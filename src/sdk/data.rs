@@ -1,132 +1,133 @@
 use std::any::Any;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ops::Deref;
-use std::sync::Arc;
+use std::rc::Rc;
 
 #[derive(Clone)]
 pub struct Val {
     pub typ: i64,
-    pub data: Arc<Box<dyn Any>>,
+    pub data: Rc<RefCell<Box<dyn Any>>>,
 }
 
 unsafe impl Send for Val {}
 
 impl Val {
-    pub fn new(typ: i64, data: Arc<Box<dyn Any>>) -> Self {
+    pub fn new(typ: i64, data: Rc<RefCell<Box<dyn Any>>>) -> Self {
         Val { typ, data: data }
     }
     fn clone_data(&self) -> Self {
         return match self.typ {
             1 => Val {
                 typ: self.typ,
-                data: Arc::new(Box::new(self.as_i16().clone())),
+                data: Rc::new(RefCell::new(Box::new(self.as_i16().clone()))),
             },
             2 => Val {
                 typ: self.typ,
-                data: Arc::new(Box::new(self.as_i32().clone())),
+                data: Rc::new(RefCell::new(Box::new(self.as_i32().clone()))),
             },
             3 => Val {
                 typ: self.typ,
-                data: Arc::new(Box::new(self.as_i64().clone())),
+                data: Rc::new(RefCell::new(Box::new(self.as_i64().clone()))),
             },
             4 => Val {
                 typ: self.typ,
-                data: Arc::new(Box::new(self.as_f32().clone())),
+                data: Rc::new(RefCell::new(Box::new(self.as_f32().clone()))),
             },
             5 => Val {
                 typ: self.typ,
-                data: Arc::new(Box::new(self.as_f64().clone())),
+                data: Rc::new(RefCell::new(Box::new(self.as_f64().clone()))),
             },
             6 => Val {
                 typ: self.typ,
-                data: Arc::new(Box::new(self.as_bool().clone())),
+                data: Rc::new(RefCell::new(Box::new(self.as_bool().clone()))),
             },
             7 => Val {
                 typ: self.typ,
-                data: Arc::new(Box::new(self.as_string().clone())),
+                data: Rc::new(RefCell::new(Box::new(self.as_string().clone()))),
             },
             8 => Val {
                 typ: self.typ,
-                data: Arc::new(Box::new(self.as_object().clone_object())),
+                data: Rc::new(RefCell::new(Box::new(self.as_object().clone_object()))),
             },
             9 => Val {
                 typ: self.typ,
-                data: Arc::new(Box::new(self.as_array())),
+                data: Rc::new(RefCell::new(Box::new(self.as_array()))),
             },
             10 => Val {
                 typ: self.typ,
-                data: Arc::new(Box::new(self.as_func())),
+                data: Rc::new(RefCell::new(Box::new(self.as_func()))),
             },
             11 => {
-                let d: Arc<Val> = self.as_refer();
+                let d: Rc<RefCell<Val>> = self.as_refer();
                 Val {
                     typ: self.typ,
-                    data: Arc::new(Box::new(d)),
+                    data: Rc::new(RefCell::new(Box::new(d))),
                 }
             }
             _ => Val {
                 typ: self.typ,
-                data: Arc::new(Box::new(0)),
+                data: Rc::new(RefCell::new(Box::new(0))),
             },
         };
     }
     pub fn as_i16(&self) -> i16 {
         let a = self.data.clone();
         let b = a.deref();
-        b.downcast_ref::<i16>().unwrap().clone()
+        b.borrow().downcast_ref::<i16>().unwrap().clone()
     }
     pub fn as_i32(&self) -> i32 {
         let a = self.data.clone();
         let b = a.deref();
-        b.downcast_ref::<i32>().unwrap().clone()
+        b.borrow().downcast_ref::<i32>().unwrap().clone()
     }
     pub fn as_i64(&self) -> i64 {
         let a = self.data.clone();
         let b = a.deref();
-        b.downcast_ref::<i64>().unwrap().clone()
+        b.borrow().downcast_ref::<i64>().unwrap().clone()
     }
     pub fn as_f32(&self) -> f32 {
         let a = self.data.clone();
         let b = a.deref();
-        b.downcast_ref::<f32>().unwrap().clone()
+        b.borrow().downcast_ref::<f32>().unwrap().clone()
     }
     pub fn as_f64(&self) -> f64 {
         let a = self.data.clone();
         let b = a.deref();
-        b.downcast_ref::<f64>().unwrap().clone()
+        b.borrow().downcast_ref::<f64>().unwrap().clone()
     }
     pub fn as_bool(&self) -> bool {
         let a = self.data.clone();
         let b = a.deref();
-        b.downcast_ref::<bool>().unwrap().clone()
+        b.borrow().downcast_ref::<bool>().unwrap().clone()
     }
     pub fn as_string(&self) -> String {
         let a = self.data.clone();
         let b = a.deref();
-        b.downcast_ref::<String>().unwrap().clone()
+        b.borrow().downcast_ref::<String>().unwrap().clone()
     }
     pub fn as_object(&self) -> Object {
         let a = self.data.clone();
-        let b = a.deref();
+        let b = a.borrow();
         let c = b.downcast_ref::<Object>().unwrap();
         c.clone_object()
     }
     pub fn as_array(&self) -> Array {
         let a = self.data.clone();
-        let b = a.deref();
+        let b: std::cell::Ref<'_, Box<dyn Any>> = a.borrow();
         let c = b.downcast_ref::<Array>().unwrap();
         c.clone_arr()
     }
     pub fn as_func(&self) -> Function {
         let a = self.data.clone();
-        let b = a.deref();
+        let b: std::cell::Ref<'_, Box<dyn Any>> = a.borrow();
         let c = b.downcast_ref::<Function>().unwrap();
         c.clone_func()
     }
-    pub fn as_refer(&self) -> Arc<Val> {
+    pub fn as_refer(&self) -> Rc<RefCell<Val>> {
         let a = self.data.clone();
-        let b = a.deref();
-        let c = b.downcast_ref::<Arc<Val>>().unwrap();
+        let b = a.borrow();
+        let c = b.downcast_ref::<Rc<RefCell<Val>>>().unwrap();
         c.clone()
     }
     pub fn is_empty(&self) -> bool {
@@ -171,8 +172,8 @@ impl Blueprint {
 }
 
 pub struct Object {
-    typ: i64,
-    data: ValGroup,
+    pub typ: i64,
+    pub data: ValGroup,
 }
 
 impl Object {
