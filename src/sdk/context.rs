@@ -62,7 +62,14 @@ impl Context {
         }
         Val::new(0, Rc::new(RefCell::new(Box::new(0))))
     }
-    pub fn put_val_globally(&mut self, name: String, val: Val) {
+    pub fn define_val_globally(&mut self, name: String, val: Val) {
+        self.memory
+            .last()
+            .unwrap()
+            .borrow_mut()
+            .define_val(name.clone(), val.clone());
+    }
+    pub fn update_val_globally(&mut self, name: String, val: Val) {
         let mut found = false;
         for scope in self.memory.iter().rev() {
             if scope.borrow_mut().update_val(name.clone(), val.clone()) {

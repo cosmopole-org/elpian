@@ -201,42 +201,18 @@ impl Executor {
             },
         }
     }
-    fn resolve_expr_and_assign(&mut self, assign: bool, data: Val) -> Val {
-        if self.program[self.pointer] == 0x01 {
+    fn resolve_expr(&mut self) -> Val {
+        if self.program[self.pointer] == 0x0c {
             self.pointer += 1;
-            let val = self.extract_val();
-            if assign {
-                if val.typ == 11 {
-                    let refer = val.as_refer();
-                    refer.borrow_mut().typ = data.clone().typ;
-                    refer.borrow_mut().data = data.clone().data;
-                } else {
-                    panic!("elpian error: non reference value can not be indexed");
-                }
-                return data;
-            } else {
-                if val.typ == 11 {
-                    let v = val.as_refer();
-                    let v_inner = v.borrow();
-                    return v_inner.clone();
-                } else {
-                    return val;
-                }
-            }
-        } else if self.program[self.pointer] == 0x02 {
-            self.pointer += 1;
-            let arr_id_name = self.extract_str();
+            let indexed_id_name = self.extract_str();
+            let indexed = self.ctx.find_val_globally(indexed_id_name);
             let index = self.resolve_expr();
             if index.typ == 7 {
-                let indexed = self.ctx.find_val_globally(arr_id_name);
                 if indexed.typ == 11 {
                     let refer = indexed.as_refer();
                     let val = refer.borrow_mut();
-                    if val.typ == 7 {
-                        let mut obj = val.as_object();
-                        if assign {
-                            obj.data.data.insert(index.as_string(), data);
-                        }
+                    if val.typ == 8 {
+                        let obj = val.as_object();
                         return obj.data.data.get(&index.as_string()).unwrap().clone();
                     } else {
                         panic!("elpian error: non object value can not be indexed by string");
@@ -244,24 +220,46 @@ impl Executor {
                 } else {
                     panic!("elpian error: non reference value can not be indexed");
                 }
+            } else if index.typ >= 1 && index.typ <= 3 {
+                if indexed.typ == 10 {
+                    let refer = indexed.as_refer();
+                    let val = refer.borrow_mut();
+                    if val.typ == 9 {
+                        let arr = val.as_array();
+                        if index.typ == 1 {
+                            return arr.data.get(index.as_i16() as usize).unwrap().clone();
+                        } else if index.typ == 2 {
+                            return arr.data.get(index.as_i32() as usize).unwrap().clone();
+                        } else {
+                            return arr.data.get(index.as_i64() as usize).unwrap().clone();
+                        }
+                    } else {
+                        panic!("elpian error: non object value can not be indexed by string");
+                    }
+                } else {
+                    panic!("elpian error: non reference value can not be indexed");
+                }
+            } else {
+                panic!(
+                    "elpian error: types other than integer and string can not be used to index anything"
+                );
+            }
+        } else {
+            let val = self.extract_val();
+            if val.typ == 11 {
+                let v = val.as_refer();
+                let v_inner = v.borrow();
+                return v_inner.clone();
+            } else {
+                return val;
             }
         }
-        Val {
-            typ: 0,
-            data: Rc::new(RefCell::new(Box::new(0))),
-        }
     }
-    fn resolve_expr(&mut self) -> Val {
-        self.resolve_expr_and_assign(
-            false,
-            Val {
-                typ: 0,
-                data: Rc::new(RefCell::new(Box::new(0))),
-            },
-        )
+    fn define(&mut self, id_name: String, val: Val) {
+        self.ctx.define_val_globally(id_name, val);
     }
     fn assign(&mut self, id_name: String, val: Val) {
-        self.ctx.put_val_globally(id_name, val);
+        self.ctx.update_val_globally(id_name, val);
     }
     pub fn run_from(&mut self, start: usize, end: usize) -> Val {
         self.pointer = start;
@@ -273,25 +271,27 @@ impl Executor {
             self.pointer += 1;
             match unit {
                 0x01 => {
-                    if self.program[self.pointer] == 0x01 {
+                    if self.program[self.pointer] == 0x0b {
                         self.pointer += 1;
                         let var_name = self.extract_str();
                         let data = self.resolve_expr();
-                        self.assign(var_name, data);
-                    } else if self.program[self.pointer] == 0x02 {
+                        self.define(var_name, data);
+                    }
+                }
+                0x02 => {
+                    if self.program[self.pointer] == 0x0c {
                         self.pointer += 1;
-                        let arr_id_name = self.extract_str();
+                        let indexed_id_name = self.extract_str();
+                        let indexed = self.ctx.find_val_globally(indexed_id_name);
                         let index = self.resolve_expr();
                         let data = self.resolve_expr();
                         if index.typ == 7 {
-                            let indexed = self.ctx.find_val_globally(arr_id_name);
                             if indexed.typ == 11 {
                                 let refer = indexed.as_refer();
                                 let val = refer.borrow_mut();
-                                if val.typ == 7 {
+                                if val.typ == 8 {
                                     let mut obj = val.as_object();
                                     obj.data.data.insert(index.as_string(), data);
-                                    return obj.data.data.get(&index.as_string()).unwrap().clone();
                                 } else {
                                     panic!(
                                         "elpian error: non object value can not be indexed by string"
@@ -300,7 +300,37 @@ impl Executor {
                             } else {
                                 panic!("elpian error: non reference value can not be indexed");
                             }
+                        } else if index.typ >= 1 && index.typ <= 3 {
+                            if indexed.typ == 10 {
+                                let refer = indexed.as_refer();
+                                let val = refer.borrow_mut();
+                                if val.typ == 9 {
+                                    let mut arr = val.as_array();
+                                    if index.typ == 1 {
+                                        arr.data[index.as_i16() as usize] = data;
+                                    } else if index.typ == 2 {
+                                        arr.data[index.as_i32() as usize] = data;
+                                    } else {
+                                        arr.data[index.as_i64() as usize] = data;
+                                    }
+                                } else {
+                                    panic!(
+                                        "elpian error: non object value can not be indexed by string"
+                                    );
+                                }
+                            } else {
+                                panic!("elpian error: non reference value can not be indexed");
+                            }
+                        } else {
+                            panic!(
+                                "elpian error: types other than integer and string can not be used to index anything"
+                            );
                         }
+                    } else if self.program[self.pointer] == 0x0b {
+                        self.pointer += 1;
+                        let var_name = self.extract_str();
+                        let data = self.resolve_expr();
+                        self.assign(var_name, data);
                     }
                 }
                 _ => {}

@@ -24,7 +24,7 @@ impl Val {
             4 => self.as_f32().to_string(),
             5 => self.as_i64().to_string(),
             6 => self.as_bool().to_string(),
-            7 => self.as_string(),
+            7 => format!("\"{}\"", self.as_string()),
             8 => self.as_object().stringify(),
             9 => self.as_array().stringify(),
             10 => "[Function]".to_string(),
@@ -222,7 +222,7 @@ impl Object {
 }
 
 pub struct Array {
-    data: Vec<Val>,
+    pub data: Vec<Val>,
 }
 
 impl Array {
