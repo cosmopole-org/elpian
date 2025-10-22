@@ -39,9 +39,17 @@ impl VM {
         VM {
             program,
             executors: executors,
-            callbacks: Arc::new(Mutex::new(HashMap::new())),
+            callbacks: callbacks,
             cb_id_counter: 0,
         }
+    }
+    pub fn print_memory(&mut self) {
+        self.executors.iter().for_each(|ex| {
+            ex.send((0x02, 0, "".to_string())).unwrap();
+        });
+    }
+    pub fn run(&mut self) -> Val {
+        self.run_func("")
     }
     pub fn run_func(&mut self, func_name: &str) -> Val {
         self.cb_id_counter += 1;

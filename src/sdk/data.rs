@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::ops::Deref;
 use std::rc::Rc;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Val {
     pub typ: i64,
     pub data: Rc<RefCell<Box<dyn Any>>>,
@@ -15,6 +15,25 @@ unsafe impl Send for Val {}
 impl Val {
     pub fn new(typ: i64, data: Rc<RefCell<Box<dyn Any>>>) -> Self {
         Val { typ, data: data }
+    }
+    pub fn stringify(&self) -> String {
+        return match self.typ {
+            1 => self.as_i16().to_string(),
+            2 => self.as_i32().to_string(),
+            3 => self.as_i64().to_string(),
+            4 => self.as_f32().to_string(),
+            5 => self.as_i64().to_string(),
+            6 => self.as_bool().to_string(),
+            7 => self.as_string(),
+            8 => self.as_object().stringify(),
+            9 => self.as_array().stringify(),
+            10 => "[Function]".to_string(),
+            11 => {
+                let d: Rc<RefCell<Val>> = self.as_refer();
+                d.borrow().stringify()
+            }
+            _ => "undefined".to_string(),
+        };
     }
     fn clone_data(&self) -> Self {
         return match self.typ {
@@ -155,6 +174,20 @@ impl ValGroup {
         }
         ValGroup::new(copied)
     }
+    pub fn stringify(&self) -> String {
+        let mut result = "{".to_string();
+        let mut index = 0;
+        for (k, v) in self.data.iter() {
+            if index > 0 {
+                result = format!("{}, {}: {}", result, k, v.stringify());
+            } else {
+                result = format!("{} {}: {}", result, k, v.stringify());
+            }
+            index += 1;
+        }
+        result = format!("{} }}", result);
+        result
+    }
 }
 
 pub struct Blueprint {
@@ -183,6 +216,9 @@ impl Object {
     pub fn clone_object(&self) -> Self {
         return Object::new(self.typ, self.data.clone_data());
     }
+    pub fn stringify(&self) -> String {
+        self.data.stringify()
+    }
 }
 
 pub struct Array {
@@ -198,6 +234,20 @@ impl Array {
     }
     pub fn clone_arr(&self) -> Self {
         return Array::new(self.data.iter().map(|item| item.clone_data()).collect());
+    }
+    pub fn stringify(&self) -> String {
+        let mut result = "[".to_string();
+        let mut index = 0;
+        for v in self.data.iter() {
+            if index > 0 {
+                result = format!("{}, {}", result, v.stringify());
+            } else {
+                result = format!("{} {}", result, v.stringify());
+            }
+            index += 1;
+        }
+        result = format!("{}]", result);
+        result
     }
 }
 

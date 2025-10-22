@@ -29,15 +29,36 @@ impl Executor {
                 let (op_code, cb_id, payload) = tasks_recv.recv().unwrap();
                 match op_code {
                     0x00 => {
+                        println!("ending executor...");
                         break;
                     }
                     0x01 => {
-                        let val = ex.ctx.find_val_in_first_scope(payload);
-                        if !val.is_empty() {
-                            let func = val.as_func();
-                            let result = ex.run_from(func.start, func.end);
+                        println!("executor: run_func called");
+                        if payload.is_empty() {
+                            let result = ex.run_from(0, ex.program.len());
                             vm_send.clone().send((0x01, cb_id, result)).unwrap();
+                        } else {
+                            let val = ex.ctx.find_val_in_first_scope(payload);
+                            if !val.is_empty() {
+                                let func = val.as_func();
+                                let result = ex.run_from(func.start, func.end);
+                                vm_send.clone().send((0x01, cb_id, result)).unwrap();
+                            }
                         }
+                    }
+                    0x02 => {
+                        println!("executor: print_memory called");
+                        ex.ctx.memory.iter().for_each(|scope| {
+                            scope
+                                .borrow()
+                                .memory
+                                .borrow()
+                                .data
+                                .iter()
+                                .for_each(|(key, val)| {
+                                    println!("{{ key: {}, val: {} }}", key, val.stringify());
+                                });
+                        });
                     }
                     _ => {}
                 }
@@ -50,35 +71,35 @@ impl Executor {
             .try_into()
             .unwrap();
         self.pointer += 2;
-        i16::from_le_bytes(num_bytes)
+        i16::from_be_bytes(num_bytes)
     }
     fn extract_i32(&mut self) -> i32 {
         let num_bytes: [u8; 4] = self.program[self.pointer..(self.pointer + 4)]
             .try_into()
             .unwrap();
         self.pointer += 4;
-        i32::from_le_bytes(num_bytes)
+        i32::from_be_bytes(num_bytes)
     }
     fn extract_i64(&mut self) -> i64 {
         let num_bytes: [u8; 8] = self.program[self.pointer..(self.pointer + 8)]
             .try_into()
             .unwrap();
         self.pointer += 8;
-        i64::from_le_bytes(num_bytes)
+        i64::from_be_bytes(num_bytes)
     }
     fn extract_f32(&mut self) -> f32 {
         let num_bytes: [u8; 4] = self.program[self.pointer..(self.pointer + 4)]
             .try_into()
             .unwrap();
         self.pointer += 4;
-        f32::from_le_bytes(num_bytes)
+        f32::from_be_bytes(num_bytes)
     }
     fn extract_f64(&mut self) -> f64 {
         let num_bytes: [u8; 8] = self.program[self.pointer..(self.pointer + 8)]
             .try_into()
             .unwrap();
         self.pointer += 8;
-        f64::from_le_bytes(num_bytes)
+        f64::from_be_bytes(num_bytes)
     }
     fn extract_bool(&mut self) -> bool {
         let result = self.program[self.pointer] == 0x01;
@@ -90,8 +111,9 @@ impl Executor {
             .try_into()
             .unwrap();
         self.pointer += 4;
-        let length = i32::from_le_bytes(len_bytes) as usize;
+        let length = i32::from_be_bytes(len_bytes) as usize;
         let str_bytes = self.program[self.pointer..(self.pointer + length)].to_vec();
+        self.pointer += length;
         String::from_utf8(str_bytes).unwrap()
     }
     fn extract_obj(&mut self) -> Object {
@@ -241,7 +263,6 @@ impl Executor {
     fn assign(&mut self, id_name: String, val: Val) {
         self.ctx.put_val_globally(id_name, val);
     }
-
     pub fn run_from(&mut self, start: usize, end: usize) -> Val {
         self.pointer = start;
         loop {

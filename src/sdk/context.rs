@@ -20,13 +20,17 @@ impl Scope {
             return val.unwrap().clone();
         }
     }
-    pub fn put_val(&mut self, name: String, val: Val) -> bool {
+    pub fn update_val(&mut self, name: String, val: Val) -> bool {
         let mut v = self.memory.borrow_mut();
         if v.data.contains_key(&name) {
             v.data.insert(name, val);
             return true;
         }
         false
+    }
+    pub fn define_val(&mut self, name: String, val: Val) {
+        let mut v = self.memory.borrow_mut();
+        v.data.insert(name, val);
     }
 }
 
@@ -59,10 +63,19 @@ impl Context {
         Val::new(0, Rc::new(RefCell::new(Box::new(0))))
     }
     pub fn put_val_globally(&mut self, name: String, val: Val) {
+        let mut found = false;
         for scope in self.memory.iter().rev() {
-            if scope.borrow_mut().put_val(name.clone(), val.clone()) {
+            if scope.borrow_mut().update_val(name.clone(), val.clone()) {
+                found = true;
                 break;
             }
+        }
+        if !found {
+            self.memory
+                .last()
+                .unwrap()
+                .borrow_mut()
+                .define_val(name.clone(), val.clone());
         }
     }
     pub fn find_val_in_last_scope(&mut self, name: String) -> Val {
