@@ -495,99 +495,17 @@ impl Executor {
                     }
                     8 => {
                         let val2 = arg2.as_object();
+                        let mut deleted: Vec<String> = vec![];
                         val2.data.data.iter().for_each(|(k, v)| {
                             if val1.data.data.contains_key(k) {
                                 let v2 = val1.data.data.get(k).unwrap();
-                                if v.typ == v2.typ {
-                                    if match v.typ {
-                                        1 | 2 | 3 => {
-                                            let v_val = match v.typ {
-                                                1 => v.as_i16() as i64,
-                                                2 => v.as_i32() as i64,
-                                                3 => v.as_i64() as i64,
-                                                _ => 0,
-                                            };
-                                            match v2.typ {
-                                                1 | 2 | 3 => {
-                                                    let v2_val = match v2.typ {
-                                                        1 => v.as_i16() as i64,
-                                                        2 => v.as_i32() as i64,
-                                                        3 => v.as_i64() as i64,
-                                                        _ => 0,
-                                                    };
-                                                    v_val == v2_val
-                                                }
-                                                4 | 5 => {
-                                                    let v_val_temp = v_val as f64;
-                                                    let v2_val = match v2.typ {
-                                                        4 => v.as_f32() as f64,
-                                                        5 => v.as_f64() as f64,
-                                                        _ => 0.0,
-                                                    };
-                                                    v_val_temp == v2_val
-                                                }
-                                                _ => false,
-                                            }
-                                        }
-                                        4 | 5 => {
-                                            let v_val = match v.typ {
-                                                4 => v.as_f32() as f64,
-                                                5 => v.as_f64() as f64,
-                                                _ => 0.0,
-                                            };
-                                            match v2.typ {
-                                                1 | 2 | 3 => {
-                                                    let v2_val = match v2.typ {
-                                                        1 => v.as_i16() as f64,
-                                                        2 => v.as_i32() as f64,
-                                                        3 => v.as_i64() as f64,
-                                                        _ => 0.0,
-                                                    };
-                                                    v_val == v2_val
-                                                }
-                                                4 | 5 => {
-                                                    let v2_val = match v2.typ {
-                                                        4 => v.as_f32() as f64,
-                                                        5 => v.as_f64() as f64,
-                                                        _ => 0.0,
-                                                    };
-                                                    v_val == v2_val
-                                                }
-                                                _ => false,
-                                            }
-                                        }
-                                        6 => {
-                                            let v_val = match v.typ {
-                                                4 => v.as_f32() as f64,
-                                                5 => v.as_f64() as f64,
-                                                _ => 0.0,
-                                            };
-                                            match v2.typ {
-                                                1 | 2 | 3 => {
-                                                    let v2_val = match v2.typ {
-                                                        1 => v.as_i16() as f64,
-                                                        2 => v.as_i32() as f64,
-                                                        3 => v.as_i64() as f64,
-                                                        _ => 0.0,
-                                                    };
-                                                    v_val == v2_val
-                                                }
-                                                4 | 5 => {
-                                                    let v2_val = match v2.typ {
-                                                        4 => v.as_f32() as f64,
-                                                        5 => v.as_f64() as f64,
-                                                        _ => 0.0,
-                                                    };
-                                                    v_val == v2_val
-                                                }
-                                                _ => false,
-                                            }
-                                        }
-                                    } {
-                                        val1.data.data.remove(&k.clone());
-                                    }
+                                if self.is_equal(v.clone(), v2.clone()) {
+                                    deleted.push(k.clone());
                                 }
                             }
+                        });
+                        deleted.iter().for_each(|k| {
+                            val1.data.data.remove(&k.clone());
                         });
                         Val {
                             typ: 8,
@@ -595,12 +513,7 @@ impl Executor {
                         }
                     }
                     9 => {
-                        let mut val2 = arg2.as_array();
-                        val2.data.insert(0, arg1);
-                        Val {
-                            typ: 9,
-                            data: Rc::new(RefCell::new(Box::new(val2))),
-                        }
+                        panic!("elpian error: array can not be subtracted from object");
                     }
                     10 => {
                         panic!("elpian error: function and integer can not be summed");
@@ -651,6 +564,146 @@ impl Executor {
                 panic!("can not sum unknown type with anything");
             }
         }
+    }
+    fn is_equal(&self, v: Val, v2: Val) -> bool {
+        return match v.typ {
+            1 | 2 | 3 => {
+                let v_val = match v.typ {
+                    1 => v.as_i16() as i64,
+                    2 => v.as_i32() as i64,
+                    3 => v.as_i64() as i64,
+                    _ => 0,
+                };
+                match v2.typ {
+                    1 | 2 | 3 => {
+                        let v2_val = match v2.typ {
+                            1 => v.as_i16() as i64,
+                            2 => v.as_i32() as i64,
+                            3 => v.as_i64() as i64,
+                            _ => 0,
+                        };
+                        v_val == v2_val
+                    }
+                    4 | 5 => {
+                        let v_val_temp = v_val as f64;
+                        let v2_val = match v2.typ {
+                            4 => v.as_f32() as f64,
+                            5 => v.as_f64() as f64,
+                            _ => 0.0,
+                        };
+                        v_val_temp == v2_val
+                    }
+                    _ => false,
+                }
+            }
+            4 | 5 => {
+                let v_val = match v.typ {
+                    4 => v.as_f32() as f64,
+                    5 => v.as_f64() as f64,
+                    _ => 0.0,
+                };
+                match v2.typ {
+                    1 | 2 | 3 => {
+                        let v2_val = match v2.typ {
+                            1 => v.as_i16() as f64,
+                            2 => v.as_i32() as f64,
+                            3 => v.as_i64() as f64,
+                            _ => 0.0,
+                        };
+                        v_val == v2_val
+                    }
+                    4 | 5 => {
+                        let v2_val = match v2.typ {
+                            4 => v.as_f32() as f64,
+                            5 => v.as_f64() as f64,
+                            _ => 0.0,
+                        };
+                        v_val == v2_val
+                    }
+                    _ => false,
+                }
+            }
+            6 => {
+                let v_val = v.as_bool();
+                match v2.typ {
+                    6 => {
+                        let v2_val = v2.as_bool();
+                        v_val == v2_val
+                    }
+                    _ => false,
+                }
+            }
+            7 => {
+                let v_val = v.as_string();
+                match v2.typ {
+                    6 => {
+                        let v2_val = v2.as_string();
+                        v_val == v2_val
+                    }
+                    _ => false,
+                }
+            }
+            8 => {
+                let v_val = v.as_object();
+                match v2.typ {
+                    6 => {
+                        let v2_val = v2.as_object();
+                        if v_val.data.data.iter().all(|(k, d)| {
+                            if !v2_val.data.data.contains_key(&k.clone()) {
+                                return false;
+                            }
+                            true
+                        }) && v_val.data.data.iter().all(|(k, d)| {
+                            if !v2_val.data.data.contains_key(&k.clone()) {
+                                return false;
+                            }
+                            true
+                        }) {
+                            return v_val.data.data.iter().all(|(k, d)| {
+                                self.is_equal(
+                                    d.clone(),
+                                    v2_val.data.data.get(&k.clone()).unwrap().clone(),
+                                )
+                            });
+                        }
+                        false
+                    }
+                    _ => false,
+                }
+            }
+            9 => {
+                let v_val = v.as_array();
+                match v2.typ {
+                    9 => {
+                        let v2_val = v2.as_array();
+                        if v_val.data.len() != v2_val.data.len() {
+                            return false;
+                        }
+                        let counter: usize = 0;
+                        return v_val.data.iter().all(|d| {
+                            if self.is_equal(d.clone(), v2_val.data.get(counter).unwrap().clone()) {
+                                counter += 1;
+                                return true;
+                            } else {
+                                return false;
+                            }
+                        });
+                    }
+                    _ => false,
+                }
+            }
+            10 => {
+                let v_val = v.as_func();
+                match v2.typ {
+                    10 => {
+                        let v2_val = v2.as_func();
+                        v_val.start == v2_val.start && v_val.end == v2_val.end
+                    }
+                    _ => false,
+                }
+            }
+            _ => false,
+        };
     }
     fn operate_sum(&self, arg1: Val, arg2: Val) -> Val {
         match arg1.typ {
