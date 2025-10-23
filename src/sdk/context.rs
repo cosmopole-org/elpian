@@ -4,12 +4,26 @@ use crate::sdk::data::{Val, ValGroup};
 
 pub struct Scope {
     pub memory: Rc<RefCell<ValGroup>>,
+    pub frozen_start: usize,
+    pub frozen_end: usize,
+    pub frozen_pointer: usize,
 }
 impl Scope {
-    pub fn new() -> Self {
+    pub fn new(initial_pointer: usize, frozen_start: usize, frozen_end: usize) -> Self {
         Scope {
             memory: Rc::new(RefCell::new(ValGroup::new_empty())),
+            frozen_pointer: initial_pointer,
+            frozen_start: frozen_start,
+            frozen_end: frozen_end,
         }
+    }
+    pub fn update_frozen_pointer(&mut self, pointer: usize) {
+        self.frozen_pointer = pointer;
+    }
+    pub fn update_initial_pointer_info(&mut self, pointer: usize, frozen_start: usize, frozen_end: usize) {
+        self.frozen_pointer = pointer;
+        self.frozen_start = frozen_start;
+        self.frozen_end = frozen_end;
     }
     pub fn find_val(&self, name: String) -> Val {
         let v = self.memory.borrow();
@@ -41,11 +55,12 @@ pub struct Context {
 impl Context {
     pub fn new() -> Self {
         Context {
-            memory: vec![Rc::new(RefCell::new(Scope::new()))],
+            memory: vec![],
         }
     }
-    pub fn push_scope(&mut self) {
-        self.memory.push(Rc::new(RefCell::new(Scope::new())));
+    pub fn push_scope(&mut self, inital_pointer: usize, frozen_start: usize, frozen_end: usize) {
+        self.memory
+            .push(Rc::new(RefCell::new(Scope::new(inital_pointer, frozen_start, frozen_end))));
     }
     pub fn pop_scope(&mut self) {
         self.memory.pop();

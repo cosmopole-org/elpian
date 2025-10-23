@@ -14,6 +14,7 @@ use std::{
 
 pub struct Executor {
     pointer: usize,
+    end_at: usize,
     ctx: Context,
     program: Vec<u8>,
 }
@@ -24,6 +25,7 @@ impl Executor {
         thread::spawn(move || {
             let mut ex = Executor {
                 pointer: 0,
+                end_at: program.len(),
                 ctx: Context::new(),
                 program,
             };
@@ -1135,10 +1137,29 @@ impl Executor {
         self.ctx.update_val_globally(id_name, val);
     }
     pub fn run_from(&mut self, start: usize, end: usize) -> Val {
+        self.ctx.push_scope(start, start, end);
         self.pointer = start;
+        self.end_at = end;
         loop {
-            if self.pointer == end {
-                break;
+            if self.pointer == self.end_at {
+                self.ctx.memory.iter().for_each(|scope| {
+                    scope
+                        .borrow()
+                        .memory
+                        .borrow()
+                        .data
+                        .iter()
+                        .for_each(|(key, val)| {
+                            println!("{{ key: {}, val: {} }}", key, val.stringify());
+                        });
+                });
+                self.ctx.pop_scope();
+                if self.ctx.memory.len() > 0 {
+                    self.pointer = self.ctx.memory.last().unwrap().borrow().frozen_pointer;
+                    self.end_at = self.ctx.memory.last().unwrap().borrow().frozen_end;
+                } else {
+                    break;
+                }
             }
             let unit: u8 = self.program[self.pointer];
             self.pointer += 1;
@@ -1192,6 +1213,123 @@ impl Executor {
                         let var_name = self.extract_str();
                         let data = self.resolve_expr();
                         self.assign(var_name, data);
+                    }
+                }
+                0x03 => {
+                    let val = self.resolve_expr();
+                    if val.typ == 10 {
+                        let func = val.as_func();
+                        self.ctx
+                            .memory
+                            .last()
+                            .unwrap()
+                            .borrow_mut()
+                            .update_frozen_pointer(self.pointer);
+                        self.ctx.push_scope(
+                            func.borrow().start,
+                            func.borrow().start,
+                            func.borrow().end,
+                        );
+                        self.pointer = func.borrow().start;
+                    } else {
+                        panic!("elpian error: the specified data is not runnable");
+                    }
+                }
+                0x04 => {
+                    let has_condition = self.program[self.pointer] == 0x01;
+                    let mut condition = false;
+                    if has_condition {
+                        let val = self.resolve_expr();
+                        if val.typ == 6 {
+                            condition = val.as_bool();
+                        }
+                    }
+                    if !has_condition {
+                        let branch_true_start = self.extract_i64() as usize;
+                        let branch_true_end = self.extract_i64() as usize;
+                        let branch_after_start = self.extract_i64() as usize;
+                        self.ctx
+                            .memory
+                            .last()
+                            .unwrap()
+                            .borrow_mut()
+                            .update_frozen_pointer(branch_after_start);
+                        self.ctx
+                            .push_scope(branch_true_start, branch_true_start, branch_true_end);
+                        self.pointer = branch_true_start;
+                    } else {
+                        let branch_true_start = self.extract_i64() as usize;
+                        let branch_true_end = self.extract_i64() as usize;
+                        let branch_next_start = self.extract_i64() as usize;
+                        let branch_after_start = self.extract_i64() as usize;
+                        if condition {
+                            self.ctx
+                                .memory
+                                .last()
+                                .unwrap()
+                                .borrow_mut()
+                                .update_frozen_pointer(branch_after_start);
+                            self.ctx.push_scope(
+                                branch_true_start,
+                                branch_true_start,
+                                branch_true_end,
+                            );
+                            self.pointer = branch_true_start;
+                        } else {
+                            self.pointer = branch_next_start;
+                        }
+                    }
+                }
+                0x05 => {
+                    let mut condition = false;
+                    let val = self.resolve_expr();
+                    if val.typ == 6 {
+                        condition = val.as_bool();
+                    }
+                    let branch_true_start = self.extract_i64() as usize;
+                    let branch_true_end = self.extract_i64() as usize;
+                    let branch_after_start = self.extract_i64() as usize;
+                    if condition {
+                        self.ctx
+                            .memory
+                            .last()
+                            .unwrap()
+                            .borrow_mut()
+                            .update_frozen_pointer(branch_after_start);
+                        self.ctx
+                            .push_scope(branch_true_start, branch_true_start, branch_true_end);
+                        self.pointer = branch_true_start;
+                    } else {
+                        self.pointer = branch_after_start;
+                    }
+                }
+                0x06 => {
+                    let comparing_val = self.resolve_expr();
+                    let case_count = self.extract_i64();
+                    let branch_after_start = self.extract_i64() as usize;
+                    let mut matched = false;
+                    for _i in 0..case_count {
+                        let val = self.resolve_expr();
+                        let branch_true_start = self.extract_i64() as usize;
+                        let branch_true_end = self.extract_i64() as usize;
+                        if self.is_equal(comparing_val.clone(), val.clone()) {
+                            matched = true;
+                            self.ctx
+                                .memory
+                                .last()
+                                .unwrap()
+                                .borrow_mut()
+                                .update_frozen_pointer(branch_after_start);
+                            self.ctx.push_scope(
+                                branch_true_start,
+                                branch_true_start,
+                                branch_true_end,
+                            );
+                            self.pointer = branch_true_start;
+                        }
+                    }
+                    if !matched {
+                        self.pointer = branch_after_start;
                     }
                 }
                 _ => {}
