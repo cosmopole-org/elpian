@@ -7,7 +7,7 @@ use std::{
     thread,
 };
 
-use crate::sdk::{data::Val, executor::Executor};
+use crate::sdk::{compiler, data::Val, executor::Executor};
 
 pub struct VM {
     pub program: Vec<u8>,
@@ -17,7 +17,7 @@ pub struct VM {
 }
 
 impl VM {
-    pub fn new(program: Vec<u8>, execuror_count: i32) -> Self {
+    pub fn create(program: Vec<u8>, execuror_count: i32) -> Self {
         let mut executors: Vec<Sender<(u8, i64, String)>> = vec![];
         let callbacks: Arc<Mutex<HashMap<i64, Sender<Val>>>> = Arc::new(Mutex::new(HashMap::new()));
         for _ in 0..execuror_count {
@@ -42,6 +42,10 @@ impl VM {
             callbacks: callbacks,
             cb_id_counter: 0,
         }
+    }
+    pub fn compile_and_create(program: serde_json::Value, execuror_count: i32) -> Self {
+        let byte_code = compiler::compile(program);
+        Self::create(byte_code, execuror_count)
     }
     pub fn print_memory(&mut self) {
         self.executors.iter().for_each(|ex| {
