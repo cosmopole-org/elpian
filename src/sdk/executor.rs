@@ -43,7 +43,7 @@ impl Executor {
                             let val = ex.ctx.find_val_in_first_scope(payload);
                             if !val.is_empty() {
                                 let func = val.as_func();
-                                let result = ex.run_from(func.start, func.end);
+                                let result = ex.run_from(func.borrow().start, func.borrow().end);
                                 vm_send.clone().send((0x01, cb_id, result)).unwrap();
                             }
                         }
@@ -188,14 +188,7 @@ impl Executor {
             },
             0x0b => {
                 let id = self.extract_str();
-                let d = self.ctx.find_val_globally(id);
-                if d.is_empty() {
-                    panic!("elpian error: undefined reference");
-                }
-                Val {
-                    typ: 11,
-                    data: Rc::new(RefCell::new(Box::new(d))),
-                }
+                self.ctx.find_val_globally(id)
             }
             _ => Val {
                 typ: 0,
@@ -232,6 +225,345 @@ impl Executor {
                 typ: 1,
                 data: Rc::new(RefCell::new(Box::new(num))),
             };
+        }
+    }
+    fn operate_sum(&self, arg1: Val, arg2: Val) -> Val {
+        match arg1.typ {
+            1 | 2 | 3 => {
+                let val1 = match arg1.typ {
+                    1 => arg1.as_i16() as i64,
+                    2 => arg1.as_i32() as i64,
+                    3 => arg1.as_i64() as i64,
+                    _ => 0,
+                };
+                match arg2.typ {
+                    1 => {
+                        let val2 = arg2.as_i16() as i64;
+                        self.check_int_range(val1 + val2)
+                    }
+                    2 => {
+                        let val2 = arg2.as_i32() as i64;
+                        self.check_int_range(val1 + val2)
+                    }
+                    3 => {
+                        let val2 = arg2.as_i64() as i64;
+                        self.check_int_range(val1 + val2)
+                    }
+                    4 => {
+                        let val2 = arg2.as_f32() as f64;
+                        let val1_temp = val1 as f64;
+                        self.check_float_range(val1_temp + val2)
+                    }
+                    5 => {
+                        let val2 = arg2.as_f64() as f64;
+                        let val1_temp = val1 as f64;
+                        self.check_float_range(val1_temp + val2)
+                    }
+                    6 => {
+                        panic!("elpian error: boolean and integer can not be summed");
+                    }
+                    7 => {
+                        let val2 = arg2.as_string();
+                        let val1_temp = val1.to_string();
+                        Val {
+                            typ: 7,
+                            data: Rc::new(RefCell::new(Box::new(format!("{}{}", val1_temp, val2)))),
+                        }
+                    }
+                    8 => {
+                        panic!("elpian error: object and integer can not be summed");
+                    }
+                    9 => {
+                        let val2 = arg2.as_array();
+                        val2.borrow_mut().data.insert(0, arg1);
+                        Val {
+                            typ: 9,
+                            data: Rc::new(RefCell::new(Box::new(val2))),
+                        }
+                    }
+                    10 => {
+                        panic!("elpian error: function and integer can not be summed");
+                    }
+                    _ => {
+                        panic!("elpian error: unknown data type and integer can not be summed");
+                    }
+                }
+            }
+            4 | 5 => {
+                let val1 = match arg1.typ {
+                    4 => arg1.as_f32() as f64,
+                    5 => arg1.as_f64() as f64,
+                    _ => 0.0,
+                };
+                match arg2.typ {
+                    1 => {
+                        let val2 = arg2.as_i16() as f64;
+                        self.check_float_range(val1 + val2)
+                    }
+                    2 => {
+                        let val2 = arg2.as_i32() as f64;
+                        self.check_float_range(val1 + val2)
+                    }
+                    3 => {
+                        let val2 = arg2.as_i64() as f64;
+                        self.check_float_range(val1 + val2)
+                    }
+                    4 => {
+                        let val2 = arg2.as_f32() as f64;
+                        self.check_float_range(val1 + val2)
+                    }
+                    5 => {
+                        let val2 = arg2.as_f64() as f64;
+                        self.check_float_range(val1 + val2)
+                    }
+                    6 => {
+                        panic!("elpian error: boolean and integer can not be summed");
+                    }
+                    7 => {
+                        let val2 = arg2.as_string();
+                        let val1_temp = val1.to_string();
+                        Val {
+                            typ: 7,
+                            data: Rc::new(RefCell::new(Box::new(format!("{}{}", val1_temp, val2)))),
+                        }
+                    }
+                    8 => {
+                        panic!("elpian error: object and integer can not be summed");
+                    }
+                    9 => {
+                        let val2 = arg2.as_array();
+                        val2.borrow_mut().data.insert(0, arg1);
+                        Val {
+                            typ: 9,
+                            data: Rc::new(RefCell::new(Box::new(val2))),
+                        }
+                    }
+                    10 => {
+                        panic!("elpian error: function and integer can not be summed");
+                    }
+                    _ => {
+                        panic!("elpian error: unknown data type and integer can not be summed");
+                    }
+                }
+            }
+            6 => {
+                let val1 = arg1.as_bool();
+                match arg2.typ {
+                    1 => {
+                        panic!("elpian error: bool and integer can not be summed");
+                    }
+                    2 => {
+                        panic!("elpian error: bool and integer can not be summed");
+                    }
+                    3 => {
+                        panic!("elpian error: objeboolt and integer can not be summed");
+                    }
+                    4 => {
+                        panic!("elpian error: bool and float can not be summed");
+                    }
+                    5 => {
+                        panic!("elpian error: bool and float can not be summed");
+                    }
+                    6 => {
+                        let val2 = arg2.as_bool();
+                        Val {
+                            typ: 7,
+                            data: Rc::new(RefCell::new(Box::new(val1 ^ val2))),
+                        }
+                    }
+                    7 => {
+                        let val2 = arg2.as_string();
+                        let val1_temp = val1.to_string();
+                        Val {
+                            typ: 7,
+                            data: Rc::new(RefCell::new(Box::new(format!("{}{}", val1_temp, val2)))),
+                        }
+                    }
+                    8 => {
+                        panic!("elpian error: object and bool can not be summed");
+                    }
+                    9 => {
+                        let val2 = arg2.as_array();
+                        val2.borrow_mut().data.insert(0, arg1);
+                        Val {
+                            typ: 9,
+                            data: Rc::new(RefCell::new(Box::new(val2))),
+                        }
+                    }
+                    10 => {
+                        panic!("elpian error: function and bool can not be summed");
+                    }
+                    _ => {
+                        panic!("elpian error: unknown data type and bool can not be summed");
+                    }
+                }
+            }
+            7 => {
+                let val1 = arg1.as_string();
+                match arg2.typ {
+                    1 => {
+                        let val2 = arg2.as_i16().to_string();
+                        Val {
+                            typ: 7,
+                            data: Rc::new(RefCell::new(Box::new(format!("{}{}", val1, val2)))),
+                        }
+                    }
+                    2 => {
+                        let val2 = arg2.as_i32().to_string();
+                        Val {
+                            typ: 7,
+                            data: Rc::new(RefCell::new(Box::new(format!("{}{}", val1, val2)))),
+                        }
+                    }
+                    3 => {
+                        let val2 = arg2.as_i64().to_string();
+                        Val {
+                            typ: 7,
+                            data: Rc::new(RefCell::new(Box::new(format!("{}{}", val1, val2)))),
+                        }
+                    }
+                    4 => {
+                        let val2 = arg2.as_f32().to_string();
+                        Val {
+                            typ: 7,
+                            data: Rc::new(RefCell::new(Box::new(format!("{}{}", val1, val2)))),
+                        }
+                    }
+                    5 => {
+                        let val2 = arg2.as_f64().to_string();
+                        Val {
+                            typ: 7,
+                            data: Rc::new(RefCell::new(Box::new(format!("{}{}", val1, val2)))),
+                        }
+                    }
+                    6 => {
+                        let val2 = arg2.as_bool().to_string();
+                        Val {
+                            typ: 7,
+                            data: Rc::new(RefCell::new(Box::new(format!("{}{}", val1, val2)))),
+                        }
+                    }
+                    7 => {
+                        let val2 = arg2.as_string();
+                        Val {
+                            typ: 7,
+                            data: Rc::new(RefCell::new(Box::new(format!("{}{}", val1, val2)))),
+                        }
+                    }
+                    8 => {
+                        let val2 = arg2.as_object().borrow().stringify();
+                        Val {
+                            typ: 7,
+                            data: Rc::new(RefCell::new(Box::new(format!("{}{}", val1, val2)))),
+                        }
+                    }
+                    9 => {
+                        let val2 = arg2.as_array().borrow().stringify();
+                        Val {
+                            typ: 7,
+                            data: Rc::new(RefCell::new(Box::new(format!("{}{}", val1, val2)))),
+                        }
+                    }
+                    10 => {
+                        panic!("elpian error: function and string can not be summed");
+                    }
+                    _ => {
+                        panic!("elpian error: unknown data type and string can not be summed");
+                    }
+                }
+            }
+            8 => {
+                let val1 = arg1.as_object();
+                match arg2.typ {
+                    1 => {
+                        panic!("elpian error: object and integer can not be summed");
+                    }
+                    2 => {
+                        panic!("elpian error: object and integer can not be summed");
+                    }
+                    3 => {
+                        panic!("elpian error: object and integer can not be summed");
+                    }
+                    4 => {
+                        panic!("elpian error: object and float can not be summed");
+                    }
+                    5 => {
+                        panic!("elpian error: object and float can not be summed");
+                    }
+                    6 => {
+                        panic!("elpian error: object and bool can not be summed");
+                    }
+                    7 => {
+                        let val1_temp = val1.borrow().stringify();
+                        let val2 = arg2.as_string();
+                        Val {
+                            typ: 7,
+                            data: Rc::new(RefCell::new(Box::new(format!("{}{}", val1_temp, val2)))),
+                        }
+                    }
+                    8 => {
+                        let val2 = arg2.as_object();
+                        val2.borrow().data.data.iter().for_each(|(k, v)| {
+                            val1.borrow_mut().data.data.insert(k.clone(), v.clone());
+                        });
+                        Val {
+                            typ: 8,
+                            data: Rc::new(RefCell::new(Box::new(val2))),
+                        }
+                    }
+                    9 => {
+                        let val2 = arg2.as_array();
+                        val2.borrow_mut().data.insert(0, arg1);
+                        Val {
+                            typ: 9,
+                            data: Rc::new(RefCell::new(Box::new(val2))),
+                        }
+                    }
+                    10 => {
+                        panic!("elpian error: function and object can not be summed");
+                    }
+                    _ => {
+                        panic!("elpian error: unknown data type and object can not be summed");
+                    }
+                }
+            }
+            9 => {
+                let val1 = arg1.as_array();
+                match arg2.typ {
+                    1 | 2 | 3 | 4 | 5 | 6 | 8 | 10 => {
+                        val1.borrow_mut().data.push(arg2);
+                        Val {
+                            typ: 9,
+                            data: Rc::new(RefCell::new(Box::new(val1))),
+                        }
+                    }
+                    7 => {
+                        let val1_temp = val1.borrow().stringify();
+                        let val2 = arg2.as_string();
+                        Val {
+                            typ: 7,
+                            data: Rc::new(RefCell::new(Box::new(format!("{}{}", val1_temp, val2)))),
+                        }
+                    }
+                    9 => {
+                        let val2 = arg2.as_array();
+                        val1.borrow_mut().data.append(&mut val2.borrow_mut().data);
+                        Val {
+                            typ: 9,
+                            data: Rc::new(RefCell::new(Box::new(val1))),
+                        }
+                    }
+                    _ => {
+                        panic!("elpian error: unknown data type and array can not be summed");
+                    }
+                }
+            }
+            10 => {
+                panic!("function can not be summed with anything");
+            }
+            _ => {
+                panic!("can not sum unknown type with anything");
+            }
         }
     }
     fn operate_subtract(&self, arg1: Val, arg2: Val) -> Val {
@@ -365,8 +697,8 @@ impl Executor {
                         panic!("elpian error: bool and object can not be subtracted");
                     }
                     9 => {
-                        let mut val2 = arg2.as_array();
-                        val2.data.insert(0, arg1);
+                        let val2 = arg2.as_array();
+                        val2.borrow_mut().data.insert(0, arg1);
                         Val {
                             typ: 9,
                             data: Rc::new(RefCell::new(Box::new(val2))),
@@ -440,7 +772,7 @@ impl Executor {
                         }
                     }
                     8 => {
-                        let val2 = arg2.as_object().stringify();
+                        let val2 = arg2.as_object().borrow().stringify();
                         val1 = val1.replace(&val2, "");
                         Val {
                             typ: 7,
@@ -448,7 +780,7 @@ impl Executor {
                         }
                     }
                     9 => {
-                        let val2 = arg2.as_array().stringify();
+                        let val2 = arg2.as_array().borrow().stringify();
                         val1 = val1.replace(&val2, "");
                         Val {
                             typ: 7,
@@ -464,7 +796,7 @@ impl Executor {
                 }
             }
             8 => {
-                let mut val1 = arg1.as_object();
+                let val1 = arg1.as_object();
                 match arg2.typ {
                     1 => {
                         panic!("elpian error: object and integer can not be subtracted");
@@ -485,7 +817,7 @@ impl Executor {
                         panic!("elpian error: object and bool can not be subtracted");
                     }
                     7 => {
-                        let mut val1_temp = val1.stringify();
+                        let mut val1_temp = val1.borrow().stringify();
                         let val2 = arg2.as_string();
                         val1_temp = val1_temp.replace(&val2, "");
                         Val {
@@ -496,16 +828,17 @@ impl Executor {
                     8 => {
                         let val2 = arg2.as_object();
                         let mut deleted: Vec<String> = vec![];
-                        val2.data.data.iter().for_each(|(k, v)| {
-                            if val1.data.data.contains_key(k) {
-                                let v2 = val1.data.data.get(k).unwrap();
+                        val2.borrow().data.data.iter().for_each(|(k, v)| {
+                            if val1.borrow().data.data.contains_key(k) {
+                                let val1_data = &val1.borrow().data.data;
+                                let v2 = val1_data.get(k).unwrap();
                                 if self.is_equal(v.clone(), v2.clone()) {
                                     deleted.push(k.clone());
                                 }
                             }
                         });
                         deleted.iter().for_each(|k| {
-                            val1.data.data.remove(&k.clone());
+                            val1.borrow_mut().data.data.remove(&k.clone());
                         });
                         Val {
                             typ: 8,
@@ -524,33 +857,45 @@ impl Executor {
                 }
             }
             9 => {
-                let mut val1 = arg1.as_array();
+                let val1 = arg1.as_array();
                 match arg2.typ {
-                    1 | 2 | 3 | 4 | 5 | 6 | 8 => {
-                        val1.data.push(arg2);
+                    1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 10 => {
+                        val1.borrow_mut().data = val1
+                            .borrow()
+                            .data
+                            .iter()
+                            .filter_map(|item| {
+                                if self.is_equal(item.clone(), arg2.clone()) {
+                                    return None;
+                                } else {
+                                    return Some(item.clone());
+                                }
+                            })
+                            .collect();
                         Val {
                             typ: 9,
                             data: Rc::new(RefCell::new(Box::new(val1))),
-                        }
-                    }
-                    7 => {
-                        let val1_temp = val1.stringify();
-                        let val2 = arg2.as_string();
-                        Val {
-                            typ: 7,
-                            data: Rc::new(RefCell::new(Box::new(format!("{}{}", val1_temp, val2)))),
                         }
                     }
                     9 => {
-                        let mut val2 = arg2.as_array();
-                        val1.data.append(&mut val2.data);
+                        let val2 = arg2.as_array();
+                        val1.borrow_mut().data = val1
+                            .borrow()
+                            .data
+                            .iter()
+                            .filter_map(|item| {
+                                for item2 in val2.borrow().data.iter() {
+                                    if self.is_equal(item.clone(), item2.clone()) {
+                                        return None;
+                                    }
+                                }
+                                return Some(item.clone());
+                            })
+                            .collect();
                         Val {
                             typ: 9,
                             data: Rc::new(RefCell::new(Box::new(val1))),
                         }
-                    }
-                    10 => {
-                        panic!("elpian error: function and integer can not be summed");
                     }
                     _ => {
                         panic!("elpian error: unknown data type and integer can not be summed");
@@ -558,10 +903,10 @@ impl Executor {
                 }
             }
             10 => {
-                panic!("function can not be summed with anything");
+                panic!("nothing can be subtracted from function");
             }
             _ => {
-                panic!("can not sum unknown type with anything");
+                panic!("can not subtract unknown type with anything");
             }
         }
     }
@@ -648,21 +993,21 @@ impl Executor {
                 match v2.typ {
                     6 => {
                         let v2_val = v2.as_object();
-                        if v_val.data.data.iter().all(|(k, d)| {
-                            if !v2_val.data.data.contains_key(&k.clone()) {
+                        if v_val.borrow().data.data.iter().all(|(k, _d)| {
+                            if !v2_val.borrow().data.data.contains_key(&k.clone()) {
                                 return false;
                             }
                             true
-                        }) && v_val.data.data.iter().all(|(k, d)| {
-                            if !v2_val.data.data.contains_key(&k.clone()) {
+                        }) && v_val.borrow().data.data.iter().all(|(k, _d)| {
+                            if !v2_val.borrow().data.data.contains_key(&k.clone()) {
                                 return false;
                             }
                             true
                         }) {
-                            return v_val.data.data.iter().all(|(k, d)| {
+                            return v_val.borrow().data.data.iter().all(|(k, d)| {
                                 self.is_equal(
                                     d.clone(),
-                                    v2_val.data.data.get(&k.clone()).unwrap().clone(),
+                                    v2_val.borrow().data.data.get(&k.clone()).unwrap().clone(),
                                 )
                             });
                         }
@@ -676,12 +1021,15 @@ impl Executor {
                 match v2.typ {
                     9 => {
                         let v2_val = v2.as_array();
-                        if v_val.data.len() != v2_val.data.len() {
+                        if v_val.borrow().data.len() != v2_val.borrow().data.len() {
                             return false;
                         }
-                        let counter: usize = 0;
-                        return v_val.data.iter().all(|d| {
-                            if self.is_equal(d.clone(), v2_val.data.get(counter).unwrap().clone()) {
+                        let mut counter: usize = 0;
+                        return v_val.borrow().data.iter().all(|d| {
+                            if self.is_equal(
+                                d.clone(),
+                                v2_val.borrow().data.get(counter).unwrap().clone(),
+                            ) {
                                 counter += 1;
                                 return true;
                             } else {
@@ -697,355 +1045,14 @@ impl Executor {
                 match v2.typ {
                     10 => {
                         let v2_val = v2.as_func();
-                        v_val.start == v2_val.start && v_val.end == v2_val.end
+                        v_val.borrow().start == v2_val.borrow().start
+                            && v_val.borrow().end == v2_val.borrow().end
                     }
                     _ => false,
                 }
             }
             _ => false,
         };
-    }
-    fn operate_sum(&self, arg1: Val, arg2: Val) -> Val {
-        match arg1.typ {
-            1 | 2 | 3 => {
-                let val1 = match arg1.typ {
-                    1 => arg1.as_i16() as i64,
-                    2 => arg1.as_i32() as i64,
-                    3 => arg1.as_i64() as i64,
-                    _ => 0,
-                };
-                match arg2.typ {
-                    1 => {
-                        let val2 = arg2.as_i16() as i64;
-                        self.check_int_range(val1 + val2)
-                    }
-                    2 => {
-                        let val2 = arg2.as_i32() as i64;
-                        self.check_int_range(val1 + val2)
-                    }
-                    3 => {
-                        let val2 = arg2.as_i64() as i64;
-                        self.check_int_range(val1 + val2)
-                    }
-                    4 => {
-                        let val2 = arg2.as_f32() as f64;
-                        let val1_temp = val1 as f64;
-                        self.check_float_range(val1_temp + val2)
-                    }
-                    5 => {
-                        let val2 = arg2.as_f64() as f64;
-                        let val1_temp = val1 as f64;
-                        self.check_float_range(val1_temp + val2)
-                    }
-                    6 => {
-                        panic!("elpian error: boolean and integer can not be summed");
-                    }
-                    7 => {
-                        let val2 = arg2.as_string();
-                        let val1_temp = val1.to_string();
-                        Val {
-                            typ: 7,
-                            data: Rc::new(RefCell::new(Box::new(format!("{}{}", val1_temp, val2)))),
-                        }
-                    }
-                    8 => {
-                        panic!("elpian error: object and integer can not be summed");
-                    }
-                    9 => {
-                        let mut val2 = arg2.as_array();
-                        val2.data.insert(0, arg1);
-                        Val {
-                            typ: 9,
-                            data: Rc::new(RefCell::new(Box::new(val2))),
-                        }
-                    }
-                    10 => {
-                        panic!("elpian error: function and integer can not be summed");
-                    }
-                    _ => {
-                        panic!("elpian error: unknown data type and integer can not be summed");
-                    }
-                }
-            }
-            4 | 5 => {
-                let val1 = match arg1.typ {
-                    4 => arg1.as_f32() as f64,
-                    5 => arg1.as_f64() as f64,
-                    _ => 0.0,
-                };
-                match arg2.typ {
-                    1 => {
-                        let val2 = arg2.as_i16() as f64;
-                        self.check_float_range(val1 + val2)
-                    }
-                    2 => {
-                        let val2 = arg2.as_i32() as f64;
-                        self.check_float_range(val1 + val2)
-                    }
-                    3 => {
-                        let val2 = arg2.as_i64() as f64;
-                        self.check_float_range(val1 + val2)
-                    }
-                    4 => {
-                        let val2 = arg2.as_f32() as f64;
-                        self.check_float_range(val1 + val2)
-                    }
-                    5 => {
-                        let val2 = arg2.as_f64() as f64;
-                        self.check_float_range(val1 + val2)
-                    }
-                    6 => {
-                        panic!("elpian error: boolean and integer can not be summed");
-                    }
-                    7 => {
-                        let val2 = arg2.as_string();
-                        let val1_temp = val1.to_string();
-                        Val {
-                            typ: 7,
-                            data: Rc::new(RefCell::new(Box::new(format!("{}{}", val1_temp, val2)))),
-                        }
-                    }
-                    8 => {
-                        panic!("elpian error: object and integer can not be summed");
-                    }
-                    9 => {
-                        let mut val2 = arg2.as_array();
-                        val2.data.insert(0, arg1);
-                        Val {
-                            typ: 9,
-                            data: Rc::new(RefCell::new(Box::new(val2))),
-                        }
-                    }
-                    10 => {
-                        panic!("elpian error: function and integer can not be summed");
-                    }
-                    _ => {
-                        panic!("elpian error: unknown data type and integer can not be summed");
-                    }
-                }
-            }
-            6 => {
-                let val1 = arg1.as_bool();
-                match arg2.typ {
-                    1 => {
-                        panic!("elpian error: bool and integer can not be summed");
-                    }
-                    2 => {
-                        panic!("elpian error: bool and integer can not be summed");
-                    }
-                    3 => {
-                        panic!("elpian error: objeboolt and integer can not be summed");
-                    }
-                    4 => {
-                        panic!("elpian error: bool and float can not be summed");
-                    }
-                    5 => {
-                        panic!("elpian error: bool and float can not be summed");
-                    }
-                    6 => {
-                        let val2 = arg2.as_bool();
-                        Val {
-                            typ: 7,
-                            data: Rc::new(RefCell::new(Box::new(val1 ^ val2))),
-                        }
-                    }
-                    7 => {
-                        let val2 = arg2.as_string();
-                        let val1_temp = val1.to_string();
-                        Val {
-                            typ: 7,
-                            data: Rc::new(RefCell::new(Box::new(format!("{}{}", val1_temp, val2)))),
-                        }
-                    }
-                    8 => {
-                        panic!("elpian error: object and bool can not be summed");
-                    }
-                    9 => {
-                        let mut val2 = arg2.as_array();
-                        val2.data.insert(0, arg1);
-                        Val {
-                            typ: 9,
-                            data: Rc::new(RefCell::new(Box::new(val2))),
-                        }
-                    }
-                    10 => {
-                        panic!("elpian error: function and bool can not be summed");
-                    }
-                    _ => {
-                        panic!("elpian error: unknown data type and bool can not be summed");
-                    }
-                }
-            }
-            7 => {
-                let val1 = arg1.as_string();
-                match arg2.typ {
-                    1 => {
-                        let val2 = arg2.as_i16().to_string();
-                        Val {
-                            typ: 7,
-                            data: Rc::new(RefCell::new(Box::new(format!("{}{}", val1, val2)))),
-                        }
-                    }
-                    2 => {
-                        let val2 = arg2.as_i32().to_string();
-                        Val {
-                            typ: 7,
-                            data: Rc::new(RefCell::new(Box::new(format!("{}{}", val1, val2)))),
-                        }
-                    }
-                    3 => {
-                        let val2 = arg2.as_i64().to_string();
-                        Val {
-                            typ: 7,
-                            data: Rc::new(RefCell::new(Box::new(format!("{}{}", val1, val2)))),
-                        }
-                    }
-                    4 => {
-                        let val2 = arg2.as_f32().to_string();
-                        Val {
-                            typ: 7,
-                            data: Rc::new(RefCell::new(Box::new(format!("{}{}", val1, val2)))),
-                        }
-                    }
-                    5 => {
-                        let val2 = arg2.as_f64().to_string();
-                        Val {
-                            typ: 7,
-                            data: Rc::new(RefCell::new(Box::new(format!("{}{}", val1, val2)))),
-                        }
-                    }
-                    6 => {
-                        let val2 = arg2.as_bool().to_string();
-                        Val {
-                            typ: 7,
-                            data: Rc::new(RefCell::new(Box::new(format!("{}{}", val1, val2)))),
-                        }
-                    }
-                    7 => {
-                        let val2 = arg2.as_string();
-                        Val {
-                            typ: 7,
-                            data: Rc::new(RefCell::new(Box::new(format!("{}{}", val1, val2)))),
-                        }
-                    }
-                    8 => {
-                        let val2 = arg2.as_object().stringify();
-                        Val {
-                            typ: 7,
-                            data: Rc::new(RefCell::new(Box::new(format!("{}{}", val1, val2)))),
-                        }
-                    }
-                    9 => {
-                        let val2 = arg2.as_array().stringify();
-                        Val {
-                            typ: 7,
-                            data: Rc::new(RefCell::new(Box::new(format!("{}{}", val1, val2)))),
-                        }
-                    }
-                    10 => {
-                        panic!("elpian error: function and string can not be summed");
-                    }
-                    _ => {
-                        panic!("elpian error: unknown data type and string can not be summed");
-                    }
-                }
-            }
-            8 => {
-                let mut val1 = arg1.as_object();
-                match arg2.typ {
-                    1 => {
-                        panic!("elpian error: object and integer can not be summed");
-                    }
-                    2 => {
-                        panic!("elpian error: object and integer can not be summed");
-                    }
-                    3 => {
-                        panic!("elpian error: object and integer can not be summed");
-                    }
-                    4 => {
-                        panic!("elpian error: object and float can not be summed");
-                    }
-                    5 => {
-                        panic!("elpian error: object and float can not be summed");
-                    }
-                    6 => {
-                        panic!("elpian error: object and bool can not be summed");
-                    }
-                    7 => {
-                        let val1_temp = val1.stringify();
-                        let val2 = arg2.as_string();
-                        Val {
-                            typ: 7,
-                            data: Rc::new(RefCell::new(Box::new(format!("{}{}", val1_temp, val2)))),
-                        }
-                    }
-                    8 => {
-                        let val2 = arg2.as_object();
-                        val2.data.data.iter().for_each(|(k, v)| {
-                            val1.data.data.insert(k.clone(), v.clone());
-                        });
-                        Val {
-                            typ: 8,
-                            data: Rc::new(RefCell::new(Box::new(val2))),
-                        }
-                    }
-                    9 => {
-                        let mut val2 = arg2.as_array();
-                        val2.data.insert(0, arg1);
-                        Val {
-                            typ: 9,
-                            data: Rc::new(RefCell::new(Box::new(val2))),
-                        }
-                    }
-                    10 => {
-                        panic!("elpian error: function and object can not be summed");
-                    }
-                    _ => {
-                        panic!("elpian error: unknown data type and object can not be summed");
-                    }
-                }
-            }
-            9 => {
-                let mut val1 = arg1.as_array();
-                match arg2.typ {
-                    1 | 2 | 3 | 4 | 5 | 6 | 8 => {
-                        val1.data.push(arg2);
-                        Val {
-                            typ: 9,
-                            data: Rc::new(RefCell::new(Box::new(val1))),
-                        }
-                    }
-                    7 => {
-                        let val1_temp = val1.stringify();
-                        let val2 = arg2.as_string();
-                        Val {
-                            typ: 7,
-                            data: Rc::new(RefCell::new(Box::new(format!("{}{}", val1_temp, val2)))),
-                        }
-                    }
-                    9 => {
-                        let mut val2 = arg2.as_array();
-                        val1.data.append(&mut val2.data);
-                        Val {
-                            typ: 9,
-                            data: Rc::new(RefCell::new(Box::new(val1))),
-                        }
-                    }
-                    10 => {
-                        panic!("elpian error: function and array can not be summed");
-                    }
-                    _ => {
-                        panic!("elpian error: unknown data type and array can not be summed");
-                    }
-                }
-            }
-            10 => {
-                panic!("function can not be summed with anything");
-            }
-            _ => {
-                panic!("can not sum unknown type with anything");
-            }
-        }
     }
     fn resolve_expr(&mut self) -> Val {
         if self.program[self.pointer] == 0x0c {
@@ -1054,36 +1061,45 @@ impl Executor {
             let indexed = self.ctx.find_val_globally(indexed_id_name);
             let index = self.resolve_expr();
             if index.typ == 7 {
-                if indexed.typ == 11 {
-                    let refer = indexed.as_refer();
-                    let val = refer.borrow_mut();
-                    if val.typ == 8 {
-                        let obj = val.as_object();
-                        return obj.data.data.get(&index.as_string()).unwrap().clone();
-                    } else {
-                        panic!("elpian error: non object value can not be indexed by string");
-                    }
+                if indexed.typ == 8 {
+                    let obj = indexed.as_object();
+                    return obj
+                        .borrow()
+                        .data
+                        .data
+                        .get(&index.as_string())
+                        .unwrap()
+                        .clone();
                 } else {
-                    panic!("elpian error: non reference value can not be indexed");
+                    panic!("elpian error: non object value can not be indexed by string");
                 }
             } else if index.typ >= 1 && index.typ <= 3 {
-                if indexed.typ == 10 {
-                    let refer = indexed.as_refer();
-                    let val = refer.borrow_mut();
-                    if val.typ == 9 {
-                        let arr = val.as_array();
-                        if index.typ == 1 {
-                            return arr.data.get(index.as_i16() as usize).unwrap().clone();
-                        } else if index.typ == 2 {
-                            return arr.data.get(index.as_i32() as usize).unwrap().clone();
-                        } else {
-                            return arr.data.get(index.as_i64() as usize).unwrap().clone();
-                        }
+                if indexed.typ == 9 {
+                    let arr = indexed.as_array();
+                    if index.typ == 1 {
+                        return arr
+                            .borrow()
+                            .data
+                            .get(index.as_i16() as usize)
+                            .unwrap()
+                            .clone();
+                    } else if index.typ == 2 {
+                        return arr
+                            .borrow()
+                            .data
+                            .get(index.as_i32() as usize)
+                            .unwrap()
+                            .clone();
                     } else {
-                        panic!("elpian error: non object value can not be indexed by string");
+                        return arr
+                            .borrow()
+                            .data
+                            .get(index.as_i64() as usize)
+                            .unwrap()
+                            .clone();
                     }
                 } else {
-                    panic!("elpian error: non reference value can not be indexed");
+                    panic!("elpian error: non object value can not be indexed by string");
                 }
             } else {
                 panic!(
@@ -1094,16 +1110,22 @@ impl Executor {
             self.pointer += 1;
             let arg1 = self.resolve_expr();
             let arg2 = self.resolve_expr();
+            return Val {
+                typ: 6,
+                data: Rc::new(RefCell::new(Box::new(self.is_equal(arg1, arg2)))),
+            };
+        } else if self.program[self.pointer] == 0x11 {
+            self.pointer += 1;
+            let arg1 = self.resolve_expr();
+            let arg2 = self.resolve_expr();
             return self.operate_sum(arg1, arg2);
+        } else if self.program[self.pointer] == 0x12 {
+            self.pointer += 1;
+            let arg1 = self.resolve_expr();
+            let arg2 = self.resolve_expr();
+            return self.operate_subtract(arg1, arg2);
         } else {
-            let val = self.extract_val();
-            if val.typ == 11 {
-                let v = val.as_refer();
-                let v_inner = v.borrow();
-                return v_inner.clone();
-            } else {
-                return val;
-            }
+            self.extract_val()
         }
     }
     fn define(&mut self, id_name: String, val: Val) {
@@ -1137,40 +1159,28 @@ impl Executor {
                         let index = self.resolve_expr();
                         let data = self.resolve_expr();
                         if index.typ == 7 {
-                            if indexed.typ == 11 {
-                                let refer = indexed.as_refer();
-                                let val = refer.borrow_mut();
-                                if val.typ == 8 {
-                                    let mut obj = val.as_object();
-                                    obj.data.data.insert(index.as_string(), data);
-                                } else {
-                                    panic!(
-                                        "elpian error: non object value can not be indexed by string"
-                                    );
-                                }
+                            if indexed.typ == 8 {
+                                let obj = indexed.as_object();
+                                obj.borrow_mut().data.data.insert(index.as_string(), data);
                             } else {
-                                panic!("elpian error: non reference value can not be indexed");
+                                panic!(
+                                    "elpian error: non object value can not be indexed by string"
+                                );
                             }
                         } else if index.typ >= 1 && index.typ <= 3 {
-                            if indexed.typ == 10 {
-                                let refer = indexed.as_refer();
-                                let val = refer.borrow_mut();
-                                if val.typ == 9 {
-                                    let mut arr = val.as_array();
-                                    if index.typ == 1 {
-                                        arr.data[index.as_i16() as usize] = data;
-                                    } else if index.typ == 2 {
-                                        arr.data[index.as_i32() as usize] = data;
-                                    } else {
-                                        arr.data[index.as_i64() as usize] = data;
-                                    }
+                            if indexed.typ == 9 {
+                                let arr = indexed.as_array();
+                                if index.typ == 1 {
+                                    arr.borrow_mut().data[index.as_i16() as usize] = data;
+                                } else if index.typ == 2 {
+                                    arr.borrow_mut().data[index.as_i32() as usize] = data;
                                 } else {
-                                    panic!(
-                                        "elpian error: non object value can not be indexed by string"
-                                    );
+                                    arr.borrow_mut().data[index.as_i64() as usize] = data;
                                 }
                             } else {
-                                panic!("elpian error: non reference value can not be indexed");
+                                panic!(
+                                    "elpian error: non object value can not be indexed by string"
+                                );
                             }
                         } else {
                             panic!(

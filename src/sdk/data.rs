@@ -25,13 +25,9 @@ impl Val {
             5 => self.as_i64().to_string(),
             6 => self.as_bool().to_string(),
             7 => format!("\"{}\"", self.as_string()),
-            8 => self.as_object().stringify(),
-            9 => self.as_array().stringify(),
+            8 => self.as_object().borrow().stringify(),
+            9 => self.as_array().borrow().stringify(),
             10 => "[Function]".to_string(),
-            11 => {
-                let d: Rc<RefCell<Val>> = self.as_refer();
-                d.borrow().stringify()
-            }
             _ => "undefined".to_string(),
         };
     }
@@ -67,23 +63,16 @@ impl Val {
             },
             8 => Val {
                 typ: self.typ,
-                data: Rc::new(RefCell::new(Box::new(self.as_object().clone_object()))),
+                data: Rc::new(RefCell::new(Box::new(self.as_object().borrow().clone_object()))),
             },
             9 => Val {
                 typ: self.typ,
-                data: Rc::new(RefCell::new(Box::new(self.as_array()))),
+                data: Rc::new(RefCell::new(Box::new(self.as_array().borrow().clone_arr()))),
             },
             10 => Val {
                 typ: self.typ,
-                data: Rc::new(RefCell::new(Box::new(self.as_func()))),
+                data: Rc::new(RefCell::new(Box::new(self.as_func().borrow().clone_func()))),
             },
-            11 => {
-                let d: Rc<RefCell<Val>> = self.as_refer();
-                Val {
-                    typ: self.typ,
-                    data: Rc::new(RefCell::new(Box::new(d))),
-                }
-            }
             _ => Val {
                 typ: self.typ,
                 data: Rc::new(RefCell::new(Box::new(0))),
@@ -125,28 +114,22 @@ impl Val {
         let b = a.deref();
         b.borrow().downcast_ref::<String>().unwrap().clone()
     }
-    pub fn as_object(&self) -> Object {
+    pub fn as_object(&self) -> Rc<RefCell<Object>> {
         let a = self.data.clone();
         let b = a.borrow();
-        let c = b.downcast_ref::<Object>().unwrap();
-        c.clone_object()
+        let c = b.downcast_ref::<Rc<RefCell<Object>>>().unwrap();
+        c.clone()
     }
-    pub fn as_array(&self) -> Array {
+    pub fn as_array(&self) -> Rc<RefCell<Array>> {
         let a = self.data.clone();
         let b: std::cell::Ref<'_, Box<dyn Any>> = a.borrow();
-        let c = b.downcast_ref::<Array>().unwrap();
-        c.clone_arr()
+        let c = b.downcast_ref::<Rc<RefCell<Array>>>().unwrap();
+        c.clone()
     }
-    pub fn as_func(&self) -> Function {
+    pub fn as_func(&self) -> Rc<RefCell<Function>> {
         let a = self.data.clone();
         let b: std::cell::Ref<'_, Box<dyn Any>> = a.borrow();
-        let c = b.downcast_ref::<Function>().unwrap();
-        c.clone_func()
-    }
-    pub fn as_refer(&self) -> Rc<RefCell<Val>> {
-        let a = self.data.clone();
-        let b = a.borrow();
-        let c = b.downcast_ref::<Rc<RefCell<Val>>>().unwrap();
+        let c = b.downcast_ref::<Rc<RefCell<Function>>>().unwrap();
         c.clone()
     }
     pub fn is_empty(&self) -> bool {
