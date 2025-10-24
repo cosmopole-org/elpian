@@ -36,6 +36,7 @@ fn main() {
           ]
         }),
         1,
+        vec!["println".to_string()]
     );
     vm.run();
     vm.print_memory();

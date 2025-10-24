@@ -2,32 +2,230 @@ use crate::sdk::{
     context::Context,
     data::{Array, Function, Object, Val, ValGroup},
 };
-use core::panic;
+use core::{borrow, panic};
 use std::{
+    any::Any,
     cell::RefCell,
     collections::HashMap,
     i16,
+    ops::Deref,
     rc::Rc,
     sync::mpsc::{self, Sender},
     thread,
 };
+
+#[derive(Clone, PartialEq)]
+pub enum OperationTypes {
+    DefineVar,
+    CallFunc,
+}
+
+#[derive(Clone, PartialEq)]
+pub enum ExecStates {
+    DefineVarExtractName,
+    DefineVarExtractValue,
+    CallFuncStarted,
+    CallFuncExtractFunc,
+    CallFuncExtractParam,
+    CallFuncFinished,
+}
+
+pub trait Operation {
+    fn get_type(&self) -> OperationTypes;
+    fn get_state(&self) -> ExecStates;
+    fn set_state(&mut self, state: ExecStates, data: Box<dyn Any>);
+    fn get_data(&self) -> Vec<Val>;
+}
+
+struct DefineVariable {
+    typ: OperationTypes,
+    state: ExecStates,
+    pub var_name: Option<String>,
+    pub var_value: Option<Val>,
+}
+
+impl DefineVariable {
+    pub fn new() -> Self {
+        DefineVariable {
+            typ: OperationTypes::DefineVar,
+            state: ExecStates::DefineVarExtractName,
+            var_name: None,
+            var_value: None,
+        }
+    }
+}
+
+impl Operation for DefineVariable {
+    fn get_state(&self) -> ExecStates {
+        self.state.clone()
+    }
+
+    fn get_type(&self) -> OperationTypes {
+        self.typ.clone()
+    }
+
+    fn set_state(&mut self, state: ExecStates, data: Box<dyn Any>) {
+        self.state = state.clone();
+        if state == ExecStates::DefineVarExtractName {
+            self.var_name = Some(*data.downcast::<String>().unwrap());
+        } else if state == ExecStates::DefineVarExtractValue {
+            self.var_value = Some(*data.downcast::<Val>().unwrap());
+        }
+    }
+
+    fn get_data(&self) -> Vec<Val> {
+        vec![
+            Val{
+                typ: 7,
+                data: Rc::new(RefCell::new(Box::new(self.var_name.clone())))
+            },
+            Val{
+                typ: 7,
+                data: Rc::new(RefCell::new(Box::new(self.var_value.clone())))
+            },
+        ]
+    }
+}
+
+struct CallFunction {
+    typ: OperationTypes,
+    state: ExecStates,
+    pub func: Option<Function>,
+    pub is_native: bool,
+    pub param_count: i32,
+    pub params: Vec<Val>,
+}
+
+impl CallFunction {
+    pub fn new() -> Self {
+        CallFunction {
+            typ: OperationTypes::CallFunc,
+            state: ExecStates::CallFuncStarted,
+            func: None,
+            param_count: 0,
+            is_native: false,
+            params: vec![],
+        }
+    }
+}
+
+impl Operation for CallFunction {
+    fn get_state(&self) -> ExecStates {
+        self.state.clone()
+    }
+
+    fn get_type(&self) -> OperationTypes {
+        self.typ.clone()
+    }
+
+    fn set_state(&mut self, state: ExecStates, data: Box<dyn Any>) {
+        self.state = state.clone();
+        if state == ExecStates::CallFuncExtractFunc {
+            let val = data.downcast::<(Val, i32)>().unwrap();
+            if val.as_ref().0.typ == 10 {
+                self.func = Some(val.as_ref().0.as_func().borrow().clone());
+                self.param_count = val.as_ref().1;
+                self.is_native = false;
+            } else if val.as_ref().0.typ == 255 {
+                self.func = Some(Function::new(0, 0, vec![]));
+                self.param_count = 1;
+                self.is_native = true;
+            } else {
+                panic!("elpian error: the specified data is not runnable");
+            }
+        } else if state == ExecStates::CallFuncExtractParam {
+            self.params.push(*data.downcast::<Val>().unwrap());
+        }
+        if let Some(func) = &self.func {
+            if func.params.len() == self.params.len() {
+                self.state = ExecStates::CallFuncFinished;
+            }
+        }
+    }
+
+    fn get_data(&self) -> Vec<Val> {
+        vec![
+            Val{
+                typ: 10,
+                data: Rc::new(RefCell::new(Box::new(self.func.clone().unwrap())))
+            },
+            Val{
+                typ: 6,
+                data: Rc::new(RefCell::new(Box::new(self.is_native)))
+            },
+            Val{
+                typ: 2,
+                data: Rc::new(RefCell::new(Box::new(self.param_count)))
+            },
+            Val{
+                typ: 9,
+                data: Rc::new(RefCell::new(Box::new(self.params.clone())))
+            },
+        ]
+    }
+}
 
 pub struct Executor {
     pointer: usize,
     end_at: usize,
     ctx: Context,
     program: Vec<u8>,
+    vm_send: Sender<(u8, i64, Val)>,
+    callbacks: HashMap<i64, Sender<Val>>,
+    cb_counter: i64,
+    pending_func_result_position: usize,
+    after_return_next_jump: usize,
+    pending_func_result_value: Val,
+    registers: Vec<Rc<RefCell<Box<dyn Operation>>>>,
 }
 
 impl Executor {
-    pub fn create(program: Vec<u8>, vm_send: Sender<(u8, i64, Val)>) -> Sender<(u8, i64, String)> {
+    pub fn create(
+        program: Vec<u8>,
+        vm_send: Sender<(u8, i64, Val)>,
+        func_group: Vec<String>,
+    ) -> Sender<(u8, i64, String)> {
         let (tasks_send, tasks_recv) = mpsc::channel::<(u8, i64, String)>();
         thread::spawn(move || {
+            let mut program_payload: Vec<u8> = vec![];
+            for func_name in func_group.iter() {
+                program_payload.push(0x07);
+                program_payload.append(&mut i32::to_be_bytes(func_name.len() as i32).to_vec());
+                program_payload.append(&mut func_name.as_bytes().to_vec());
+                program_payload.append(&mut i32::to_be_bytes(1).to_vec());
+                let param_name = "input".to_string();
+                program_payload.append(&mut i32::to_be_bytes(param_name.len() as i32).to_vec());
+                program_payload.append(&mut param_name.as_bytes().to_vec());
+                let mut func_body = vec![];
+                func_body.push(0x03);
+                func_body.push(0x0b);
+                let ask_host_call_name = "askHost".to_string();
+                func_body.append(&mut i32::to_be_bytes(ask_host_call_name.len() as i32).to_vec());
+                func_body.append(&mut ask_host_call_name.as_bytes().to_vec());
+                func_body.append(&mut i32::to_be_bytes(1).to_vec());
+                func_body.push(0x0b);
+                let arg_name = "input".to_string();
+                program_payload.append(&mut i32::to_be_bytes(arg_name.len() as i32).to_vec());
+                func_body.append(&mut arg_name.as_bytes().to_vec());
+                let func_start = program_payload.len();
+                let func_end = func_start + func_body.len();
+                program_payload.append(&mut i64::to_be_bytes(func_start as i64).to_vec());
+                program_payload.append(&mut i64::to_be_bytes(func_end as i64).to_vec());
+                program_payload.append(&mut func_body);
+            }
+            program_payload.append(&mut program.clone());
             let mut ex = Executor {
                 pointer: 0,
-                end_at: program.len(),
+                end_at: program_payload.len(),
                 ctx: Context::new(),
-                program,
+                program: program_payload,
+                vm_send: vm_send.clone(),
+                cb_counter: 0,
+                callbacks: HashMap::new(),
+                pending_func_result_position: 0,
+                after_return_next_jump: 0,
+                pending_func_result_value: Val::new(254, Rc::new(RefCell::new(Box::new(0)))),
+                registers: vec![],
             };
             loop {
                 let (op_code, cb_id, payload) = tasks_recv.recv().unwrap();
@@ -142,7 +340,12 @@ impl Executor {
     fn extract_func(&mut self) -> Function {
         let start = self.extract_i64() as usize;
         let end = self.extract_i64() as usize;
-        Function::new(start, end)
+        let param_count = self.extract_i32();
+        let mut params = vec![];
+        for _i in 0..param_count {
+            params.push(self.extract_str());
+        }
+        Function::new(start, end, params)
     }
     fn extract_val(&mut self) -> Val {
         let p = self.program[self.pointer];
@@ -190,6 +393,12 @@ impl Executor {
             },
             0x0b => {
                 let id = self.extract_str();
+                if id == "askHost" {
+                    return Val {
+                        typ: -2,
+                        data: Rc::new(RefCell::new(Box::new(self.extract_func()))),
+                    };
+                }
                 self.ctx.find_val_globally(id)
             }
             _ => Val {
@@ -1056,78 +1265,88 @@ impl Executor {
             _ => false,
         };
     }
-    fn resolve_expr(&mut self) -> Val {
-        if self.program[self.pointer] == 0x0c {
-            self.pointer += 1;
-            let indexed_id_name = self.extract_str();
-            let indexed = self.ctx.find_val_globally(indexed_id_name);
-            let index = self.resolve_expr();
-            if index.typ == 7 {
-                if indexed.typ == 8 {
-                    let obj = indexed.as_object();
-                    return obj
-                        .borrow()
-                        .data
-                        .data
-                        .get(&index.as_string())
-                        .unwrap()
-                        .clone();
-                } else {
-                    panic!("elpian error: non object value can not be indexed by string");
-                }
-            } else if index.typ >= 1 && index.typ <= 3 {
-                if indexed.typ == 9 {
-                    let arr = indexed.as_array();
-                    if index.typ == 1 {
-                        return arr
-                            .borrow()
-                            .data
-                            .get(index.as_i16() as usize)
-                            .unwrap()
-                            .clone();
-                    } else if index.typ == 2 {
-                        return arr
-                            .borrow()
-                            .data
-                            .get(index.as_i32() as usize)
-                            .unwrap()
-                            .clone();
-                    } else {
-                        return arr
-                            .borrow()
-                            .data
-                            .get(index.as_i64() as usize)
-                            .unwrap()
-                            .clone();
+    // fn resolve_expr(&mut self) -> Val {
+    //     if self.pending_func_result_value.typ != 254 {
+    //         let result_val = self.pending_func_result_value.clone();
+    //         self.pending_func_result_value = Val {
+    //             typ: 254,
+    //             data: Rc::new(RefCell::new(Box::new(0))),
+    //         };
+    //         self.pointer = self.after_return_next_jump;
+    //         return result_val;
+    //     }
+    // }
+    fn check_operation_state(&mut self) {
+        if self.registers.last().unwrap().borrow().get_type() == OperationTypes::CallFunc {
+            let state_holder = self.registers.last().unwrap().borrow();
+            if state_holder.get_state() == ExecStates::CallFuncFinished {
+                let regs = state_holder.get_data().clone();
+                let is_native = regs[1].as_bool();
+                if !is_native {
+                    let func = regs[0].as_func().clone();
+                    let arg_count = regs[2].as_i32() as usize;
+                    if arg_count != func.borrow().params.len() {
+                        panic!("elpian error: func params count is not correct");
                     }
+                    let mut args = HashMap::new();
+                    let mut i: usize = 0;
+                    for arg in regs[3].as_array().borrow().data.iter() {
+                        args.insert(func.borrow().params[i].clone(), arg.clone());
+                        i += 1;
+                    }
+                    self.ctx
+                        .memory
+                        .last()
+                        .unwrap()
+                        .borrow_mut()
+                        .update_frozen_pointer(self.pointer);
+                    self.ctx.push_scope_with_args(
+                        func.borrow().start,
+                        func.borrow().start,
+                        func.borrow().end,
+                        args,
+                    );
+                    self.after_return_next_jump = self.pointer;
+                    self.pointer = func.borrow().start;
+                    self.end_at = func.borrow().end;
                 } else {
-                    panic!("elpian error: non object value can not be indexed by string");
+                    let mut args = HashMap::new();
+                    let arg = regs[3].as_array().borrow().data[0].clone();
+                    args.insert("input".to_string(), arg);
+                    self.cb_counter += 1;
+                    let cb_id = self.cb_counter;
+                    let (cb_send, cb_recv) = mpsc::channel::<Val>();
+                    self.callbacks.insert(cb_id, cb_send);
+                    self.vm_send
+                        .send((0x02, cb_id, args["input"].clone()))
+                        .unwrap();
+                    self.pending_func_result_value = cb_recv.recv().unwrap();
+                    self.pointer = self.pending_func_result_position;
                 }
-            } else {
-                panic!(
-                    "elpian error: types other than integer and string can not be used to index anything"
-                );
             }
-        } else if self.program[self.pointer] == 0x10 {
-            self.pointer += 1;
-            let arg1 = self.resolve_expr();
-            let arg2 = self.resolve_expr();
-            return Val {
-                typ: 6,
-                data: Rc::new(RefCell::new(Box::new(self.is_equal(arg1, arg2)))),
-            };
-        } else if self.program[self.pointer] == 0x11 {
-            self.pointer += 1;
-            let arg1 = self.resolve_expr();
-            let arg2 = self.resolve_expr();
-            return self.operate_sum(arg1, arg2);
-        } else if self.program[self.pointer] == 0x12 {
-            self.pointer += 1;
-            let arg1 = self.resolve_expr();
-            let arg2 = self.resolve_expr();
-            return self.operate_subtract(arg1, arg2);
-        } else {
-            self.extract_val()
+        }
+    }
+    fn do_state_progress(&mut self, val: Val) {
+        if self.registers.last().unwrap().borrow().get_type() == OperationTypes::CallFunc {
+            if self.registers.last().unwrap().borrow().get_state() == ExecStates::CallFuncStarted {
+                let arg_count = self.extract_i32() as usize;
+                self.registers.last().unwrap().borrow_mut().set_state(
+                    ExecStates::CallFuncExtractFunc,
+                    Box::new((val.clone(), arg_count)),
+                );
+                self.check_operation_state();
+            } else if self.registers.last().unwrap().borrow().get_state()
+                == ExecStates::CallFuncExtractFunc
+                || self.registers.last().unwrap().borrow().get_state()
+                    == ExecStates::CallFuncExtractParam
+            {
+                self.registers
+                    .last()
+                    .unwrap()
+                    .borrow_mut()
+                    .set_state(ExecStates::CallFuncExtractParam, Box::new(val.clone()));
+                self.check_operation_state();
+            }
         }
     }
     fn define(&mut self, id_name: String, val: Val) {
@@ -1157,6 +1376,9 @@ impl Executor {
                 if self.ctx.memory.len() > 0 {
                     self.pointer = self.ctx.memory.last().unwrap().borrow().frozen_pointer;
                     self.end_at = self.ctx.memory.last().unwrap().borrow().frozen_end;
+                    if self.pending_func_result_value.typ != 254 {
+                        self.pointer = self.pending_func_result_position;
+                    }
                 } else {
                     break;
                 }
@@ -1164,15 +1386,113 @@ impl Executor {
             let unit: u8 = self.program[self.pointer];
             self.pointer += 1;
             match unit {
-                0x01 => {
-                    if self.program[self.pointer] == 0x0b {
-                        self.pointer += 1;
-                        let var_name = self.extract_str();
-                        let data = self.resolve_expr();
-                        self.define(var_name, data);
+                // ----------------------------------
+                // arithmetic operators:
+                // equality operator
+                0xf0 => {
+                    self.pointer += 1;
+                    let arg1 = self.resolve_expr();
+                    let arg2 = self.resolve_expr();
+                    return Val {
+                        typ: 6,
+                        data: Rc::new(RefCell::new(Box::new(self.is_equal(arg1, arg2)))),
+                    };
+                }
+                // sum operator
+                0xf1 => {
+                    self.pointer += 1;
+                    let arg1 = self.resolve_expr();
+                    let arg2 = self.resolve_expr();
+                    return self.operate_sum(arg1, arg2);
+                }
+                // subtract operator
+                0xf2 => {
+                    self.pointer += 1;
+                    let arg1 = self.resolve_expr();
+                    let arg2 = self.resolve_expr();
+                    return self.operate_subtract(arg1, arg2);
+                }
+                // ----------------------------------
+                // program operators:
+                // data indexer
+                0x0c => {
+                    self.pointer += 1;
+                    let indexed_id_name = self.extract_str();
+                    let indexed = self.ctx.find_val_globally(indexed_id_name);
+                    let index = self.resolve_expr();
+                    if index.typ == 7 {
+                        if indexed.typ == 8 {
+                            let obj = indexed.as_object();
+                            return obj
+                                .borrow()
+                                .data
+                                .data
+                                .get(&index.as_string())
+                                .unwrap()
+                                .clone();
+                        } else {
+                            panic!("elpian error: non object value can not be indexed by string");
+                        }
+                    } else if index.typ >= 1 && index.typ <= 3 {
+                        if indexed.typ == 9 {
+                            let arr = indexed.as_array();
+                            if index.typ == 1 {
+                                return arr
+                                    .borrow()
+                                    .data
+                                    .get(index.as_i16() as usize)
+                                    .unwrap()
+                                    .clone();
+                            } else if index.typ == 2 {
+                                return arr
+                                    .borrow()
+                                    .data
+                                    .get(index.as_i32() as usize)
+                                    .unwrap()
+                                    .clone();
+                            } else {
+                                return arr
+                                    .borrow()
+                                    .data
+                                    .get(index.as_i64() as usize)
+                                    .unwrap()
+                                    .clone();
+                            }
+                        } else {
+                            panic!("elpian error: non object value can not be indexed by string");
+                        }
+                    } else {
+                        panic!(
+                            "elpian error: types other than integer and string can not be used to index anything"
+                        );
                     }
                 }
-                0x02 => {
+                // function call
+                0x0d => {
+                    let state_holder = CallFunction::new();
+                    self.registers
+                        .push(Rc::new(RefCell::new(Box::new(state_holder))));
+                }
+                // definition statement
+                0x0e => {
+                    if self.program[self.pointer] == 0x0b {
+                        self.pointer += 1;
+                        let state_holder = DefineVariable::new();
+                        self.registers
+                            .push(Rc::new(RefCell::new(Box::new(state_holder))));
+                        let var_name = self.extract_str();
+                        self.registers
+                            .last()
+                            .unwrap()
+                            .borrow_mut()
+                            .set_state(ExecStates::DefineVarExtractName, Box::new(var_name));
+
+                        // let data = self.resolve_expr();
+                        // self.define(var_name, data);
+                    }
+                }
+                // assignment statement
+                0x0f => {
                     if self.program[self.pointer] == 0x0c {
                         self.pointer += 1;
                         let indexed_id_name = self.extract_str();
@@ -1215,27 +1535,8 @@ impl Executor {
                         self.assign(var_name, data);
                     }
                 }
-                0x03 => {
-                    let val = self.resolve_expr();
-                    if val.typ == 10 {
-                        let func = val.as_func();
-                        self.ctx
-                            .memory
-                            .last()
-                            .unwrap()
-                            .borrow_mut()
-                            .update_frozen_pointer(self.pointer);
-                        self.ctx.push_scope(
-                            func.borrow().start,
-                            func.borrow().start,
-                            func.borrow().end,
-                        );
-                        self.pointer = func.borrow().start;
-                    } else {
-                        panic!("elpian error: the specified data is not runnable");
-                    }
-                }
-                0x04 => {
+                // if statement
+                0x10 => {
                     let has_condition = self.program[self.pointer] == 0x01;
                     let mut condition = false;
                     if has_condition {
@@ -1257,6 +1558,7 @@ impl Executor {
                         self.ctx
                             .push_scope(branch_true_start, branch_true_start, branch_true_end);
                         self.pointer = branch_true_start;
+                        self.end_at = branch_true_end;
                     } else {
                         let branch_true_start = self.extract_i64() as usize;
                         let branch_true_end = self.extract_i64() as usize;
@@ -1275,12 +1577,14 @@ impl Executor {
                                 branch_true_end,
                             );
                             self.pointer = branch_true_start;
+                            self.end_at = branch_true_end;
                         } else {
                             self.pointer = branch_next_start;
                         }
                     }
                 }
-                0x05 => {
+                // loop statement
+                0x11 => {
                     let mut condition = false;
                     let val = self.resolve_expr();
                     if val.typ == 6 {
@@ -1299,11 +1603,13 @@ impl Executor {
                         self.ctx
                             .push_scope(branch_true_start, branch_true_start, branch_true_end);
                         self.pointer = branch_true_start;
+                        self.end_at = branch_true_end;
                     } else {
                         self.pointer = branch_after_start;
                     }
                 }
-                0x06 => {
+                // switch case statement
+                0x12 => {
                     let comparing_val = self.resolve_expr();
                     let case_count = self.extract_i64();
                     let branch_after_start = self.extract_i64() as usize;
@@ -1326,12 +1632,46 @@ impl Executor {
                                 branch_true_end,
                             );
                             self.pointer = branch_true_start;
+                            self.end_at = branch_true_end;
                         }
                     }
                     if !matched {
                         self.pointer = branch_after_start;
                     }
                 }
+                // function definiton
+                0x13 => {
+                    let func_name = self.extract_str();
+                    let param_count = self.extract_i32();
+                    let mut param_names = vec![];
+                    for _i in 0..param_count {
+                        let p_name = self.extract_str();
+                        param_names.push(p_name);
+                    }
+                    let func_start = self.extract_i64() as usize;
+                    let func_end = self.extract_i64() as usize;
+                    let func = Function::new(func_start, func_end, param_names);
+                    self.define(
+                        func_name,
+                        Val {
+                            typ: 10,
+                            data: Rc::new(RefCell::new(Box::new(func))),
+                        },
+                    );
+                }
+                // return command
+                0x14 => {
+                    self.pending_func_result_value = self.resolve_expr();
+                    self.pointer = self.end_at;
+                }
+                // ----------------------------------
+                // data expressions
+                1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 => {
+                    let val = self.extract_val();
+                    self.do_state_progress(val);
+                }
+                // ----------------------------------
+                // No-Op
                 _ => {}
             }
         }

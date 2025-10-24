@@ -63,7 +63,9 @@ impl Val {
             },
             8 => Val {
                 typ: self.typ,
-                data: Rc::new(RefCell::new(Box::new(self.as_object().borrow().clone_object()))),
+                data: Rc::new(RefCell::new(Box::new(
+                    self.as_object().borrow().clone_object(),
+                ))),
             },
             9 => Val {
                 typ: self.typ,
@@ -234,16 +236,18 @@ impl Array {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct Function {
     pub start: usize,
     pub end: usize,
+    pub params: Vec<String>,
 }
 
 impl Function {
-    pub fn new(start: usize, end: usize) -> Self {
-        Function { start, end }
+    pub fn new(start: usize, end: usize, params: Vec<String>) -> Self {
+        Function { start, end, params }
     }
     pub fn clone_func(&self) -> Self {
-        return Function::new(self.start, self.end);
+        return Function::new(self.start, self.end, self.params.clone());
     }
 }
