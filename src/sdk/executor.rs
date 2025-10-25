@@ -104,7 +104,7 @@ impl Operation for DefineVariable {
         vec![
             Val {
                 typ: 7,
-                data: Rc::new(RefCell::new(Box::new(self.var_name.clone()))),
+                data: Rc::new(RefCell::new(Box::new(self.var_name.clone().unwrap()))),
             },
             self.var_value.clone().unwrap(),
         ]
@@ -588,31 +588,31 @@ impl Executor {
         let (tasks_send, tasks_recv) = mpsc::channel::<(u8, i64, String)>();
         thread::spawn(move || {
             let mut program_payload: Vec<u8> = vec![];
-            for func_name in func_group.iter() {
-                program_payload.push(0x07);
-                program_payload.append(&mut i32::to_be_bytes(func_name.len() as i32).to_vec());
-                program_payload.append(&mut func_name.as_bytes().to_vec());
-                program_payload.append(&mut i32::to_be_bytes(1).to_vec());
-                let param_name = "input".to_string();
-                program_payload.append(&mut i32::to_be_bytes(param_name.len() as i32).to_vec());
-                program_payload.append(&mut param_name.as_bytes().to_vec());
-                let mut func_body = vec![];
-                func_body.push(0x03);
-                func_body.push(0x0b);
-                let ask_host_call_name = "askHost".to_string();
-                func_body.append(&mut i32::to_be_bytes(ask_host_call_name.len() as i32).to_vec());
-                func_body.append(&mut ask_host_call_name.as_bytes().to_vec());
-                func_body.append(&mut i32::to_be_bytes(1).to_vec());
-                func_body.push(0x0b);
-                let arg_name = "input".to_string();
-                program_payload.append(&mut i32::to_be_bytes(arg_name.len() as i32).to_vec());
-                func_body.append(&mut arg_name.as_bytes().to_vec());
-                let func_start = program_payload.len();
-                let func_end = func_start + func_body.len();
-                program_payload.append(&mut i64::to_be_bytes(func_start as i64).to_vec());
-                program_payload.append(&mut i64::to_be_bytes(func_end as i64).to_vec());
-                program_payload.append(&mut func_body);
-            }
+            // for func_name in func_group.iter() {
+            //     program_payload.push(0x07);
+            //     program_payload.append(&mut i32::to_be_bytes(func_name.len() as i32).to_vec());
+            //     program_payload.append(&mut func_name.as_bytes().to_vec());
+            //     program_payload.append(&mut i32::to_be_bytes(1).to_vec());
+            //     let param_name = "input".to_string();
+            //     program_payload.append(&mut i32::to_be_bytes(param_name.len() as i32).to_vec());
+            //     program_payload.append(&mut param_name.as_bytes().to_vec());
+            //     let mut func_body = vec![];
+            //     func_body.push(0x03);
+            //     func_body.push(0x0b);
+            //     let ask_host_call_name = "askHost".to_string();
+            //     func_body.append(&mut i32::to_be_bytes(ask_host_call_name.len() as i32).to_vec());
+            //     func_body.append(&mut ask_host_call_name.as_bytes().to_vec());
+            //     func_body.append(&mut i32::to_be_bytes(1).to_vec());
+            //     func_body.push(0x0b);
+            //     let arg_name = "input".to_string();
+            //     program_payload.append(&mut i32::to_be_bytes(arg_name.len() as i32).to_vec());
+            //     func_body.append(&mut arg_name.as_bytes().to_vec());
+            //     let func_start = program_payload.len();
+            //     let func_end = func_start + func_body.len();
+            //     program_payload.append(&mut i64::to_be_bytes(func_start as i64).to_vec());
+            //     program_payload.append(&mut i64::to_be_bytes(func_end as i64).to_vec());
+            //     program_payload.append(&mut func_body);
+            // }
             program_payload.append(&mut program.clone());
             let mut ex = Executor {
                 pointer: 0,
@@ -1688,7 +1688,7 @@ impl Executor {
                 let arg_count = self.extract_i32() as usize;
                 self.registers.last().unwrap().borrow_mut().set_state(
                     ExecStates::CallFuncExtractFunc,
-                    Box::new((val.clone(), arg_count)),
+                    Box::new((val.clone().unwrap(), arg_count)),
                 );
                 self.forward_state(None);
             } else if self.registers.last().unwrap().borrow().get_state()
@@ -1700,7 +1700,7 @@ impl Executor {
                     .last()
                     .unwrap()
                     .borrow_mut()
-                    .set_state(ExecStates::CallFuncExtractParam, Box::new(val.clone()));
+                    .set_state(ExecStates::CallFuncExtractParam, Box::new(val.clone().unwrap()));
                 self.forward_state(None);
             } else if self.registers.last().unwrap().borrow().get_state()
                 == ExecStates::CallFuncFinished
@@ -1758,7 +1758,7 @@ impl Executor {
                     .last()
                     .unwrap()
                     .borrow_mut()
-                    .set_state(ExecStates::ReturnValFinished, Box::new(val.clone()));
+                    .set_state(ExecStates::ReturnValFinished, Box::new(val.clone().unwrap()));
                 self.forward_state(None);
             } else if self.registers.last().unwrap().borrow().get_state()
                 == ExecStates::ReturnValFinished
@@ -1777,7 +1777,7 @@ impl Executor {
                     .last()
                     .unwrap()
                     .borrow_mut()
-                    .set_state(ExecStates::DefineVarExtractValue, Box::new(val.clone()));
+                    .set_state(ExecStates::DefineVarExtractValue, Box::new(val.clone().unwrap()));
                 self.forward_state(None);
             } else if self.registers.last().unwrap().borrow().get_state()
                 == ExecStates::DefineVarExtractValue
@@ -1786,7 +1786,7 @@ impl Executor {
                 let var_name = regs[0].as_string();
                 let var_value = regs[1].clone();
                 self.registers.pop();
-                self.define(var_name.clone(), var_value);
+                self.define(var_name.clone(), var_value.clone());
             }
         } else if self.registers.last().unwrap().borrow().get_type() == OperationTypes::AssignVar {
             if self.registers.last().unwrap().borrow().get_state()
@@ -1797,14 +1797,14 @@ impl Executor {
                         .last()
                         .unwrap()
                         .borrow_mut()
-                        .set_state(ExecStates::AssignVarExtractValue, Box::new(val.clone()));
+                        .set_state(ExecStates::AssignVarExtractValue, Box::new(val.clone().unwrap()));
                     self.forward_state(None);
                 } else if self.registers.last().unwrap().borrow().get_data()[1].as_i16() == 2 {
                     self.registers
                         .last()
                         .unwrap()
                         .borrow_mut()
-                        .set_state(ExecStates::AssignVarExtractIndex, Box::new(val.clone()));
+                        .set_state(ExecStates::AssignVarExtractIndex, Box::new(val.clone().unwrap()));
                     self.forward_state(None);
                 }
             } else if self.registers.last().unwrap().borrow().get_state()
@@ -1856,7 +1856,7 @@ impl Executor {
                     .last()
                     .unwrap()
                     .borrow_mut()
-                    .set_state(ExecStates::IfStmtFinished, Box::new(val.clone()));
+                    .set_state(ExecStates::IfStmtFinished, Box::new(val.clone().unwrap()));
             } else if self.registers.last().unwrap().borrow().get_state()
                 == ExecStates::IfStmtFinished
             {
@@ -1911,7 +1911,7 @@ impl Executor {
                     .last()
                     .unwrap()
                     .borrow_mut()
-                    .set_state(ExecStates::LoopStmtFinished, Box::new(val.clone()));
+                    .set_state(ExecStates::LoopStmtFinished, Box::new(val.clone().unwrap()));
             } else if self.registers.last().unwrap().borrow().get_state()
                 == ExecStates::LoopStmtFinished
             {
@@ -1947,7 +1947,7 @@ impl Executor {
                 let case_count = self.extract_i64() as usize;
                 self.registers.last().unwrap().borrow_mut().set_state(
                     ExecStates::SwitchStmtExtractVal,
-                    Box::new((val.clone(), branch_after_start, case_count)),
+                    Box::new((val.clone().unwrap(), branch_after_start, case_count)),
                 );
             } else if self.registers.last().unwrap().borrow().get_state()
                 == ExecStates::SwitchStmtExtractVal
@@ -1958,7 +1958,7 @@ impl Executor {
                 let branch_true_end = self.extract_i64() as usize;
                 self.registers.last().unwrap().borrow_mut().set_state(
                     ExecStates::SwitchStmtExtractCase,
-                    Box::new((val.clone(), branch_true_start, branch_true_end)),
+                    Box::new((val.clone().unwrap(), branch_true_start, branch_true_end)),
                 );
             } else if self.registers.last().unwrap().borrow().get_state()
                 == ExecStates::SwitchStmtFinished
@@ -1970,10 +1970,10 @@ impl Executor {
                 let mut matched = false;
                 for case_info in cases.borrow().data.iter() {
                     let data = case_info.as_object().borrow().data.data.clone();
-                    let val = data["val"].clone();
+                    let case_val = data["val"].clone();
                     let branch_true_start = data["start"].as_i64() as usize;
                     let branch_true_end = data["end"].as_i64() as usize;
-                    if self.is_equal(comparing_val.clone(), val.clone()) {
+                    if self.is_equal(comparing_val.clone(), case_val) {
                         matched = true;
                         self.ctx
                             .memory
@@ -2000,7 +2000,7 @@ impl Executor {
                     .last()
                     .unwrap()
                     .borrow_mut()
-                    .set_state(ExecStates::ArithmeticExtractArg1, Box::new(val.clone()));
+                    .set_state(ExecStates::ArithmeticExtractArg1, Box::new(val.clone().unwrap()));
             } else if self.registers.last().unwrap().borrow().get_state()
                 == ExecStates::ArithmeticExtractArg1
             {
@@ -2008,7 +2008,7 @@ impl Executor {
                     .last()
                     .unwrap()
                     .borrow_mut()
-                    .set_state(ExecStates::ArithmeticExtractArg2, Box::new(val.clone()));
+                    .set_state(ExecStates::ArithmeticExtractArg2, Box::new(val.clone().unwrap()));
             } else if self.registers.last().unwrap().borrow().get_state()
                 == ExecStates::ArithmeticExtractArg2
             {
@@ -2047,7 +2047,7 @@ impl Executor {
                     .last()
                     .unwrap()
                     .borrow_mut()
-                    .set_state(ExecStates::IndexerExtractVarName, Box::new(val.clone()));
+                    .set_state(ExecStates::IndexerExtractVarName, Box::new(val.clone().unwrap()));
             } else if self.registers.last().unwrap().borrow().get_state()
                 == ExecStates::IndexerExtractVarName
             {
@@ -2055,7 +2055,7 @@ impl Executor {
                     .last()
                     .unwrap()
                     .borrow_mut()
-                    .set_state(ExecStates::IndexerExtractIndex, Box::new(val.clone()));
+                    .set_state(ExecStates::IndexerExtractIndex, Box::new(val.clone().unwrap()));
             } else if self.registers.last().unwrap().borrow().get_state()
                 == ExecStates::IndexerExtractIndex
             {
@@ -2290,6 +2290,7 @@ impl Executor {
                 // expressions
                 // data expressions
                 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 => {
+                    self.pointer -= 1;
                     let val = self.extract_val();
                     self.forward_state(Some(val));
                 }
