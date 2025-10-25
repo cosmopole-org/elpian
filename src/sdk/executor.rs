@@ -218,10 +218,10 @@ impl Operation for CallFunction {
     fn set_state(&mut self, state: ExecStates, data: Box<dyn Any>) {
         self.state = state.clone();
         if state == ExecStates::CallFuncExtractFunc {
-            let val = data.downcast::<(Val, i32)>().unwrap();
+            let val = data.downcast::<(Val, usize)>().unwrap();
             if val.as_ref().0.typ == 10 {
                 self.func = Some(val.as_ref().0.as_func().borrow().clone());
-                self.param_count = val.as_ref().1;
+                self.param_count = val.as_ref().1 as i32;
                 self.is_native = false;
             } else if val.as_ref().0.typ == 255 {
                 self.func = Some(Function::new(0, 0, vec![]));
@@ -588,31 +588,31 @@ impl Executor {
         let (tasks_send, tasks_recv) = mpsc::channel::<(u8, i64, String)>();
         thread::spawn(move || {
             let mut program_payload: Vec<u8> = vec![];
-            // for func_name in func_group.iter() {
-            //     program_payload.push(0x07);
-            //     program_payload.append(&mut i32::to_be_bytes(func_name.len() as i32).to_vec());
-            //     program_payload.append(&mut func_name.as_bytes().to_vec());
-            //     program_payload.append(&mut i32::to_be_bytes(1).to_vec());
-            //     let param_name = "input".to_string();
-            //     program_payload.append(&mut i32::to_be_bytes(param_name.len() as i32).to_vec());
-            //     program_payload.append(&mut param_name.as_bytes().to_vec());
-            //     let mut func_body = vec![];
-            //     func_body.push(0x03);
-            //     func_body.push(0x0b);
-            //     let ask_host_call_name = "askHost".to_string();
-            //     func_body.append(&mut i32::to_be_bytes(ask_host_call_name.len() as i32).to_vec());
-            //     func_body.append(&mut ask_host_call_name.as_bytes().to_vec());
-            //     func_body.append(&mut i32::to_be_bytes(1).to_vec());
-            //     func_body.push(0x0b);
-            //     let arg_name = "input".to_string();
-            //     program_payload.append(&mut i32::to_be_bytes(arg_name.len() as i32).to_vec());
-            //     func_body.append(&mut arg_name.as_bytes().to_vec());
-            //     let func_start = program_payload.len();
-            //     let func_end = func_start + func_body.len();
-            //     program_payload.append(&mut i64::to_be_bytes(func_start as i64).to_vec());
-            //     program_payload.append(&mut i64::to_be_bytes(func_end as i64).to_vec());
-            //     program_payload.append(&mut func_body);
-            // }
+            for func_name in func_group.iter() {
+                program_payload.push(0x13);
+                program_payload.append(&mut i32::to_be_bytes(func_name.len() as i32).to_vec());
+                program_payload.append(&mut func_name.as_bytes().to_vec());
+                program_payload.append(&mut i32::to_be_bytes(1).to_vec());
+                let param_name = "input".to_string();
+                program_payload.append(&mut i32::to_be_bytes(param_name.len() as i32).to_vec());
+                program_payload.append(&mut param_name.as_bytes().to_vec());
+                let mut func_body = vec![];
+                func_body.push(0x0d);
+                func_body.push(0x0b);
+                let ask_host_call_name = "askHost".to_string();
+                func_body.append(&mut i32::to_be_bytes(ask_host_call_name.len() as i32).to_vec());
+                func_body.append(&mut ask_host_call_name.as_bytes().to_vec());
+                func_body.append(&mut i32::to_be_bytes(1).to_vec());
+                func_body.push(0x0b);
+                let arg_name = "input".to_string();
+                func_body.append(&mut i32::to_be_bytes(arg_name.len() as i32).to_vec());
+                func_body.append(&mut arg_name.as_bytes().to_vec());
+                let func_start = program_payload.len() + 8 + 8;
+                let func_end = func_start + func_body.len();
+                program_payload.append(&mut i64::to_be_bytes(func_start as i64).to_vec());
+                program_payload.append(&mut i64::to_be_bytes(func_end as i64).to_vec());
+                program_payload.append(&mut func_body);
+            }
             program_payload.append(&mut program.clone());
             let mut ex = Executor {
                 pointer: 0,
@@ -796,7 +796,7 @@ impl Executor {
                 if id == "askHost" {
                     return Val {
                         typ: -2,
-                        data: Rc::new(RefCell::new(Box::new(self.extract_func()))),
+                        data: Rc::new(RefCell::new(Box::new(0))),
                     };
                 }
                 self.ctx.find_val_globally(id)
@@ -1665,17 +1665,6 @@ impl Executor {
             _ => false,
         };
     }
-    // fn resolve_expr(&mut self) -> Val {
-    //     if self.pending_func_result_value.typ != 254 {
-    //         let result_val = self.pending_func_result_value.clone();
-    //         self.pending_func_result_value = Val {
-    //             typ: 254,
-    //             data: Rc::new(RefCell::new(Box::new(0))),
-    //         };
-    //         self.pointer = self.after_return_next_jump;
-    //         return result_val;
-    //     }
-    // }
     fn define(&mut self, id_name: String, val: Val) {
         self.ctx.define_val_globally(id_name, val);
     }
@@ -1696,11 +1685,10 @@ impl Executor {
                 || self.registers.last().unwrap().borrow().get_state()
                     == ExecStates::CallFuncExtractParam
             {
-                self.registers
-                    .last()
-                    .unwrap()
-                    .borrow_mut()
-                    .set_state(ExecStates::CallFuncExtractParam, Box::new(val.clone().unwrap()));
+                self.registers.last().unwrap().borrow_mut().set_state(
+                    ExecStates::CallFuncExtractParam,
+                    Box::new(val.clone().unwrap()),
+                );
                 self.forward_state(None);
             } else if self.registers.last().unwrap().borrow().get_state()
                 == ExecStates::CallFuncFinished
@@ -1754,11 +1742,10 @@ impl Executor {
             }
         } else if self.registers.last().unwrap().borrow().get_type() == OperationTypes::ReturnVal {
             if self.registers.last().unwrap().borrow().get_state() == ExecStates::ReturnValStarted {
-                self.registers
-                    .last()
-                    .unwrap()
-                    .borrow_mut()
-                    .set_state(ExecStates::ReturnValFinished, Box::new(val.clone().unwrap()));
+                self.registers.last().unwrap().borrow_mut().set_state(
+                    ExecStates::ReturnValFinished,
+                    Box::new(val.clone().unwrap()),
+                );
                 self.forward_state(None);
             } else if self.registers.last().unwrap().borrow().get_state()
                 == ExecStates::ReturnValFinished
@@ -1773,11 +1760,10 @@ impl Executor {
             if self.registers.last().unwrap().borrow().get_state()
                 == ExecStates::DefineVarExtractName
             {
-                self.registers
-                    .last()
-                    .unwrap()
-                    .borrow_mut()
-                    .set_state(ExecStates::DefineVarExtractValue, Box::new(val.clone().unwrap()));
+                self.registers.last().unwrap().borrow_mut().set_state(
+                    ExecStates::DefineVarExtractValue,
+                    Box::new(val.clone().unwrap()),
+                );
                 self.forward_state(None);
             } else if self.registers.last().unwrap().borrow().get_state()
                 == ExecStates::DefineVarExtractValue
@@ -1793,18 +1779,16 @@ impl Executor {
                 == ExecStates::AssignVarExtractName
             {
                 if self.registers.last().unwrap().borrow().get_data()[1].as_i16() == 1 {
-                    self.registers
-                        .last()
-                        .unwrap()
-                        .borrow_mut()
-                        .set_state(ExecStates::AssignVarExtractValue, Box::new(val.clone().unwrap()));
+                    self.registers.last().unwrap().borrow_mut().set_state(
+                        ExecStates::AssignVarExtractValue,
+                        Box::new(val.clone().unwrap()),
+                    );
                     self.forward_state(None);
                 } else if self.registers.last().unwrap().borrow().get_data()[1].as_i16() == 2 {
-                    self.registers
-                        .last()
-                        .unwrap()
-                        .borrow_mut()
-                        .set_state(ExecStates::AssignVarExtractIndex, Box::new(val.clone().unwrap()));
+                    self.registers.last().unwrap().borrow_mut().set_state(
+                        ExecStates::AssignVarExtractIndex,
+                        Box::new(val.clone().unwrap()),
+                    );
                     self.forward_state(None);
                 }
             } else if self.registers.last().unwrap().borrow().get_state()
@@ -1996,19 +1980,17 @@ impl Executor {
             if self.registers.last().unwrap().borrow().get_state()
                 == ExecStates::ArithmeticExtractOp
             {
-                self.registers
-                    .last()
-                    .unwrap()
-                    .borrow_mut()
-                    .set_state(ExecStates::ArithmeticExtractArg1, Box::new(val.clone().unwrap()));
+                self.registers.last().unwrap().borrow_mut().set_state(
+                    ExecStates::ArithmeticExtractArg1,
+                    Box::new(val.clone().unwrap()),
+                );
             } else if self.registers.last().unwrap().borrow().get_state()
                 == ExecStates::ArithmeticExtractArg1
             {
-                self.registers
-                    .last()
-                    .unwrap()
-                    .borrow_mut()
-                    .set_state(ExecStates::ArithmeticExtractArg2, Box::new(val.clone().unwrap()));
+                self.registers.last().unwrap().borrow_mut().set_state(
+                    ExecStates::ArithmeticExtractArg2,
+                    Box::new(val.clone().unwrap()),
+                );
             } else if self.registers.last().unwrap().borrow().get_state()
                 == ExecStates::ArithmeticExtractArg2
             {
@@ -2043,19 +2025,17 @@ impl Executor {
             }
         } else if self.registers.last().unwrap().borrow().get_type() == OperationTypes::Indexer {
             if self.registers.last().unwrap().borrow().get_state() == ExecStates::IndexerStarted {
-                self.registers
-                    .last()
-                    .unwrap()
-                    .borrow_mut()
-                    .set_state(ExecStates::IndexerExtractVarName, Box::new(val.clone().unwrap()));
+                self.registers.last().unwrap().borrow_mut().set_state(
+                    ExecStates::IndexerExtractVarName,
+                    Box::new(val.clone().unwrap()),
+                );
             } else if self.registers.last().unwrap().borrow().get_state()
                 == ExecStates::IndexerExtractVarName
             {
-                self.registers
-                    .last()
-                    .unwrap()
-                    .borrow_mut()
-                    .set_state(ExecStates::IndexerExtractIndex, Box::new(val.clone().unwrap()));
+                self.registers.last().unwrap().borrow_mut().set_state(
+                    ExecStates::IndexerExtractIndex,
+                    Box::new(val.clone().unwrap()),
+                );
             } else if self.registers.last().unwrap().borrow().get_state()
                 == ExecStates::IndexerExtractIndex
             {
@@ -2276,9 +2256,10 @@ impl Executor {
                         func_name,
                         Val {
                             typ: 10,
-                            data: Rc::new(RefCell::new(Box::new(func))),
+                            data: Rc::new(RefCell::new(Box::new(func.clone()))),
                         },
                     );
+                    self.pointer = func_end;
                 }
                 // return command
                 0x14 => {
