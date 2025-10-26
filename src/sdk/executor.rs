@@ -701,6 +701,7 @@ pub struct Executor {
     after_return_next_jump: usize,
     pending_func_result_value: Val,
     registers: Vec<Rc<RefCell<Box<dyn Operation>>>>,
+    allowed_api: HashMap<String, bool>,
 }
 
 impl Executor {
@@ -711,38 +712,43 @@ impl Executor {
         func_group: Vec<String>,
     ) -> Sender<(u8, i64, Val)> {
         let (tasks_send, tasks_recv) = mpsc::channel::<(u8, i64, Val)>();
+        let mut allowed_api: HashMap<String, bool> = HashMap::new();
+        for api_name in func_group.iter() {
+            allowed_api.insert(api_name.clone(), true);
+        }
         thread::spawn(move || {
             let mut program_payload: Vec<u8> = vec![];
-            for func_name in func_group.iter() {
-                program_payload.push(0x13);
-                program_payload.append(&mut i32::to_be_bytes(func_name.len() as i32).to_vec());
-                program_payload.append(&mut func_name.as_bytes().to_vec());
-                program_payload.append(&mut i32::to_be_bytes(1).to_vec());
-                let param_name = "input".to_string();
-                program_payload.append(&mut i32::to_be_bytes(param_name.len() as i32).to_vec());
-                program_payload.append(&mut param_name.as_bytes().to_vec());
-                let mut func_body = vec![];
-                func_body.push(0x0d);
-                func_body.push(0x0b);
-                let ask_host_call_name = "askHost".to_string();
-                func_body.append(&mut i32::to_be_bytes(ask_host_call_name.len() as i32).to_vec());
-                func_body.append(&mut ask_host_call_name.as_bytes().to_vec());
-                func_body.append(&mut i32::to_be_bytes(2).to_vec());
-                func_body.push(7);
-                func_body.append(&mut i32::to_be_bytes(func_name.len() as i32).to_vec());
-                func_body.append(&mut func_name.as_bytes().to_vec());
-                func_body.push(0x0b);
-                let arg_name = "input".to_string();
-                func_body.append(&mut i32::to_be_bytes(arg_name.len() as i32).to_vec());
-                func_body.append(&mut arg_name.as_bytes().to_vec());
-                let func_start = program_payload.len() + 8 + 8;
-                let func_end = func_start + func_body.len();
-                program_payload.append(&mut i64::to_be_bytes(func_start as i64).to_vec());
-                program_payload.append(&mut i64::to_be_bytes(func_end as i64).to_vec());
-                program_payload.append(&mut func_body);
-            }
+            // for func_name in func_group.iter() {
+            //     program_payload.push(0x13);
+            //     program_payload.append(&mut i32::to_be_bytes(func_name.len() as i32).to_vec());
+            //     program_payload.append(&mut func_name.as_bytes().to_vec());
+            //     program_payload.append(&mut i32::to_be_bytes(1).to_vec());
+            //     let param_name = "input".to_string();
+            //     program_payload.append(&mut i32::to_be_bytes(param_name.len() as i32).to_vec());
+            //     program_payload.append(&mut param_name.as_bytes().to_vec());
+            //     let mut func_body = vec![];
+            //     func_body.push(0x0d);
+            //     func_body.push(0x0b);
+            //     let ask_host_call_name = "askHost".to_string();
+            //     func_body.append(&mut i32::to_be_bytes(ask_host_call_name.len() as i32).to_vec());
+            //     func_body.append(&mut ask_host_call_name.as_bytes().to_vec());
+            //     func_body.append(&mut i32::to_be_bytes(2).to_vec());
+            //     func_body.push(7);
+            //     func_body.append(&mut i32::to_be_bytes(func_name.len() as i32).to_vec());
+            //     func_body.append(&mut func_name.as_bytes().to_vec());
+            //     func_body.push(0x0b);
+            //     let arg_name = "input".to_string();
+            //     func_body.append(&mut i32::to_be_bytes(arg_name.len() as i32).to_vec());
+            //     func_body.append(&mut arg_name.as_bytes().to_vec());
+            //     let func_start = program_payload.len() + 8 + 8;
+            //     let func_end = func_start + func_body.len();
+            //     program_payload.append(&mut i64::to_be_bytes(func_start as i64).to_vec());
+            //     program_payload.append(&mut i64::to_be_bytes(func_end as i64).to_vec());
+            //     program_payload.append(&mut func_body);
+            // }
             program_payload.append(&mut program.clone());
             let mut ex = Executor {
+                allowed_api: allowed_api,
                 executor_id: exec_id,
                 pointer: 0,
                 end_at: program_payload.len(),
@@ -760,11 +766,11 @@ impl Executor {
                 let (op_code, cb_id, payload) = tasks_recv.recv().unwrap();
                 match op_code {
                     0x00 => {
-                        println!("ending executor...");
+                        // println!("ending executor...");
                         break;
                     }
                     0x01 => {
-                        println!("executor: run_func called");
+                        // println!("executor: run_func called");
                         run_cb_id = cb_id;
                         if payload.is_empty() {
                             let result = ex.run_from(
@@ -800,7 +806,7 @@ impl Executor {
                         }
                     }
                     0x02 => {
-                        println!("executor: print_memory called");
+                        // println!("executor: print_memory called");
                         ex.ctx.memory.iter().for_each(|scope| {
                             scope
                                 .borrow()
@@ -814,7 +820,6 @@ impl Executor {
                         });
                     }
                     0x03 => {
-                        println!("{:?}", ex.registers);
                         let result = ex.run_from(ex.pointer, ex.end_at, true, payload);
                         if ex.pointer == ex.end_at {
                             vm_send.clone().send((0x01, run_cb_id, result)).unwrap();
@@ -1692,9 +1697,9 @@ impl Executor {
                 match v2.typ {
                     1 | 2 | 3 => {
                         let v2_val = match v2.typ {
-                            1 => v.as_i16() as i64,
-                            2 => v.as_i32() as i64,
-                            3 => v.as_i64() as i64,
+                            1 => v2.as_i16() as i64,
+                            2 => v2.as_i32() as i64,
+                            3 => v2.as_i64() as i64,
                             _ => 0,
                         };
                         v_val == v2_val
@@ -1702,8 +1707,8 @@ impl Executor {
                     4 | 5 => {
                         let v_val_temp = v_val as f64;
                         let v2_val = match v2.typ {
-                            4 => v.as_f32() as f64,
-                            5 => v.as_f64() as f64,
+                            4 => v2.as_f32() as f64,
+                            5 => v2.as_f64() as f64,
                             _ => 0.0,
                         };
                         v_val_temp == v2_val
@@ -1720,17 +1725,17 @@ impl Executor {
                 match v2.typ {
                     1 | 2 | 3 => {
                         let v2_val = match v2.typ {
-                            1 => v.as_i16() as f64,
-                            2 => v.as_i32() as f64,
-                            3 => v.as_i64() as f64,
+                            1 => v2.as_i16() as f64,
+                            2 => v2.as_i32() as f64,
+                            3 => v2.as_i64() as f64,
                             _ => 0.0,
                         };
                         v_val == v2_val
                     }
                     4 | 5 => {
                         let v2_val = match v2.typ {
-                            4 => v.as_f32() as f64,
-                            5 => v.as_f64() as f64,
+                            4 => v2.as_f32() as f64,
+                            5 => v2.as_f64() as f64,
                             _ => 0.0,
                         };
                         v_val == v2_val
@@ -1892,10 +1897,13 @@ impl Executor {
                     self.registers.pop();
                 } else {
                     let mut args = HashMap::new();
-                    let arg = regs[3].as_array().borrow().data[0].clone();
-                    args.insert("apiName".to_string(), arg);
-                    let arg = regs[3].as_array().borrow().data[1].clone();
-                    args.insert("input".to_string(), arg);
+                    let arg1 = regs[3].as_array().borrow().data[0].clone();
+                    if !self.allowed_api.contains_key(&arg1.as_string().clone()) {
+                        panic!("elpian error: this api access is locked");
+                    }
+                    args.insert("apiName".to_string(), arg1);
+                    let arg2 = regs[3].as_array().borrow().data[1].clone();
+                    args.insert("input".to_string(), arg2);
                     self.cb_counter += 1;
                     let cb_id = self.cb_counter;
                     self.registers.pop();
@@ -2029,6 +2037,7 @@ impl Executor {
                     .unwrap()
                     .borrow_mut()
                     .set_state(ExecStates::IfStmtFinished, Box::new(val.clone().unwrap()));
+                self.forward_state(None);
             } else if self.registers.last().unwrap().borrow().get_state()
                 == ExecStates::IfStmtFinished
             {
@@ -2179,6 +2188,7 @@ impl Executor {
                     ExecStates::ArithmeticExtractArg2,
                     Box::new(val.clone().unwrap()),
                 );
+                self.forward_state(None);
             } else if self.registers.last().unwrap().borrow().get_state()
                 == ExecStates::ArithmeticExtractArg2
             {
@@ -2195,18 +2205,10 @@ impl Executor {
                         }));
                     }
                     2 => {
-                        return self.forward_state(Some(Val {
-                            typ: 6,
-                            data: Rc::new(RefCell::new(Box::new(self.operate_sum(arg1, arg2)))),
-                        }));
+                        return self.forward_state(Some(self.operate_sum(arg1, arg2)));
                     }
                     3 => {
-                        return self.forward_state(Some(Val {
-                            typ: 6,
-                            data: Rc::new(RefCell::new(Box::new(
-                                self.operate_subtract(arg1, arg2),
-                            ))),
-                        }));
+                        return self.forward_state(Some(self.operate_subtract(arg1, arg2)));
                     }
                     _ => {}
                 }
@@ -2299,43 +2301,26 @@ impl Executor {
         }
         let mut ce = continue_exec;
         loop {
-            println!("{} {}", self.pointer, self.program.len());
-            if self.pointer == self.end_at {
-                // self.ctx.memory.iter().for_each(|scope| {
-                //     scope
-                //         .borrow()
-                //         .memory
-                //         .borrow()
-                //         .data
-                //         .iter()
-                //         .for_each(|(key, val)| {
-                //             println!("{{ key: {}, val: {} }}", key, val.stringify());
-                //         });
-                // });
+            let mut terminate = false;
+            while self.pointer == self.end_at {
+                if self.pointer == end && self.ctx.memory.len() == 1 {
+                    terminate = true;
+                    break;
+                }
                 self.ctx.pop_scope();
-                self.ctx.memory.iter().for_each(|scope| {
-                    scope
-                        .borrow()
-                        .memory
-                        .borrow()
-                        .data
-                        .iter()
-                        .for_each(|(key, val)| {
-                            println!("{{ key: {}, val: {} }}", key, val.stringify());
-                        });
-                });
                 if self.ctx.memory.len() > 0 {
                     self.pointer = self.ctx.memory.last().unwrap().borrow().frozen_pointer;
                     self.end_at = self.ctx.memory.last().unwrap().borrow().frozen_end;
-                    if self.pointer == self.end_at {
-                        break;
-                    }
                     if self.pending_func_result_value.typ != 254 {
                         self.pointer = self.pending_func_result_position;
                     }
                 } else {
+                    terminate = true;
                     break;
                 }
+            }
+            if terminate {
+                break;
             }
             if ce {
                 ce = false;
@@ -2357,7 +2342,7 @@ impl Executor {
                         .last()
                         .unwrap()
                         .borrow_mut()
-                        .set_state(ExecStates::ArithmeticExtractOp, Box::new(1));
+                        .set_state(ExecStates::ArithmeticExtractOp, Box::new(1 as i16));
                 }
                 // sum operator
                 0xf1 => {
@@ -2368,7 +2353,7 @@ impl Executor {
                         .last()
                         .unwrap()
                         .borrow_mut()
-                        .set_state(ExecStates::ArithmeticExtractOp, Box::new(2));
+                        .set_state(ExecStates::ArithmeticExtractOp, Box::new(2 as i16));
                 }
                 // subtract operator
                 0xf2 => {
@@ -2379,7 +2364,7 @@ impl Executor {
                         .last()
                         .unwrap()
                         .borrow_mut()
-                        .set_state(ExecStates::ArithmeticExtractOp, Box::new(3));
+                        .set_state(ExecStates::ArithmeticExtractOp, Box::new(3 as i16));
                 }
                 // ----------------------------------
                 // program operators:
@@ -2472,7 +2457,7 @@ impl Executor {
                     let func_end = self.extract_i64() as usize;
                     let func = Function::new(func_start, func_end, param_names);
                     self.define(
-                        func_name,
+                        func_name.clone(),
                         Val {
                             typ: 10,
                             data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(

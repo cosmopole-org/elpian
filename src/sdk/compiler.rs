@@ -1,3 +1,4 @@
+
 fn serialize_expr(val: serde_json::Value) -> Vec<u8> {
     let mut result: Vec<u8> = vec![];
     match val["type"].as_str().unwrap() {
@@ -69,6 +70,37 @@ fn serialize_expr(val: serde_json::Value) -> Vec<u8> {
                 result.append(&mut serialize_expr(v.clone()));
             }
         }
+        "arithmetic" => {
+            match val["data"]["operation"].as_str().unwrap() {
+                "==" => {
+                    result.push(0xf0);
+                }
+                "+" => {
+                    result.push(0xf1);
+                }
+                "-" => {
+                    result.push(0xf2);
+                }
+                _ => {}
+            };
+            result.append(&mut serialize_expr(val["data"]["operand1"].clone()));
+            result.append(&mut serialize_expr(val["data"]["operand2"].clone()));
+        }
+        "callFunction" => {
+            result.push(0x0d);
+            result.append(&mut serialize_expr(val["data"]["callee"].clone()));
+            result.append(
+                &mut i32::to_be_bytes(val["data"]["arguments"].as_array().unwrap().len() as i32)
+                    .to_vec(),
+            );
+            val["data"]["arguments"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .for_each(|arg| {
+                    result.append(&mut serialize_expr(arg.clone()));
+                });
+        }
         _ => {
             panic!("unknown val type");
         }
@@ -76,10 +108,52 @@ fn serialize_expr(val: serde_json::Value) -> Vec<u8> {
     result
 }
 
-pub fn compile(program: serde_json::Value) -> Vec<u8> {
+pub fn compile(program: serde_json::Value, start_point: usize) -> Vec<u8> {
     let mut result: Vec<u8> = vec![];
     for operation in program["body"].as_array().unwrap().iter() {
         match operation["type"].as_str().unwrap() {
+            "ifStmt" => {
+                result.push(0x10);
+                result.push(0x01);
+                result.append(&mut serialize_expr(operation["data"]["condition"].clone()).to_vec());
+                let body_start = start_point + result.len() + 8 + 8 + 8 + 8;
+                let body = compile(operation["data"].clone(), body_start);
+                let body_end = body_start + body.len();
+                result.append(&mut i64::to_be_bytes(body_start as i64).to_vec());
+                result.append(&mut i64::to_be_bytes(body_end as i64).to_vec());
+                result.append(&mut i64::to_be_bytes(body_end as i64).to_vec());
+                result.append(&mut i64::to_be_bytes(body_end as i64).to_vec());
+                result.append(&mut body.clone());
+            }
+            "defineFunction" => {
+                result.push(0x13);
+                let mut str_bytes = operation["data"]["name"]
+                    .as_str()
+                    .unwrap()
+                    .as_bytes()
+                    .to_vec();
+                let mut len_bytes = i32::to_be_bytes(str_bytes.len() as i32).to_vec();
+                result.append(&mut len_bytes);
+                result.append(&mut str_bytes);
+                result.append(
+                    &mut i32::to_be_bytes(
+                        operation["data"]["params"].as_array().unwrap().len() as i32
+                    )
+                    .to_vec(),
+                );
+                for p_name in operation["data"]["params"].as_array().unwrap().iter() {
+                    let mut str_bytes = p_name.as_str().unwrap().as_bytes().to_vec();
+                    let mut len_bytes = i32::to_be_bytes(str_bytes.len() as i32).to_vec();
+                    result.append(&mut len_bytes);
+                    result.append(&mut str_bytes);
+                }
+                let func_start = start_point + result.len() + 8 + 8;
+                let body = compile(operation["data"].clone(), func_start);
+                let func_end = func_start + body.len();
+                result.append(&mut i64::to_be_bytes(func_start as i64).to_vec());
+                result.append(&mut i64::to_be_bytes(func_end as i64).to_vec());
+                result.append(&mut body.clone());
+            }
             "callFunction" => {
                 result.push(0x0d);
                 result.append(&mut serialize_expr(operation["data"]["callee"].clone()));
@@ -143,6 +217,9 @@ pub fn compile(program: serde_json::Value) -> Vec<u8> {
                 // skip
             }
         }
+    }
+    if result.len() == 0 {
+        result.push(0x00);
     }
     result
 }

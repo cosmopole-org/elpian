@@ -86,7 +86,7 @@ impl VM {
         execuror_count: i32,
         func_group: Vec<String>,
     ) -> Self {
-        let byte_code = compiler::compile(program);
+        let byte_code = compiler::compile(program, 0);
         Self::create(byte_code, execuror_count, func_group)
     }
     pub fn print_memory(&mut self) {

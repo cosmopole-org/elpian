@@ -24,6 +24,61 @@ fn main() {
           "type": "program",
           "body": [
             {
+              "type": "defineFunction",
+              "data": {
+                "name": "println",
+                "params": ["input"],
+                "body": [
+                  {
+                    "type": "ifStmt",
+                    "data": {
+                      "condition": {
+                        "type": "arithmetic",
+                        "data": {
+                          "operation": "==",
+                          "operand1": {
+                            "type": "i32",
+                            "data": { "value": 37 }
+                          },
+                          "operand2": {
+                            "type": "i32",
+                            "data": { "value": 37 }
+                          }
+                        }
+                      },
+                      "body": [
+                        {
+                          "type": "callFunction",
+                          "data": {
+                            "callee": {
+                              "type": "identifier",
+                              "data": { "name": "askHost" }
+                            },
+                            "arguments": [
+                              {
+                                "type": "string",
+                                "data": { "value": "println" }
+                              },
+                              {
+                                "type": "identifier",
+                                "data": { "name": "input" }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              },
+            },
+            {
+              "type": "defineFunction",
+              "data": {
+                "name": "test",
+                "params": [],
+                "body": [
+            {
               "type": "definition",
               "data": {
                 "leftSide": {
@@ -58,10 +113,33 @@ fn main() {
                 },
                 "arguments": [
                   {
-                    "type": "i32",
-                    "data": { "value": 35 }
+                    "type": "arithmetic",
+                    "data": {
+                      "operation": "+",
+                      "operand1": {
+                        "type": "i32",
+                        "data": { "value": 35 }
+                      },
+                      "operand2": {
+                        "type": "i32",
+                        "data": { "value": 37 }
+                      }
+                    }
                   }
                 ]
+              }
+            }
+          ]
+              },
+            },
+            {
+              "type": "callFunction",
+              "data": {
+                "callee": {
+                  "type": "identifier",
+                  "data": { "name": "test" }
+                },
+                "arguments": []
               }
             }
           ]
