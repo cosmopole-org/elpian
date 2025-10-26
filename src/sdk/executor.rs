@@ -187,7 +187,7 @@ impl Operation for AssignVariable {
 struct CallFunction {
     typ: OperationTypes,
     state: ExecStates,
-    pub func: Option<Function>,
+    pub func: Option<Rc<RefCell<Function>>>,
     pub is_native: bool,
     pub param_count: i32,
     pub params: Vec<Val>,
@@ -220,12 +220,16 @@ impl Operation for CallFunction {
         if state == ExecStates::CallFuncExtractFunc {
             let val = data.downcast::<(Val, usize)>().unwrap();
             if val.as_ref().0.typ == 10 {
-                self.func = Some(val.as_ref().0.as_func().borrow().clone());
+                self.func = Some(val.as_ref().0.as_func());
                 self.param_count = val.as_ref().1 as i32;
                 self.is_native = false;
             } else if val.as_ref().0.typ == 255 {
-                self.func = Some(Function::new(0, 0, vec![]));
-                self.param_count = 1;
+                self.func = Some(Rc::new(RefCell::new(Function::new(
+                    0,
+                    0,
+                    vec!["apiName".to_string(), "input".to_string()],
+                ))));
+                self.param_count = 2;
                 self.is_native = true;
             } else {
                 panic!("elpian error: the specified data is not runnable");
@@ -234,7 +238,7 @@ impl Operation for CallFunction {
             self.params.push(*data.downcast::<Val>().unwrap());
         }
         if let Some(func) = &self.func {
-            if func.params.len() == self.params.len() {
+            if func.borrow().params.len() == self.params.len() {
                 self.state = ExecStates::CallFuncFinished;
             }
         }
@@ -256,7 +260,7 @@ impl Operation for CallFunction {
             },
             Val {
                 typ: 9,
-                data: Rc::new(RefCell::new(Box::new(self.params.clone()))),
+                data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(Array::new(self.params.clone())))))),
             },
         ]
     }
@@ -602,7 +606,10 @@ impl Executor {
                 let ask_host_call_name = "askHost".to_string();
                 func_body.append(&mut i32::to_be_bytes(ask_host_call_name.len() as i32).to_vec());
                 func_body.append(&mut ask_host_call_name.as_bytes().to_vec());
-                func_body.append(&mut i32::to_be_bytes(1).to_vec());
+                func_body.append(&mut i32::to_be_bytes(2).to_vec());
+                func_body.push(7);
+                func_body.append(&mut i32::to_be_bytes(func_name.len() as i32).to_vec());
+                func_body.append(&mut func_name.as_bytes().to_vec());
                 func_body.push(0x0b);
                 let arg_name = "input".to_string();
                 func_body.append(&mut i32::to_be_bytes(arg_name.len() as i32).to_vec());
@@ -795,11 +802,12 @@ impl Executor {
                 let id = self.extract_str();
                 if id == "askHost" {
                     return Val {
-                        typ: -2,
+                        typ: 255,
                         data: Rc::new(RefCell::new(Box::new(0))),
                     };
+                } else {
+                    return self.ctx.find_val_globally(id);
                 }
-                self.ctx.find_val_globally(id)
             }
             _ => Val {
                 typ: 0,
@@ -1679,7 +1687,11 @@ impl Executor {
                     ExecStates::CallFuncExtractFunc,
                     Box::new((val.clone().unwrap(), arg_count)),
                 );
-                self.forward_state(None);
+                if self.registers.last().unwrap().borrow().get_state()
+                    == ExecStates::CallFuncFinished
+                {
+                    self.forward_state(None);
+                }
             } else if self.registers.last().unwrap().borrow().get_state()
                 == ExecStates::CallFuncExtractFunc
                 || self.registers.last().unwrap().borrow().get_state()
@@ -1689,7 +1701,11 @@ impl Executor {
                     ExecStates::CallFuncExtractParam,
                     Box::new(val.clone().unwrap()),
                 );
-                self.forward_state(None);
+                if self.registers.last().unwrap().borrow().get_state()
+                    == ExecStates::CallFuncFinished
+                {
+                    self.forward_state(None);
+                }
             } else if self.registers.last().unwrap().borrow().get_state()
                 == ExecStates::CallFuncFinished
             {
@@ -1725,13 +1741,25 @@ impl Executor {
                 } else {
                     let mut args = HashMap::new();
                     let arg = regs[3].as_array().borrow().data[0].clone();
+                    args.insert("apiName".to_string(), arg);
+                    let arg = regs[3].as_array().borrow().data[1].clone();
                     args.insert("input".to_string(), arg);
                     self.cb_counter += 1;
                     let cb_id = self.cb_counter;
                     let (cb_send, cb_recv) = mpsc::channel::<Val>();
                     self.callbacks.insert(cb_id, cb_send);
                     self.vm_send
-                        .send((0x02, cb_id, args["input"].clone()))
+                        .send((
+                            0x02,
+                            cb_id,
+                            Val {
+                                typ: 9,
+                                data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(Array::new(vec![
+                                    args["apiName"].clone(),
+                                    args["input"].clone(),
+                                ])))))),
+                            },
+                        ))
                         .unwrap();
                     let result = cb_recv.recv().unwrap();
                     // self.pending_func_result_value = result.clone();
@@ -2256,7 +2284,9 @@ impl Executor {
                         func_name,
                         Val {
                             typ: 10,
-                            data: Rc::new(RefCell::new(Box::new(func.clone()))),
+                            data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(
+                                func.clone(),
+                            ))))),
                         },
                     );
                     self.pointer = func_end;

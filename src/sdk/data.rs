@@ -64,16 +64,16 @@ impl Val {
             8 => Val {
                 typ: self.typ,
                 data: Rc::new(RefCell::new(Box::new(
-                    self.as_object().borrow().clone_object(),
+                    Rc::new(RefCell::new(self.as_object().borrow().clone_object())),
                 ))),
             },
             9 => Val {
                 typ: self.typ,
-                data: Rc::new(RefCell::new(Box::new(self.as_array().borrow().clone_arr()))),
+                data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(self.as_array().borrow().clone_arr()))))),
             },
             10 => Val {
                 typ: self.typ,
-                data: Rc::new(RefCell::new(Box::new(self.as_func().borrow().clone_func()))),
+                data: Rc::new(RefCell::new(Box::new(self.as_func()))),
             },
             _ => Val {
                 typ: self.typ,
@@ -130,7 +130,7 @@ impl Val {
     }
     pub fn as_func(&self) -> Rc<RefCell<Function>> {
         let a = self.data.clone();
-        let b: std::cell::Ref<'_, Box<dyn Any>> = a.borrow();
+        let b = a.borrow();
         let c = b.downcast_ref::<Rc<RefCell<Function>>>().unwrap();
         c.clone()
     }

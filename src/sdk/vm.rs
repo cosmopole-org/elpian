@@ -31,6 +31,12 @@ impl VM {
                         let sender = cbs.get(&cb_id).unwrap();
                         sender.send(payload).unwrap();
                     }
+                    0x02 => {
+                        let params = payload.as_array().borrow().data.clone();
+                        if params[0].as_string() == "println" {
+                            println!("{}", params[1].stringify());
+                        }
+                    }
                     _ => {}
                 }
             });
