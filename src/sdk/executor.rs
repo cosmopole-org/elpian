@@ -3,10 +3,12 @@ use crate::sdk::{
     data::{Array, Function, Object, Val, ValGroup},
 };
 use core::panic;
+use std::fmt::Debug;
 use std::{
     any::Any,
     cell::RefCell,
     collections::HashMap,
+    fmt::Display,
     i16,
     rc::Rc,
     sync::mpsc::{self, Sender},
@@ -24,6 +26,28 @@ pub enum OperationTypes {
     SwitchStmt,
     Arithmetic,
     Indexer,
+}
+
+impl Debug for OperationTypes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OperationTypes::DefineVar => write!(f, "DefineVar"),
+            OperationTypes::AssignVar => write!(f, "AssignVar"),
+            OperationTypes::CallFunc => write!(f, "CallFunc"),
+            OperationTypes::ReturnVal => write!(f, "ReturnVal"),
+            OperationTypes::IfStmt => write!(f, "IfStmt"),
+            OperationTypes::LoopStmt => write!(f, "LoopStmt"),
+            OperationTypes::SwitchStmt => write!(f, "SwitchStmt"),
+            OperationTypes::Arithmetic => write!(f, "Arithmetic"),
+            OperationTypes::Indexer => write!(f, "Indexer"),
+        }
+    }
+}
+
+impl Display for OperationTypes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 #[derive(Clone, PartialEq)]
@@ -57,11 +81,57 @@ pub enum ExecStates {
     IndexerExtractIndex,
 }
 
+impl Debug for ExecStates {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ExecStates::AssignVarExtractName => write!(f, "AssignVarExtractName"),
+            ExecStates::AssignVarExtractIndex => write!(f, "AssignVarExtractIndex"),
+            ExecStates::AssignVarExtractValue => write!(f, "AssignVarExtractValue"),
+            ExecStates::DefineVarExtractName => write!(f, "DefineVarExtractName"),
+            ExecStates::DefineVarExtractValue => write!(f, "DefineVarExtractValue"),
+            ExecStates::CallFuncStarted => write!(f, "CallFuncStarted"),
+            ExecStates::CallFuncExtractFunc => write!(f, "CallFuncExtractFunc"),
+            ExecStates::CallFuncExtractParam => write!(f, "CallFuncExtractParam"),
+            ExecStates::CallFuncFinished => write!(f, "CallFuncFinished"),
+            ExecStates::ReturnValStarted => write!(f, "ReturnValStarted"),
+            ExecStates::ReturnValFinished => write!(f, "ReturnValFinished"),
+            ExecStates::IfStmtStarted => write!(f, "IfStmtStarted"),
+            ExecStates::IfStmtIsConditioned => write!(f, "IfStmtIsConditioned"),
+            ExecStates::IfStmtFinished => write!(f, "IfStmtFinished"),
+            ExecStates::LoopStmtStarted => write!(f, "LoopStmtStarted"),
+            ExecStates::LoopStmtFinished => write!(f, "LoopStmtFinished"),
+            ExecStates::SwitchStmtStarted => write!(f, "SwitchStmtStarted"),
+            ExecStates::SwitchStmtExtractVal => write!(f, "SwitchStmtExtractVal"),
+            ExecStates::SwitchStmtExtractCase => write!(f, "SwitchStmtExtractCase"),
+            ExecStates::SwitchStmtFinished => write!(f, "SwitchStmtFinished"),
+            ExecStates::ArithmeticStarted => write!(f, "ArithmeticStarted"),
+            ExecStates::ArithmeticExtractOp => write!(f, "ArithmeticExtractOp"),
+            ExecStates::ArithmeticExtractArg1 => write!(f, "ArithmeticExtractArg1"),
+            ExecStates::ArithmeticExtractArg2 => write!(f, "ArithmeticExtractArg2"),
+            ExecStates::IndexerStarted => write!(f, "IndexerStarted"),
+            ExecStates::IndexerExtractVarName => write!(f, "IndexerExtractVarName"),
+            ExecStates::IndexerExtractIndex => write!(f, "IndexerExtractIndex"),
+        }
+    }
+}
+
+impl Display for ExecStates {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
 pub trait Operation {
     fn get_type(&self) -> OperationTypes;
     fn get_state(&self) -> ExecStates;
     fn set_state(&mut self, state: ExecStates, data: Box<dyn Any>);
     fn get_data(&self) -> Vec<Val>;
+}
+
+impl Debug for dyn Operation {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "Operation{{{} {}}}", self.get_type(), self.get_state())
+    }
 }
 
 struct DefineVariable {
@@ -126,7 +196,7 @@ impl AssignVariable {
             typ: OperationTypes::AssignVar,
             state: ExecStates::AssignVarExtractName,
             var_name: None,
-            assign_target_type: 0x00,
+            assign_target_type: 0,
             index: None,
             var_value: None,
         }
@@ -148,17 +218,8 @@ impl Operation for AssignVariable {
             let (var_name, assign_target_type) = *data.downcast::<(String, i16)>().unwrap();
             self.var_name = Some(var_name.clone());
             self.assign_target_type = assign_target_type;
-            if assign_target_type == 1 {
-                if state != ExecStates::AssignVarExtractValue {
-                    panic!("elpian error: wrong state set to assignment operation");
-                }
-            } else if assign_target_type == 2 {
-                if state != ExecStates::AssignVarExtractIndex {
-                    panic!("elpian error: wrong state set to assignment operation");
-                }
-            }
         } else if state == ExecStates::AssignVarExtractIndex {
-            if self.assign_target_type == 0x0c {
+            if self.assign_target_type == 2 {
                 self.index = Some(*data.downcast::<Val>().unwrap());
             } else {
                 panic!("elpian error: wrong state set to assignment operation");
@@ -169,18 +230,75 @@ impl Operation for AssignVariable {
     }
 
     fn get_data(&self) -> Vec<Val> {
-        vec![
-            Val {
-                typ: 7,
-                data: Rc::new(RefCell::new(Box::new(self.var_name.clone()))),
-            },
-            Val {
-                typ: 6,
-                data: Rc::new(RefCell::new(Box::new(self.assign_target_type))),
-            },
-            self.index.clone().unwrap(),
-            self.var_value.clone().unwrap(),
-        ]
+        if self.assign_target_type == 2 {
+            if self.var_value.is_none() {
+                return vec![
+                    Val {
+                        typ: 7,
+                        data: Rc::new(RefCell::new(Box::new(self.var_name.clone().unwrap()))),
+                    },
+                    Val {
+                        typ: 6,
+                        data: Rc::new(RefCell::new(Box::new(self.assign_target_type))),
+                    },
+                    self.index.clone().unwrap(),
+                    Val {
+                        typ: 0,
+                        data: Rc::new(RefCell::new(Box::new(0))),
+                    },
+                ];
+            } else {
+                return vec![
+                    Val {
+                        typ: 7,
+                        data: Rc::new(RefCell::new(Box::new(self.var_name.clone().unwrap()))),
+                    },
+                    Val {
+                        typ: 6,
+                        data: Rc::new(RefCell::new(Box::new(self.assign_target_type))),
+                    },
+                    self.index.clone().unwrap(),
+                    self.var_value.clone().unwrap(),
+                ];
+            }
+        } else {
+            if self.var_value.is_none() {
+                return vec![
+                    Val {
+                        typ: 7,
+                        data: Rc::new(RefCell::new(Box::new(self.var_name.clone().unwrap()))),
+                    },
+                    Val {
+                        typ: 6,
+                        data: Rc::new(RefCell::new(Box::new(self.assign_target_type))),
+                    },
+                    Val {
+                        typ: 0,
+                        data: Rc::new(RefCell::new(Box::new(0))),
+                    },
+                    Val {
+                        typ: 0,
+                        data: Rc::new(RefCell::new(Box::new(0))),
+                    },
+                ];
+            } else {
+                return vec![
+                    Val {
+                        typ: 7,
+                        data: Rc::new(RefCell::new(Box::new(self.var_name.clone().unwrap()))),
+                    },
+                    Val {
+                        typ: 6,
+                        data: Rc::new(RefCell::new(Box::new(self.assign_target_type))),
+                    },
+                    Val {
+                        typ: 0,
+                        data: Rc::new(RefCell::new(Box::new(0))),
+                    },
+                    self.var_value.clone().unwrap(),
+                ];
+            }
+        }
     }
 }
 
@@ -260,7 +378,9 @@ impl Operation for CallFunction {
             },
             Val {
                 typ: 9,
-                data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(Array::new(self.params.clone())))))),
+                data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(Array::new(
+                    self.params.clone(),
+                )))))),
             },
         ]
     }
@@ -570,12 +690,12 @@ impl Operation for IndexerValue {
 }
 
 pub struct Executor {
+    executor_id: i16,
     pointer: usize,
     end_at: usize,
     ctx: Context,
     program: Vec<u8>,
     vm_send: Sender<(u8, i64, Val)>,
-    callbacks: HashMap<i64, Sender<Val>>,
     cb_counter: i64,
     pending_func_result_position: usize,
     after_return_next_jump: usize,
@@ -586,10 +706,11 @@ pub struct Executor {
 impl Executor {
     pub fn create(
         program: Vec<u8>,
+        exec_id: i16,
         vm_send: Sender<(u8, i64, Val)>,
         func_group: Vec<String>,
-    ) -> Sender<(u8, i64, String)> {
-        let (tasks_send, tasks_recv) = mpsc::channel::<(u8, i64, String)>();
+    ) -> Sender<(u8, i64, Val)> {
+        let (tasks_send, tasks_recv) = mpsc::channel::<(u8, i64, Val)>();
         thread::spawn(move || {
             let mut program_payload: Vec<u8> = vec![];
             for func_name in func_group.iter() {
@@ -622,18 +743,19 @@ impl Executor {
             }
             program_payload.append(&mut program.clone());
             let mut ex = Executor {
+                executor_id: exec_id,
                 pointer: 0,
                 end_at: program_payload.len(),
                 ctx: Context::new(),
                 program: program_payload,
                 vm_send: vm_send.clone(),
                 cb_counter: 0,
-                callbacks: HashMap::new(),
                 pending_func_result_position: 0,
                 after_return_next_jump: 0,
                 pending_func_result_value: Val::new(254, Rc::new(RefCell::new(Box::new(0)))),
                 registers: vec![],
             };
+            let mut run_cb_id: i64 = 0;
             loop {
                 let (op_code, cb_id, payload) = tasks_recv.recv().unwrap();
                 match op_code {
@@ -643,15 +765,37 @@ impl Executor {
                     }
                     0x01 => {
                         println!("executor: run_func called");
+                        run_cb_id = cb_id;
                         if payload.is_empty() {
-                            let result = ex.run_from(0, ex.program.len());
-                            vm_send.clone().send((0x01, cb_id, result)).unwrap();
+                            let result = ex.run_from(
+                                0,
+                                ex.program.len(),
+                                false,
+                                Val {
+                                    typ: 0,
+                                    data: Rc::new(RefCell::new(Box::new(0))),
+                                },
+                            );
+                            if ex.pointer == ex.ctx.memory.get(0).unwrap().borrow().frozen_end {
+                                vm_send.clone().send((0x01, cb_id, result)).unwrap();
+                            }
                         } else {
-                            let val = ex.ctx.find_val_in_first_scope(payload);
+                            let func_name = payload.as_string();
+                            let val = ex.ctx.find_val_in_first_scope(func_name);
                             if !val.is_empty() {
                                 let func = val.as_func();
-                                let result = ex.run_from(func.borrow().start, func.borrow().end);
-                                vm_send.clone().send((0x01, cb_id, result)).unwrap();
+                                let result = ex.run_from(
+                                    func.borrow().start,
+                                    func.borrow().end,
+                                    false,
+                                    Val {
+                                        typ: 0,
+                                        data: Rc::new(RefCell::new(Box::new(0))),
+                                    },
+                                );
+                                if ex.pointer == ex.ctx.memory.get(1).unwrap().borrow().frozen_end {
+                                    vm_send.clone().send((0x01, cb_id, result)).unwrap();
+                                }
                             }
                         }
                     }
@@ -668,6 +812,13 @@ impl Executor {
                                     println!("{{ key: {}, val: {} }}", key, val.stringify());
                                 });
                         });
+                    }
+                    0x03 => {
+                        println!("{:?}", ex.registers);
+                        let result = ex.run_from(ex.pointer, ex.end_at, true, payload);
+                        if ex.pointer == ex.end_at {
+                            vm_send.clone().send((0x01, run_cb_id, result)).unwrap();
+                        }
                     }
                     _ => {}
                 }
@@ -1679,7 +1830,7 @@ impl Executor {
     fn assign(&mut self, id_name: String, val: Val) {
         self.ctx.update_val_globally(id_name, val);
     }
-    fn forward_state(&mut self, val: Option<Val>) {
+    fn forward_state(&mut self, val: Option<Val>) -> bool {
         if self.registers.last().unwrap().borrow().get_type() == OperationTypes::CallFunc {
             if self.registers.last().unwrap().borrow().get_state() == ExecStates::CallFuncStarted {
                 let arg_count = self.extract_i32() as usize;
@@ -1690,7 +1841,7 @@ impl Executor {
                 if self.registers.last().unwrap().borrow().get_state()
                     == ExecStates::CallFuncFinished
                 {
-                    self.forward_state(None);
+                    return self.forward_state(None);
                 }
             } else if self.registers.last().unwrap().borrow().get_state()
                 == ExecStates::CallFuncExtractFunc
@@ -1704,7 +1855,7 @@ impl Executor {
                 if self.registers.last().unwrap().borrow().get_state()
                     == ExecStates::CallFuncFinished
                 {
-                    self.forward_state(None);
+                    return self.forward_state(None);
                 }
             } else if self.registers.last().unwrap().borrow().get_state()
                 == ExecStates::CallFuncFinished
@@ -1738,6 +1889,7 @@ impl Executor {
                     self.after_return_next_jump = self.pointer;
                     self.pointer = func.borrow().start;
                     self.end_at = func.borrow().end;
+                    self.registers.pop();
                 } else {
                     let mut args = HashMap::new();
                     let arg = regs[3].as_array().borrow().data[0].clone();
@@ -1746,26 +1898,27 @@ impl Executor {
                     args.insert("input".to_string(), arg);
                     self.cb_counter += 1;
                     let cb_id = self.cb_counter;
-                    let (cb_send, cb_recv) = mpsc::channel::<Val>();
-                    self.callbacks.insert(cb_id, cb_send);
+                    self.registers.pop();
                     self.vm_send
                         .send((
                             0x02,
                             cb_id,
                             Val {
                                 typ: 9,
-                                data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(Array::new(vec![
-                                    args["apiName"].clone(),
-                                    args["input"].clone(),
-                                ])))))),
+                                data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(
+                                    Array::new(vec![
+                                        args["apiName"].clone(),
+                                        Val {
+                                            typ: 1,
+                                            data: Rc::new(RefCell::new(Box::new(self.executor_id))),
+                                        },
+                                        args["input"].clone(),
+                                    ]),
+                                ))))),
                             },
                         ))
                         .unwrap();
-                    let result = cb_recv.recv().unwrap();
-                    // self.pending_func_result_value = result.clone();
-                    // self.pointer = self.pending_func_result_position;
-                    self.registers.pop();
-                    self.forward_state(Some(result));
+                    return true;
                 }
             }
         } else if self.registers.last().unwrap().borrow().get_type() == OperationTypes::ReturnVal {
@@ -1774,7 +1927,7 @@ impl Executor {
                     ExecStates::ReturnValFinished,
                     Box::new(val.clone().unwrap()),
                 );
-                self.forward_state(None);
+                return self.forward_state(None);
             } else if self.registers.last().unwrap().borrow().get_state()
                 == ExecStates::ReturnValFinished
             {
@@ -1792,7 +1945,7 @@ impl Executor {
                     ExecStates::DefineVarExtractValue,
                     Box::new(val.clone().unwrap()),
                 );
-                self.forward_state(None);
+                return self.forward_state(None);
             } else if self.registers.last().unwrap().borrow().get_state()
                 == ExecStates::DefineVarExtractValue
             {
@@ -1811,14 +1964,21 @@ impl Executor {
                         ExecStates::AssignVarExtractValue,
                         Box::new(val.clone().unwrap()),
                     );
-                    self.forward_state(None);
+                    return self.forward_state(None);
                 } else if self.registers.last().unwrap().borrow().get_data()[1].as_i16() == 2 {
                     self.registers.last().unwrap().borrow_mut().set_state(
                         ExecStates::AssignVarExtractIndex,
                         Box::new(val.clone().unwrap()),
                     );
-                    self.forward_state(None);
                 }
+            } else if self.registers.last().unwrap().borrow().get_state()
+                == ExecStates::AssignVarExtractIndex
+            {
+                self.registers.last().unwrap().borrow_mut().set_state(
+                    ExecStates::AssignVarExtractValue,
+                    Box::new(val.clone().unwrap()),
+                );
+                return self.forward_state(None);
             } else if self.registers.last().unwrap().borrow().get_state()
                 == ExecStates::AssignVarExtractValue
             {
@@ -2029,19 +2189,19 @@ impl Executor {
                 self.registers.pop();
                 match op {
                     1 => {
-                        self.forward_state(Some(Val {
+                        return self.forward_state(Some(Val {
                             typ: 6,
                             data: Rc::new(RefCell::new(Box::new(self.is_equal(arg1, arg2)))),
                         }));
                     }
                     2 => {
-                        self.forward_state(Some(Val {
+                        return self.forward_state(Some(Val {
                             typ: 6,
                             data: Rc::new(RefCell::new(Box::new(self.operate_sum(arg1, arg2)))),
                         }));
                     }
                     3 => {
-                        self.forward_state(Some(Val {
+                        return self.forward_state(Some(Val {
                             typ: 6,
                             data: Rc::new(RefCell::new(Box::new(
                                 self.operate_subtract(arg1, arg2),
@@ -2074,7 +2234,7 @@ impl Executor {
                 if index.typ == 7 {
                     if indexed.typ == 8 {
                         let obj = indexed.as_object();
-                        self.forward_state(Some(
+                        return self.forward_state(Some(
                             obj.borrow()
                                 .data
                                 .data
@@ -2089,7 +2249,7 @@ impl Executor {
                     if indexed.typ == 9 {
                         let arr = indexed.as_array();
                         if index.typ == 1 {
-                            self.forward_state(Some(
+                            return self.forward_state(Some(
                                 arr.borrow()
                                     .data
                                     .get(index.as_i16() as usize)
@@ -2097,7 +2257,7 @@ impl Executor {
                                     .clone(),
                             ));
                         } else if index.typ == 2 {
-                            self.forward_state(Some(
+                            return self.forward_state(Some(
                                 arr.borrow()
                                     .data
                                     .get(index.as_i32() as usize)
@@ -2105,7 +2265,7 @@ impl Executor {
                                     .clone(),
                             ));
                         } else {
-                            self.forward_state(Some(
+                            return self.forward_state(Some(
                                 arr.borrow()
                                     .data
                                     .get(index.as_i64() as usize)
@@ -2123,13 +2283,36 @@ impl Executor {
                 }
             }
         }
+        return false;
     }
-    pub fn run_from(&mut self, start: usize, end: usize) -> Val {
-        self.ctx.push_scope(start, start, end);
-        self.pointer = start;
-        self.end_at = end;
+    pub fn run_from(
+        &mut self,
+        start: usize,
+        end: usize,
+        continue_exec: bool,
+        host_call_result: Val,
+    ) -> Val {
+        if !continue_exec {
+            self.ctx.push_scope(start, start, end);
+            self.pointer = start;
+            self.end_at = end;
+        }
+        let mut ce = continue_exec;
         loop {
+            println!("{} {}", self.pointer, self.program.len());
             if self.pointer == self.end_at {
+                // self.ctx.memory.iter().for_each(|scope| {
+                //     scope
+                //         .borrow()
+                //         .memory
+                //         .borrow()
+                //         .data
+                //         .iter()
+                //         .for_each(|(key, val)| {
+                //             println!("{{ key: {}, val: {} }}", key, val.stringify());
+                //         });
+                // });
+                self.ctx.pop_scope();
                 self.ctx.memory.iter().for_each(|scope| {
                     scope
                         .borrow()
@@ -2141,15 +2324,23 @@ impl Executor {
                             println!("{{ key: {}, val: {} }}", key, val.stringify());
                         });
                 });
-                self.ctx.pop_scope();
                 if self.ctx.memory.len() > 0 {
                     self.pointer = self.ctx.memory.last().unwrap().borrow().frozen_pointer;
                     self.end_at = self.ctx.memory.last().unwrap().borrow().frozen_end;
+                    if self.pointer == self.end_at {
+                        break;
+                    }
                     if self.pending_func_result_value.typ != 254 {
                         self.pointer = self.pending_func_result_position;
                     }
                 } else {
                     break;
+                }
+            }
+            if ce {
+                ce = false;
+                if self.registers.len() > 0 {
+                    self.forward_state(Some(host_call_result.clone()));
                 }
             }
             let unit: u8 = self.program[self.pointer];
@@ -2229,7 +2420,7 @@ impl Executor {
                         let var_name = self.extract_str();
                         self.registers.last().unwrap().borrow_mut().set_state(
                             ExecStates::AssignVarExtractName,
-                            Box::new((var_name, 0x0c)),
+                            Box::new((var_name, 2 as i16)),
                         );
                     } else if self.program[self.pointer] == 0x0b {
                         self.pointer += 1;
@@ -2239,7 +2430,7 @@ impl Executor {
                         let var_name = self.extract_str();
                         self.registers.last().unwrap().borrow_mut().set_state(
                             ExecStates::AssignVarExtractName,
-                            Box::new((var_name, 0x0b)),
+                            Box::new((var_name, 1 as i16)),
                         );
                     }
                 }
@@ -2303,7 +2494,9 @@ impl Executor {
                 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 => {
                     self.pointer -= 1;
                     let val = self.extract_val();
-                    self.forward_state(Some(val));
+                    if self.forward_state(Some(val)) {
+                        break;
+                    }
                 }
                 // ----------------------------------
                 // No-Op

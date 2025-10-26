@@ -41,7 +41,15 @@ fn serialize_expr(val: serde_json::Value) -> Vec<u8> {
         }
         "string" => {
             result.push(7);
-            result.append(&mut val["data"]["value"].as_str().unwrap().as_bytes().to_vec());
+            let mut value_bytes = val["data"]["value"].as_str().unwrap().as_bytes().to_vec();
+            result.append(&mut i32::to_be_bytes(value_bytes.len() as i32).to_vec());
+            result.append(&mut value_bytes);
+        }
+        "identifier" => {
+            result.push(0x0b);
+            let mut value_bytes = val["data"]["name"].as_str().unwrap().as_bytes().to_vec();
+            result.append(&mut i32::to_be_bytes(value_bytes.len() as i32).to_vec());
+            result.append(&mut value_bytes);
         }
         "object" => {
             result.push(8);
@@ -72,10 +80,27 @@ pub fn compile(program: serde_json::Value) -> Vec<u8> {
     let mut result: Vec<u8> = vec![];
     for operation in program["body"].as_array().unwrap().iter() {
         match operation["type"].as_str().unwrap() {
+            "callFunction" => {
+                result.push(0x0d);
+                result.append(&mut serialize_expr(operation["data"]["callee"].clone()));
+                result.append(
+                    &mut i32::to_be_bytes(
+                        operation["data"]["arguments"].as_array().unwrap().len() as i32
+                    )
+                    .to_vec(),
+                );
+                operation["data"]["arguments"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .for_each(|arg| {
+                        result.append(&mut serialize_expr(arg.clone()));
+                    });
+            }
             "definition" => {
-                result.push(0x01);
-                result.push(0x0b);
+                result.push(0x0e);
                 if operation["data"]["leftSide"]["type"].as_str().unwrap() == "identifier" {
+                    result.push(0x0b);
                     let mut str_bytes = operation["data"]["leftSide"]["data"]["name"]
                         .as_str()
                         .unwrap()
@@ -88,7 +113,7 @@ pub fn compile(program: serde_json::Value) -> Vec<u8> {
                 }
             }
             "assignment" => {
-                result.push(0x02);
+                result.push(0x0f);
                 if operation["data"]["leftSide"]["type"].as_str().unwrap() == "identifier" {
                     result.push(0x0b);
                     let mut str_bytes = operation["data"]["leftSide"]["data"]["name"]
@@ -101,6 +126,17 @@ pub fn compile(program: serde_json::Value) -> Vec<u8> {
                     result.append(&mut str_bytes);
                     result.append(&mut serialize_expr(operation["data"]["rightSide"].clone()));
                 } else if operation["data"]["leftSide"]["type"].as_str().unwrap() == "indexer" {
+                    result.push(0x0c);
+                    let mut str_bytes =
+                        operation["data"]["leftSide"]["data"]["target"]["data"]["name"]
+                            .as_str()
+                            .unwrap()
+                            .as_bytes()
+                            .to_vec();
+                    let mut len_bytes = i32::to_be_bytes(str_bytes.len() as i32).to_vec();
+                    result.append(&mut len_bytes);
+                    result.append(&mut str_bytes);
+                    result.append(&mut serialize_expr(operation["data"]["rightSide"].clone()));
                 }
             }
             _ => {
