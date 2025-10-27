@@ -1,3 +1,7 @@
+use std::vec;
+
+use serde_json::Value;
+
 fn serialize_expr(val: serde_json::Value) -> Vec<u8> {
     let mut result: Vec<u8> = vec![];
     match val["type"].as_str().unwrap() {
@@ -138,22 +142,71 @@ fn serialize_expr(val: serde_json::Value) -> Vec<u8> {
     result
 }
 
+fn serialize_condition_chain(
+    operation: Value,
+    is_conditioned: bool,
+    start_point: usize,
+) -> (Vec<u8>, Vec<usize>) {
+    let mut result: Vec<u8> = vec![];
+    let mut baps: Vec<usize> = vec![];
+    result.push(0x10);
+    if is_conditioned {
+        result.push(0x01);
+        result.append(&mut serialize_expr(operation["data"]["condition"].clone()).to_vec());
+    } else {
+        result.push(0x00);
+    }
+    let body_start = if is_conditioned {
+        start_point + result.len() + 8 + 8 + 8 + 8
+    } else {
+        start_point + result.len() + 8 + 8 + 8
+    };
+    let body = compile(operation["data"].clone(), body_start);
+    let body_end = body_start + body.len();
+    result.append(&mut i64::to_be_bytes(body_start as i64).to_vec());
+    result.append(&mut i64::to_be_bytes(body_end as i64).to_vec());
+    let mut after_body: Vec<u8> = vec![];
+    let elseif_stmt = operation["data"].get("elseifStmt");
+    if !elseif_stmt.is_none() {
+        let (mut compiled_body, mut branch_after_points) =
+            serialize_condition_chain(elseif_stmt.unwrap().clone(), true, body_end);
+        after_body.append(&mut compiled_body);
+        baps.append(&mut branch_after_points);
+    } else {
+        let else_stmt = operation["data"].get("elseStmt");
+        if !else_stmt.is_none() {
+            let (mut compiled_body, mut branch_after_points) =
+                serialize_condition_chain(else_stmt.unwrap().clone(), false, body_end);
+            after_body.append(&mut compiled_body);
+            baps.append(&mut branch_after_points);
+        }
+    }
+    if is_conditioned {
+        result.append(&mut i64::to_be_bytes(body_end as i64).to_vec());
+    }
+    baps.push(start_point + result.len());
+    result.append(&mut vec![0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+    result.append(&mut body.clone());
+    result.append(&mut after_body);
+    (result, baps)
+}
+
 pub fn compile(program: serde_json::Value, start_point: usize) -> Vec<u8> {
     let mut result: Vec<u8> = vec![];
     for operation in program["body"].as_array().unwrap().iter() {
         match operation["type"].as_str().unwrap() {
             "ifStmt" => {
-                result.push(0x10);
-                result.push(0x01);
-                result.append(&mut serialize_expr(operation["data"]["condition"].clone()).to_vec());
-                let body_start = start_point + result.len() + 8 + 8 + 8 + 8;
-                let body = compile(operation["data"].clone(), body_start);
-                let body_end = body_start + body.len();
-                result.append(&mut i64::to_be_bytes(body_start as i64).to_vec());
-                result.append(&mut i64::to_be_bytes(body_end as i64).to_vec());
-                result.append(&mut i64::to_be_bytes(body_end as i64).to_vec());
-                result.append(&mut i64::to_be_bytes(body_end as i64).to_vec());
-                result.append(&mut body.clone());
+                let (mut compiled_code, baps) =
+                    serialize_condition_chain(operation.clone(), true, start_point + result.len());
+                let brach_after =
+                    i64::to_be_bytes((start_point + result.len() + compiled_code.len()) as i64)
+                        .to_vec();
+                for bap in baps.iter() {
+                    let s = *bap - start_point - result.len();
+                    let e = *bap + 8 - start_point - result.len();
+                    compiled_code[s..e].copy_from_slice(brach_after.as_slice());
+                }
+                result.append(&mut compiled_code);
             }
             "loopStmt" => {
                 let loop_start = start_point + result.len();
@@ -168,6 +221,33 @@ pub fn compile(program: serde_json::Value, start_point: usize) -> Vec<u8> {
                 result.append(&mut i64::to_be_bytes(body_end as i64).to_vec());
                 result.append(&mut i64::to_be_bytes(body_end as i64).to_vec());
                 result.append(&mut body.clone());
+            }
+            "switchStmt" => {
+                result.push(0x12);
+                result.append(&mut serialize_expr(operation["data"]["value"].clone()).to_vec());
+                let mut inner: Vec<u8> = vec![];
+                for case_val in operation["data"]["cases"].as_array().unwrap().iter() {
+                    inner.append(&mut serialize_expr(case_val["value"].clone()));
+                    let body_start = start_point + result.len() + 8 + 8;
+                    let mut body: Vec<u8> = compile(case_val["body"].clone(), body_start);
+                    let body_end = body_start + body.len();
+                    inner.append(&mut i64::to_be_bytes(body_start as i64).to_vec());
+                    inner.append(&mut i64::to_be_bytes(body_end as i64).to_vec());
+                    inner.append(&mut body);
+                }
+                result.append(
+                    &mut i64::to_be_bytes(
+                        (start_point + result.len() + inner.len() + 8 + 8) as i64,
+                    )
+                    .to_vec(),
+                );
+                result.append(
+                    &mut i64::to_be_bytes(
+                        operation["data"]["cases"].as_array().unwrap().len() as i64
+                    )
+                    .to_vec(),
+                );
+                result.append(&mut inner);
             }
             "defineFunction" => {
                 result.push(0x13);

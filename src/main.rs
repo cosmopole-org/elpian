@@ -30,45 +30,24 @@ fn main() {
                 "params": ["input"],
                 "body": [
                   {
-                    "type": "ifStmt",
+                    "type": "callFunction",
                     "data": {
-                      "condition": {
-                        "type": "arithmetic",
-                        "data": {
-                          "operation": ">",
-                          "operand1": {
-                            "type": "i32",
-                            "data": { "value": 38 }
-                          },
-                          "operand2": {
-                            "type": "i32",
-                            "data": { "value": 37 }
-                          }
-                        }
+                      "callee": {
+                        "type": "identifier",
+                        "data": { "name": "askHost" }
                       },
-                      "body": [
+                      "arguments": [
                         {
-                          "type": "callFunction",
-                          "data": {
-                            "callee": {
-                              "type": "identifier",
-                              "data": { "name": "askHost" }
-                            },
-                            "arguments": [
-                              {
-                                "type": "string",
-                                "data": { "value": "println" }
-                              },
-                              {
-                                "type": "identifier",
-                                "data": { "name": "input" }
-                              }
-                            ]
-                          }
+                          "type": "string",
+                          "data": { "value": "println" }
+                        },
+                        {
+                          "type": "identifier",
+                          "data": { "name": "input" }
                         }
                       ]
                     }
-                  }
+                  },
                 ]
               },
             },
@@ -113,17 +92,9 @@ fn main() {
                 },
                 "arguments": [
                   {
-                    "type": "arithmetic",
+                    "type": "identifier",
                     "data": {
-                      "operation": "+",
-                      "operand1": {
-                        "type": "i32",
-                        "data": { "value": 35 }
-                      },
-                      "operand2": {
-                        "type": "i32",
-                        "data": { "value": 37 }
-                      }
+                      "name": "count",
                     }
                   }
                 ]

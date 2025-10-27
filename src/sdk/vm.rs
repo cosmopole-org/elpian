@@ -34,7 +34,10 @@ impl VM {
                         0x01 => {
                             let cbs = callbacks_clone.lock().unwrap();
                             let sender = cbs.get(&cb_id).unwrap();
-                            sender.send(payload).unwrap();
+                            let res = sender.send(payload);
+                            if !res.is_ok() {
+                                println!("{:#?}", res.err());
+                            }
                         }
                         0x02 => {
                             let params = payload.as_array().borrow().data.clone();

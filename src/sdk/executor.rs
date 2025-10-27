@@ -1,4 +1,3 @@
-
 use crate::sdk::{
     context::Context,
     data::{Array, Function, Object, Val, ValGroup},
@@ -776,17 +775,19 @@ impl Executor {
                 registers: vec![],
             };
             let mut run_cb_id: i64 = 0;
+            let mut exec_globally = false;
             loop {
                 let (op_code, cb_id, payload) = tasks_recv.recv().unwrap();
                 match op_code {
                     0x00 => {
                         // println!("ending executor...");
-                        break;
+                        // break;
                     }
                     0x01 => {
                         // println!("executor: run_func called");
                         run_cb_id = cb_id;
                         if payload.is_empty() {
+                            exec_globally = true;
                             let result = ex.run_from(
                                 0,
                                 ex.program.len(),
@@ -797,9 +798,11 @@ impl Executor {
                                 },
                             );
                             if ex.pointer == ex.ctx.memory.get(0).unwrap().borrow().frozen_end {
+                                println!("test");
                                 vm_send.clone().send((0x01, cb_id, result)).unwrap();
                             }
                         } else {
+                            exec_globally = false;
                             let func_name = payload.as_string();
                             let val = ex.ctx.find_val_in_first_scope(func_name);
                             if !val.is_empty() {
@@ -835,7 +838,17 @@ impl Executor {
                     }
                     0x03 => {
                         let result = ex.run_from(ex.pointer, ex.end_at, true, payload);
-                        if ex.pointer == ex.end_at {
+                        if ex.ctx.memory.len() > 0 {
+                            if exec_globally {
+                                if ex.pointer == ex.ctx.memory.get(0).unwrap().borrow().frozen_end {
+                                    vm_send.clone().send((0x01, run_cb_id, result)).unwrap();
+                                }
+                            } else {
+                                if ex.pointer == ex.ctx.memory.get(1).unwrap().borrow().frozen_end {
+                                    vm_send.clone().send((0x01, run_cb_id, result)).unwrap();
+                                }
+                            }
+                        } else {
                             vm_send.clone().send((0x01, run_cb_id, result)).unwrap();
                         }
                     }
@@ -3679,11 +3692,29 @@ impl Executor {
                         .push(Rc::new(RefCell::new(Box::new(state_holder))));
                     let has_condition = self.program[self.pointer] == 0x01;
                     self.pointer += 1;
-                    self.registers
-                        .last()
-                        .unwrap()
-                        .borrow_mut()
-                        .set_state(ExecStates::IfStmtIsConditioned, Box::new(has_condition));
+                    if has_condition {
+                        self.registers
+                            .last()
+                            .unwrap()
+                            .borrow_mut()
+                            .set_state(ExecStates::IfStmtIsConditioned, Box::new(has_condition));
+                    } else {
+                        self.registers
+                            .last()
+                            .unwrap()
+                            .borrow_mut()
+                            .set_state(ExecStates::IfStmtIsConditioned, Box::new(has_condition));
+                        self.registers.last().unwrap().borrow_mut().set_state(
+                            ExecStates::IfStmtFinished,
+                            Box::new(Val {
+                                typ: 6,
+                                data: Rc::new(RefCell::new(Box::new(true))),
+                            }),
+                        );
+                        if self.forward_state(None) {
+                            break;
+                        }
+                    }
                 }
                 // loop statement
                 0x11 => {
