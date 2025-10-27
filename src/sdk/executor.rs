@@ -1,3 +1,4 @@
+
 use crate::sdk::{
     context::Context,
     data::{Array, Function, Object, Val, ValGroup},
@@ -3124,7 +3125,7 @@ impl Executor {
                     .unwrap()
                     .borrow_mut()
                     .set_state(ExecStates::IfStmtFinished, Box::new(val.clone().unwrap()));
-                self.forward_state(None);
+                return self.forward_state(None);
             } else if self.registers.last().unwrap().borrow().get_state()
                 == ExecStates::IfStmtFinished
             {
@@ -3180,6 +3181,7 @@ impl Executor {
                     .unwrap()
                     .borrow_mut()
                     .set_state(ExecStates::LoopStmtFinished, Box::new(val.clone().unwrap()));
+                return self.forward_state(None);
             } else if self.registers.last().unwrap().borrow().get_state()
                 == ExecStates::LoopStmtFinished
             {
@@ -3723,6 +3725,11 @@ impl Executor {
                     let state_holder = ReturnValue::new();
                     self.registers
                         .push(Rc::new(RefCell::new(Box::new(state_holder))));
+                }
+                // jump command
+                0x15 => {
+                    let dest = self.extract_i64() as usize;
+                    self.pointer = dest;
                 }
                 // ----------------------------------
                 // expressions

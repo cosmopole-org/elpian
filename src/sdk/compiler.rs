@@ -155,6 +155,20 @@ pub fn compile(program: serde_json::Value, start_point: usize) -> Vec<u8> {
                 result.append(&mut i64::to_be_bytes(body_end as i64).to_vec());
                 result.append(&mut body.clone());
             }
+            "loopStmt" => {
+                let loop_start = start_point + result.len();
+                result.push(0x11);
+                result.append(&mut serialize_expr(operation["data"]["condition"].clone()).to_vec());
+                let body_start = start_point + result.len() + 8 + 8 + 8;
+                let mut body = compile(operation["data"].clone(), body_start);
+                body.push(0x15);
+                body.append(&mut i64::to_be_bytes(loop_start as i64).to_vec());
+                let body_end = body_start + body.len();
+                result.append(&mut i64::to_be_bytes(body_start as i64).to_vec());
+                result.append(&mut i64::to_be_bytes(body_end as i64).to_vec());
+                result.append(&mut i64::to_be_bytes(body_end as i64).to_vec());
+                result.append(&mut body.clone());
+            }
             "defineFunction" => {
                 result.push(0x13);
                 let mut str_bytes = operation["data"]["name"]
