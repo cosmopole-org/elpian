@@ -26,6 +26,7 @@ pub enum OperationTypes {
     SwitchStmt,
     Arithmetic,
     Indexer,
+    NotVal,
 }
 
 impl Debug for OperationTypes {
@@ -40,6 +41,7 @@ impl Debug for OperationTypes {
             OperationTypes::SwitchStmt => write!(f, "SwitchStmt"),
             OperationTypes::Arithmetic => write!(f, "Arithmetic"),
             OperationTypes::Indexer => write!(f, "Indexer"),
+            OperationTypes::NotVal => write!(f, "NotVal"),
         }
     }
 }
@@ -79,6 +81,8 @@ pub enum ExecStates {
     IndexerStarted,
     IndexerExtractVarName,
     IndexerExtractIndex,
+    NotValStarted,
+    NotValFinished,
 }
 
 impl Debug for ExecStates {
@@ -111,6 +115,8 @@ impl Debug for ExecStates {
             ExecStates::IndexerStarted => write!(f, "IndexerStarted"),
             ExecStates::IndexerExtractVarName => write!(f, "IndexerExtractVarName"),
             ExecStates::IndexerExtractIndex => write!(f, "IndexerExtractIndex"),
+            ExecStates::NotValStarted => write!(f, "NotValStarted"),
+            ExecStates::NotValFinished => write!(f, "NotValFinished"),
         }
     }
 }
@@ -689,6 +695,43 @@ impl Operation for IndexerValue {
     }
 }
 
+struct NotValue {
+    typ: OperationTypes,
+    state: ExecStates,
+    pub value: Option<Val>,
+}
+
+impl NotValue {
+    pub fn new() -> Self {
+        NotValue {
+            typ: OperationTypes::ReturnVal,
+            state: ExecStates::ReturnValStarted,
+            value: None,
+        }
+    }
+}
+
+impl Operation for NotValue {
+    fn get_state(&self) -> ExecStates {
+        self.state.clone()
+    }
+
+    fn get_type(&self) -> OperationTypes {
+        self.typ.clone()
+    }
+
+    fn set_state(&mut self, state: ExecStates, data: Box<dyn Any>) {
+        self.state = state.clone();
+        if state == ExecStates::ReturnValFinished {
+            self.value = Some(*data.downcast::<Val>().unwrap());
+        }
+    }
+
+    fn get_data(&self) -> Vec<Val> {
+        vec![self.value.clone().unwrap()]
+    }
+}
+
 pub struct Executor {
     executor_id: i16,
     pointer: usize,
@@ -1019,11 +1062,11 @@ impl Executor {
                         panic!("elpian error: object and integer can not be summed");
                     }
                     9 => {
-                        let val2 = arg2.as_array();
-                        val2.borrow_mut().data.insert(0, arg1);
+                        let mut val2 = arg2.as_array().borrow().clone_arr();
+                        val2.data.insert(0, arg1);
                         Val {
                             typ: 9,
-                            data: Rc::new(RefCell::new(Box::new(val2))),
+                            data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(val2))))),
                         }
                     }
                     10 => {
@@ -1062,7 +1105,7 @@ impl Executor {
                         self.check_float_range(val1 + val2)
                     }
                     6 => {
-                        panic!("elpian error: boolean and integer can not be summed");
+                        panic!("elpian error: boolean and float can not be summed");
                     }
                     7 => {
                         let val2 = arg2.as_string();
@@ -1073,21 +1116,21 @@ impl Executor {
                         }
                     }
                     8 => {
-                        panic!("elpian error: object and integer can not be summed");
+                        panic!("elpian error: object and float can not be summed");
                     }
                     9 => {
-                        let val2 = arg2.as_array();
-                        val2.borrow_mut().data.insert(0, arg1);
+                        let mut val2 = arg2.as_array().borrow().clone_arr();
+                        val2.data.insert(0, arg1);
                         Val {
                             typ: 9,
-                            data: Rc::new(RefCell::new(Box::new(val2))),
+                            data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(val2))))),
                         }
                     }
                     10 => {
-                        panic!("elpian error: function and integer can not be summed");
+                        panic!("elpian error: function and float can not be summed");
                     }
                     _ => {
-                        panic!("elpian error: unknown data type and integer can not be summed");
+                        panic!("elpian error: unknown data type and float can not be summed");
                     }
                 }
             }
@@ -1128,11 +1171,11 @@ impl Executor {
                         panic!("elpian error: object and bool can not be summed");
                     }
                     9 => {
-                        let val2 = arg2.as_array();
-                        val2.borrow_mut().data.insert(0, arg1);
+                        let mut val2 = arg2.as_array().borrow().clone_arr();
+                        val2.data.insert(0, arg1);
                         Val {
                             typ: 9,
-                            data: Rc::new(RefCell::new(Box::new(val2))),
+                            data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(val2))))),
                         }
                     }
                     10 => {
@@ -1257,11 +1300,11 @@ impl Executor {
                         }
                     }
                     9 => {
-                        let val2 = arg2.as_array();
-                        val2.borrow_mut().data.insert(0, arg1);
+                        let mut val2 = arg2.as_array().borrow().clone_arr();
+                        val2.data.insert(0, arg1);
                         Val {
                             typ: 9,
-                            data: Rc::new(RefCell::new(Box::new(val2))),
+                            data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(val2))))),
                         }
                     }
                     10 => {
@@ -1291,11 +1334,11 @@ impl Executor {
                         }
                     }
                     9 => {
-                        let val2 = arg2.as_array();
-                        val1.borrow_mut().data.append(&mut val2.borrow_mut().data);
+                        let mut val1 = arg2.as_array().borrow().clone_arr();
+                        val1.data.append(&mut arg2.as_array().borrow().data.clone());
                         Val {
                             typ: 9,
-                            data: Rc::new(RefCell::new(Box::new(val1))),
+                            data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(val1))))),
                         }
                     }
                     _ => {
@@ -1304,10 +1347,335 @@ impl Executor {
                 }
             }
             10 => {
-                panic!("function can not be summed with anything");
+                panic!("elpian error: function can not be summed with other types");
             }
             _ => {
-                panic!("can not sum unknown type with anything");
+                panic!("elpian error: unknown type can not be summed with other types");
+            }
+        }
+    }
+    fn operate_multiply(&self, arg1: Val, arg2: Val) -> Val {
+        match arg1.typ {
+            1 | 2 | 3 => {
+                let val1 = match arg1.typ {
+                    1 => arg1.as_i16() as i64,
+                    2 => arg1.as_i32() as i64,
+                    3 => arg1.as_i64() as i64,
+                    _ => 0,
+                };
+                match arg2.typ {
+                    1 => {
+                        let val2 = arg2.as_i16() as i64;
+                        self.check_int_range(val1 * val2)
+                    }
+                    2 => {
+                        let val2 = arg2.as_i32() as i64;
+                        self.check_int_range(val1 * val2)
+                    }
+                    3 => {
+                        let val2 = arg2.as_i64() as i64;
+                        self.check_int_range(val1 * val2)
+                    }
+                    4 => {
+                        let val2 = arg2.as_f32() as f64;
+                        let val1_temp = val1 as f64;
+                        self.check_float_range(val1_temp * val2)
+                    }
+                    5 => {
+                        let val2 = arg2.as_f64() as f64;
+                        let val1_temp = val1 as f64;
+                        self.check_float_range(val1_temp * val2)
+                    }
+                    6 => {
+                        panic!("elpian error: boolean and integer can not be multiplied");
+                    }
+                    7 => {
+                        let val2 = arg2.as_string();
+                        let mut res = "".to_string();
+                        for _i in 0..val1 {
+                            res.push_str(&val2);
+                        }
+                        Val {
+                            typ: 7,
+                            data: Rc::new(RefCell::new(Box::new(res))),
+                        }
+                    }
+                    8 => {
+                        panic!("elpian error: object and integer can not be multiplied");
+                    }
+                    9 => {
+                        let val2 = arg2.as_array();
+                        let mut res: Vec<Val> = vec![];
+                        for _i in 0..val1 {
+                            res.append(&mut val2.borrow().data.clone());
+                        }
+                        Val {
+                            typ: 9,
+                            data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(
+                                Array::new(res),
+                            ))))),
+                        }
+                    }
+                    10 => {
+                        panic!("elpian error: function and integer can not be multiplied");
+                    }
+                    _ => {
+                        panic!("elpian error: unknown data type and integer can not be multiplied");
+                    }
+                }
+            }
+            4 | 5 => {
+                let val1 = match arg1.typ {
+                    4 => arg1.as_f32() as f64,
+                    5 => arg1.as_f64() as f64,
+                    _ => 0.0,
+                };
+                match arg2.typ {
+                    1 => {
+                        let val2 = arg2.as_i16() as f64;
+                        self.check_float_range(val1 * val2)
+                    }
+                    2 => {
+                        let val2 = arg2.as_i32() as f64;
+                        self.check_float_range(val1 * val2)
+                    }
+                    3 => {
+                        let val2 = arg2.as_i64() as f64;
+                        self.check_float_range(val1 * val2)
+                    }
+                    4 => {
+                        let val2 = arg2.as_f32() as f64;
+                        self.check_float_range(val1 * val2)
+                    }
+                    5 => {
+                        let val2 = arg2.as_f64() as f64;
+                        self.check_float_range(val1 * val2)
+                    }
+                    6 => {
+                        panic!("elpian error: boolean and float can not be multiplied");
+                    }
+                    7 => {
+                        let val2 = arg2.as_string();
+                        let val1_temp = val1.to_string();
+                        Val {
+                            typ: 7,
+                            data: Rc::new(RefCell::new(Box::new(format!("{}{}", val1_temp, val2)))),
+                        }
+                    }
+                    8 => {
+                        panic!("elpian error: object and float can not be multiplied");
+                    }
+                    9 => {
+                        panic!("elpian error: array and float can not be multiplied");
+                    }
+                    10 => {
+                        panic!("elpian error: function and float can not be multiplied");
+                    }
+                    _ => {
+                        panic!("elpian error: unknown data type and float can not be multiplied");
+                    }
+                }
+            }
+            6 => {
+                let val1 = arg1.as_bool();
+                match arg2.typ {
+                    1 => {
+                        panic!("elpian error: bool and integer can not be multiplied");
+                    }
+                    2 => {
+                        panic!("elpian error: bool and integer can not be multiplied");
+                    }
+                    3 => {
+                        panic!("elpian error: bool and integer can not be multiplied");
+                    }
+                    4 => {
+                        panic!("elpian error: bool and float can not be multiplied");
+                    }
+                    5 => {
+                        panic!("elpian error: bool and float can not be multiplied");
+                    }
+                    6 => {
+                        let val2 = arg2.as_bool();
+                        Val {
+                            typ: 7,
+                            data: Rc::new(RefCell::new(Box::new(val1 & val2))),
+                        }
+                    }
+                    7 => {
+                        let val2 = arg2.as_string();
+                        let val1_temp = val1.to_string();
+                        Val {
+                            typ: 7,
+                            data: Rc::new(RefCell::new(Box::new(format!("{}{}", val1_temp, val2)))),
+                        }
+                    }
+                    8 => {
+                        if val1 {
+                            return arg2.clone();
+                        } else {
+                            return Val {
+                                typ: 8,
+                                data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(
+                                    Object::new(-2, ValGroup::new_empty()),
+                                ))))),
+                            };
+                        }
+                    }
+                    9 => {
+                        if val1 {
+                            return arg2.clone();
+                        } else {
+                            return Val {
+                                typ: 9,
+                                data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(
+                                    Array::new_empty(),
+                                ))))),
+                            };
+                        }
+                    }
+                    10 => {
+                        panic!("elpian error: function and bool can not be multiplied");
+                    }
+                    _ => {
+                        panic!("elpian error: unknown data type and bool can not be multiplied");
+                    }
+                }
+            }
+            7 => {
+                let val1 = arg1.as_string();
+                match arg2.typ {
+                    1 => {
+                        let mut res = "".to_string();
+                        for _i in 0..arg2.as_i16() {
+                            res.push_str(&val1);
+                        }
+                        Val {
+                            typ: 7,
+                            data: Rc::new(RefCell::new(Box::new(res))),
+                        }
+                    }
+                    2 => {
+                        let mut res = "".to_string();
+                        for _i in 0..arg2.as_i32() {
+                            res.push_str(&val1);
+                        }
+                        Val {
+                            typ: 7,
+                            data: Rc::new(RefCell::new(Box::new(res))),
+                        }
+                    }
+                    3 => {
+                        let mut res = "".to_string();
+                        for _i in 0..arg2.as_i64() {
+                            res.push_str(&val1);
+                        }
+                        Val {
+                            typ: 7,
+                            data: Rc::new(RefCell::new(Box::new(res))),
+                        }
+                    }
+                    4 => {
+                        panic!("elpian error: string and float can not be multiplied");
+                    }
+                    5 => {
+                        panic!("elpian error: string and float can not be multiplied");
+                    }
+                    6 => {
+                        panic!("elpian error: string and bool can not be multiplied");
+                    }
+                    7 => {
+                        panic!("elpian error: string and string can not be multiplied");
+                    }
+                    8 => {
+                        panic!("elpian error: string and object can not be multiplied");
+                    }
+                    9 => {
+                        panic!("elpian error: string and array can not be multiplied");
+                    }
+                    10 => {
+                        panic!("elpian error: string and function can not be multiplied");
+                    }
+                    _ => {
+                        panic!("elpian error: string type and unknown data can not be multiplied");
+                    }
+                }
+            }
+            8 => {
+                panic!("elpian error: object can not be multiplied with other types");
+            }
+            9 => {
+                let val1 = arg1.as_array();
+                match arg2.typ {
+                    1 => {
+                        let mut res: Vec<Val> = vec![];
+                        for _i in 0..arg2.as_i16() {
+                            res.append(&mut val1.borrow().data.clone());
+                        }
+                        Val {
+                            typ: 9,
+                            data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(
+                                Array::new(res),
+                            ))))),
+                        }
+                    }
+                    2 => {
+                        let mut res: Vec<Val> = vec![];
+                        for _i in 0..arg2.as_i32() {
+                            res.append(&mut val1.borrow().data.clone());
+                        }
+                        Val {
+                            typ: 9,
+                            data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(
+                                Array::new(res),
+                            ))))),
+                        }
+                    }
+                    3 => {
+                        let mut res: Vec<Val> = vec![];
+                        for _i in 0..arg2.as_i64() {
+                            res.append(&mut val1.borrow().data.clone());
+                        }
+                        Val {
+                            typ: 9,
+                            data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(
+                                Array::new(res),
+                            ))))),
+                        }
+                    }
+                    4 | 5 => {
+                        panic!("elpian error: array and float can not be multiplied");
+                    }
+                    6 => {
+                        if arg2.as_bool() {
+                            return arg1.clone();
+                        } else {
+                            return Val {
+                                typ: 9,
+                                data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(
+                                    Array::new_empty(),
+                                ))))),
+                            };
+                        }
+                    }
+                    7 => {
+                        panic!("elpian error: array and string can not be multiplied");
+                    }
+                    8 => {
+                        panic!("elpian error: array and object can not be multiplied");
+                    }
+                    10 => {
+                        panic!("elpian error: array and function can not be multiplied");
+                    }
+                    _ => {
+                        panic!("elpian error: unknown data type and array can not be multiplied");
+                    }
+                }
+            }
+            10 => {
+                panic!("elpian error: function can not be multiplied with other types");
+            }
+            _ => {
+                panic!("elpian error: unknown type can not be multiplied with other types");
             }
         }
     }
@@ -1652,6 +2020,123 @@ impl Executor {
             }
             _ => {
                 panic!("can not subtract unknown type with anything");
+            }
+        }
+    }
+    fn operate_division(&self, arg1: Val, arg2: Val) -> Val {
+        match arg1.typ {
+            1 | 2 | 3 => {
+                let val1 = match arg1.typ {
+                    1 => arg1.as_i16() as f64,
+                    2 => arg1.as_i32() as f64,
+                    3 => arg1.as_i64() as f64,
+                    _ => 0.0,
+                };
+                match arg2.typ {
+                    1 => {
+                        let val2 = arg2.as_i16() as f64;
+                        self.check_float_range(val1 / val2)
+                    }
+                    2 => {
+                        let val2 = arg2.as_i32() as f64;
+                        self.check_float_range(val1 / val2)
+                    }
+                    3 => {
+                        let val2 = arg2.as_i64() as f64;
+                        self.check_float_range(val1 / val2)
+                    }
+                    4 => {
+                        let val2 = arg2.as_f32() as f64;
+                        self.check_float_range(val1 / val2)
+                    }
+                    5 => {
+                        let val2 = arg2.as_f64() as f64;
+                        self.check_float_range(val1 / val2)
+                    }
+                    6 => {
+                        panic!("elpian error: integer and boolean can not be divisioned");
+                    }
+                    7 => {
+                        panic!("elpian error: integer and boolean can not be divisioned");
+                    }
+                    8 => {
+                        panic!("elpian error: integer and object can not be divisioned");
+                    }
+                    9 => {
+                        panic!("elpian error: integer and array can not be divisioned");
+                    }
+                    10 => {
+                        panic!("elpian error: integer and function can not be divisioned");
+                    }
+                    _ => {
+                        panic!("elpian error: integer and unknown data type can not be divisioned");
+                    }
+                }
+            }
+            4 | 5 => {
+                let val1 = match arg1.typ {
+                    4 => arg1.as_f32() as f64,
+                    5 => arg1.as_f64() as f64,
+                    _ => 0.0,
+                };
+                match arg2.typ {
+                    1 => {
+                        let val2 = arg2.as_i16() as f64;
+                        self.check_float_range(val1 / val2)
+                    }
+                    2 => {
+                        let val2 = arg2.as_i32() as f64;
+                        self.check_float_range(val1 / val2)
+                    }
+                    3 => {
+                        let val2 = arg2.as_i64() as f64;
+                        self.check_float_range(val1 / val2)
+                    }
+                    4 => {
+                        let val2 = arg2.as_f32() as f64;
+                        self.check_float_range(val1 / val2)
+                    }
+                    5 => {
+                        let val2 = arg2.as_f64() as f64;
+                        self.check_float_range(val1 / val2)
+                    }
+                    6 => {
+                        panic!("elpian error: float and boolean can not be divisioned");
+                    }
+                    7 => {
+                        panic!("elpian error: float and string can not be divisioned");
+                    }
+                    8 => {
+                        panic!("elpian error: float and object can not be divisioned");
+                    }
+                    9 => {
+                        panic!("elpian error: float and array can not be divisioned");
+                    }
+                    10 => {
+                        panic!("elpian error: float and function can not be divisioned");
+                    }
+                    _ => {
+                        panic!("elpian error: float and unknown data type can not be divisioned");
+                    }
+                }
+            }
+            6 => {
+                panic!("elpian error: bool can not be divisioned with other types");
+            }
+            7 => {
+                panic!("elpian error: bool can not be divisioned with other types");
+            }
+            8 => {
+                panic!("elpian error: object can not be divisioned with other types");
+            }
+            9 => {
+                panic!("elpian error: array can not be divisioned with other types");
+            }
+            10 => {
+                panic!("elpian error: function can not be divisioned with other types");
+            }
+            _ => {
+                panic!("elpian error: unknown type can not be divisioned with other types");
             }
         }
     }
@@ -2842,6 +3327,12 @@ impl Executor {
                     8 => {
                         return self.forward_state(Some(self.operate_subtract(arg1, arg2)));
                     }
+                    9 => {
+                        return self.forward_state(Some(self.operate_multiply(arg1, arg2)));
+                    }
+                    10 => {
+                        return self.forward_state(Some(self.operate_division(arg1, arg2)));
+                    }
                     _ => {}
                 }
             }
@@ -2914,6 +3405,29 @@ impl Executor {
                     panic!(
                         "elpian error: types other than integer and string can not be used to index anything"
                     );
+                }
+            }
+        } else if self.registers.last().unwrap().borrow().get_type() == OperationTypes::NotVal {
+            if self.registers.last().unwrap().borrow().get_state() == ExecStates::NotValStarted {
+                self.registers
+                    .last()
+                    .unwrap()
+                    .borrow_mut()
+                    .set_state(ExecStates::NotValFinished, Box::new(val.clone().unwrap()));
+                return self.forward_state(None);
+            } else if self.registers.last().unwrap().borrow().get_state()
+                == ExecStates::NotValFinished
+            {
+                let data = self.registers.last().unwrap().borrow().get_data();
+                let val = data[0].clone();
+                self.registers.pop();
+                if val.typ == 6 {
+                    return self.forward_state(Some(Val {
+                        typ: 6,
+                        data: Rc::new(RefCell::new(Box::new(!val.as_bool()))),
+                    }));
+                } else {
+                    panic!("elpian error: not operator (!) can not be applied to non-bool value");
                 }
             }
         }
@@ -3052,6 +3566,56 @@ impl Executor {
                         .unwrap()
                         .borrow_mut()
                         .set_state(ExecStates::ArithmeticExtractOp, Box::new(8 as i16));
+                }
+                // multiply operator
+                0xf8 => {
+                    let state_holder = Arithmetic::new();
+                    self.registers
+                        .push(Rc::new(RefCell::new(Box::new(state_holder))));
+                    self.registers
+                        .last()
+                        .unwrap()
+                        .borrow_mut()
+                        .set_state(ExecStates::ArithmeticExtractOp, Box::new(9 as i16));
+                }
+                // division operator
+                0xf9 => {
+                    let state_holder = Arithmetic::new();
+                    self.registers
+                        .push(Rc::new(RefCell::new(Box::new(state_holder))));
+                    self.registers
+                        .last()
+                        .unwrap()
+                        .borrow_mut()
+                        .set_state(ExecStates::ArithmeticExtractOp, Box::new(10 as i16));
+                }
+                // mod operator
+                0xfa => {
+                    let state_holder = Arithmetic::new();
+                    self.registers
+                        .push(Rc::new(RefCell::new(Box::new(state_holder))));
+                    self.registers
+                        .last()
+                        .unwrap()
+                        .borrow_mut()
+                        .set_state(ExecStates::ArithmeticExtractOp, Box::new(11 as i16));
+                }
+                // power operator
+                0xfb => {
+                    let state_holder = Arithmetic::new();
+                    self.registers
+                        .push(Rc::new(RefCell::new(Box::new(state_holder))));
+                    self.registers
+                        .last()
+                        .unwrap()
+                        .borrow_mut()
+                        .set_state(ExecStates::ArithmeticExtractOp, Box::new(12 as i16));
+                }
+                // not operator
+                0xfc => {
+                    let state_holder = NotValue::new();
+                    self.registers
+                        .push(Rc::new(RefCell::new(Box::new(state_holder))));
                 }
                 // ----------------------------------
                 // program operators:

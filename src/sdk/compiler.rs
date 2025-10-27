@@ -1,4 +1,3 @@
-
 fn serialize_expr(val: serde_json::Value) -> Vec<u8> {
     let mut result: Vec<u8> = vec![];
     match val["type"].as_str().unwrap() {
@@ -70,6 +69,10 @@ fn serialize_expr(val: serde_json::Value) -> Vec<u8> {
                 result.append(&mut serialize_expr(v.clone()));
             }
         }
+        "not" => {
+            result.push(0xfc);
+            result.append(&mut serialize_expr(val["data"]["value"].clone()));
+        }
         "arithmetic" => {
             match val["data"]["operation"].as_str().unwrap() {
                 "==" => {
@@ -95,6 +98,18 @@ fn serialize_expr(val: serde_json::Value) -> Vec<u8> {
                 }
                 "-" => {
                     result.push(0xf7);
+                }
+                "*" => {
+                    result.push(0xf8);
+                }
+                "/" => {
+                    result.push(0xf9);
+                }
+                "%" => {
+                    result.push(0xfa);
+                }
+                "^" => {
+                    result.push(0xfb);
                 }
                 _ => {}
             };
