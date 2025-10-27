@@ -75,11 +75,26 @@ fn serialize_expr(val: serde_json::Value) -> Vec<u8> {
                 "==" => {
                     result.push(0xf0);
                 }
-                "+" => {
+                ">" => {
                     result.push(0xf1);
                 }
-                "-" => {
+                ">=" => {
                     result.push(0xf2);
+                }
+                "<" => {
+                    result.push(0xf3);
+                }
+                "<=" => {
+                    result.push(0xf4);
+                }
+                "!=" => {
+                    result.push(0xf5);
+                }
+                "+" => {
+                    result.push(0xf6);
+                }
+                "-" => {
+                    result.push(0xf7);
                 }
                 _ => {}
             };

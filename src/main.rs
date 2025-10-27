@@ -35,10 +35,10 @@ fn main() {
                       "condition": {
                         "type": "arithmetic",
                         "data": {
-                          "operation": "==",
+                          "operation": ">",
                           "operand1": {
                             "type": "i32",
-                            "data": { "value": 37 }
+                            "data": { "value": 38 }
                           },
                           "operand2": {
                             "type": "i32",

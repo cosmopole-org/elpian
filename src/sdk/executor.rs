@@ -717,43 +717,13 @@ impl Executor {
             allowed_api.insert(api_name.clone(), true);
         }
         thread::spawn(move || {
-            let mut program_payload: Vec<u8> = vec![];
-            // for func_name in func_group.iter() {
-            //     program_payload.push(0x13);
-            //     program_payload.append(&mut i32::to_be_bytes(func_name.len() as i32).to_vec());
-            //     program_payload.append(&mut func_name.as_bytes().to_vec());
-            //     program_payload.append(&mut i32::to_be_bytes(1).to_vec());
-            //     let param_name = "input".to_string();
-            //     program_payload.append(&mut i32::to_be_bytes(param_name.len() as i32).to_vec());
-            //     program_payload.append(&mut param_name.as_bytes().to_vec());
-            //     let mut func_body = vec![];
-            //     func_body.push(0x0d);
-            //     func_body.push(0x0b);
-            //     let ask_host_call_name = "askHost".to_string();
-            //     func_body.append(&mut i32::to_be_bytes(ask_host_call_name.len() as i32).to_vec());
-            //     func_body.append(&mut ask_host_call_name.as_bytes().to_vec());
-            //     func_body.append(&mut i32::to_be_bytes(2).to_vec());
-            //     func_body.push(7);
-            //     func_body.append(&mut i32::to_be_bytes(func_name.len() as i32).to_vec());
-            //     func_body.append(&mut func_name.as_bytes().to_vec());
-            //     func_body.push(0x0b);
-            //     let arg_name = "input".to_string();
-            //     func_body.append(&mut i32::to_be_bytes(arg_name.len() as i32).to_vec());
-            //     func_body.append(&mut arg_name.as_bytes().to_vec());
-            //     let func_start = program_payload.len() + 8 + 8;
-            //     let func_end = func_start + func_body.len();
-            //     program_payload.append(&mut i64::to_be_bytes(func_start as i64).to_vec());
-            //     program_payload.append(&mut i64::to_be_bytes(func_end as i64).to_vec());
-            //     program_payload.append(&mut func_body);
-            // }
-            program_payload.append(&mut program.clone());
             let mut ex = Executor {
                 allowed_api: allowed_api,
                 executor_id: exec_id,
                 pointer: 0,
-                end_at: program_payload.len(),
+                end_at: program.len(),
                 ctx: Context::new(),
-                program: program_payload,
+                program: program,
                 vm_send: vm_send.clone(),
                 cb_counter: 0,
                 pending_func_result_position: 0,
@@ -1607,7 +1577,7 @@ impl Executor {
                             if val1.borrow().data.data.contains_key(k) {
                                 let val1_data = &val1.borrow().data.data;
                                 let v2 = val1_data.get(k).unwrap();
-                                if self.is_equal(v.clone(), v2.clone()) {
+                                if self.is_eq(v.clone(), v2.clone()) {
                                     deleted.push(k.clone());
                                 }
                             }
@@ -1640,7 +1610,7 @@ impl Executor {
                             .data
                             .iter()
                             .filter_map(|item| {
-                                if self.is_equal(item.clone(), arg2.clone()) {
+                                if self.is_eq(item.clone(), arg2.clone()) {
                                     return None;
                                 } else {
                                     return Some(item.clone());
@@ -1660,7 +1630,7 @@ impl Executor {
                             .iter()
                             .filter_map(|item| {
                                 for item2 in val2.borrow().data.iter() {
-                                    if self.is_equal(item.clone(), item2.clone()) {
+                                    if self.is_eq(item.clone(), item2.clone()) {
                                         return None;
                                     }
                                 }
@@ -1685,7 +1655,7 @@ impl Executor {
             }
         }
     }
-    fn is_equal(&self, v: Val, v2: Val) -> bool {
+    fn is_eq(&self, v: Val, v2: Val) -> bool {
         return match v.typ {
             1 | 2 | 3 => {
                 let v_val = match v.typ {
@@ -1780,7 +1750,7 @@ impl Executor {
                             true
                         }) {
                             return v_val.borrow().data.data.iter().all(|(k, d)| {
-                                self.is_equal(
+                                self.is_eq(
                                     d.clone(),
                                     v2_val.borrow().data.data.get(&k.clone()).unwrap().clone(),
                                 )
@@ -1801,7 +1771,7 @@ impl Executor {
                         }
                         let mut counter: usize = 0;
                         return v_val.borrow().data.iter().all(|d| {
-                            if self.is_equal(
+                            if self.is_eq(
                                 d.clone(),
                                 v2_val.borrow().data.get(counter).unwrap().clone(),
                             ) {
@@ -1827,6 +1797,638 @@ impl Executor {
                 }
             }
             _ => false,
+        };
+    }
+    fn is_ge(&self, v: Val, v2: Val) -> bool {
+        return match v.typ {
+            1 | 2 | 3 => {
+                let v_val = match v.typ {
+                    1 => v.as_i16() as i64,
+                    2 => v.as_i32() as i64,
+                    3 => v.as_i64() as i64,
+                    _ => 0,
+                };
+                match v2.typ {
+                    1 | 2 | 3 => {
+                        let v2_val = match v2.typ {
+                            1 => v2.as_i16() as i64,
+                            2 => v2.as_i32() as i64,
+                            3 => v2.as_i64() as i64,
+                            _ => 0,
+                        };
+                        v_val > v2_val
+                    }
+                    4 | 5 => {
+                        let v_val_temp = v_val as f64;
+                        let v2_val = match v2.typ {
+                            4 => v2.as_f32() as f64,
+                            5 => v2.as_f64() as f64,
+                            _ => 0.0,
+                        };
+                        v_val_temp > v2_val
+                    }
+                    _ => panic!(
+                        "elpian error: numerical and non numerical values are not comparable unless it is just equality check"
+                    ),
+                }
+            }
+            4 | 5 => {
+                let v_val = match v.typ {
+                    4 => v.as_f32() as f64,
+                    5 => v.as_f64() as f64,
+                    _ => 0.0,
+                };
+                match v2.typ {
+                    1 | 2 | 3 => {
+                        let v2_val = match v2.typ {
+                            1 => v2.as_i16() as f64,
+                            2 => v2.as_i32() as f64,
+                            3 => v2.as_i64() as f64,
+                            _ => 0.0,
+                        };
+                        v_val > v2_val
+                    }
+                    4 | 5 => {
+                        let v2_val = match v2.typ {
+                            4 => v2.as_f32() as f64,
+                            5 => v2.as_f64() as f64,
+                            _ => 0.0,
+                        };
+                        v_val > v2_val
+                    }
+                    _ => panic!(
+                        "elpian error: numerical and non numerical values are not comparable unless it is just equality check"
+                    ),
+                }
+            }
+            6 => {
+                let v_val = v.as_bool();
+                match v2.typ {
+                    6 => {
+                        let v2_val = v2.as_bool();
+                        v_val > v2_val
+                    }
+                    _ => panic!(
+                        "elpian error: boolean and non boolean values are not comparable unless it is just equality check"
+                    ),
+                }
+            }
+            7 => {
+                let v_val = v.as_string();
+                match v2.typ {
+                    6 => {
+                        let v2_val = v2.as_string();
+                        v_val > v2_val
+                    }
+                    _ => panic!(
+                        "elpian error: string and non string values are not comparable unless it is just equality check"
+                    ),
+                }
+            }
+            8 => {
+                let v_val = v.as_object();
+                match v2.typ {
+                    6 => {
+                        let v2_val = v2.as_object();
+                        if v_val.borrow().data.data.iter().all(|(k, _d)| {
+                            if !v2_val.borrow().data.data.contains_key(&k.clone()) {
+                                return false;
+                            }
+                            true
+                        }) && v_val.borrow().data.data.iter().all(|(k, _d)| {
+                            if !v2_val.borrow().data.data.contains_key(&k.clone()) {
+                                return false;
+                            }
+                            true
+                        }) {
+                            let mut counter1 = 0;
+                            let mut counter2 = 0;
+                            v_val.borrow().data.data.iter().for_each(|(k, d)| {
+                                if self.is_ge(
+                                    d.clone(),
+                                    v2_val.borrow().data.data.get(&k.clone()).unwrap().clone(),
+                                ) {
+                                    counter1 += 1;
+                                } else {
+                                    counter2 += 1;
+                                }
+                            });
+                            return counter1 > counter2;
+                        }
+                        false
+                    }
+                    _ => panic!(
+                        "elpian error: object and non object values are not comparable unless it is just equality check"
+                    ),
+                }
+            }
+            9 => {
+                let v_val = v.as_array();
+                match v2.typ {
+                    9 => {
+                        let v2_val = v2.as_array();
+                        if v_val.borrow().data.len() != v2_val.borrow().data.len() {
+                            return false;
+                        }
+                        let mut counter1 = 0;
+                        let mut counter2 = 0;
+                        let mut counter = 0;
+                        v_val.borrow().data.iter().for_each(|d| {
+                            if self.is_ge(
+                                d.clone(),
+                                v2_val.borrow().data.get(counter).unwrap().clone(),
+                            ) {
+                                counter1 += 1;
+                            } else {
+                                counter2 += 1;
+                            }
+                            counter += 1;
+                        });
+                        return counter1 > counter2;
+                    }
+                    _ => panic!(
+                        "elpian error: array and non array values are not comparable unless it is just equality check"
+                    ),
+                }
+            }
+            10 => panic!(
+                "elpian error: function types are not comparable unless it is just equality check"
+            ),
+            _ => panic!("elpian error: unknown types are not comparable"),
+        };
+    }
+    fn is_gee(&self, v: Val, v2: Val) -> bool {
+        return match v.typ {
+            1 | 2 | 3 => {
+                let v_val = match v.typ {
+                    1 => v.as_i16() as i64,
+                    2 => v.as_i32() as i64,
+                    3 => v.as_i64() as i64,
+                    _ => 0,
+                };
+                match v2.typ {
+                    1 | 2 | 3 => {
+                        let v2_val = match v2.typ {
+                            1 => v2.as_i16() as i64,
+                            2 => v2.as_i32() as i64,
+                            3 => v2.as_i64() as i64,
+                            _ => 0,
+                        };
+                        v_val >= v2_val
+                    }
+                    4 | 5 => {
+                        let v_val_temp = v_val as f64;
+                        let v2_val = match v2.typ {
+                            4 => v2.as_f32() as f64,
+                            5 => v2.as_f64() as f64,
+                            _ => 0.0,
+                        };
+                        v_val_temp >= v2_val
+                    }
+                    _ => panic!(
+                        "elpian error: numerical and non numerical values are not comparable unless it is just equality check"
+                    ),
+                }
+            }
+            4 | 5 => {
+                let v_val = match v.typ {
+                    4 => v.as_f32() as f64,
+                    5 => v.as_f64() as f64,
+                    _ => 0.0,
+                };
+                match v2.typ {
+                    1 | 2 | 3 => {
+                        let v2_val = match v2.typ {
+                            1 => v2.as_i16() as f64,
+                            2 => v2.as_i32() as f64,
+                            3 => v2.as_i64() as f64,
+                            _ => 0.0,
+                        };
+                        v_val >= v2_val
+                    }
+                    4 | 5 => {
+                        let v2_val = match v2.typ {
+                            4 => v2.as_f32() as f64,
+                            5 => v2.as_f64() as f64,
+                            _ => 0.0,
+                        };
+                        v_val >= v2_val
+                    }
+                    _ => panic!(
+                        "elpian error: numerical and non numerical values are not comparable unless it is just equality check"
+                    ),
+                }
+            }
+            6 => {
+                let v_val = v.as_bool();
+                match v2.typ {
+                    6 => {
+                        let v2_val = v2.as_bool();
+                        v_val >= v2_val
+                    }
+                    _ => panic!(
+                        "elpian error: boolean and non boolean values are not comparable unless it is just equality check"
+                    ),
+                }
+            }
+            7 => {
+                let v_val = v.as_string();
+                match v2.typ {
+                    6 => {
+                        let v2_val = v2.as_string();
+                        v_val >= v2_val
+                    }
+                    _ => panic!(
+                        "elpian error: string and non string values are not comparable unless it is just equality check"
+                    ),
+                }
+            }
+            8 => {
+                let v_val = v.as_object();
+                match v2.typ {
+                    6 => {
+                        let v2_val = v2.as_object();
+                        if v_val.borrow().data.data.iter().all(|(k, _d)| {
+                            if !v2_val.borrow().data.data.contains_key(&k.clone()) {
+                                return false;
+                            }
+                            true
+                        }) && v_val.borrow().data.data.iter().all(|(k, _d)| {
+                            if !v2_val.borrow().data.data.contains_key(&k.clone()) {
+                                return false;
+                            }
+                            true
+                        }) {
+                            let mut counter1 = 0;
+                            let mut counter2 = 0;
+                            v_val.borrow().data.data.iter().for_each(|(k, d)| {
+                                if self.is_gee(
+                                    d.clone(),
+                                    v2_val.borrow().data.data.get(&k.clone()).unwrap().clone(),
+                                ) {
+                                    counter1 += 1;
+                                } else {
+                                    counter2 += 1;
+                                }
+                            });
+                            return counter1 >= counter2;
+                        }
+                        false
+                    }
+                    _ => panic!(
+                        "elpian error: object and non object values are not comparable unless it is just equality check"
+                    ),
+                }
+            }
+            9 => {
+                let v_val = v.as_array();
+                match v2.typ {
+                    9 => {
+                        let v2_val = v2.as_array();
+                        if v_val.borrow().data.len() != v2_val.borrow().data.len() {
+                            return false;
+                        }
+                        let mut counter1 = 0;
+                        let mut counter2 = 0;
+                        let mut counter = 0;
+                        v_val.borrow().data.iter().for_each(|d| {
+                            if self.is_gee(
+                                d.clone(),
+                                v2_val.borrow().data.get(counter).unwrap().clone(),
+                            ) {
+                                counter1 += 1;
+                            } else {
+                                counter2 += 1;
+                            }
+                            counter += 1;
+                        });
+                        return counter1 >= counter2;
+                    }
+                    _ => panic!(
+                        "elpian error: array and non array values are not comparable unless it is just equality check"
+                    ),
+                }
+            }
+            10 => panic!(
+                "elpian error: function types are not comparable unless it is just equality check"
+            ),
+            _ => panic!("elpian error: unknown types are not comparable"),
+        };
+    }
+    fn is_le(&self, v: Val, v2: Val) -> bool {
+        return match v.typ {
+            1 | 2 | 3 => {
+                let v_val = match v.typ {
+                    1 => v.as_i16() as i64,
+                    2 => v.as_i32() as i64,
+                    3 => v.as_i64() as i64,
+                    _ => 0,
+                };
+                match v2.typ {
+                    1 | 2 | 3 => {
+                        let v2_val = match v2.typ {
+                            1 => v2.as_i16() as i64,
+                            2 => v2.as_i32() as i64,
+                            3 => v2.as_i64() as i64,
+                            _ => 0,
+                        };
+                        v_val < v2_val
+                    }
+                    4 | 5 => {
+                        let v_val_temp = v_val as f64;
+                        let v2_val = match v2.typ {
+                            4 => v2.as_f32() as f64,
+                            5 => v2.as_f64() as f64,
+                            _ => 0.0,
+                        };
+                        v_val_temp < v2_val
+                    }
+                    _ => panic!(
+                        "elpian error: numerical and non numerical values are not comparable unless it is just equality check"
+                    ),
+                }
+            }
+            4 | 5 => {
+                let v_val = match v.typ {
+                    4 => v.as_f32() as f64,
+                    5 => v.as_f64() as f64,
+                    _ => 0.0,
+                };
+                match v2.typ {
+                    1 | 2 | 3 => {
+                        let v2_val = match v2.typ {
+                            1 => v2.as_i16() as f64,
+                            2 => v2.as_i32() as f64,
+                            3 => v2.as_i64() as f64,
+                            _ => 0.0,
+                        };
+                        v_val < v2_val
+                    }
+                    4 | 5 => {
+                        let v2_val = match v2.typ {
+                            4 => v2.as_f32() as f64,
+                            5 => v2.as_f64() as f64,
+                            _ => 0.0,
+                        };
+                        v_val < v2_val
+                    }
+                    _ => panic!(
+                        "elpian error: numerical and non numerical values are not comparable unless it is just equality check"
+                    ),
+                }
+            }
+            6 => {
+                let v_val = v.as_bool();
+                match v2.typ {
+                    6 => {
+                        let v2_val = v2.as_bool();
+                        v_val < v2_val
+                    }
+                    _ => panic!(
+                        "elpian error: boolean and non boolean values are not comparable unless it is just equality check"
+                    ),
+                }
+            }
+            7 => {
+                let v_val = v.as_string();
+                match v2.typ {
+                    6 => {
+                        let v2_val = v2.as_string();
+                        v_val < v2_val
+                    }
+                    _ => panic!(
+                        "elpian error: string and non string values are not comparable unless it is just equality check"
+                    ),
+                }
+            }
+            8 => {
+                let v_val = v.as_object();
+                match v2.typ {
+                    6 => {
+                        let v2_val = v2.as_object();
+                        if v_val.borrow().data.data.iter().all(|(k, _d)| {
+                            if !v2_val.borrow().data.data.contains_key(&k.clone()) {
+                                return false;
+                            }
+                            true
+                        }) && v_val.borrow().data.data.iter().all(|(k, _d)| {
+                            if !v2_val.borrow().data.data.contains_key(&k.clone()) {
+                                return false;
+                            }
+                            true
+                        }) {
+                            let mut counter1 = 0;
+                            let mut counter2 = 0;
+                            v_val.borrow().data.data.iter().for_each(|(k, d)| {
+                                if self.is_le(
+                                    d.clone(),
+                                    v2_val.borrow().data.data.get(&k.clone()).unwrap().clone(),
+                                ) {
+                                    counter1 += 1;
+                                } else {
+                                    counter2 += 1;
+                                }
+                            });
+                            return counter1 < counter2;
+                        }
+                        false
+                    }
+                    _ => panic!(
+                        "elpian error: object and non object values are not comparable unless it is just equality check"
+                    ),
+                }
+            }
+            9 => {
+                let v_val = v.as_array();
+                match v2.typ {
+                    9 => {
+                        let v2_val = v2.as_array();
+                        if v_val.borrow().data.len() != v2_val.borrow().data.len() {
+                            return false;
+                        }
+                        let mut counter1 = 0;
+                        let mut counter2 = 0;
+                        let mut counter = 0;
+                        v_val.borrow().data.iter().for_each(|d| {
+                            if self.is_le(
+                                d.clone(),
+                                v2_val.borrow().data.get(counter).unwrap().clone(),
+                            ) {
+                                counter1 += 1;
+                            } else {
+                                counter2 += 1;
+                            }
+                            counter += 1;
+                        });
+                        return counter1 < counter2;
+                    }
+                    _ => panic!(
+                        "elpian error: array and non array values are not comparable unless it is just equality check"
+                    ),
+                }
+            }
+            10 => panic!(
+                "elpian error: function types are not comparable unless it is just equality check"
+            ),
+            _ => panic!("elpian error: unknown types are not comparable"),
+        };
+    }
+    fn is_lee(&self, v: Val, v2: Val) -> bool {
+        return match v.typ {
+            1 | 2 | 3 => {
+                let v_val = match v.typ {
+                    1 => v.as_i16() as i64,
+                    2 => v.as_i32() as i64,
+                    3 => v.as_i64() as i64,
+                    _ => 0,
+                };
+                match v2.typ {
+                    1 | 2 | 3 => {
+                        let v2_val = match v2.typ {
+                            1 => v2.as_i16() as i64,
+                            2 => v2.as_i32() as i64,
+                            3 => v2.as_i64() as i64,
+                            _ => 0,
+                        };
+                        v_val <= v2_val
+                    }
+                    4 | 5 => {
+                        let v_val_temp = v_val as f64;
+                        let v2_val = match v2.typ {
+                            4 => v2.as_f32() as f64,
+                            5 => v2.as_f64() as f64,
+                            _ => 0.0,
+                        };
+                        v_val_temp <= v2_val
+                    }
+                    _ => panic!(
+                        "elpian error: numerical and non numerical values are not comparable unless it is just equality check"
+                    ),
+                }
+            }
+            4 | 5 => {
+                let v_val = match v.typ {
+                    4 => v.as_f32() as f64,
+                    5 => v.as_f64() as f64,
+                    _ => 0.0,
+                };
+                match v2.typ {
+                    1 | 2 | 3 => {
+                        let v2_val = match v2.typ {
+                            1 => v2.as_i16() as f64,
+                            2 => v2.as_i32() as f64,
+                            3 => v2.as_i64() as f64,
+                            _ => 0.0,
+                        };
+                        v_val <= v2_val
+                    }
+                    4 | 5 => {
+                        let v2_val = match v2.typ {
+                            4 => v2.as_f32() as f64,
+                            5 => v2.as_f64() as f64,
+                            _ => 0.0,
+                        };
+                        v_val <= v2_val
+                    }
+                    _ => panic!(
+                        "elpian error: numerical and non numerical values are not comparable unless it is just equality check"
+                    ),
+                }
+            }
+            6 => {
+                let v_val = v.as_bool();
+                match v2.typ {
+                    6 => {
+                        let v2_val = v2.as_bool();
+                        v_val <= v2_val
+                    }
+                    _ => panic!(
+                        "elpian error: boolean and non boolean values are not comparable unless it is just equality check"
+                    ),
+                }
+            }
+            7 => {
+                let v_val = v.as_string();
+                match v2.typ {
+                    6 => {
+                        let v2_val = v2.as_string();
+                        v_val <= v2_val
+                    }
+                    _ => panic!(
+                        "elpian error: string and non string values are not comparable unless it is just equality check"
+                    ),
+                }
+            }
+            8 => {
+                let v_val = v.as_object();
+                match v2.typ {
+                    6 => {
+                        let v2_val = v2.as_object();
+                        if v_val.borrow().data.data.iter().all(|(k, _d)| {
+                            if !v2_val.borrow().data.data.contains_key(&k.clone()) {
+                                return false;
+                            }
+                            true
+                        }) && v_val.borrow().data.data.iter().all(|(k, _d)| {
+                            if !v2_val.borrow().data.data.contains_key(&k.clone()) {
+                                return false;
+                            }
+                            true
+                        }) {
+                            let mut counter1 = 0;
+                            let mut counter2 = 0;
+                            v_val.borrow().data.data.iter().for_each(|(k, d)| {
+                                if self.is_lee(
+                                    d.clone(),
+                                    v2_val.borrow().data.data.get(&k.clone()).unwrap().clone(),
+                                ) {
+                                    counter1 += 1;
+                                } else {
+                                    counter2 += 1;
+                                }
+                            });
+                            return counter1 <= counter2;
+                        }
+                        false
+                    }
+                    _ => panic!(
+                        "elpian error: object and non object values are not comparable unless it is just equality check"
+                    ),
+                }
+            }
+            9 => {
+                let v_val = v.as_array();
+                match v2.typ {
+                    9 => {
+                        let v2_val = v2.as_array();
+                        if v_val.borrow().data.len() != v2_val.borrow().data.len() {
+                            return false;
+                        }
+                        let mut counter1 = 0;
+                        let mut counter2 = 0;
+                        let mut counter = 0;
+                        v_val.borrow().data.iter().for_each(|d| {
+                            if self.is_lee(
+                                d.clone(),
+                                v2_val.borrow().data.get(counter).unwrap().clone(),
+                            ) {
+                                counter1 += 1;
+                            } else {
+                                counter2 += 1;
+                            }
+                            counter += 1;
+                        });
+                        return counter1 <= counter2;
+                    }
+                    _ => panic!(
+                        "elpian error: array and non array values are not comparable unless it is just equality check"
+                    ),
+                }
+            }
+            10 => panic!(
+                "elpian error: function types are not comparable unless it is just equality check"
+            ),
+            _ => panic!("elpian error: unknown types are not comparable"),
         };
     }
     fn define(&mut self, id_name: String, val: Val) {
@@ -2154,7 +2756,7 @@ impl Executor {
                     let case_val = data["val"].clone();
                     let branch_true_start = data["start"].as_i64() as usize;
                     let branch_true_end = data["end"].as_i64() as usize;
-                    if self.is_equal(comparing_val.clone(), case_val) {
+                    if self.is_eq(comparing_val.clone(), case_val) {
                         matched = true;
                         self.ctx
                             .memory
@@ -2201,13 +2803,43 @@ impl Executor {
                     1 => {
                         return self.forward_state(Some(Val {
                             typ: 6,
-                            data: Rc::new(RefCell::new(Box::new(self.is_equal(arg1, arg2)))),
+                            data: Rc::new(RefCell::new(Box::new(self.is_eq(arg1, arg2)))),
                         }));
                     }
                     2 => {
-                        return self.forward_state(Some(self.operate_sum(arg1, arg2)));
+                        return self.forward_state(Some(Val {
+                            typ: 6,
+                            data: Rc::new(RefCell::new(Box::new(self.is_ge(arg1, arg2)))),
+                        }));
                     }
                     3 => {
+                        return self.forward_state(Some(Val {
+                            typ: 6,
+                            data: Rc::new(RefCell::new(Box::new(self.is_gee(arg1, arg2)))),
+                        }));
+                    }
+                    4 => {
+                        return self.forward_state(Some(Val {
+                            typ: 6,
+                            data: Rc::new(RefCell::new(Box::new(self.is_le(arg1, arg2)))),
+                        }));
+                    }
+                    5 => {
+                        return self.forward_state(Some(Val {
+                            typ: 6,
+                            data: Rc::new(RefCell::new(Box::new(self.is_lee(arg1, arg2)))),
+                        }));
+                    }
+                    6 => {
+                        return self.forward_state(Some(Val {
+                            typ: 6,
+                            data: Rc::new(RefCell::new(Box::new(!self.is_eq(arg1, arg2)))),
+                        }));
+                    }
+                    7 => {
+                        return self.forward_state(Some(self.operate_sum(arg1, arg2)));
+                    }
+                    8 => {
                         return self.forward_state(Some(self.operate_subtract(arg1, arg2)));
                     }
                     _ => {}
@@ -2344,7 +2976,7 @@ impl Executor {
                         .borrow_mut()
                         .set_state(ExecStates::ArithmeticExtractOp, Box::new(1 as i16));
                 }
-                // sum operator
+                // ge operator
                 0xf1 => {
                     let state_holder = Arithmetic::new();
                     self.registers
@@ -2355,7 +2987,7 @@ impl Executor {
                         .borrow_mut()
                         .set_state(ExecStates::ArithmeticExtractOp, Box::new(2 as i16));
                 }
-                // subtract operator
+                // gee operator
                 0xf2 => {
                     let state_holder = Arithmetic::new();
                     self.registers
@@ -2365,6 +2997,61 @@ impl Executor {
                         .unwrap()
                         .borrow_mut()
                         .set_state(ExecStates::ArithmeticExtractOp, Box::new(3 as i16));
+                }
+                // le operator
+                0xf3 => {
+                    let state_holder = Arithmetic::new();
+                    self.registers
+                        .push(Rc::new(RefCell::new(Box::new(state_holder))));
+                    self.registers
+                        .last()
+                        .unwrap()
+                        .borrow_mut()
+                        .set_state(ExecStates::ArithmeticExtractOp, Box::new(4 as i16));
+                }
+                // lee operator
+                0xf4 => {
+                    let state_holder = Arithmetic::new();
+                    self.registers
+                        .push(Rc::new(RefCell::new(Box::new(state_holder))));
+                    self.registers
+                        .last()
+                        .unwrap()
+                        .borrow_mut()
+                        .set_state(ExecStates::ArithmeticExtractOp, Box::new(5 as i16));
+                }
+                // inequality operator
+                0xf5 => {
+                    let state_holder = Arithmetic::new();
+                    self.registers
+                        .push(Rc::new(RefCell::new(Box::new(state_holder))));
+                    self.registers
+                        .last()
+                        .unwrap()
+                        .borrow_mut()
+                        .set_state(ExecStates::ArithmeticExtractOp, Box::new(6 as i16));
+                }
+                // sum operator
+                0xf6 => {
+                    let state_holder = Arithmetic::new();
+                    self.registers
+                        .push(Rc::new(RefCell::new(Box::new(state_holder))));
+                    self.registers
+                        .last()
+                        .unwrap()
+                        .borrow_mut()
+                        .set_state(ExecStates::ArithmeticExtractOp, Box::new(7 as i16));
+                }
+                // subtract operator
+                0xf7 => {
+                    let state_holder = Arithmetic::new();
+                    self.registers
+                        .push(Rc::new(RefCell::new(Box::new(state_holder))));
+                    self.registers
+                        .last()
+                        .unwrap()
+                        .borrow_mut()
+                        .set_state(ExecStates::ArithmeticExtractOp, Box::new(8 as i16));
                 }
                 // ----------------------------------
                 // program operators:
