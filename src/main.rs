@@ -48,40 +48,19 @@ fn main() {
                       ]
                     }
                   },
+                  {
+                    "type": "return",
+                    "data": {
+                      "value": {
+                        "type": "string",
+                        "data": {
+                          "value": "hello keyhan !",
+                        }
+                      }
+                    }
+                  }
                 ]
               },
-            },
-            {
-              "type": "defineFunction",
-              "data": {
-                "name": "test",
-                "params": [],
-                "body": [
-            {
-              "type": "definition",
-              "data": {
-                "leftSide": {
-                  "type": "identifier",
-                  "data": { "name": "count" }
-                },
-                "rightSide": {
-                  "type": "i32",
-                  "data": { "value": 23 }
-                }
-              }
-            },
-            {
-              "type": "assignment",
-              "data": {
-                "leftSide": {
-                  "type": "identifier",
-                  "data": { "name": "count" }
-                },
-                "rightSide": {
-                  "type": "i32",
-                  "data": { "value": 33 }
-                }
-              }
             },
             {
               "type": "callFunction",
@@ -92,25 +71,48 @@ fn main() {
                 },
                 "arguments": [
                   {
-                    "type": "identifier",
+                    "type": "arithmetic",
                     "data": {
-                      "name": "count",
+                      "operation": "+",
+                      "operand1": {
+                        "type": "callFunction",
+                        "data": {
+                          "callee": {
+                            "type": "identifier",
+                            "data": { "name": "println" }
+                          },
+                          "arguments": [
+                            {
+                              "type": "object",
+                              "data": {
+                                "value": {
+                                  "name": {
+                                    "type": "string",
+                                    "data": {
+                                      "value": "keyhan"
+                                    }
+                                  },
+                                  "age": {
+                                    "type": "i16",
+                                    "data": {
+                                      "value": 27
+                                    }
+                                  },
+                                },
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "operand2": {
+                        "type": "string",
+                        "data": {
+                          "value": " hi !",
+                        }
+                      }
                     }
                   }
                 ]
-              }
-            }
-          ]
-              },
-            },
-            {
-              "type": "callFunction",
-              "data": {
-                "callee": {
-                  "type": "identifier",
-                  "data": { "name": "test" }
-                },
-                "arguments": []
               }
             }
           ]

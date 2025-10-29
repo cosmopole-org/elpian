@@ -57,9 +57,13 @@ fn serialize_expr(val: serde_json::Value) -> Vec<u8> {
         }
         "object" => {
             result.push(8);
+            result.append(&mut i64::to_be_bytes(-2).to_vec());
             result.append(&mut i32::to_be_bytes(val["data"]["value"].as_object().unwrap().iter().len() as i32).to_vec());
             for (k, v) in val["data"]["value"].as_object().unwrap().iter() {
-                result.append(&mut k.as_bytes().to_vec());
+                result.push(7);
+                let mut key_bytes = k.as_bytes().to_vec();
+                result.append(&mut i32::to_be_bytes(key_bytes.len() as i32).to_vec());
+                result.append(&mut key_bytes);
                 result.append(&mut serialize_expr(v.clone()));
             }
         }
@@ -195,6 +199,10 @@ pub fn compile(program: serde_json::Value, start_point: usize) -> Vec<u8> {
     let mut result: Vec<u8> = vec![];
     for operation in program["body"].as_array().unwrap().iter() {
         match operation["type"].as_str().unwrap() {
+            "return" => {
+                result.push(0x14);
+                result.append(&mut serialize_expr(operation["data"]["value"].clone()).to_vec());
+            }
             "ifStmt" => {
                 let (mut compiled_code, baps) =
                     serialize_condition_chain(operation.clone(), true, start_point + result.len());

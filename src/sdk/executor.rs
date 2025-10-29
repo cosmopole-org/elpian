@@ -3,7 +3,6 @@ use crate::sdk::{
     data::{Array, Function, Object, Val, ValGroup},
 };
 use core::panic;
-use std::fmt::Debug;
 use std::{
     any::Any,
     cell::RefCell,
@@ -14,6 +13,7 @@ use std::{
     sync::mpsc::{self, Sender},
     thread,
 };
+use std::{fmt::Debug, vec};
 
 #[derive(Clone, PartialEq)]
 pub enum OperationTypes {
@@ -27,6 +27,8 @@ pub enum OperationTypes {
     Arithmetic,
     Indexer,
     NotVal,
+    ObjExpr,
+    Dummy,
 }
 
 impl Debug for OperationTypes {
@@ -42,6 +44,8 @@ impl Debug for OperationTypes {
             OperationTypes::Arithmetic => write!(f, "Arithmetic"),
             OperationTypes::Indexer => write!(f, "Indexer"),
             OperationTypes::NotVal => write!(f, "NotVal"),
+            OperationTypes::ObjExpr => write!(f, "ObjExpr"),
+            OperationTypes::Dummy => write!(f, "Dummy"),
         }
     }
 }
@@ -83,6 +87,11 @@ pub enum ExecStates {
     IndexerExtractIndex,
     NotValStarted,
     NotValFinished,
+    ObjExprStarted,
+    ObjExprExtractInfo,
+    ObjExprExtractProp,
+    ObjExprFinished,
+    Dummy,
 }
 
 impl Debug for ExecStates {
@@ -117,6 +126,11 @@ impl Debug for ExecStates {
             ExecStates::IndexerExtractIndex => write!(f, "IndexerExtractIndex"),
             ExecStates::NotValStarted => write!(f, "NotValStarted"),
             ExecStates::NotValFinished => write!(f, "NotValFinished"),
+            ExecStates::ObjExprStarted => write!(f, "ObjExprStarted"),
+            ExecStates::ObjExprExtractInfo => write!(f, "ObjExprExtractInfo"),
+            ExecStates::ObjExprExtractProp => write!(f, "ObjExprExtractProp"),
+            ExecStates::ObjExprFinished => write!(f, "ObjExprFinished"),
+            ExecStates::Dummy => write!(f, "Dummy"),
         }
     }
 }
@@ -732,6 +746,102 @@ impl Operation for NotValue {
     }
 }
 
+struct ObjectExpr {
+    typ: OperationTypes,
+    state: ExecStates,
+    pub object_typ_id: i64,
+    pub prop_count: i32,
+    pub props: Vec<Val>,
+}
+
+impl ObjectExpr {
+    pub fn new() -> Self {
+        ObjectExpr {
+            typ: OperationTypes::ObjExpr,
+            state: ExecStates::ObjExprStarted,
+            object_typ_id: 0,
+            prop_count: 0,
+            props: vec![],
+        }
+    }
+}
+
+impl Operation for ObjectExpr {
+    fn get_state(&self) -> ExecStates {
+        self.state.clone()
+    }
+
+    fn get_type(&self) -> OperationTypes {
+        self.typ.clone()
+    }
+
+    fn set_state(&mut self, state: ExecStates, data: Box<dyn Any>) {
+        self.state = state.clone();
+        if state == ExecStates::ObjExprExtractInfo {
+            let val = data.downcast::<(i64, i32)>().unwrap();
+            self.object_typ_id = val.as_ref().0;
+            self.prop_count = val.as_ref().1;
+        } else if state == ExecStates::ObjExprExtractProp {
+            let val = *data.downcast::<Val>().unwrap();
+            self.props.push(val.clone());
+        }
+        if (self.prop_count as usize) == (self.props.len() / 2) {
+            self.state = ExecStates::ObjExprFinished;
+        }
+    }
+
+    fn get_data(&self) -> Vec<Val> {
+        vec![
+            Val {
+                typ: 3,
+                data: Rc::new(RefCell::new(Box::new(self.object_typ_id))),
+            },
+            Val {
+                typ: 2,
+                data: Rc::new(RefCell::new(Box::new(self.prop_count))),
+            },
+            Val {
+                typ: 9,
+                data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(Array::new(
+                    self.props.clone(),
+                )))))),
+            },
+        ]
+    }
+}
+
+struct DummyOp {
+    typ: OperationTypes,
+    state: ExecStates,
+}
+
+impl DummyOp {
+    pub fn new() -> Self {
+        DummyOp {
+            typ: OperationTypes::Dummy,
+            state: ExecStates::Dummy,
+        }
+    }
+}
+
+impl Operation for DummyOp {
+    fn get_state(&self) -> ExecStates {
+        self.state.clone()
+    }
+
+    fn get_type(&self) -> OperationTypes {
+        self.typ.clone()
+    }
+
+    fn set_state(&mut self, state: ExecStates, _data: Box<dyn Any>) {
+        self.state = state.clone();
+    }
+
+    fn get_data(&self) -> Vec<Val> {
+        vec![]
+    }
+}
+
 pub struct Executor {
     executor_id: i16,
     pointer: usize,
@@ -740,8 +850,6 @@ pub struct Executor {
     program: Vec<u8>,
     vm_send: Sender<(u8, i64, Val)>,
     cb_counter: i64,
-    pending_func_result_position: usize,
-    after_return_next_jump: usize,
     pending_func_result_value: Val,
     registers: Vec<Rc<RefCell<Box<dyn Operation>>>>,
     allowed_api: HashMap<String, bool>,
@@ -769,8 +877,6 @@ impl Executor {
                 program: program,
                 vm_send: vm_send.clone(),
                 cb_counter: 0,
-                pending_func_result_position: 0,
-                after_return_next_jump: 0,
                 pending_func_result_value: Val::new(254, Rc::new(RefCell::new(Box::new(0)))),
                 registers: vec![],
             };
@@ -798,7 +904,6 @@ impl Executor {
                                 },
                             );
                             if ex.pointer == ex.ctx.memory.get(0).unwrap().borrow().frozen_end {
-                                println!("test");
                                 vm_send.clone().send((0x01, cb_id, result)).unwrap();
                             }
                         } else {
@@ -908,26 +1013,15 @@ impl Executor {
         self.pointer += length;
         String::from_utf8(str_bytes).unwrap()
     }
-    fn extract_obj(&mut self) -> Object {
-        let mut data: HashMap<String, Val> = HashMap::new();
-        let typ = self.extract_i64();
-        let props_len = self.extract_i32();
-        for _ in 0..props_len {
-            let prop_key = self.extract_str();
-            let prop_val = self.extract_val();
-            data.insert(prop_key, prop_val);
-        }
-        Object::new(typ, ValGroup::new(data))
-    }
-    fn extract_arr(&mut self) -> Array {
+    fn extract_arr(&mut self) -> Rc<RefCell<Array>> {
         let mut data: Vec<Val> = vec![];
         let arr_len = self.extract_i32();
         for _ in 0..arr_len {
             data.push(self.extract_val());
         }
-        Array::new(data)
+        Rc::new(RefCell::new(Array::new(data)))
     }
-    fn extract_func(&mut self) -> Function {
+    fn extract_func(&mut self) -> Rc<RefCell<Function>> {
         let start = self.extract_i64() as usize;
         let end = self.extract_i64() as usize;
         let param_count = self.extract_i32();
@@ -935,7 +1029,7 @@ impl Executor {
         for _i in 0..param_count {
             params.push(self.extract_str());
         }
-        Function::new(start, end, params)
+        Rc::new(RefCell::new(Function::new(start, end, params)))
     }
     fn extract_val(&mut self) -> Val {
         let p = self.program[self.pointer];
@@ -968,10 +1062,6 @@ impl Executor {
             0x07 => Val {
                 typ: 7,
                 data: Rc::new(RefCell::new(Box::new(self.extract_str()))),
-            },
-            0x08 => Val {
-                typ: 8,
-                data: Rc::new(RefCell::new(Box::new(self.extract_obj()))),
             },
             0x09 => Val {
                 typ: 9,
@@ -2937,7 +3027,44 @@ impl Executor {
         self.ctx.update_val_globally(id_name, val);
     }
     fn forward_state(&mut self, val: Option<Val>) -> bool {
-        if self.registers.last().unwrap().borrow().get_type() == OperationTypes::CallFunc {
+        if self.registers.last().unwrap().borrow().get_type() == OperationTypes::ObjExpr {
+            if self.registers.last().unwrap().borrow().get_state() == ExecStates::ObjExprExtractInfo
+                || self.registers.last().unwrap().borrow().get_state()
+                    == ExecStates::ObjExprExtractProp
+            {
+                self.registers.last().unwrap().borrow_mut().set_state(
+                    ExecStates::ObjExprExtractProp,
+                    Box::new(val.clone().unwrap()),
+                );
+                if self.registers.last().unwrap().borrow().get_state()
+                    == ExecStates::ObjExprFinished
+                {
+                    return self.forward_state(None);
+                }
+            } else if self.registers.last().unwrap().borrow().get_state()
+                == ExecStates::ObjExprFinished
+            {
+                let regs = self.registers.last().unwrap().borrow().get_data().clone();
+                let typ_id = regs[0].as_i64();
+                let props_vec = regs[2].as_array();
+                let mut props_map = HashMap::new();
+                for i in (0..props_vec.borrow().data.len()).step_by(2) {
+                    props_map.insert(
+                        props_vec.borrow().data[i].as_string(),
+                        props_vec.borrow().data[i + 1].clone(),
+                    );
+                }
+                let result = Val {
+                    typ: 8,
+                    data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(Object::new(
+                        typ_id,
+                        ValGroup::new(props_map),
+                    )))))),
+                };
+                self.registers.pop();
+                self.forward_state(Some(result));
+            }
+        } else if self.registers.last().unwrap().borrow().get_type() == OperationTypes::CallFunc {
             if self.registers.last().unwrap().borrow().get_state() == ExecStates::CallFuncStarted {
                 let arg_count = self.extract_i32() as usize;
                 self.registers.last().unwrap().borrow_mut().set_state(
@@ -2992,10 +3119,11 @@ impl Executor {
                         func.borrow().end,
                         args,
                     );
-                    self.after_return_next_jump = self.pointer;
                     self.pointer = func.borrow().start;
                     self.end_at = func.borrow().end;
                     self.registers.pop();
+                    self.registers
+                        .push(Rc::new(RefCell::new(Box::new(DummyOp::new()))));
                 } else {
                     let mut args = HashMap::new();
                     let arg1 = regs[3].as_array().borrow().data[0].clone();
@@ -3469,11 +3597,25 @@ impl Executor {
                     break;
                 }
                 self.ctx.pop_scope();
+                if self.registers.len() > 0
+                    && self.registers.last().unwrap().borrow().get_type() == OperationTypes::Dummy
+                {
+                    self.registers.pop();
+                }
                 if self.ctx.memory.len() > 0 {
                     self.pointer = self.ctx.memory.last().unwrap().borrow().frozen_pointer;
                     self.end_at = self.ctx.memory.last().unwrap().borrow().frozen_end;
                     if self.pending_func_result_value.typ != 254 {
-                        self.pointer = self.pending_func_result_position;
+                        let returned_val = self.pending_func_result_value.clone();
+                        self.pending_func_result_value = Val {
+                            typ: 254,
+                            data: Rc::new(RefCell::new(Box::new(0))),
+                        };
+                        if self.registers.len() > 0 {
+                            if self.forward_state(Some(returned_val)) {
+                                break;
+                            }
+                        }
                     }
                 } else {
                     terminate = true;
@@ -3486,7 +3628,9 @@ impl Executor {
             if ce {
                 ce = false;
                 if self.registers.len() > 0 {
-                    self.forward_state(Some(host_call_result.clone()));
+                    if self.forward_state(Some(host_call_result.clone())) {
+                        break;
+                    }
                 }
             }
             let unit: u8 = self.program[self.pointer];
@@ -3765,12 +3909,24 @@ impl Executor {
                 // ----------------------------------
                 // expressions
                 // data expressions
-                1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 => {
+                1 | 2 | 3 | 4 | 5 | 6 | 7 | 9 | 10 | 11 => {
                     self.pointer -= 1;
                     let val = self.extract_val();
                     if self.forward_state(Some(val)) {
                         break;
                     }
+                }
+                // object expressions
+                8 => {
+                    let typ = self.extract_i64();
+                    let props_len = self.extract_i32();
+                    self.registers
+                        .push(Rc::new(RefCell::new(Box::new(ObjectExpr::new()))));
+                    self.registers
+                        .last()
+                        .unwrap()
+                        .borrow_mut()
+                        .set_state(ExecStates::ObjExprExtractInfo, Box::new((typ, props_len)));
                 }
                 // ----------------------------------
                 // No-Op
