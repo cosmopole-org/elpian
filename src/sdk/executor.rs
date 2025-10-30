@@ -28,6 +28,7 @@ pub enum OperationTypes {
     Indexer,
     NotVal,
     ObjExpr,
+    ArrExpr,
     Dummy,
 }
 
@@ -45,6 +46,7 @@ impl Debug for OperationTypes {
             OperationTypes::Indexer => write!(f, "Indexer"),
             OperationTypes::NotVal => write!(f, "NotVal"),
             OperationTypes::ObjExpr => write!(f, "ObjExpr"),
+            OperationTypes::ArrExpr => write!(f, "ArrExpr"),
             OperationTypes::Dummy => write!(f, "Dummy"),
         }
     }
@@ -91,6 +93,10 @@ pub enum ExecStates {
     ObjExprExtractInfo,
     ObjExprExtractProp,
     ObjExprFinished,
+    ArrExprStarted,
+    ArrExprExtractInfo,
+    ArrExprExtractItem,
+    ArrExprFinished,
     Dummy,
 }
 
@@ -130,6 +136,10 @@ impl Debug for ExecStates {
             ExecStates::ObjExprExtractInfo => write!(f, "ObjExprExtractInfo"),
             ExecStates::ObjExprExtractProp => write!(f, "ObjExprExtractProp"),
             ExecStates::ObjExprFinished => write!(f, "ObjExprFinished"),
+            ExecStates::ArrExprStarted => write!(f, "ArrExprStarted"),
+            ExecStates::ArrExprExtractInfo => write!(f, "ArrExprExtractInfo"),
+            ExecStates::ArrExprExtractItem => write!(f, "ArrExprExtractItem"),
+            ExecStates::ArrExprFinished => write!(f, "ArrExprFinished"),
             ExecStates::Dummy => write!(f, "Dummy"),
         }
     }
@@ -810,6 +820,62 @@ impl Operation for ObjectExpr {
     }
 }
 
+struct ArrayExpr {
+    typ: OperationTypes,
+    state: ExecStates,
+    pub item_count: i32,
+    pub items: Vec<Val>,
+}
+
+impl ArrayExpr {
+    pub fn new() -> Self {
+        ArrayExpr {
+            typ: OperationTypes::ArrExpr,
+            state: ExecStates::ArrExprStarted,
+            item_count: 0,
+            items: vec![],
+        }
+    }
+}
+
+impl Operation for ArrayExpr {
+    fn get_state(&self) -> ExecStates {
+        self.state.clone()
+    }
+
+    fn get_type(&self) -> OperationTypes {
+        self.typ.clone()
+    }
+
+    fn set_state(&mut self, state: ExecStates, data: Box<dyn Any>) {
+        self.state = state.clone();
+        if state == ExecStates::ArrExprExtractInfo {
+            self.item_count = *data.downcast::<i32>().unwrap();
+        } else if state == ExecStates::ArrExprExtractItem {
+            let val = *data.downcast::<Val>().unwrap();
+            self.items.push(val.clone());
+        }
+        if (self.item_count as usize) == self.items.len() {
+            self.state = ExecStates::ArrExprFinished;
+        }
+    }
+
+    fn get_data(&self) -> Vec<Val> {
+        vec![
+            Val {
+                typ: 2,
+                data: Rc::new(RefCell::new(Box::new(self.item_count))),
+            },
+            Val {
+                typ: 9,
+                data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(Array::new(
+                    self.items.clone(),
+                )))))),
+            },
+        ]
+    }
+}
+
 struct DummyOp {
     typ: OperationTypes,
     state: ExecStates,
@@ -853,10 +919,14 @@ pub struct Executor {
     pending_func_result_value: Val,
     registers: Vec<Rc<RefCell<Box<dyn Operation>>>>,
     allowed_api: HashMap<String, bool>,
+    run_cb_id: i64,
+    exec_globally: bool,
+    reserved_host_call: Option<(u8, i64, Val)>,
 }
 
 impl Executor {
-    pub fn create(
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn create_in_multi_thread(
         program: Vec<u8>,
         exec_id: i16,
         vm_send: Sender<(u8, i64, Val)>,
@@ -879,6 +949,9 @@ impl Executor {
                 cb_counter: 0,
                 pending_func_result_value: Val::new(254, Rc::new(RefCell::new(Box::new(0)))),
                 registers: vec![],
+                run_cb_id: 0,
+                exec_globally: false,
+                reserved_host_call: None,
             };
             let mut run_cb_id: i64 = 0;
             let mut exec_globally = false;
@@ -904,7 +977,11 @@ impl Executor {
                                 },
                             );
                             if ex.pointer == ex.ctx.memory.get(0).unwrap().borrow().frozen_end {
-                                vm_send.clone().send((0x01, cb_id, result)).unwrap();
+                                ex.vm_send.clone().send((0x01, cb_id, result)).unwrap();
+                            } else if !ex.reserved_host_call.is_none() {
+                                let host_call_data = ex.reserved_host_call.clone().unwrap();
+                                ex.reserved_host_call = None;
+                                ex.vm_send.clone().send(host_call_data).unwrap();
                             }
                         } else {
                             exec_globally = false;
@@ -922,7 +999,11 @@ impl Executor {
                                     },
                                 );
                                 if ex.pointer == ex.ctx.memory.get(1).unwrap().borrow().frozen_end {
-                                    vm_send.clone().send((0x01, cb_id, result)).unwrap();
+                                    ex.vm_send.clone().send((0x01, cb_id, result)).unwrap();
+                                } else if !ex.reserved_host_call.is_none() {
+                                    let host_call_data = ex.reserved_host_call.clone().unwrap();
+                                    ex.reserved_host_call = None;
+                                    ex.vm_send.clone().send(host_call_data).unwrap();
                                 }
                             }
                         }
@@ -946,15 +1027,23 @@ impl Executor {
                         if ex.ctx.memory.len() > 0 {
                             if exec_globally {
                                 if ex.pointer == ex.ctx.memory.get(0).unwrap().borrow().frozen_end {
-                                    vm_send.clone().send((0x01, run_cb_id, result)).unwrap();
+                                    ex.vm_send.clone().send((0x01, run_cb_id, result)).unwrap();
+                                } else if !ex.reserved_host_call.is_none() {
+                                    let host_call_data = ex.reserved_host_call.clone().unwrap();
+                                    ex.reserved_host_call = None;
+                                    ex.vm_send.clone().send(host_call_data).unwrap();
                                 }
                             } else {
                                 if ex.pointer == ex.ctx.memory.get(1).unwrap().borrow().frozen_end {
-                                    vm_send.clone().send((0x01, run_cb_id, result)).unwrap();
+                                    ex.vm_send.clone().send((0x01, run_cb_id, result)).unwrap();
+                                } else if !ex.reserved_host_call.is_none() {
+                                    let host_call_data = ex.reserved_host_call.clone().unwrap();
+                                    ex.reserved_host_call = None;
+                                    ex.vm_send.clone().send(host_call_data).unwrap();
                                 }
                             }
                         } else {
-                            vm_send.clone().send((0x01, run_cb_id, result)).unwrap();
+                            ex.vm_send.clone().send((0x01, run_cb_id, result)).unwrap();
                         }
                     }
                     _ => {}
@@ -962,6 +1051,188 @@ impl Executor {
             }
         });
         tasks_send.clone()
+    }
+    pub fn create_in_single_thread(
+        program: Vec<u8>,
+        exec_id: i16,
+        vm_send: Sender<(u8, i64, Val)>,
+        func_group: Vec<String>,
+    ) -> Self {
+        let mut allowed_api: HashMap<String, bool> = HashMap::new();
+        for api_name in func_group.iter() {
+            allowed_api.insert(api_name.clone(), true);
+        }
+        Executor {
+            allowed_api: allowed_api,
+            executor_id: exec_id,
+            pointer: 0,
+            end_at: program.len(),
+            ctx: Context::new(),
+            program: program,
+            vm_send: vm_send.clone(),
+            cb_counter: 0,
+            pending_func_result_value: Val::new(254, Rc::new(RefCell::new(Box::new(0)))),
+            registers: vec![],
+            run_cb_id: 0,
+            exec_globally: false,
+            reserved_host_call: None,
+        }
+    }
+    pub fn single_thread_operation(
+        &mut self,
+        op_code: u8,
+        cb_id: i64,
+        payload: Val,
+    ) -> (u8, i64, Val) {
+        match op_code {
+            0x01 => {
+                // println!("executor: run_func called");
+                self.run_cb_id = cb_id;
+                if payload.is_empty() {
+                    self.exec_globally = true;
+                    let result = self.run_from(
+                        0,
+                        self.program.len(),
+                        false,
+                        Val {
+                            typ: 0,
+                            data: Rc::new(RefCell::new(Box::new(0))),
+                        },
+                    );
+                    if self.pointer == self.ctx.memory.get(0).unwrap().borrow().frozen_end {
+                        return (0x01, cb_id, result);
+                    } else if !self.reserved_host_call.is_none() {
+                        let host_call_data = self.reserved_host_call.clone().unwrap();
+                        self.reserved_host_call = None;
+                        return host_call_data;
+                    } else {
+                        return (
+                            0x00,
+                            0,
+                            Val {
+                                typ: 0,
+                                data: Rc::new(RefCell::new(Box::new(0))),
+                            },
+                        );
+                    }
+                } else {
+                    self.exec_globally = false;
+                    let func_name = payload.as_string();
+                    let val = self.ctx.find_val_in_first_scope(func_name);
+                    if !val.is_empty() {
+                        let func = val.as_func();
+                        let result = self.run_from(
+                            func.borrow().start,
+                            func.borrow().end,
+                            false,
+                            Val {
+                                typ: 0,
+                                data: Rc::new(RefCell::new(Box::new(0))),
+                            },
+                        );
+                        if self.pointer == self.ctx.memory.get(1).unwrap().borrow().frozen_end {
+                            return (0x01, cb_id, result);
+                        } else if !self.reserved_host_call.is_none() {
+                            let host_call_data = self.reserved_host_call.clone().unwrap();
+                            self.reserved_host_call = None;
+                            return host_call_data;
+                        } else {
+                            return (
+                                0x00,
+                                0,
+                                Val {
+                                    typ: 0,
+                                    data: Rc::new(RefCell::new(Box::new(0))),
+                                },
+                            );
+                        }
+                    } else {
+                        panic!("elpian error: global function not found");
+                    }
+                }
+            }
+            0x02 => {
+                // println!("executor: print_memory called");
+                self.ctx.memory.iter().for_each(|scope| {
+                    scope
+                        .borrow()
+                        .memory
+                        .borrow()
+                        .data
+                        .iter()
+                        .for_each(|(key, val)| {
+                            println!("{{ key: {}, val: {} }}", key, val.stringify());
+                        });
+                });
+                return (
+                    0x00,
+                    0,
+                    Val {
+                        typ: 0,
+                        data: Rc::new(RefCell::new(Box::new(0))),
+                    },
+                );
+            }
+            0x03 => {
+                let result = self.run_from(self.pointer, self.end_at, true, payload);
+                if self.ctx.memory.len() > 0 {
+                    if self.exec_globally {
+                        if self.pointer == self.ctx.memory.get(0).unwrap().borrow().frozen_end {
+                            return (0x01, cb_id, result);
+                        } else if !self.reserved_host_call.is_none() {
+                            let host_call_data = self.reserved_host_call.clone().unwrap();
+                            self.reserved_host_call = None;
+                            return host_call_data;
+                        } else {
+                            return (
+                                0x00,
+                                0,
+                                Val {
+                                    typ: 0,
+                                    data: Rc::new(RefCell::new(Box::new(0))),
+                                },
+                            );
+                        }
+                    } else {
+                        if self.pointer == self.ctx.memory.get(1).unwrap().borrow().frozen_end {
+                            return (0x01, cb_id, result);
+                        } else if !self.reserved_host_call.is_none() {
+                            let host_call_data = self.reserved_host_call.clone().unwrap();
+                            self.reserved_host_call = None;
+                            return host_call_data;
+                        } else {
+                            return (
+                                0x00,
+                                0,
+                                Val {
+                                    typ: 0,
+                                    data: Rc::new(RefCell::new(Box::new(0))),
+                                },
+                            );
+                        }
+                    }
+                } else {
+                    return (
+                        0x00,
+                        0,
+                        Val {
+                            typ: 0,
+                            data: Rc::new(RefCell::new(Box::new(0))),
+                        },
+                    );
+                }
+            }
+            _ => {
+                return (
+                    0x00,
+                    0,
+                    Val {
+                        typ: 0,
+                        data: Rc::new(RefCell::new(Box::new(0))),
+                    },
+                );
+            }
+        }
     }
     fn extract_i16(&mut self) -> i16 {
         let num_bytes: [u8; 2] = self.program[self.pointer..(self.pointer + 2)]
@@ -3027,7 +3298,29 @@ impl Executor {
         self.ctx.update_val_globally(id_name, val);
     }
     fn forward_state(&mut self, val: Option<Val>) -> bool {
-        if self.registers.last().unwrap().borrow().get_type() == OperationTypes::ObjExpr {
+        if self.registers.last().unwrap().borrow().get_type() == OperationTypes::ArrExpr {
+            if self.registers.last().unwrap().borrow().get_state() == ExecStates::ArrExprExtractInfo
+                || self.registers.last().unwrap().borrow().get_state()
+                    == ExecStates::ArrExprExtractItem
+            {
+                self.registers.last().unwrap().borrow_mut().set_state(
+                    ExecStates::ArrExprExtractItem,
+                    Box::new(val.clone().unwrap()),
+                );
+                if self.registers.last().unwrap().borrow().get_state()
+                    == ExecStates::ArrExprFinished
+                {
+                    return self.forward_state(None);
+                }
+            } else if self.registers.last().unwrap().borrow().get_state()
+                == ExecStates::ArrExprFinished
+            {
+                let regs = self.registers.last().unwrap().borrow().get_data().clone();
+                let items_vec = regs[1].clone();
+                self.registers.pop();
+                self.forward_state(Some(items_vec));
+            }
+        } else if self.registers.last().unwrap().borrow().get_type() == OperationTypes::ObjExpr {
             if self.registers.last().unwrap().borrow().get_state() == ExecStates::ObjExprExtractInfo
                 || self.registers.last().unwrap().borrow().get_state()
                     == ExecStates::ObjExprExtractProp
@@ -3136,25 +3429,23 @@ impl Executor {
                     self.cb_counter += 1;
                     let cb_id = self.cb_counter;
                     self.registers.pop();
-                    self.vm_send
-                        .send((
-                            0x02,
-                            cb_id,
-                            Val {
-                                typ: 9,
-                                data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(
-                                    Array::new(vec![
-                                        args["apiName"].clone(),
-                                        Val {
-                                            typ: 1,
-                                            data: Rc::new(RefCell::new(Box::new(self.executor_id))),
-                                        },
-                                        args["input"].clone(),
-                                    ]),
-                                ))))),
-                            },
-                        ))
-                        .unwrap();
+                    self.reserved_host_call = Some((
+                        0x02,
+                        cb_id,
+                        Val {
+                            typ: 9,
+                            data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(
+                                Array::new(vec![
+                                    args["apiName"].clone(),
+                                    Val {
+                                        typ: 1,
+                                        data: Rc::new(RefCell::new(Box::new(self.executor_id))),
+                                    },
+                                    args["input"].clone(),
+                                ]),
+                            ))))),
+                        },
+                    ));
                     return true;
                 }
             }
@@ -3909,7 +4200,7 @@ impl Executor {
                 // ----------------------------------
                 // expressions
                 // data expressions
-                1 | 2 | 3 | 4 | 5 | 6 | 7 | 9 | 10 | 11 => {
+                1 | 2 | 3 | 4 | 5 | 6 | 7 | 10 | 11 => {
                     self.pointer -= 1;
                     let val = self.extract_val();
                     if self.forward_state(Some(val)) {
@@ -3927,6 +4218,17 @@ impl Executor {
                         .unwrap()
                         .borrow_mut()
                         .set_state(ExecStates::ObjExprExtractInfo, Box::new((typ, props_len)));
+                }
+                // array expressions
+                9 => {
+                    let arr_len = self.extract_i32();
+                    self.registers
+                        .push(Rc::new(RefCell::new(Box::new(ArrayExpr::new()))));
+                    self.registers
+                        .last()
+                        .unwrap()
+                        .borrow_mut()
+                        .set_state(ExecStates::ArrExprExtractInfo, Box::new(arr_len));
                 }
                 // ----------------------------------
                 // No-Op

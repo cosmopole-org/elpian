@@ -227,7 +227,7 @@ impl Array {
             if index > 0 {
                 result = format!("{}, {}", result, v.stringify());
             } else {
-                result = format!("{} {}", result, v.stringify());
+                result = format!("{}{}", result, v.stringify());
             }
             index += 1;
         }

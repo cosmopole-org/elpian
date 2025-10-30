@@ -83,22 +83,22 @@ fn main() {
                           },
                           "arguments": [
                             {
-                              "type": "object",
+                              "type": "array",
                               "data": {
-                                "value": {
-                                  "name": {
+                                "value": [
+                                  {
                                     "type": "string",
                                     "data": {
                                       "value": "keyhan"
                                     }
                                   },
-                                  "age": {
+                                  {
                                     "type": "i16",
                                     "data": {
                                       "value": 27
                                     }
                                   },
-                                },
+                                ],
                               }
                             }
                           ]
