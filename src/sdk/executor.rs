@@ -4,15 +4,15 @@ use crate::sdk::{
 };
 use core::panic;
 use std::{
-    any::Any,
-    cell::RefCell,
-    collections::HashMap,
-    fmt::Display,
-    i16,
-    rc::Rc,
+    any::Any, cell::RefCell, collections::HashMap, fmt::Display, i16, rc::Rc,
+};
+
+#[cfg(not(target_arch = "wasm32"))]
+use std::{
     sync::mpsc::{self, Sender},
     thread,
 };
+
 use std::{fmt::Debug, vec};
 
 #[derive(Clone, PartialEq)]
@@ -914,6 +914,7 @@ pub struct Executor {
     end_at: usize,
     ctx: Context,
     program: Vec<u8>,
+    #[cfg(not(target_arch = "wasm32"))]
     vm_send: Sender<(u8, i64, Val)>,
     cb_counter: i64,
     pending_func_result_value: Val,
@@ -1052,10 +1053,10 @@ impl Executor {
         });
         tasks_send.clone()
     }
+    #[cfg(target_arch = "wasm32")]
     pub fn create_in_single_thread(
         program: Vec<u8>,
         exec_id: i16,
-        vm_send: Sender<(u8, i64, Val)>,
         func_group: Vec<String>,
     ) -> Self {
         let mut allowed_api: HashMap<String, bool> = HashMap::new();
@@ -1069,7 +1070,6 @@ impl Executor {
             end_at: program.len(),
             ctx: Context::new(),
             program: program,
-            vm_send: vm_send.clone(),
             cb_counter: 0,
             pending_func_result_value: Val::new(254, Rc::new(RefCell::new(Box::new(0)))),
             registers: vec![],

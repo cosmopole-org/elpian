@@ -6,10 +6,24 @@ use std::{
         Arc, Mutex,
         mpsc::{self, Sender},
     },
-    thread,
 };
 
+#[cfg(not(target_arch = "wasm32"))]
+use std::thread;
+
+use wasm_bindgen::prelude::wasm_bindgen;
+
 use crate::sdk::{compiler, data::Val, executor::Executor};
+
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_namespace = console)]
+    fn log(s: &str);
+    #[wasm_bindgen(js_namespace = console, js_name = log)]
+    fn log_u32(a: u32);
+    #[wasm_bindgen(js_namespace = console, js_name = log)]
+    fn log_many(a: &str, b: &str);
+}
 
 pub struct VM {
     pub program: Vec<u8>,
@@ -94,9 +108,9 @@ impl VM {
             single_thread_executor: None,
         }
     }
+    #[cfg(target_arch = "wasm32")]
     pub fn create_single_threaded(program: Vec<u8>, func_group: Vec<String>) -> Self {
         let callbacks: Arc<Mutex<HashMap<i64, Sender<Val>>>> = Arc::new(Mutex::new(HashMap::new()));
-        let (vm_send, _vm_recv) = mpsc::channel::<(u8, i64, Val)>();
         VM {
             program: program.clone(),
             executors: Arc::new(Mutex::new(vec![])),
@@ -105,7 +119,6 @@ impl VM {
             single_thread_executor: Some(Rc::new(RefCell::new(Executor::create_in_single_thread(
                 program.clone(),
                 0,
-                vm_send.clone(),
                 func_group.clone(),
             )))),
         }
@@ -117,9 +130,15 @@ impl VM {
     ) -> Self {
         let byte_code = compiler::compile(program, 0);
         if execuror_count == 1 {
+            #[cfg(not(target_arch = "wasm32"))]
+            return Self::create_multi_threaded(byte_code, execuror_count, func_group);
+            #[cfg(target_arch = "wasm32")]
             return Self::create_single_threaded(byte_code, func_group);
         } else {
+            #[cfg(not(target_arch = "wasm32"))]
             return Self::create_multi_threaded(byte_code, execuror_count, func_group);
+            #[cfg(target_arch = "wasm32")]
+            return Self::create_single_threaded(byte_code, func_group);
         }
     }
     pub fn print_memory(&mut self) {
@@ -161,6 +180,9 @@ impl VM {
             0x02 => {
                 let params = payload.as_array().borrow().data.clone();
                 if params[0].as_string() == "println" {
+                    #[cfg(target_arch = "wasm32")]
+                    log(&params[2].stringify());
+                    #[cfg(not(target_arch = "wasm32"))]
                     println!("{}", params[2].stringify());
                     let res = self
                         .single_thread_executor
