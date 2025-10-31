@@ -11,18 +11,16 @@ use std::{
 #[cfg(not(target_arch = "wasm32"))]
 use std::thread;
 
-use wasm_bindgen::prelude::wasm_bindgen;
+#[cfg(target_arch = "wasm32")]
+use serde_json::{json, Value};
 
 use crate::sdk::{compiler, data::Val, executor::Executor};
 
-#[wasm_bindgen]
-extern "C" {
-    #[wasm_bindgen(js_namespace = console)]
-    fn log(s: &str);
-    #[wasm_bindgen(js_namespace = console, js_name = log)]
-    fn log_u32(a: u32);
-    #[wasm_bindgen(js_namespace = console, js_name = log)]
-    fn log_many(a: &str, b: &str);
+#[cfg(target_arch = "wasm32")]
+use crate::sdk::data::{Array, Object, ValGroup};
+
+pub struct CallbackHolder {
+    pub callback: Box<dyn Fn(String) -> String>,
 }
 
 pub struct VM {
@@ -31,6 +29,7 @@ pub struct VM {
     callbacks: Arc<Mutex<HashMap<i64, Sender<Val>>>>,
     cb_id_counter: i64,
     single_thread_executor: Option<Rc<RefCell<Executor>>>,
+    _callback: CallbackHolder,
 }
 
 impl VM {
@@ -39,6 +38,7 @@ impl VM {
         program: Vec<u8>,
         execuror_count: i32,
         func_group: Vec<String>,
+        callback: CallbackHolder,
     ) -> Self {
         let executors: Arc<Mutex<Vec<Sender<(u8, i64, Val)>>>> = Arc::new(Mutex::new(vec![]));
         let callbacks: Arc<Mutex<HashMap<i64, Sender<Val>>>> = Arc::new(Mutex::new(HashMap::new()));
@@ -106,10 +106,15 @@ impl VM {
             callbacks: callbacks,
             cb_id_counter: 0,
             single_thread_executor: None,
+            _callback: callback,
         }
     }
     #[cfg(target_arch = "wasm32")]
-    pub fn create_single_threaded(program: Vec<u8>, func_group: Vec<String>) -> Self {
+    pub fn create_single_threaded(
+        program: Vec<u8>,
+        func_group: Vec<String>,
+        callback: CallbackHolder,
+    ) -> Self {
         let callbacks: Arc<Mutex<HashMap<i64, Sender<Val>>>> = Arc::new(Mutex::new(HashMap::new()));
         VM {
             program: program.clone(),
@@ -121,24 +126,26 @@ impl VM {
                 0,
                 func_group.clone(),
             )))),
+            _callback: callback,
         }
     }
     pub fn compile_and_create(
         program: serde_json::Value,
         execuror_count: i32,
         func_group: Vec<String>,
+        callback: CallbackHolder,
     ) -> Self {
         let byte_code = compiler::compile(program, 0);
         if execuror_count == 1 {
             #[cfg(not(target_arch = "wasm32"))]
-            return Self::create_multi_threaded(byte_code, execuror_count, func_group);
+            return Self::create_multi_threaded(byte_code, execuror_count, func_group, callback);
             #[cfg(target_arch = "wasm32")]
-            return Self::create_single_threaded(byte_code, func_group);
+            return Self::create_single_threaded(byte_code, func_group, callback);
         } else {
             #[cfg(not(target_arch = "wasm32"))]
-            return Self::create_multi_threaded(byte_code, execuror_count, func_group);
+            return Self::create_multi_threaded(byte_code, execuror_count, func_group, callback);
             #[cfg(target_arch = "wasm32")]
-            return Self::create_single_threaded(byte_code, func_group);
+            return Self::create_single_threaded(byte_code, func_group, callback);
         }
     }
     pub fn print_memory(&mut self) {
@@ -169,6 +176,98 @@ impl VM {
                 );
         }
     }
+    #[cfg(target_arch = "wasm32")]
+    fn convert_json_value_to_val(&self, val: Value) -> Val {
+        match val["type"].as_str().unwrap() {
+            "i16" => {
+                return Val {
+                    typ: 1,
+                    data: Rc::new(RefCell::new(Box::new(
+                        val["data"]["value"].as_i64().unwrap() as i16,
+                    ))),
+                };
+            }
+            "i32" => {
+                return Val {
+                    typ: 2,
+                    data: Rc::new(RefCell::new(Box::new(
+                        val["data"]["value"].as_i64().unwrap() as i32,
+                    ))),
+                };
+            }
+            "i64" => {
+                return Val {
+                    typ: 3,
+                    data: Rc::new(RefCell::new(Box::new(
+                        val["data"]["value"].as_i64().unwrap() as i64,
+                    ))),
+                };
+            }
+            "f32" => {
+                return Val {
+                    typ: 4,
+                    data: Rc::new(RefCell::new(Box::new(
+                        val["data"]["value"].as_f64().unwrap() as f32,
+                    ))),
+                };
+            }
+            "f64" => {
+                return Val {
+                    typ: 5,
+                    data: Rc::new(RefCell::new(Box::new(
+                        val["data"]["value"].as_f64().unwrap() as f64,
+                    ))),
+                };
+            }
+            "bool" => {
+                return Val {
+                    typ: 6,
+                    data: Rc::new(RefCell::new(Box::new(
+                        val["data"]["value"].as_bool().unwrap(),
+                    ))),
+                };
+            }
+            "string" => {
+                return Val {
+                    typ: 7,
+                    data: Rc::new(RefCell::new(Box::new(
+                        val["data"]["value"].as_str().unwrap().to_string(),
+                    ))),
+                };
+            }
+            "object" => {
+                let mut obj_map = HashMap::new();
+                for (k, v) in val["data"]["value"].as_object().unwrap().iter() {
+                    obj_map.insert(k.clone(), self.convert_json_value_to_val(v.clone()));
+                }
+                return Val {
+                    typ: 8,
+                    data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(Object::new(
+                        -2,
+                        ValGroup::new(obj_map),
+                    )))))),
+                };
+            }
+            "array" => {
+                let mut array_vec = vec![];
+                for item in val["data"]["value"].as_array().unwrap().iter() {
+                    array_vec.push(self.convert_json_value_to_val(item.clone()));
+                }
+                return Val {
+                    typ: 9,
+                    data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(Array::new(
+                        array_vec,
+                    )))))),
+                };
+            }
+            _ => {
+                return Val {
+                    typ: 0,
+                    data: Rc::new(RefCell::new(Box::new(0))),
+                };
+            }
+        }
+    }
     pub fn run(&mut self) -> Val {
         self.run_func("")
     }
@@ -179,11 +278,41 @@ impl VM {
             }
             0x02 => {
                 let params = payload.as_array().borrow().data.clone();
-                if params[0].as_string() == "println" {
-                    #[cfg(target_arch = "wasm32")]
-                    log(&params[2].stringify());
-                    #[cfg(not(target_arch = "wasm32"))]
-                    println!("{}", params[2].stringify());
+                #[cfg(target_arch = "wasm32")]
+                {
+                    let res_raw = (self._callback.callback)(
+                        json!({"apiName": params[0].as_string(), "payload": params[2].stringify()})
+                            .to_string(),
+                    );
+                    let res_json: Value = serde_json::from_str(&res_raw).unwrap();
+                    let res = self.convert_json_value_to_val(res_json);
+                    let res_next = self
+                        .single_thread_executor
+                        .as_ref()
+                        .unwrap()
+                        .borrow_mut()
+                        .single_thread_operation(0x03, cb_id, res);
+                    return self.handle_executor_request(res_next.0, res_next.1, res_next.2);
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    if params[0].as_string() == "println" {
+                        println!("{}", params[2].stringify());
+                        let res = self
+                            .single_thread_executor
+                            .as_ref()
+                            .unwrap()
+                            .borrow_mut()
+                            .single_thread_operation(
+                                0x03,
+                                cb_id,
+                                Val {
+                                    typ: 0,
+                                    data: Rc::new(RefCell::new(Box::new(0))),
+                                },
+                            );
+                        return self.handle_executor_request(res.0, res.1, res.2);
+                    }
                     let res = self
                         .single_thread_executor
                         .as_ref()
@@ -199,20 +328,6 @@ impl VM {
                         );
                     return self.handle_executor_request(res.0, res.1, res.2);
                 }
-                let res = self
-                    .single_thread_executor
-                    .as_ref()
-                    .unwrap()
-                    .borrow_mut()
-                    .single_thread_operation(
-                        0x03,
-                        cb_id,
-                        Val {
-                            typ: 0,
-                            data: Rc::new(RefCell::new(Box::new(0))),
-                        },
-                    );
-                return self.handle_executor_request(res.0, res.1, res.2);
             }
             _ => {
                 return Val {

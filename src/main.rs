@@ -1,7 +1,7 @@
 use std::sync::mpsc;
 
 use elpian::sdk::vm::VM;
-use serde_json::json;
+use serde_json::{Value, json};
 
 fn main() {
     // let mut vm = VM::create(
@@ -119,10 +119,28 @@ fn main() {
         }),
         1,
         vec!["println".to_string()],
+        elpian::sdk::vm::CallbackHolder {
+            callback: Box::new(ask_host),
+        },
     );
     vm.run();
     vm.print_memory();
     println!("ended !");
     let (_sender, end_signal_recv) = mpsc::channel::<bool>();
     println!("{:?}", end_signal_recv.recv().err().unwrap());
+}
+
+fn ask_host(input: String) -> String {
+    let value: Value = serde_json::from_str(&input).unwrap();
+    if value["apiName"].as_str().unwrap().to_string() == "println" {
+        println!("{}", value["payload"].as_str().unwrap());
+        return json!({
+          "type": "empty",
+          "data": 0
+        }).to_string();
+    }
+    return json!({
+      "type": "empty",
+      "data": 0
+    }).to_string();
 }

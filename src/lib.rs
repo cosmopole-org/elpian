@@ -1,23 +1,19 @@
 use wasm_bindgen::prelude::*;
 
-use crate::sdk::vm::VM;
+use crate::sdk::vm::{CallbackHolder, VM};
 use serde_json::json;
 
 pub mod sdk;
 
-#[wasm_bindgen]
-extern "C" {
-    #[wasm_bindgen(js_namespace = console)]
-    fn log(s: &str);
-    #[wasm_bindgen(js_namespace = console, js_name = log)]
-    fn log_u32(a: u32);
-    #[wasm_bindgen(js_namespace = console, js_name = log)]
-    fn log_many(a: &str, b: &str);
-}
-
 #[wasm_bindgen(start)]
 fn main() -> Result<(), JsValue> {
-  Ok(())
+    Ok(())
+}
+
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_namespace = env, js_name=ask_host)]
+    fn ask_host(s: String) -> String;
 }
 
 #[wasm_bindgen]
@@ -122,8 +118,11 @@ pub fn execute() {
         }),
         1,
         vec!["println".to_string()],
+        CallbackHolder{callback: Box::new(ask_host)},
     );
     vm.run();
     vm.print_memory();
-    log("ended !");
+    ask_host(
+        json!({"apiName": "println".to_string(), "payload": "ended !".to_string()}).to_string(),
+    );
 }
