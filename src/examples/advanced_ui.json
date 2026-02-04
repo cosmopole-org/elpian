@@ -1,0 +1,349 @@
+{
+  "ui": [
+    {
+      "type": "container",
+      "style": {
+        "width": "100%",
+        "height": "100%",
+        "flex_direction": "Column",
+        "padding": {
+          "top": 20,
+          "bottom": 20,
+          "left": 20,
+          "right": 20
+        }
+      },
+      "background_color": {
+        "r": 0.05,
+        "g": 0.05,
+        "b": 0.1,
+        "a": 1.0
+      },
+      "children": [
+        {
+          "type": "text",
+          "text": "Complete UI Components Demo",
+          "font_size": 36,
+          "style": {
+            "margin": {
+              "top": 0,
+              "bottom": 20,
+              "left": 0,
+              "right": 0
+            }
+          },
+          "color": {
+            "r": 0.9,
+            "g": 0.9,
+            "b": 1.0,
+            "a": 1.0
+          }
+        },
+        {
+          "type": "container",
+          "style": {
+            "width": "100%",
+            "flex_direction": "Row",
+            "justify_content": "SpaceAround",
+            "margin": {
+              "top": 0,
+              "bottom": 20,
+              "left": 0,
+              "right": 0
+            }
+          },
+          "children": [
+            {
+              "type": "button",
+              "label": "Action Button",
+              "action": "main_action"
+            },
+            {
+              "type": "button",
+              "label": "Settings",
+              "action": "open_settings"
+            },
+            {
+              "type": "button",
+              "label": "Help",
+              "action": "show_help"
+            }
+          ]
+        },
+        {
+          "type": "container",
+          "style": {
+            "width": "100%",
+            "flex_direction": "Column",
+            "padding": {
+              "top": 20,
+              "bottom": 20,
+              "left": 20,
+              "right": 20
+            },
+            "margin": {
+              "top": 10,
+              "bottom": 10,
+              "left": 0,
+              "right": 0
+            }
+          },
+          "background_color": {
+            "r": 0.15,
+            "g": 0.15,
+            "b": 0.2,
+            "a": 0.8
+          },
+          "children": [
+            {
+              "type": "text",
+              "text": "Slider Demo",
+              "font_size": 20,
+              "style": {
+                "margin": {
+                  "top": 0,
+                  "bottom": 10,
+                  "left": 0,
+                  "right": 0
+                }
+              },
+              "color": {
+                "r": 0.8,
+                "g": 0.8,
+                "b": 0.8,
+                "a": 1.0
+              }
+            },
+            {
+              "type": "slider",
+              "id": "volume_slider",
+              "min": 0,
+              "max": 100,
+              "value": 75,
+              "on_change": "volume_changed",
+              "style": {
+                "margin": {
+                  "top": 5,
+                  "bottom": 15,
+                  "left": 0,
+                  "right": 0
+                }
+              }
+            },
+            {
+              "type": "text",
+              "text": "Checkboxes",
+              "font_size": 20,
+              "style": {
+                "margin": {
+                  "top": 10,
+                  "bottom": 10,
+                  "left": 0,
+                  "right": 0
+                }
+              },
+              "color": {
+                "r": 0.8,
+                "g": 0.8,
+                "b": 0.8,
+                "a": 1.0
+              }
+            },
+            {
+              "type": "checkbox",
+              "id": "option1",
+              "label": "Enable sound effects",
+              "checked": true,
+              "on_change": "sfx_toggle",
+              "style": {
+                "margin": {
+                  "top": 5,
+                  "bottom": 5,
+                  "left": 0,
+                  "right": 0
+                }
+              }
+            },
+            {
+              "type": "checkbox",
+              "id": "option2",
+              "label": "Enable music",
+              "checked": true,
+              "on_change": "music_toggle",
+              "style": {
+                "margin": {
+                  "top": 5,
+                  "bottom": 5,
+                  "left": 0,
+                  "right": 0
+                }
+              }
+            },
+            {
+              "type": "checkbox",
+              "id": "option3",
+              "label": "Enable vibration",
+              "checked": false,
+              "on_change": "vibration_toggle",
+              "style": {
+                "margin": {
+                  "top": 5,
+                  "bottom": 15,
+                  "left": 0,
+                  "right": 0
+                }
+              }
+            },
+            {
+              "type": "text",
+              "text": "Radio Buttons (Difficulty)",
+              "font_size": 20,
+              "style": {
+                "margin": {
+                  "top": 10,
+                  "bottom": 10,
+                  "left": 0,
+                  "right": 0
+                }
+              },
+              "color": {
+                "r": 0.8,
+                "g": 0.8,
+                "b": 0.8,
+                "a": 1.0
+              }
+            },
+            {
+              "type": "radio",
+              "id": "easy",
+              "label": "Easy",
+              "group": "difficulty",
+              "checked": false,
+              "on_change": "difficulty_changed",
+              "style": {
+                "margin": {
+                  "top": 5,
+                  "bottom": 5,
+                  "left": 0,
+                  "right": 0
+                }
+              }
+            },
+            {
+              "type": "radio",
+              "id": "normal",
+              "label": "Normal",
+              "group": "difficulty",
+              "checked": true,
+              "on_change": "difficulty_changed",
+              "style": {
+                "margin": {
+                  "top": 5,
+                  "bottom": 5,
+                  "left": 0,
+                  "right": 0
+                }
+              }
+            },
+            {
+              "type": "radio",
+              "id": "hard",
+              "label": "Hard",
+              "group": "difficulty",
+              "checked": false,
+              "on_change": "difficulty_changed",
+              "style": {
+                "margin": {
+                  "top": 5,
+                  "bottom": 15,
+                  "left": 0,
+                  "right": 0
+                }
+              }
+            },
+            {
+              "type": "text",
+              "text": "Progress Bar",
+              "font_size": 20,
+              "style": {
+                "margin": {
+                  "top": 10,
+                  "bottom": 10,
+                  "left": 0,
+                  "right": 0
+                }
+              },
+              "color": {
+                "r": 0.8,
+                "g": 0.8,
+                "b": 0.8,
+                "a": 1.0
+              }
+            },
+            {
+              "type": "progressbar",
+              "id": "loading_bar",
+              "value": 65,
+              "max": 100,
+              "bar_color": {
+                "r": 0.2,
+                "g": 0.8,
+                "b": 0.3,
+                "a": 1.0
+              },
+              "background_color": {
+                "r": 0.2,
+                "g": 0.2,
+                "b": 0.2,
+                "a": 1.0
+              },
+              "style": {
+                "margin": {
+                  "top": 5,
+                  "bottom": 15,
+                  "left": 0,
+                  "right": 0
+                }
+              }
+            },
+            {
+              "type": "text",
+              "text": "Text Input",
+              "font_size": 20,
+              "style": {
+                "margin": {
+                  "top": 10,
+                  "bottom": 10,
+                  "left": 0,
+                  "right": 0
+                }
+              },
+              "color": {
+                "r": 0.8,
+                "g": 0.8,
+                "b": 0.8,
+                "a": 1.0
+              }
+            },
+            {
+              "type": "textinput",
+              "id": "username",
+              "placeholder": "Enter your name...",
+              "value": "",
+              "on_change": "username_changed",
+              "style": {
+                "margin": {
+                  "top": 5,
+                  "bottom": 5,
+                  "left": 0,
+                  "right": 0
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "world": []
+}
