@@ -1,17 +1,11 @@
+// use wasm_bindgen::prelude::wasm_bindgen;
+
 use crate::sdk::{
     context::Context,
     data::{Array, Function, Object, Val, ValGroup},
 };
 use core::panic;
-use std::{
-    any::Any, cell::RefCell, collections::HashMap, fmt::Display, i16, rc::Rc,
-};
-
-#[cfg(not(target_arch = "wasm32"))]
-use std::{
-    sync::mpsc::{self, Sender},
-    thread,
-};
+use std::{any::Any, cell::RefCell, collections::HashMap, fmt::Display, i16, rc::Rc};
 
 use std::{fmt::Debug, vec};
 
@@ -29,6 +23,8 @@ pub enum OperationTypes {
     NotVal,
     ObjExpr,
     ArrExpr,
+    CondBrch,
+    CastOprt,
     Dummy,
 }
 
@@ -47,6 +43,8 @@ impl Debug for OperationTypes {
             OperationTypes::NotVal => write!(f, "NotVal"),
             OperationTypes::ObjExpr => write!(f, "ObjExpr"),
             OperationTypes::ArrExpr => write!(f, "ArrExpr"),
+            OperationTypes::CondBrch => write!(f, "CondBrch"),
+            OperationTypes::CastOprt => write!(f, "CastOprt"),
             OperationTypes::Dummy => write!(f, "Dummy"),
         }
     }
@@ -97,6 +95,10 @@ pub enum ExecStates {
     ArrExprExtractInfo,
     ArrExprExtractItem,
     ArrExprFinished,
+    CondBranchStarted,
+    CondBranchFinished,
+    CastOprtStarted,
+    CastOprtFinished,
     Dummy,
 }
 
@@ -140,6 +142,10 @@ impl Debug for ExecStates {
             ExecStates::ArrExprExtractInfo => write!(f, "ArrExprExtractInfo"),
             ExecStates::ArrExprExtractItem => write!(f, "ArrExprExtractItem"),
             ExecStates::ArrExprFinished => write!(f, "ArrExprFinished"),
+            ExecStates::CondBranchStarted => write!(f, "CondBranchStarted"),
+            ExecStates::CondBranchFinished => write!(f, "CondBranchFinished"),
+            ExecStates::CastOprtStarted => write!(f, "CastOprtStarted"),
+            ExecStates::CastOprtFinished => write!(f, "CastOprtFinished"),
             ExecStates::Dummy => write!(f, "Dummy"),
         }
     }
@@ -373,6 +379,7 @@ impl Operation for CallFunction {
                 self.is_native = false;
             } else if val.as_ref().0.typ == 255 {
                 self.func = Some(Rc::new(RefCell::new(Function::new(
+                    "".to_string(),
                     0,
                     0,
                     vec!["apiName".to_string(), "input".to_string()],
@@ -386,6 +393,7 @@ impl Operation for CallFunction {
             self.params.push(*data.downcast::<Val>().unwrap());
         }
         if let Some(func) = &self.func {
+            println!("keyhan");
             if func.borrow().params.len() == self.params.len() {
                 self.state = ExecStates::CallFuncFinished;
             }
@@ -876,6 +884,107 @@ impl Operation for ArrayExpr {
     }
 }
 
+struct CondBranch {
+    typ: OperationTypes,
+    state: ExecStates,
+    pub condition: Option<Val>,
+    pub true_branch: i64,
+    pub false_branch: i64,
+}
+
+impl CondBranch {
+    pub fn new() -> Self {
+        CondBranch {
+            typ: OperationTypes::CondBrch,
+            state: ExecStates::CondBranchStarted,
+            condition: None,
+            true_branch: 0,
+            false_branch: 0,
+        }
+    }
+}
+
+impl Operation for CondBranch {
+    fn get_state(&self) -> ExecStates {
+        self.state.clone()
+    }
+
+    fn get_type(&self) -> OperationTypes {
+        self.typ.clone()
+    }
+
+    fn set_state(&mut self, state: ExecStates, data: Box<dyn Any>) {
+        self.state = state.clone();
+        if state == ExecStates::CondBranchFinished {
+            let (cond, tb, fb) = *data.downcast::<(Val, i64, i64)>().unwrap().clone();
+            self.condition = Some(cond);
+            self.true_branch = tb;
+            self.false_branch = fb;
+        }
+    }
+
+    fn get_data(&self) -> Vec<Val> {
+        vec![
+            self.condition.clone().unwrap(),
+            Val {
+                typ: 3,
+                data: Rc::new(RefCell::new(Box::new(self.true_branch))),
+            },
+            Val {
+                typ: 3,
+                data: Rc::new(RefCell::new(Box::new(self.false_branch))),
+            },
+        ]
+    }
+}
+
+struct CastOp {
+    typ: OperationTypes,
+    state: ExecStates,
+    pub data: Option<Val>,
+    pub target_type: String,
+}
+
+impl CastOp {
+    pub fn new() -> Self {
+        CastOp {
+            typ: OperationTypes::CastOprt,
+            state: ExecStates::CastOprtStarted,
+            data: None,
+            target_type: "".to_string(),
+        }
+    }
+}
+
+impl Operation for CastOp {
+    fn get_state(&self) -> ExecStates {
+        self.state.clone()
+    }
+
+    fn get_type(&self) -> OperationTypes {
+        self.typ.clone()
+    }
+
+    fn set_state(&mut self, state: ExecStates, data: Box<dyn Any>) {
+        self.state = state.clone();
+        if state == ExecStates::CastOprtFinished {
+            let (data, tt) = *data.downcast::<(Val, String)>().unwrap().clone();
+            self.data = Some(data);
+            self.target_type = tt;
+        }
+    }
+
+    fn get_data(&self) -> Vec<Val> {
+        vec![
+            self.data.clone().unwrap(),
+            Val {
+                typ: 7,
+                data: Rc::new(RefCell::new(Box::new(self.target_type.clone()))),
+            },
+        ]
+    }
+}
+
 struct DummyOp {
     typ: OperationTypes,
     state: ExecStates,
@@ -914,146 +1023,17 @@ pub struct Executor {
     end_at: usize,
     ctx: Context,
     program: Vec<u8>,
-    #[cfg(not(target_arch = "wasm32"))]
-    vm_send: Sender<(u8, i64, Val)>,
     cb_counter: i64,
     pending_func_result_value: Val,
     registers: Vec<Rc<RefCell<Box<dyn Operation>>>>,
-    allowed_api: HashMap<String, bool>,
+    _allowed_api: HashMap<String, bool>,
     run_cb_id: i64,
     exec_globally: bool,
     reserved_host_call: Option<(u8, i64, Val)>,
+    pub processing: bool,
 }
 
 impl Executor {
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn create_in_multi_thread(
-        program: Vec<u8>,
-        exec_id: i16,
-        vm_send: Sender<(u8, i64, Val)>,
-        func_group: Vec<String>,
-    ) -> Sender<(u8, i64, Val)> {
-        let (tasks_send, tasks_recv) = mpsc::channel::<(u8, i64, Val)>();
-        let mut allowed_api: HashMap<String, bool> = HashMap::new();
-        for api_name in func_group.iter() {
-            allowed_api.insert(api_name.clone(), true);
-        }
-        thread::spawn(move || {
-            let mut ex = Executor {
-                allowed_api: allowed_api,
-                executor_id: exec_id,
-                pointer: 0,
-                end_at: program.len(),
-                ctx: Context::new(),
-                program: program,
-                vm_send: vm_send.clone(),
-                cb_counter: 0,
-                pending_func_result_value: Val::new(254, Rc::new(RefCell::new(Box::new(0)))),
-                registers: vec![],
-                run_cb_id: 0,
-                exec_globally: false,
-                reserved_host_call: None,
-            };
-            let mut run_cb_id: i64 = 0;
-            let mut exec_globally = false;
-            loop {
-                let (op_code, cb_id, payload) = tasks_recv.recv().unwrap();
-                match op_code {
-                    0x00 => {
-                        // println!("ending executor...");
-                        // break;
-                    }
-                    0x01 => {
-                        // println!("executor: run_func called");
-                        run_cb_id = cb_id;
-                        if payload.is_empty() {
-                            exec_globally = true;
-                            let result = ex.run_from(
-                                0,
-                                ex.program.len(),
-                                false,
-                                Val {
-                                    typ: 0,
-                                    data: Rc::new(RefCell::new(Box::new(0))),
-                                },
-                            );
-                            if ex.pointer == ex.ctx.memory.get(0).unwrap().borrow().frozen_end {
-                                ex.vm_send.clone().send((0x01, cb_id, result)).unwrap();
-                            } else if !ex.reserved_host_call.is_none() {
-                                let host_call_data = ex.reserved_host_call.clone().unwrap();
-                                ex.reserved_host_call = None;
-                                ex.vm_send.clone().send(host_call_data).unwrap();
-                            }
-                        } else {
-                            exec_globally = false;
-                            let func_name = payload.as_string();
-                            let val = ex.ctx.find_val_in_first_scope(func_name);
-                            if !val.is_empty() {
-                                let func = val.as_func();
-                                let result = ex.run_from(
-                                    func.borrow().start,
-                                    func.borrow().end,
-                                    false,
-                                    Val {
-                                        typ: 0,
-                                        data: Rc::new(RefCell::new(Box::new(0))),
-                                    },
-                                );
-                                if ex.pointer == ex.ctx.memory.get(1).unwrap().borrow().frozen_end {
-                                    ex.vm_send.clone().send((0x01, cb_id, result)).unwrap();
-                                } else if !ex.reserved_host_call.is_none() {
-                                    let host_call_data = ex.reserved_host_call.clone().unwrap();
-                                    ex.reserved_host_call = None;
-                                    ex.vm_send.clone().send(host_call_data).unwrap();
-                                }
-                            }
-                        }
-                    }
-                    0x02 => {
-                        // println!("executor: print_memory called");
-                        ex.ctx.memory.iter().for_each(|scope| {
-                            scope
-                                .borrow()
-                                .memory
-                                .borrow()
-                                .data
-                                .iter()
-                                .for_each(|(key, val)| {
-                                    println!("{{ key: {}, val: {} }}", key, val.stringify());
-                                });
-                        });
-                    }
-                    0x03 => {
-                        let result = ex.run_from(ex.pointer, ex.end_at, true, payload);
-                        if ex.ctx.memory.len() > 0 {
-                            if exec_globally {
-                                if ex.pointer == ex.ctx.memory.get(0).unwrap().borrow().frozen_end {
-                                    ex.vm_send.clone().send((0x01, run_cb_id, result)).unwrap();
-                                } else if !ex.reserved_host_call.is_none() {
-                                    let host_call_data = ex.reserved_host_call.clone().unwrap();
-                                    ex.reserved_host_call = None;
-                                    ex.vm_send.clone().send(host_call_data).unwrap();
-                                }
-                            } else {
-                                if ex.pointer == ex.ctx.memory.get(1).unwrap().borrow().frozen_end {
-                                    ex.vm_send.clone().send((0x01, run_cb_id, result)).unwrap();
-                                } else if !ex.reserved_host_call.is_none() {
-                                    let host_call_data = ex.reserved_host_call.clone().unwrap();
-                                    ex.reserved_host_call = None;
-                                    ex.vm_send.clone().send(host_call_data).unwrap();
-                                }
-                            }
-                        } else {
-                            ex.vm_send.clone().send((0x01, run_cb_id, result)).unwrap();
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        });
-        tasks_send.clone()
-    }
-    #[cfg(target_arch = "wasm32")]
     pub fn create_in_single_thread(
         program: Vec<u8>,
         exec_id: i16,
@@ -1064,7 +1044,7 @@ impl Executor {
             allowed_api.insert(api_name.clone(), true);
         }
         Executor {
-            allowed_api: allowed_api,
+            _allowed_api: allowed_api,
             executor_id: exec_id,
             pointer: 0,
             end_at: program.len(),
@@ -1076,6 +1056,7 @@ impl Executor {
             run_cb_id: 0,
             exec_globally: false,
             reserved_host_call: None,
+            processing: false,
         }
     }
     pub fn single_thread_operation(
@@ -1088,8 +1069,9 @@ impl Executor {
             0x01 => {
                 // println!("executor: run_func called");
                 self.run_cb_id = cb_id;
-                if payload.is_empty() {
+                if payload.typ != 9 {
                     self.exec_globally = true;
+                    self.processing = true;
                     let result = self.run_from(
                         0,
                         self.program.len(),
@@ -1098,14 +1080,17 @@ impl Executor {
                             typ: 0,
                             data: Rc::new(RefCell::new(Box::new(0))),
                         },
+                        false,
                     );
-                    if self.pointer == self.ctx.memory.get(0).unwrap().borrow().frozen_end {
-                        return (0x01, cb_id, result);
-                    } else if !self.reserved_host_call.is_none() {
+                    if !self.reserved_host_call.is_none() {
                         let host_call_data = self.reserved_host_call.clone().unwrap();
                         self.reserved_host_call = None;
                         return host_call_data;
+                    } else if self.pointer == self.ctx.memory.get(0).unwrap().borrow().frozen_end {
+                        self.processing = false;
+                        return (0x01, cb_id, result);
                     } else {
+                        self.processing = false;
                         return (
                             0x00,
                             0,
@@ -1117,10 +1102,24 @@ impl Executor {
                     }
                 } else {
                     self.exec_globally = false;
-                    let func_name = payload.as_string();
+                    self.processing = true;
+                    let arr = payload.as_array();
+                    let func_name = arr.borrow().data[0].as_string();
+                    let input = arr.borrow().data[1].clone();
                     let val = self.ctx.find_val_in_first_scope(func_name);
                     if !val.is_empty() {
                         let func = val.as_func();
+                        let mut m = HashMap::new();
+                        if func.borrow().params.len() > 0 {
+                            m.insert(func.borrow().params[0].clone(), input);
+                        }
+                        self.ctx.push_scope_with_args(
+                            "funcBody".to_string(),
+                            func.borrow().start,
+                            func.borrow().start,
+                            func.borrow().end,
+                            m,
+                        );
                         let result = self.run_from(
                             func.borrow().start,
                             func.borrow().end,
@@ -1129,14 +1128,17 @@ impl Executor {
                                 typ: 0,
                                 data: Rc::new(RefCell::new(Box::new(0))),
                             },
+                            true,
                         );
-                        if self.pointer == self.ctx.memory.get(1).unwrap().borrow().frozen_end {
-                            return (0x01, cb_id, result);
-                        } else if !self.reserved_host_call.is_none() {
+                        if !self.reserved_host_call.is_none() {
                             let host_call_data = self.reserved_host_call.clone().unwrap();
                             self.reserved_host_call = None;
                             return host_call_data;
+                        } else if self.ctx.memory.len() == 1 {
+                            self.processing = false;
+                            return (0x01, cb_id, result);
                         } else {
+                            self.processing = false;
                             return (
                                 0x00,
                                 0,
@@ -1174,16 +1176,26 @@ impl Executor {
                 );
             }
             0x03 => {
-                let result = self.run_from(self.pointer, self.end_at, true, payload);
+                let result = self.run_from(
+                    self.pointer,
+                    self.end_at,
+                    true,
+                    payload,
+                    !self.exec_globally,
+                );
                 if self.ctx.memory.len() > 0 {
                     if self.exec_globally {
-                        if self.pointer == self.ctx.memory.get(0).unwrap().borrow().frozen_end {
-                            return (0x01, cb_id, result);
-                        } else if !self.reserved_host_call.is_none() {
+                        if !self.reserved_host_call.is_none() {
                             let host_call_data = self.reserved_host_call.clone().unwrap();
                             self.reserved_host_call = None;
                             return host_call_data;
+                        } else if self.pointer
+                            == self.ctx.memory.get(0).unwrap().borrow().frozen_end
+                        {
+                            self.processing = false;
+                            return (0x01, cb_id, result);
                         } else {
+                            self.processing = false;
                             return (
                                 0x00,
                                 0,
@@ -1194,13 +1206,15 @@ impl Executor {
                             );
                         }
                     } else {
-                        if self.pointer == self.ctx.memory.get(1).unwrap().borrow().frozen_end {
-                            return (0x01, cb_id, result);
-                        } else if !self.reserved_host_call.is_none() {
+                        if !self.reserved_host_call.is_none() {
                             let host_call_data = self.reserved_host_call.clone().unwrap();
                             self.reserved_host_call = None;
                             return host_call_data;
+                        } else if self.ctx.memory.len() == 1 {
+                            self.processing = false;
+                            return (0x01, cb_id, result);
                         } else {
+                            self.processing = false;
                             return (
                                 0x00,
                                 0,
@@ -1212,6 +1226,7 @@ impl Executor {
                         }
                     }
                 } else {
+                    self.processing = false;
                     return (
                         0x00,
                         0,
@@ -1223,6 +1238,7 @@ impl Executor {
                 }
             }
             _ => {
+                self.processing = false;
                 return (
                     0x00,
                     0,
@@ -1300,7 +1316,12 @@ impl Executor {
         for _i in 0..param_count {
             params.push(self.extract_str());
         }
-        Rc::new(RefCell::new(Function::new(start, end, params)))
+        Rc::new(RefCell::new(Function::new(
+            "".to_string(),
+            start,
+            end,
+            params,
+        )))
     }
     fn extract_val(&mut self) -> Val {
         let p = self.program[self.pointer];
@@ -1385,7 +1406,7 @@ impl Executor {
             };
         } else {
             return Val {
-                typ: 1,
+                typ: 3,
                 data: Rc::new(RefCell::new(Box::new(num))),
             };
         }
@@ -2586,7 +2607,7 @@ impl Executor {
             7 => {
                 let v_val = v.as_string();
                 match v2.typ {
-                    6 => {
+                    7 => {
                         let v2_val = v2.as_string();
                         v_val == v2_val
                     }
@@ -2596,7 +2617,7 @@ impl Executor {
             8 => {
                 let v_val = v.as_object();
                 match v2.typ {
-                    6 => {
+                    8 => {
                         let v2_val = v2.as_object();
                         if v_val.borrow().data.data.iter().all(|(k, _d)| {
                             if !v2_val.borrow().data.data.contains_key(&k.clone()) {
@@ -3297,632 +3318,1310 @@ impl Executor {
     fn assign(&mut self, id_name: String, val: Val) {
         self.ctx.update_val_globally(id_name, val);
     }
-    fn forward_state(&mut self, val: Option<Val>) -> bool {
-        if self.registers.last().unwrap().borrow().get_type() == OperationTypes::ArrExpr {
-            if self.registers.last().unwrap().borrow().get_state() == ExecStates::ArrExprExtractInfo
-                || self.registers.last().unwrap().borrow().get_state()
-                    == ExecStates::ArrExprExtractItem
-            {
-                self.registers.last().unwrap().borrow_mut().set_state(
-                    ExecStates::ArrExprExtractItem,
-                    Box::new(val.clone().unwrap()),
-                );
-                if self.registers.last().unwrap().borrow().get_state()
-                    == ExecStates::ArrExprFinished
-                {
-                    return self.forward_state(None);
-                }
-            } else if self.registers.last().unwrap().borrow().get_state()
-                == ExecStates::ArrExprFinished
-            {
-                let regs = self.registers.last().unwrap().borrow().get_data().clone();
-                let items_vec = regs[1].clone();
-                self.registers.pop();
-                self.forward_state(Some(items_vec));
-            }
-        } else if self.registers.last().unwrap().borrow().get_type() == OperationTypes::ObjExpr {
-            if self.registers.last().unwrap().borrow().get_state() == ExecStates::ObjExprExtractInfo
-                || self.registers.last().unwrap().borrow().get_state()
-                    == ExecStates::ObjExprExtractProp
-            {
-                self.registers.last().unwrap().borrow_mut().set_state(
-                    ExecStates::ObjExprExtractProp,
-                    Box::new(val.clone().unwrap()),
-                );
-                if self.registers.last().unwrap().borrow().get_state()
-                    == ExecStates::ObjExprFinished
-                {
-                    return self.forward_state(None);
-                }
-            } else if self.registers.last().unwrap().borrow().get_state()
-                == ExecStates::ObjExprFinished
-            {
-                let regs = self.registers.last().unwrap().borrow().get_data().clone();
-                let typ_id = regs[0].as_i64();
-                let props_vec = regs[2].as_array();
-                let mut props_map = HashMap::new();
-                for i in (0..props_vec.borrow().data.len()).step_by(2) {
-                    props_map.insert(
-                        props_vec.borrow().data[i].as_string(),
-                        props_vec.borrow().data[i + 1].clone(),
-                    );
-                }
-                let result = Val {
-                    typ: 8,
-                    data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(Object::new(
-                        typ_id,
-                        ValGroup::new(props_map),
-                    )))))),
-                };
-                self.registers.pop();
-                self.forward_state(Some(result));
-            }
-        } else if self.registers.last().unwrap().borrow().get_type() == OperationTypes::CallFunc {
-            if self.registers.last().unwrap().borrow().get_state() == ExecStates::CallFuncStarted {
-                let arg_count = self.extract_i32() as usize;
-                self.registers.last().unwrap().borrow_mut().set_state(
-                    ExecStates::CallFuncExtractFunc,
-                    Box::new((val.clone().unwrap(), arg_count)),
-                );
-                if self.registers.last().unwrap().borrow().get_state()
-                    == ExecStates::CallFuncFinished
-                {
-                    return self.forward_state(None);
-                }
-            } else if self.registers.last().unwrap().borrow().get_state()
-                == ExecStates::CallFuncExtractFunc
-                || self.registers.last().unwrap().borrow().get_state()
-                    == ExecStates::CallFuncExtractParam
-            {
-                self.registers.last().unwrap().borrow_mut().set_state(
-                    ExecStates::CallFuncExtractParam,
-                    Box::new(val.clone().unwrap()),
-                );
-                if self.registers.last().unwrap().borrow().get_state()
-                    == ExecStates::CallFuncFinished
-                {
-                    return self.forward_state(None);
-                }
-            } else if self.registers.last().unwrap().borrow().get_state()
-                == ExecStates::CallFuncFinished
-            {
-                let regs = self.registers.last().unwrap().borrow().get_data().clone();
-                let is_native = regs[1].as_bool();
-                if !is_native {
-                    let func = regs[0].as_func().clone();
-                    let arg_count = regs[2].as_i32() as usize;
-                    if arg_count != func.borrow().params.len() {
-                        panic!("elpian error: func params count is not correct");
-                    }
-                    let mut args = HashMap::new();
-                    let mut i: usize = 0;
-                    for arg in regs[3].as_array().borrow().data.iter() {
-                        args.insert(func.borrow().params[i].clone(), arg.clone());
-                        i += 1;
-                    }
-                    self.ctx
-                        .memory
-                        .last()
-                        .unwrap()
-                        .borrow_mut()
-                        .update_frozen_pointer(self.pointer);
-                    self.ctx.push_scope_with_args(
-                        func.borrow().start,
-                        func.borrow().start,
-                        func.borrow().end,
-                        args,
-                    );
-                    self.pointer = func.borrow().start;
-                    self.end_at = func.borrow().end;
-                    self.registers.pop();
-                    self.registers
-                        .push(Rc::new(RefCell::new(Box::new(DummyOp::new()))));
-                } else {
-                    let mut args = HashMap::new();
-                    let arg1 = regs[3].as_array().borrow().data[0].clone();
-                    if !self.allowed_api.contains_key(&arg1.as_string().clone()) {
-                        panic!("elpian error: this api access is locked");
-                    }
-                    args.insert("apiName".to_string(), arg1);
-                    let arg2 = regs[3].as_array().borrow().data[1].clone();
-                    args.insert("input".to_string(), arg2);
-                    self.cb_counter += 1;
-                    let cb_id = self.cb_counter;
-                    self.registers.pop();
-                    self.reserved_host_call = Some((
-                        0x02,
-                        cb_id,
-                        Val {
-                            typ: 9,
-                            data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(
-                                Array::new(vec![
-                                    args["apiName"].clone(),
-                                    Val {
-                                        typ: 1,
-                                        data: Rc::new(RefCell::new(Box::new(self.executor_id))),
-                                    },
-                                    args["input"].clone(),
-                                ]),
-                            ))))),
-                        },
-                    ));
-                    return true;
-                }
-            }
-        } else if self.registers.last().unwrap().borrow().get_type() == OperationTypes::ReturnVal {
-            if self.registers.last().unwrap().borrow().get_state() == ExecStates::ReturnValStarted {
-                self.registers.last().unwrap().borrow_mut().set_state(
-                    ExecStates::ReturnValFinished,
-                    Box::new(val.clone().unwrap()),
-                );
-                return self.forward_state(None);
-            } else if self.registers.last().unwrap().borrow().get_state()
-                == ExecStates::ReturnValFinished
-            {
-                let data = self.registers.last().unwrap().borrow().get_data();
-                let returned_val = data[0].clone();
-                self.registers.pop();
-                self.pointer = self.end_at;
-                self.pending_func_result_value = returned_val;
-            }
-        } else if self.registers.last().unwrap().borrow().get_type() == OperationTypes::DefineVar {
-            if self.registers.last().unwrap().borrow().get_state()
-                == ExecStates::DefineVarExtractName
-            {
-                self.registers.last().unwrap().borrow_mut().set_state(
-                    ExecStates::DefineVarExtractValue,
-                    Box::new(val.clone().unwrap()),
-                );
-                return self.forward_state(None);
-            } else if self.registers.last().unwrap().borrow().get_state()
-                == ExecStates::DefineVarExtractValue
-            {
-                let regs = self.registers.last().unwrap().borrow().get_data().clone();
-                let var_name = regs[0].as_string();
-                let var_value = regs[1].clone();
-                self.registers.pop();
-                self.define(var_name.clone(), var_value.clone());
-            }
-        } else if self.registers.last().unwrap().borrow().get_type() == OperationTypes::AssignVar {
-            if self.registers.last().unwrap().borrow().get_state()
-                == ExecStates::AssignVarExtractName
-            {
-                if self.registers.last().unwrap().borrow().get_data()[1].as_i16() == 1 {
-                    self.registers.last().unwrap().borrow_mut().set_state(
-                        ExecStates::AssignVarExtractValue,
-                        Box::new(val.clone().unwrap()),
-                    );
-                    return self.forward_state(None);
-                } else if self.registers.last().unwrap().borrow().get_data()[1].as_i16() == 2 {
-                    self.registers.last().unwrap().borrow_mut().set_state(
-                        ExecStates::AssignVarExtractIndex,
-                        Box::new(val.clone().unwrap()),
-                    );
-                }
-            } else if self.registers.last().unwrap().borrow().get_state()
-                == ExecStates::AssignVarExtractIndex
-            {
-                self.registers.last().unwrap().borrow_mut().set_state(
-                    ExecStates::AssignVarExtractValue,
-                    Box::new(val.clone().unwrap()),
-                );
-                return self.forward_state(None);
-            } else if self.registers.last().unwrap().borrow().get_state()
-                == ExecStates::AssignVarExtractValue
-            {
-                let regs = self.registers.last().unwrap().borrow().get_data().clone();
-                let var_name = regs[0].as_string();
-                let assign_target_type = regs[1].as_i16();
-                let data = regs[3].clone();
-                if assign_target_type == 1 {
-                    self.assign(var_name.clone(), data);
-                } else if assign_target_type == 2 {
-                    let index = regs[2].clone();
-                    self.pointer += 1;
-                    let indexed = self.ctx.find_val_globally(var_name);
-                    if index.typ == 7 {
-                        if indexed.typ == 8 {
-                            let obj = indexed.as_object();
-                            obj.borrow_mut().data.data.insert(index.as_string(), data);
-                        } else {
-                            panic!("elpian error: non object value can not be indexed by string");
-                        }
-                    } else if index.typ >= 1 && index.typ <= 3 {
-                        if indexed.typ == 9 {
-                            let arr = indexed.as_array();
-                            if index.typ == 1 {
-                                arr.borrow_mut().data[index.as_i16() as usize] = data;
-                            } else if index.typ == 2 {
-                                arr.borrow_mut().data[index.as_i32() as usize] = data;
-                            } else {
-                                arr.borrow_mut().data[index.as_i64() as usize] = data;
-                            }
-                        } else {
-                            panic!("elpian error: non object value can not be indexed by string");
-                        }
-                    } else {
-                        panic!(
-                            "elpian error: types other than integer and string can not be used to index anything"
-                        );
-                    }
-                }
-                self.registers.pop();
-            }
-        } else if self.registers.last().unwrap().borrow().get_type() == OperationTypes::IfStmt {
-            if self.registers.last().unwrap().borrow().get_state()
-                == ExecStates::IfStmtIsConditioned
-            {
-                self.registers
-                    .last()
-                    .unwrap()
-                    .borrow_mut()
-                    .set_state(ExecStates::IfStmtFinished, Box::new(val.clone().unwrap()));
-                return self.forward_state(None);
-            } else if self.registers.last().unwrap().borrow().get_state()
-                == ExecStates::IfStmtFinished
-            {
-                let regs = self.registers.last().unwrap().borrow().get_data().clone();
-                let has_condition = regs[0].as_bool();
-                let cond_val = regs[1].clone();
-                let mut condition = false;
-                if has_condition {
-                    if cond_val.typ == 6 {
-                        condition = cond_val.as_bool();
-                    }
-                }
-                if !has_condition {
-                    let branch_true_start = self.extract_i64() as usize;
-                    let branch_true_end = self.extract_i64() as usize;
-                    let branch_after_start = self.extract_i64() as usize;
-                    self.ctx
-                        .memory
-                        .last()
-                        .unwrap()
-                        .borrow_mut()
-                        .update_frozen_pointer(branch_after_start);
-                    self.ctx
-                        .push_scope(branch_true_start, branch_true_start, branch_true_end);
-                    self.pointer = branch_true_start;
-                    self.end_at = branch_true_end;
-                } else {
-                    let branch_true_start = self.extract_i64() as usize;
-                    let branch_true_end = self.extract_i64() as usize;
-                    let branch_next_start = self.extract_i64() as usize;
-                    let branch_after_start = self.extract_i64() as usize;
-                    if condition {
-                        self.ctx
-                            .memory
-                            .last()
-                            .unwrap()
-                            .borrow_mut()
-                            .update_frozen_pointer(branch_after_start);
-                        self.ctx
-                            .push_scope(branch_true_start, branch_true_start, branch_true_end);
-                        self.pointer = branch_true_start;
-                        self.end_at = branch_true_end;
-                    } else {
-                        self.pointer = branch_next_start;
-                    }
-                }
-                self.registers.pop();
-            }
-        } else if self.registers.last().unwrap().borrow().get_type() == OperationTypes::LoopStmt {
-            if self.registers.last().unwrap().borrow().get_state() == ExecStates::LoopStmtStarted {
-                self.registers
-                    .last()
-                    .unwrap()
-                    .borrow_mut()
-                    .set_state(ExecStates::LoopStmtFinished, Box::new(val.clone().unwrap()));
-                return self.forward_state(None);
-            } else if self.registers.last().unwrap().borrow().get_state()
-                == ExecStates::LoopStmtFinished
-            {
-                let regs = self.registers.last().unwrap().borrow().get_data().clone();
-                let cond_val = regs[0].clone();
-                let mut condition = false;
-                if cond_val.typ == 6 {
-                    condition = cond_val.as_bool();
-                }
-                let branch_true_start = self.extract_i64() as usize;
-                let branch_true_end = self.extract_i64() as usize;
-                let branch_after_start = self.extract_i64() as usize;
-                if condition {
-                    self.ctx
-                        .memory
-                        .last()
-                        .unwrap()
-                        .borrow_mut()
-                        .update_frozen_pointer(branch_after_start);
-                    self.ctx
-                        .push_scope(branch_true_start, branch_true_start, branch_true_end);
-                    self.pointer = branch_true_start;
-                    self.end_at = branch_true_end;
-                } else {
-                    self.pointer = branch_after_start;
-                }
-                self.registers.pop();
-            }
-        } else if self.registers.last().unwrap().borrow().get_type() == OperationTypes::SwitchStmt {
-            if self.registers.last().unwrap().borrow().get_state() == ExecStates::SwitchStmtStarted
-            {
-                let branch_after_start = self.extract_i64() as usize;
-                let case_count = self.extract_i64() as usize;
-                self.registers.last().unwrap().borrow_mut().set_state(
-                    ExecStates::SwitchStmtExtractVal,
-                    Box::new((val.clone().unwrap(), branch_after_start, case_count)),
-                );
-            } else if self.registers.last().unwrap().borrow().get_state()
-                == ExecStates::SwitchStmtExtractVal
-                || self.registers.last().unwrap().borrow().get_state()
-                    == ExecStates::SwitchStmtExtractCase
-            {
-                let branch_true_start = self.extract_i64() as usize;
-                let branch_true_end = self.extract_i64() as usize;
-                self.registers.last().unwrap().borrow_mut().set_state(
-                    ExecStates::SwitchStmtExtractCase,
-                    Box::new((val.clone().unwrap(), branch_true_start, branch_true_end)),
-                );
-            } else if self.registers.last().unwrap().borrow().get_state()
-                == ExecStates::SwitchStmtFinished
-            {
-                let regs = self.registers.last().unwrap().borrow().get_data().clone();
-                let comparing_val = regs[0].clone();
-                let branch_after_start = regs[1].as_i64() as usize;
-                let cases = regs[3].as_array();
-                let mut matched = false;
-                for case_info in cases.borrow().data.iter() {
-                    let data = case_info.as_object().borrow().data.data.clone();
-                    let case_val = data["val"].clone();
-                    let branch_true_start = data["start"].as_i64() as usize;
-                    let branch_true_end = data["end"].as_i64() as usize;
-                    if self.is_eq(comparing_val.clone(), case_val) {
-                        matched = true;
-                        self.ctx
-                            .memory
-                            .last()
-                            .unwrap()
-                            .borrow_mut()
-                            .update_frozen_pointer(branch_after_start);
-                        self.ctx
-                            .push_scope(branch_true_start, branch_true_start, branch_true_end);
-                        self.pointer = branch_true_start;
-                        self.end_at = branch_true_end;
-                    }
-                }
-                if !matched {
-                    self.pointer = branch_after_start;
-                }
-                self.registers.pop();
-            }
-        } else if self.registers.last().unwrap().borrow().get_type() == OperationTypes::Arithmetic {
-            if self.registers.last().unwrap().borrow().get_state()
-                == ExecStates::ArithmeticExtractOp
-            {
-                self.registers.last().unwrap().borrow_mut().set_state(
-                    ExecStates::ArithmeticExtractArg1,
-                    Box::new(val.clone().unwrap()),
-                );
-            } else if self.registers.last().unwrap().borrow().get_state()
-                == ExecStates::ArithmeticExtractArg1
-            {
-                self.registers.last().unwrap().borrow_mut().set_state(
-                    ExecStates::ArithmeticExtractArg2,
-                    Box::new(val.clone().unwrap()),
-                );
-                self.forward_state(None);
-            } else if self.registers.last().unwrap().borrow().get_state()
-                == ExecStates::ArithmeticExtractArg2
-            {
-                let regs = self.registers.last().unwrap().borrow().get_data().clone();
-                let op = regs[0].as_i16();
-                let arg1 = regs[1].clone();
-                let arg2 = regs[2].clone();
-                self.registers.pop();
-                match op {
-                    1 => {
-                        return self.forward_state(Some(Val {
-                            typ: 6,
-                            data: Rc::new(RefCell::new(Box::new(self.is_eq(arg1, arg2)))),
-                        }));
-                    }
-                    2 => {
-                        return self.forward_state(Some(Val {
-                            typ: 6,
-                            data: Rc::new(RefCell::new(Box::new(self.is_ge(arg1, arg2)))),
-                        }));
-                    }
-                    3 => {
-                        return self.forward_state(Some(Val {
-                            typ: 6,
-                            data: Rc::new(RefCell::new(Box::new(self.is_gee(arg1, arg2)))),
-                        }));
-                    }
-                    4 => {
-                        return self.forward_state(Some(Val {
-                            typ: 6,
-                            data: Rc::new(RefCell::new(Box::new(self.is_le(arg1, arg2)))),
-                        }));
-                    }
-                    5 => {
-                        return self.forward_state(Some(Val {
-                            typ: 6,
-                            data: Rc::new(RefCell::new(Box::new(self.is_lee(arg1, arg2)))),
-                        }));
-                    }
-                    6 => {
-                        return self.forward_state(Some(Val {
-                            typ: 6,
-                            data: Rc::new(RefCell::new(Box::new(!self.is_eq(arg1, arg2)))),
-                        }));
-                    }
-                    7 => {
-                        return self.forward_state(Some(self.operate_sum(arg1, arg2)));
-                    }
-                    8 => {
-                        return self.forward_state(Some(self.operate_subtract(arg1, arg2)));
-                    }
-                    9 => {
-                        return self.forward_state(Some(self.operate_multiply(arg1, arg2)));
-                    }
-                    10 => {
-                        return self.forward_state(Some(self.operate_division(arg1, arg2)));
-                    }
-                    _ => {}
-                }
-            }
-        } else if self.registers.last().unwrap().borrow().get_type() == OperationTypes::Indexer {
-            if self.registers.last().unwrap().borrow().get_state() == ExecStates::IndexerStarted {
-                self.registers.last().unwrap().borrow_mut().set_state(
-                    ExecStates::IndexerExtractVarName,
-                    Box::new(val.clone().unwrap()),
-                );
-            } else if self.registers.last().unwrap().borrow().get_state()
-                == ExecStates::IndexerExtractVarName
-            {
-                self.registers.last().unwrap().borrow_mut().set_state(
-                    ExecStates::IndexerExtractIndex,
-                    Box::new(val.clone().unwrap()),
-                );
-            } else if self.registers.last().unwrap().borrow().get_state()
-                == ExecStates::IndexerExtractIndex
-            {
-                let regs = self.registers.last().unwrap().borrow().get_data().clone();
-                let indexed = regs[0].clone();
-                let index = regs[1].clone();
-                self.registers.pop();
-                if index.typ == 7 {
-                    if indexed.typ == 8 {
-                        let obj = indexed.as_object();
-                        return self.forward_state(Some(
-                            obj.borrow()
-                                .data
-                                .data
-                                .get(&index.as_string())
-                                .unwrap()
-                                .clone(),
-                        ));
-                    } else {
-                        panic!("elpian error: non object value can not be indexed by string");
-                    }
-                } else if index.typ >= 1 && index.typ <= 3 {
-                    if indexed.typ == 9 {
-                        let arr = indexed.as_array();
-                        if index.typ == 1 {
-                            return self.forward_state(Some(
-                                arr.borrow()
-                                    .data
-                                    .get(index.as_i16() as usize)
-                                    .unwrap()
-                                    .clone(),
-                            ));
-                        } else if index.typ == 2 {
-                            return self.forward_state(Some(
-                                arr.borrow()
-                                    .data
-                                    .get(index.as_i32() as usize)
-                                    .unwrap()
-                                    .clone(),
-                            ));
-                        } else {
-                            return self.forward_state(Some(
-                                arr.borrow()
-                                    .data
-                                    .get(index.as_i64() as usize)
-                                    .unwrap()
-                                    .clone(),
-                            ));
-                        }
-                    } else {
-                        panic!("elpian error: non object value can not be indexed by string");
-                    }
-                } else {
-                    panic!(
-                        "elpian error: types other than integer and string can not be used to index anything"
-                    );
-                }
-            }
-        } else if self.registers.last().unwrap().borrow().get_type() == OperationTypes::NotVal {
-            if self.registers.last().unwrap().borrow().get_state() == ExecStates::NotValStarted {
-                self.registers
-                    .last()
-                    .unwrap()
-                    .borrow_mut()
-                    .set_state(ExecStates::NotValFinished, Box::new(val.clone().unwrap()));
-                return self.forward_state(None);
-            } else if self.registers.last().unwrap().borrow().get_state()
-                == ExecStates::NotValFinished
-            {
-                let data = self.registers.last().unwrap().borrow().get_data();
-                let val = data[0].clone();
-                self.registers.pop();
-                if val.typ == 6 {
-                    return self.forward_state(Some(Val {
-                        typ: 6,
-                        data: Rc::new(RefCell::new(Box::new(!val.as_bool()))),
-                    }));
-                } else {
-                    panic!("elpian error: not operator (!) can not be applied to non-bool value");
-                }
-            }
-        }
-        return false;
-    }
     pub fn run_from(
         &mut self,
         start: usize,
         end: usize,
         continue_exec: bool,
         host_call_result: Val,
+        is_partial_exec: bool,
     ) -> Val {
         if !continue_exec {
-            self.ctx.push_scope(start, start, end);
+            if !is_partial_exec {
+                self.ctx
+                    .push_scope("funcBody".to_string(), start, start, end);
+            }
             self.pointer = start;
             self.end_at = end;
+        } else {
+            self.pending_func_result_value = host_call_result.clone();
         }
-        let mut ce = continue_exec;
+        let mut main_reg: Option<Val> = None;
+        let mut is_reg_state_final = false;
+        if continue_exec {
+            if self.pending_func_result_value.typ != 254 {
+                let returned_val = self.pending_func_result_value.clone();
+                self.pending_func_result_value = Val {
+                    typ: 254,
+                    data: Rc::new(RefCell::new(Box::new(0))),
+                };
+                if self.registers.len() > 0 {
+                    main_reg = Some(returned_val);
+                    is_reg_state_final = false;
+                }
+            }
+        }
         loop {
-            let mut terminate = false;
-            while self.pointer == self.end_at {
-                if self.pointer == end && self.ctx.memory.len() == 1 {
-                    terminate = true;
-                    break;
-                }
-                self.ctx.pop_scope();
-                if self.registers.len() > 0
-                    && self.registers.last().unwrap().borrow().get_type() == OperationTypes::Dummy
-                {
-                    self.registers.pop();
-                }
-                if self.ctx.memory.len() > 0 {
-                    self.pointer = self.ctx.memory.last().unwrap().borrow().frozen_pointer;
-                    self.end_at = self.ctx.memory.last().unwrap().borrow().frozen_end;
-                    if self.pending_func_result_value.typ != 254 {
-                        let returned_val = self.pending_func_result_value.clone();
-                        self.pending_func_result_value = Val {
-                            typ: 254,
-                            data: Rc::new(RefCell::new(Box::new(0))),
-                        };
-                        if self.registers.len() > 0 {
-                            if self.forward_state(Some(returned_val)) {
-                                break;
+            if !main_reg.is_none() {
+                if self.registers.len() > 0 {
+                    if self.registers.last().unwrap().borrow().get_type() == OperationTypes::ArrExpr
+                    {
+                        if self.registers.last().unwrap().borrow().get_state()
+                            == ExecStates::ArrExprExtractInfo
+                            || self.registers.last().unwrap().borrow().get_state()
+                                == ExecStates::ArrExprExtractItem
+                        {
+                            self.registers.last().unwrap().borrow_mut().set_state(
+                                ExecStates::ArrExprExtractItem,
+                                Box::new(main_reg.clone().unwrap()),
+                            );
+                            main_reg = None;
+                            is_reg_state_final =
+                                self.registers.last().unwrap().borrow_mut().get_state()
+                                    == ExecStates::ArrExprFinished;
+                            continue;
+                        }
+                    } else if self.registers.last().unwrap().borrow().get_type()
+                        == OperationTypes::ObjExpr
+                    {
+                        if self.registers.last().unwrap().borrow().get_state()
+                            == ExecStates::ObjExprExtractInfo
+                            || self.registers.last().unwrap().borrow().get_state()
+                                == ExecStates::ObjExprExtractProp
+                        {
+                            self.registers.last().unwrap().borrow_mut().set_state(
+                                ExecStates::ObjExprExtractProp,
+                                Box::new(main_reg.clone().unwrap()),
+                            );
+                            main_reg = None;
+                            is_reg_state_final =
+                                self.registers.last().unwrap().borrow_mut().get_state()
+                                    == ExecStates::ObjExprFinished;
+                            continue;
+                        }
+                    } else if self.registers.last().unwrap().borrow().get_type()
+                        == OperationTypes::CallFunc
+                    {
+                        if self.registers.last().unwrap().borrow().get_state()
+                            == ExecStates::CallFuncStarted
+                        {
+                            let arg_count = self.extract_i32() as usize;
+                            self.registers.last().unwrap().borrow_mut().set_state(
+                                ExecStates::CallFuncExtractFunc,
+                                Box::new((main_reg.clone().unwrap(), arg_count)),
+                            );
+                            main_reg = None;
+                            is_reg_state_final =
+                                self.registers.last().unwrap().borrow_mut().get_state()
+                                    == ExecStates::CallFuncFinished;
+                            continue;
+                        } else if self.registers.last().unwrap().borrow().get_state()
+                            == ExecStates::CallFuncExtractFunc
+                            || self.registers.last().unwrap().borrow().get_state()
+                                == ExecStates::CallFuncExtractParam
+                        {
+                            self.registers.last().unwrap().borrow_mut().set_state(
+                                ExecStates::CallFuncExtractParam,
+                                Box::new(main_reg.clone().unwrap()),
+                            );
+                            main_reg = None;
+                            is_reg_state_final =
+                                self.registers.last().unwrap().borrow_mut().get_state()
+                                    == ExecStates::CallFuncFinished;
+                            continue;
+                        }
+                    } else if self.registers.last().unwrap().borrow().get_type()
+                        == OperationTypes::ReturnVal
+                    {
+                        if self.registers.last().unwrap().borrow().get_state()
+                            == ExecStates::ReturnValStarted
+                        {
+                            self.registers.last().unwrap().borrow_mut().set_state(
+                                ExecStates::ReturnValFinished,
+                                Box::new(main_reg.clone().unwrap()),
+                            );
+                            main_reg = None;
+                            is_reg_state_final =
+                                self.registers.last().unwrap().borrow_mut().get_state()
+                                    == ExecStates::ReturnValFinished;
+                            continue;
+                        }
+                    } else if self.registers.last().unwrap().borrow().get_type()
+                        == OperationTypes::DefineVar
+                    {
+                        if self.registers.last().unwrap().borrow().get_state()
+                            == ExecStates::DefineVarExtractName
+                        {
+                            self.registers.last().unwrap().borrow_mut().set_state(
+                                ExecStates::DefineVarExtractValue,
+                                Box::new(main_reg.clone().unwrap()),
+                            );
+                            main_reg = None;
+                            is_reg_state_final =
+                                self.registers.last().unwrap().borrow_mut().get_state()
+                                    == ExecStates::DefineVarExtractValue;
+                            continue;
+                        }
+                    } else if self.registers.last().unwrap().borrow().get_type()
+                        == OperationTypes::AssignVar
+                    {
+                        if self.registers.last().unwrap().borrow().get_state()
+                            == ExecStates::AssignVarExtractName
+                        {
+                            if self.registers.last().unwrap().borrow().get_data()[1].as_i16() == 1 {
+                                self.registers.last().unwrap().borrow_mut().set_state(
+                                    ExecStates::AssignVarExtractValue,
+                                    Box::new(main_reg.clone().unwrap()),
+                                );
+                                main_reg = None;
+                                is_reg_state_final =
+                                    self.registers.last().unwrap().borrow_mut().get_state()
+                                        == ExecStates::AssignVarExtractValue;
+                                continue;
+                            } else if self.registers.last().unwrap().borrow().get_data()[1].as_i16()
+                                == 2
+                            {
+                                self.registers.last().unwrap().borrow_mut().set_state(
+                                    ExecStates::AssignVarExtractIndex,
+                                    Box::new(main_reg.clone().unwrap()),
+                                );
+                                main_reg = None;
+                                is_reg_state_final =
+                                    self.registers.last().unwrap().borrow_mut().get_state()
+                                        == ExecStates::AssignVarExtractValue;
+                                continue;
                             }
+                        } else if self.registers.last().unwrap().borrow().get_state()
+                            == ExecStates::AssignVarExtractIndex
+                        {
+                            self.registers.last().unwrap().borrow_mut().set_state(
+                                ExecStates::AssignVarExtractValue,
+                                Box::new(main_reg.clone().unwrap()),
+                            );
+                            main_reg = None;
+                            is_reg_state_final =
+                                self.registers.last().unwrap().borrow_mut().get_state()
+                                    == ExecStates::AssignVarExtractValue;
+                            continue;
+                        }
+                    } else if self.registers.last().unwrap().borrow().get_type()
+                        == OperationTypes::IfStmt
+                    {
+                        if self.registers.last().unwrap().borrow().get_state()
+                            == ExecStates::IfStmtIsConditioned
+                        {
+                            self.registers.last().unwrap().borrow_mut().set_state(
+                                ExecStates::IfStmtFinished,
+                                Box::new(main_reg.clone().unwrap()),
+                            );
+                            main_reg = None;
+                            is_reg_state_final =
+                                self.registers.last().unwrap().borrow_mut().get_state()
+                                    == ExecStates::IfStmtFinished;
+                            continue;
+                        }
+                    } else if self.registers.last().unwrap().borrow().get_type()
+                        == OperationTypes::LoopStmt
+                    {
+                        if self.registers.last().unwrap().borrow().get_state()
+                            == ExecStates::LoopStmtStarted
+                        {
+                            self.registers.last().unwrap().borrow_mut().set_state(
+                                ExecStates::LoopStmtFinished,
+                                Box::new(main_reg.clone().unwrap()),
+                            );
+                            main_reg = None;
+                            is_reg_state_final =
+                                self.registers.last().unwrap().borrow_mut().get_state()
+                                    == ExecStates::LoopStmtFinished;
+                            continue;
+                        }
+                    } else if self.registers.last().unwrap().borrow().get_type()
+                        == OperationTypes::SwitchStmt
+                    {
+                        if self.registers.last().unwrap().borrow().get_state()
+                            == ExecStates::SwitchStmtStarted
+                        {
+                            let branch_after_start = self.extract_i64() as usize;
+                            let case_count = self.extract_i64() as usize;
+                            self.registers.last().unwrap().borrow_mut().set_state(
+                                ExecStates::SwitchStmtExtractVal,
+                                Box::new((
+                                    main_reg.clone().unwrap(),
+                                    branch_after_start,
+                                    case_count,
+                                )),
+                            );
+                            main_reg = None;
+                            is_reg_state_final =
+                                self.registers.last().unwrap().borrow_mut().get_state()
+                                    == ExecStates::SwitchStmtFinished;
+                            continue;
+                        } else if self.registers.last().unwrap().borrow().get_state()
+                            == ExecStates::SwitchStmtExtractVal
+                            || self.registers.last().unwrap().borrow().get_state()
+                                == ExecStates::SwitchStmtExtractCase
+                        {
+                            let branch_true_start = self.extract_i64() as usize;
+                            let branch_true_end = self.extract_i64() as usize;
+                            self.registers.last().unwrap().borrow_mut().set_state(
+                                ExecStates::SwitchStmtExtractCase,
+                                Box::new((
+                                    main_reg.clone().unwrap(),
+                                    branch_true_start,
+                                    branch_true_end,
+                                )),
+                            );
+                            main_reg = None;
+                            is_reg_state_final =
+                                self.registers.last().unwrap().borrow_mut().get_state()
+                                    == ExecStates::SwitchStmtFinished;
+                            continue;
+                        }
+                    } else if self.registers.last().unwrap().borrow().get_type()
+                        == OperationTypes::Arithmetic
+                    {
+                        if self.registers.last().unwrap().borrow().get_state()
+                            == ExecStates::ArithmeticExtractOp
+                        {
+                            self.registers.last().unwrap().borrow_mut().set_state(
+                                ExecStates::ArithmeticExtractArg1,
+                                Box::new(main_reg.clone().unwrap()),
+                            );
+                            main_reg = None;
+                            is_reg_state_final =
+                                self.registers.last().unwrap().borrow_mut().get_state()
+                                    == ExecStates::ArithmeticExtractArg2;
+                            continue;
+                        } else if self.registers.last().unwrap().borrow().get_state()
+                            == ExecStates::ArithmeticExtractArg1
+                        {
+                            self.registers.last().unwrap().borrow_mut().set_state(
+                                ExecStates::ArithmeticExtractArg2,
+                                Box::new(main_reg.clone().unwrap()),
+                            );
+                            main_reg = None;
+                            is_reg_state_final =
+                                self.registers.last().unwrap().borrow_mut().get_state()
+                                    == ExecStates::ArithmeticExtractArg2;
+                            continue;
+                        }
+                    } else if self.registers.last().unwrap().borrow().get_type()
+                        == OperationTypes::Indexer
+                    {
+                        if self.registers.last().unwrap().borrow().get_state()
+                            == ExecStates::IndexerStarted
+                        {
+                            self.registers.last().unwrap().borrow_mut().set_state(
+                                ExecStates::IndexerExtractVarName,
+                                Box::new(main_reg.clone().unwrap()),
+                            );
+                            main_reg = None;
+                            is_reg_state_final =
+                                self.registers.last().unwrap().borrow_mut().get_state()
+                                    == ExecStates::IndexerExtractIndex;
+                            continue;
+                        } else if self.registers.last().unwrap().borrow().get_state()
+                            == ExecStates::IndexerExtractVarName
+                        {
+                            self.registers.last().unwrap().borrow_mut().set_state(
+                                ExecStates::IndexerExtractIndex,
+                                Box::new(main_reg.clone().unwrap()),
+                            );
+                            main_reg = None;
+                            is_reg_state_final =
+                                self.registers.last().unwrap().borrow_mut().get_state()
+                                    == ExecStates::IndexerExtractIndex;
+                            continue;
+                        }
+                    } else if self.registers.last().unwrap().borrow().get_type()
+                        == OperationTypes::NotVal
+                    {
+                        if self.registers.last().unwrap().borrow().get_state()
+                            == ExecStates::NotValStarted
+                        {
+                            self.registers.last().unwrap().borrow_mut().set_state(
+                                ExecStates::NotValFinished,
+                                Box::new(main_reg.clone().unwrap()),
+                            );
+                            main_reg = None;
+                            is_reg_state_final =
+                                self.registers.last().unwrap().borrow_mut().get_state()
+                                    == ExecStates::NotValFinished;
+                            continue;
+                        }
+                    } else if self.registers.last().unwrap().borrow().get_type()
+                        == OperationTypes::CondBrch
+                    {
+                        if self.registers.last().unwrap().borrow().get_state()
+                            == ExecStates::CondBranchStarted
+                        {
+                            let tb = self.extract_i64();
+                            let fb = self.extract_i64();
+                            self.registers.last().unwrap().borrow_mut().set_state(
+                                ExecStates::CondBranchFinished,
+                                Box::new((main_reg.clone().unwrap(), tb, fb)),
+                            );
+                            main_reg = None;
+                            is_reg_state_final =
+                                self.registers.last().unwrap().borrow_mut().get_state()
+                                    == ExecStates::CondBranchFinished;
+                            continue;
+                        }
+                    } else if self.registers.last().unwrap().borrow().get_type()
+                        == OperationTypes::CastOprt
+                    {
+                        if self.registers.last().unwrap().borrow().get_state()
+                            == ExecStates::CastOprtStarted
+                        {
+                            let tt = self.extract_str();
+                            self.registers.last().unwrap().borrow_mut().set_state(
+                                ExecStates::CastOprtFinished,
+                                Box::new((main_reg.clone().unwrap(), tt)),
+                            );
+                            main_reg = None;
+                            is_reg_state_final =
+                                self.registers.last().unwrap().borrow_mut().get_state()
+                                    == ExecStates::CastOprtFinished;
+                            continue;
                         }
                     }
                 } else {
-                    terminate = true;
-                    break;
+                    main_reg = None;
+                }
+            } else if is_reg_state_final {
+                if self.registers.len() > 0 {
+                    if self.registers.last().unwrap().borrow().get_state()
+                        == ExecStates::ArrExprFinished
+                    {
+                        let regs = self.registers.last().unwrap().borrow().get_data().clone();
+                        let items_vec = regs[1].clone();
+                        self.registers.pop();
+                        main_reg = Some(items_vec);
+                        is_reg_state_final = false;
+                        continue;
+                    } else if self.registers.last().unwrap().borrow().get_state()
+                        == ExecStates::ObjExprFinished
+                    {
+                        let regs = self.registers.last().unwrap().borrow().get_data().clone();
+                        let typ_id = regs[0].as_i64();
+                        let props_vec = regs[2].as_array();
+                        let mut props_map = HashMap::new();
+                        for i in (0..props_vec.borrow().data.len()).step_by(2) {
+                            props_map.insert(
+                                props_vec.borrow().data[i].as_string(),
+                                props_vec.borrow().data[i + 1].clone(),
+                            );
+                        }
+                        let result = Val {
+                            typ: 8,
+                            data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(
+                                Object::new(typ_id, ValGroup::new(props_map)),
+                            ))))),
+                        };
+                        self.registers.pop();
+                        main_reg = Some(result);
+                        is_reg_state_final = false;
+                        continue;
+                    } else if self.registers.last().unwrap().borrow().get_state()
+                        == ExecStates::CallFuncFinished
+                    {
+                        let regs = self.registers.last().unwrap().borrow().get_data().clone();
+                        let is_native = regs[1].as_bool();
+                        if !is_native {
+                            let func = regs[0].as_func().clone();
+                            let arg_count = regs[2].as_i32() as usize;
+                            if arg_count != func.borrow().params.len() {
+                                panic!("elpian error: func params count is not correct");
+                            }
+                            let mut args = HashMap::new();
+                            let mut i: usize = 0;
+                            for arg in regs[3].as_array().borrow().data.iter() {
+                                args.insert(func.borrow().params[i].clone(), arg.clone());
+                                i += 1;
+                            }
+                            self.ctx
+                                .memory
+                                .last()
+                                .unwrap()
+                                .borrow_mut()
+                                .update_frozen_pointer(self.pointer);
+                            self.ctx.push_scope_with_args(
+                                "funcBody".to_string(),
+                                func.borrow().start,
+                                func.borrow().start,
+                                func.borrow().end,
+                                args,
+                            );
+                            self.pointer = func.borrow().start;
+                            self.end_at = func.borrow().end;
+                            self.registers.pop();
+                            self.registers
+                                .push(Rc::new(RefCell::new(Box::new(DummyOp::new()))));
+                            is_reg_state_final = false;
+                            continue;
+                        } else {
+                            let mut args = HashMap::new();
+                            let arg1 = regs[3].as_array().borrow().data[0].clone();
+                            // if !self.allowed_api.contains_key(&arg1.as_string().clone()) {
+                            //     panic!("elpian error: this api access is locked");
+                            // }
+                            args.insert("apiName".to_string(), arg1.clone());
+                            let arg2 = regs[3].as_array().borrow().data[1].clone();
+                            args.insert("input".to_string(), arg2.clone());
+                            self.cb_counter += 1;
+                            let cb_id = self.cb_counter;
+                            self.registers.pop();
+                            self.reserved_host_call = Some((
+                                0x02,
+                                cb_id,
+                                Val {
+                                    typ: 9,
+                                    data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(
+                                        Array::new(vec![
+                                            args["apiName"].clone(),
+                                            Val {
+                                                typ: 1,
+                                                data: Rc::new(RefCell::new(Box::new(
+                                                    self.executor_id,
+                                                ))),
+                                            },
+                                            args["input"].clone(),
+                                        ]),
+                                    ))))),
+                                },
+                            ));
+                            break;
+                        }
+                    } else if self.registers.last().unwrap().borrow().get_state()
+                        == ExecStates::ReturnValFinished
+                    {
+                        let data = self.registers.last().unwrap().borrow().get_data();
+                        let returned_val = data[0].clone();
+                        self.registers.pop();
+                        self.pointer = self.end_at;
+                        self.pending_func_result_value = returned_val;
+                        is_reg_state_final = false;
+                        continue;
+                    } else if self.registers.last().unwrap().borrow().get_state()
+                        == ExecStates::DefineVarExtractValue
+                    {
+                        let regs = self.registers.last().unwrap().borrow().get_data().clone();
+                        let var_name = regs[0].as_string();
+                        let var_value = regs[1].clone();
+                        self.registers.pop();
+                        self.define(var_name.clone(), var_value.clone());
+                        is_reg_state_final = false;
+                        continue;
+                    } else if self.registers.last().unwrap().borrow().get_state()
+                        == ExecStates::AssignVarExtractValue
+                    {
+                        let regs = self.registers.last().unwrap().borrow().get_data().clone();
+                        let var_name = regs[0].as_string();
+                        let assign_target_type = regs[1].as_i16();
+                        let data = regs[3].clone();
+                        if assign_target_type == 1 {
+                            self.assign(var_name.clone(), data);
+                        } else if assign_target_type == 2 {
+                            let index = regs[2].clone();
+                            self.pointer += 1;
+                            let indexed = self.ctx.find_val_globally(var_name);
+                            if index.typ == 7 {
+                                if indexed.typ == 8 {
+                                    let obj = indexed.as_object();
+                                    obj.borrow_mut().data.data.insert(index.as_string(), data);
+                                } else {
+                                    panic!(
+                                    "elpian error: non object value can not be indexed by string"
+                                );
+                                }
+                            } else if index.typ >= 1 && index.typ <= 3 {
+                                if indexed.typ == 9 {
+                                    let arr = indexed.as_array();
+                                    if index.typ == 1 {
+                                        arr.borrow_mut().data[index.as_i16() as usize] = data;
+                                    } else if index.typ == 2 {
+                                        arr.borrow_mut().data[index.as_i32() as usize] = data;
+                                    } else {
+                                        arr.borrow_mut().data[index.as_i64() as usize] = data;
+                                    }
+                                } else {
+                                    panic!(
+                                    "elpian error: non object value can not be indexed by string"
+                                );
+                                }
+                            } else {
+                                panic!(
+                                "elpian error: types other than integer and string can not be used to index anything"
+                            );
+                            }
+                        }
+                        self.registers.pop();
+                        is_reg_state_final = false;
+                        continue;
+                    } else if self.registers.last().unwrap().borrow().get_state()
+                        == ExecStates::IfStmtFinished
+                    {
+                        let regs = self.registers.last().unwrap().borrow().get_data().clone();
+                        let has_condition = regs[0].as_bool();
+                        let cond_val = regs[1].clone();
+                        let mut condition = false;
+                        if has_condition {
+                            if cond_val.typ == 6 {
+                                condition = cond_val.as_bool();
+                            }
+                        }
+                        if !has_condition {
+                            let branch_true_start = self.extract_i64() as usize;
+                            let branch_true_end = self.extract_i64() as usize;
+                            let branch_after_start = self.extract_i64() as usize;
+                            self.ctx
+                                .memory
+                                .last()
+                                .unwrap()
+                                .borrow_mut()
+                                .update_frozen_pointer(branch_after_start);
+                            self.ctx.push_scope(
+                                "ifBody".to_string(),
+                                branch_true_start,
+                                branch_true_start,
+                                branch_true_end,
+                            );
+                            self.pointer = branch_true_start;
+                            self.end_at = branch_true_end;
+                        } else {
+                            let branch_true_start = self.extract_i64() as usize;
+                            let branch_true_end = self.extract_i64() as usize;
+                            let branch_next_start = self.extract_i64() as usize;
+                            let branch_after_start = self.extract_i64() as usize;
+                            if condition {
+                                self.ctx
+                                    .memory
+                                    .last()
+                                    .unwrap()
+                                    .borrow_mut()
+                                    .update_frozen_pointer(branch_after_start);
+                                self.ctx.push_scope(
+                                    "ifBody".to_string(),
+                                    branch_true_start,
+                                    branch_true_start,
+                                    branch_true_end,
+                                );
+                                self.pointer = branch_true_start;
+                                self.end_at = branch_true_end;
+                            } else {
+                                self.pointer = branch_next_start;
+                            }
+                        }
+                        self.registers.pop();
+                        is_reg_state_final = false;
+                        continue;
+                    } else if self.registers.last().unwrap().borrow().get_state()
+                        == ExecStates::LoopStmtFinished
+                    {
+                        let regs = self.registers.last().unwrap().borrow().get_data().clone();
+                        let cond_val = regs[0].clone();
+                        let mut condition = false;
+                        if cond_val.typ == 6 {
+                            condition = cond_val.as_bool();
+                        }
+                        let branch_true_start = self.extract_i64() as usize;
+                        let branch_true_end = self.extract_i64() as usize;
+                        let branch_after_start = self.extract_i64() as usize;
+                        if condition {
+                            self.ctx
+                                .memory
+                                .last()
+                                .unwrap()
+                                .borrow_mut()
+                                .update_frozen_pointer(branch_after_start);
+                            self.ctx.push_scope(
+                                "loopBody".to_string(),
+                                branch_true_start,
+                                branch_true_start,
+                                branch_true_end,
+                            );
+                            self.pointer = branch_true_start;
+                            self.end_at = branch_true_end;
+                        } else {
+                            self.pointer = branch_after_start;
+                        }
+                        self.registers.pop();
+                        is_reg_state_final = false;
+                        continue;
+                    } else if self.registers.last().unwrap().borrow().get_state()
+                        == ExecStates::SwitchStmtFinished
+                    {
+                        let regs = self.registers.last().unwrap().borrow().get_data().clone();
+                        let comparing_val = regs[0].clone();
+                        let branch_after_start = regs[1].as_i64() as usize;
+                        let cases = regs[3].as_array();
+                        let mut matched = false;
+                        for case_info in cases.borrow().data.iter() {
+                            let data = case_info.as_object().borrow().data.data.clone();
+                            let case_val = data["val"].clone();
+                            let branch_true_start = data["start"].as_i64() as usize;
+                            let branch_true_end = data["end"].as_i64() as usize;
+                            if self.is_eq(comparing_val.clone(), case_val) {
+                                matched = true;
+                                self.ctx
+                                    .memory
+                                    .last()
+                                    .unwrap()
+                                    .borrow_mut()
+                                    .update_frozen_pointer(branch_after_start);
+                                self.ctx.push_scope(
+                                    "switchBody".to_string(),
+                                    branch_true_start,
+                                    branch_true_start,
+                                    branch_true_end,
+                                );
+                                self.pointer = branch_true_start;
+                                self.end_at = branch_true_end;
+                            }
+                        }
+                        if !matched {
+                            self.pointer = branch_after_start;
+                        }
+                        self.registers.pop();
+                        is_reg_state_final = false;
+                        continue;
+                    } else if self.registers.last().unwrap().borrow().get_state()
+                        == ExecStates::ArithmeticExtractArg2
+                    {
+                        let regs = self.registers.last().unwrap().borrow().get_data().clone();
+                        let op = regs[0].as_i16();
+                        let arg1 = regs[1].clone();
+                        let arg2 = regs[2].clone();
+                        self.registers.pop();
+                        match op {
+                            1 => {
+                                main_reg = Some(Val {
+                                    typ: 6,
+                                    data: Rc::new(RefCell::new(Box::new(self.is_eq(arg1, arg2)))),
+                                });
+                            }
+                            2 => {
+                                main_reg = Some(Val {
+                                    typ: 6,
+                                    data: Rc::new(RefCell::new(Box::new(self.is_ge(arg1, arg2)))),
+                                });
+                            }
+                            3 => {
+                                main_reg = Some(Val {
+                                    typ: 6,
+                                    data: Rc::new(RefCell::new(Box::new(self.is_gee(arg1, arg2)))),
+                                });
+                            }
+                            4 => {
+                                main_reg = Some(Val {
+                                    typ: 6,
+                                    data: Rc::new(RefCell::new(Box::new(self.is_le(arg1, arg2)))),
+                                });
+                            }
+                            5 => {
+                                main_reg = Some(Val {
+                                    typ: 6,
+                                    data: Rc::new(RefCell::new(Box::new(self.is_lee(arg1, arg2)))),
+                                });
+                            }
+                            6 => {
+                                main_reg = Some(Val {
+                                    typ: 6,
+                                    data: Rc::new(RefCell::new(Box::new(!self.is_eq(arg1, arg2)))),
+                                });
+                            }
+                            7 => {
+                                main_reg = Some(self.operate_sum(arg1, arg2));
+                            }
+                            8 => {
+                                main_reg = Some(self.operate_subtract(arg1, arg2));
+                            }
+                            9 => {
+                                main_reg = Some(self.operate_multiply(arg1, arg2));
+                            }
+                            10 => {
+                                main_reg = Some(self.operate_division(arg1, arg2));
+                            }
+                            _ => {}
+                        }
+                        is_reg_state_final = false;
+                        continue;
+                    } else if self.registers.last().unwrap().borrow().get_state()
+                        == ExecStates::IndexerExtractIndex
+                    {
+                        let regs = self.registers.last().unwrap().borrow().get_data().clone();
+                        let indexed = regs[0].clone();
+                        let index = regs[1].clone();
+                        self.registers.pop();
+                        if index.typ == 7 {
+                            if indexed.typ == 8 {
+                                let obj_ref = indexed.as_object();
+                                let obj = obj_ref.borrow();
+                                if let Some(o) = obj.data.data.get(&index.as_string()).clone() {
+                                    main_reg = Some(o.clone());
+                                } else {
+                                    main_reg = Some(Val {
+                                        typ: 0,
+                                        data: Rc::new(RefCell::new(Box::new(0))),
+                                    });
+                                }
+                            } else {
+                                println!(
+                                    "elpian error: non object value can not be indexed by string"
+                                );
+                                main_reg = Some(Val {
+                                    typ: 0,
+                                    data: Rc::new(RefCell::new(Box::new(0))),
+                                });
+                            }
+                        } else if index.typ >= 1 && index.typ <= 3 {
+                            if indexed.typ == 9 {
+                                let arr = indexed.as_array();
+                                if index.typ == 1 {
+                                    if let Some(o) =
+                                        arr.borrow().data.get(index.as_i16() as usize).clone()
+                                    {
+                                        main_reg = Some(o.clone());
+                                    } else {
+                                        main_reg = Some(Val {
+                                            typ: 0,
+                                            data: Rc::new(RefCell::new(Box::new(0))),
+                                        });
+                                    }
+                                } else if index.typ == 2 {
+                                    if let Some(o) =
+                                        arr.borrow().data.get(index.as_i32() as usize).clone()
+                                    {
+                                        main_reg = Some(o.clone());
+                                    } else {
+                                        main_reg = Some(Val {
+                                            typ: 0,
+                                            data: Rc::new(RefCell::new(Box::new(0))),
+                                        });
+                                    }
+                                } else {
+                                    if let Some(o) =
+                                        arr.borrow().data.get(index.as_i64() as usize).clone()
+                                    {
+                                        main_reg = Some(o.clone());
+                                    } else {
+                                        main_reg = Some(Val {
+                                            typ: 0,
+                                            data: Rc::new(RefCell::new(Box::new(0))),
+                                        });
+                                    }
+                                }
+                            } else {
+                                println!(
+                                    "elpian error: non object value can not be indexed by string"
+                                );
+                                main_reg = Some(Val {
+                                    typ: 0,
+                                    data: Rc::new(RefCell::new(Box::new(0))),
+                                });
+                            }
+                        } else {
+                            println!(
+                            "elpian error: types other than integer and string can not be used to index anything"
+                        );
+                            main_reg = Some(Val {
+                                typ: 0,
+                                data: Rc::new(RefCell::new(Box::new(0))),
+                            });
+                        }
+                        is_reg_state_final = false;
+                        continue;
+                    } else if self.registers.last().unwrap().borrow().get_state()
+                        == ExecStates::NotValFinished
+                    {
+                        let data = self.registers.last().unwrap().borrow().get_data();
+                        let val = data[0].clone();
+                        self.registers.pop();
+                        if val.typ == 6 {
+                            main_reg = Some(Val {
+                                typ: 6,
+                                data: Rc::new(RefCell::new(Box::new(!val.as_bool()))),
+                            });
+                        } else {
+                            panic!(
+                            "elpian error: not operator (!) can not be applied to non-bool value"
+                        );
+                        }
+                        is_reg_state_final = false;
+                        continue;
+                    } else if self.registers.last().unwrap().borrow().get_state()
+                        == ExecStates::CondBranchFinished
+                    {
+                        let regs = self.registers.last().unwrap().borrow().get_data().clone();
+                        let condition = regs[0].as_bool();
+                        let branch_true_start = regs[1].as_i64() as usize;
+                        let branch_false_start = regs[2].as_i64() as usize;
+                        if condition {
+                            self.pointer = branch_true_start;
+                        } else {
+                            self.pointer = branch_false_start;
+                        }
+                        self.registers.pop();
+                        is_reg_state_final = false;
+                        continue;
+                    } else if self.registers.last().unwrap().borrow().get_state()
+                        == ExecStates::CastOprtFinished
+                    {
+                        let regs = self.registers.last().unwrap().borrow().get_data().clone();
+                        let data = regs[0].clone();
+                        let target_type = regs[1].as_string();
+                        if target_type == "i16" {
+                            match data.typ {
+                                1 => {
+                                    main_reg = Some(Val {
+                                        typ: 1,
+                                        data: Rc::new(RefCell::new(Box::new(data.as_i16() as i16))),
+                                    });
+                                }
+                                2 => {
+                                    main_reg = Some(Val {
+                                        typ: 1,
+                                        data: Rc::new(RefCell::new(Box::new(data.as_i32() as i16))),
+                                    });
+                                }
+                                3 => {
+                                    main_reg = Some(Val {
+                                        typ: 1,
+                                        data: Rc::new(RefCell::new(Box::new(data.as_i64() as i16))),
+                                    });
+                                }
+                                4 => {
+                                    main_reg = Some(Val {
+                                        typ: 1,
+                                        data: Rc::new(RefCell::new(Box::new(data.as_f32() as i16))),
+                                    });
+                                }
+                                5 => {
+                                    main_reg = Some(Val {
+                                        typ: 1,
+                                        data: Rc::new(RefCell::new(Box::new(data.as_f64() as i16))),
+                                    });
+                                }
+                                6 => {
+                                    main_reg =
+                                        Some(Val {
+                                            typ: 1,
+                                            data: Rc::new(RefCell::new(Box::new(
+                                                if data.as_bool() { 1 } else { 0 } as i16,
+                                            ))),
+                                        });
+                                }
+                                7 => {
+                                    main_reg = Some(Val {
+                                        typ: 1,
+                                        data: Rc::new(RefCell::new(Box::new(
+                                            data.as_string().parse::<i16>().unwrap(),
+                                        ))),
+                                    });
+                                }
+                                _ => {
+                                    main_reg = Some(Val {
+                                        typ: 0,
+                                        data: Rc::new(RefCell::new(Box::new(0))),
+                                    });
+                                }
+                            }
+                        } else if target_type == "i32" {
+                            match data.typ {
+                                1 => {
+                                    main_reg = Some(Val {
+                                        typ: 2,
+                                        data: Rc::new(RefCell::new(Box::new(data.as_i16() as i32))),
+                                    });
+                                }
+                                2 => {
+                                    main_reg = Some(Val {
+                                        typ: 2,
+                                        data: Rc::new(RefCell::new(Box::new(data.as_i32() as i32))),
+                                    });
+                                }
+                                3 => {
+                                    main_reg = Some(Val {
+                                        typ: 2,
+                                        data: Rc::new(RefCell::new(Box::new(data.as_i64() as i32))),
+                                    });
+                                }
+                                4 => {
+                                    main_reg = Some(Val {
+                                        typ: 2,
+                                        data: Rc::new(RefCell::new(Box::new(data.as_f32() as i32))),
+                                    });
+                                }
+                                5 => {
+                                    main_reg = Some(Val {
+                                        typ: 2,
+                                        data: Rc::new(RefCell::new(Box::new(data.as_f64() as i32))),
+                                    });
+                                }
+                                6 => {
+                                    main_reg =
+                                        Some(Val {
+                                            typ: 2,
+                                            data: Rc::new(RefCell::new(Box::new(
+                                                if data.as_bool() { 1 } else { 0 } as i32,
+                                            ))),
+                                        });
+                                }
+                                7 => {
+                                    main_reg = Some(Val {
+                                        typ: 2,
+                                        data: Rc::new(RefCell::new(Box::new(
+                                            data.as_string().parse::<i32>().unwrap(),
+                                        ))),
+                                    });
+                                }
+                                _ => {
+                                    main_reg = Some(Val {
+                                        typ: 0,
+                                        data: Rc::new(RefCell::new(Box::new(0))),
+                                    });
+                                }
+                            }
+                        } else if target_type == "i64" {
+                            match data.typ {
+                                1 => {
+                                    main_reg = Some(Val {
+                                        typ: 3,
+                                        data: Rc::new(RefCell::new(Box::new(data.as_i16() as i64))),
+                                    });
+                                }
+                                2 => {
+                                    main_reg = Some(Val {
+                                        typ: 3,
+                                        data: Rc::new(RefCell::new(Box::new(data.as_i32() as i64))),
+                                    });
+                                }
+                                3 => {
+                                    main_reg = Some(Val {
+                                        typ: 3,
+                                        data: Rc::new(RefCell::new(Box::new(data.as_i64() as i64))),
+                                    });
+                                }
+                                4 => {
+                                    main_reg = Some(Val {
+                                        typ: 3,
+                                        data: Rc::new(RefCell::new(Box::new(data.as_f32() as i64))),
+                                    });
+                                }
+                                5 => {
+                                    main_reg = Some(Val {
+                                        typ: 3,
+                                        data: Rc::new(RefCell::new(Box::new(data.as_f64() as i64))),
+                                    });
+                                }
+                                6 => {
+                                    main_reg =
+                                        Some(Val {
+                                            typ: 3,
+                                            data: Rc::new(RefCell::new(Box::new(
+                                                if data.as_bool() { 1 } else { 0 } as i64,
+                                            ))),
+                                        });
+                                }
+                                7 => {
+                                    main_reg = Some(Val {
+                                        typ: 3,
+                                        data: Rc::new(RefCell::new(Box::new(
+                                            data.as_string().parse::<i64>().unwrap(),
+                                        ))),
+                                    });
+                                }
+                                _ => {
+                                    main_reg = Some(Val {
+                                        typ: 0,
+                                        data: Rc::new(RefCell::new(Box::new(0))),
+                                    });
+                                }
+                            }
+                        } else if target_type == "f32" {
+                            match data.typ {
+                                1 => {
+                                    main_reg = Some(Val {
+                                        typ: 4,
+                                        data: Rc::new(RefCell::new(Box::new(data.as_i16() as f32))),
+                                    });
+                                }
+                                2 => {
+                                    main_reg = Some(Val {
+                                        typ: 4,
+                                        data: Rc::new(RefCell::new(Box::new(data.as_i32() as f32))),
+                                    });
+                                }
+                                3 => {
+                                    main_reg = Some(Val {
+                                        typ: 4,
+                                        data: Rc::new(RefCell::new(Box::new(data.as_i64() as f32))),
+                                    });
+                                }
+                                4 => {
+                                    main_reg = Some(Val {
+                                        typ: 4,
+                                        data: Rc::new(RefCell::new(Box::new(data.as_f32() as f32))),
+                                    });
+                                }
+                                5 => {
+                                    main_reg = Some(Val {
+                                        typ: 4,
+                                        data: Rc::new(RefCell::new(Box::new(data.as_f64() as f32))),
+                                    });
+                                }
+                                6 => {
+                                    main_reg =
+                                        Some(Val {
+                                            typ: 4,
+                                            data: Rc::new(RefCell::new(Box::new(
+                                                if data.as_bool() { 1 } else { 0 } as f32,
+                                            ))),
+                                        });
+                                }
+                                7 => {
+                                    main_reg = Some(Val {
+                                        typ: 4,
+                                        data: Rc::new(RefCell::new(Box::new(
+                                            data.as_string().parse::<f32>().unwrap(),
+                                        ))),
+                                    });
+                                }
+                                _ => {
+                                    main_reg = Some(Val {
+                                        typ: 0,
+                                        data: Rc::new(RefCell::new(Box::new(0))),
+                                    });
+                                }
+                            }
+                        } else if target_type == "f64" {
+                            match data.typ {
+                                1 => {
+                                    main_reg = Some(Val {
+                                        typ: 5,
+                                        data: Rc::new(RefCell::new(Box::new(data.as_i16() as f64))),
+                                    });
+                                }
+                                2 => {
+                                    main_reg = Some(Val {
+                                        typ: 5,
+                                        data: Rc::new(RefCell::new(Box::new(data.as_i32() as f64))),
+                                    });
+                                }
+                                3 => {
+                                    main_reg = Some(Val {
+                                        typ: 5,
+                                        data: Rc::new(RefCell::new(Box::new(data.as_i64() as f64))),
+                                    });
+                                }
+                                4 => {
+                                    main_reg = Some(Val {
+                                        typ: 5,
+                                        data: Rc::new(RefCell::new(Box::new(data.as_f32() as f64))),
+                                    });
+                                }
+                                5 => {
+                                    main_reg = Some(Val {
+                                        typ: 5,
+                                        data: Rc::new(RefCell::new(Box::new(data.as_f64() as f64))),
+                                    });
+                                }
+                                6 => {
+                                    main_reg =
+                                        Some(Val {
+                                            typ: 5,
+                                            data: Rc::new(RefCell::new(Box::new(
+                                                if data.as_bool() { 1 } else { 0 } as f64,
+                                            ))),
+                                        });
+                                }
+                                7 => {
+                                    main_reg = Some(Val {
+                                        typ: 5,
+                                        data: Rc::new(RefCell::new(Box::new(
+                                            data.as_string().parse::<f64>().unwrap(),
+                                        ))),
+                                    });
+                                }
+                                _ => {
+                                    main_reg = Some(Val {
+                                        typ: 0,
+                                        data: Rc::new(RefCell::new(Box::new(0))),
+                                    });
+                                }
+                            }
+                        } else if target_type == "bool" {
+                            match data.typ {
+                                1 => {
+                                    main_reg = Some(Val {
+                                        typ: 6,
+                                        data: Rc::new(RefCell::new(Box::new(data.as_i16() > 0))),
+                                    });
+                                }
+                                2 => {
+                                    main_reg = Some(Val {
+                                        typ: 6,
+                                        data: Rc::new(RefCell::new(Box::new(data.as_i32() > 0))),
+                                    });
+                                }
+                                3 => {
+                                    main_reg = Some(Val {
+                                        typ: 6,
+                                        data: Rc::new(RefCell::new(Box::new(data.as_i64() > 0))),
+                                    });
+                                }
+                                4 => {
+                                    main_reg = Some(Val {
+                                        typ: 6,
+                                        data: Rc::new(RefCell::new(Box::new(data.as_f32() > 0.0))),
+                                    });
+                                }
+                                5 => {
+                                    main_reg = Some(Val {
+                                        typ: 6,
+                                        data: Rc::new(RefCell::new(Box::new(data.as_f64() > 0.0))),
+                                    });
+                                }
+                                6 => {
+                                    main_reg = Some(Val {
+                                        typ: 6,
+                                        data: Rc::new(RefCell::new(Box::new(data.as_bool()))),
+                                    });
+                                }
+                                7 => {
+                                    main_reg = Some(Val {
+                                        typ: 6,
+                                        data: Rc::new(RefCell::new(Box::new(
+                                            data.as_string() == "true",
+                                        ))),
+                                    });
+                                }
+                                _ => {
+                                    main_reg = Some(Val {
+                                        typ: 0,
+                                        data: Rc::new(RefCell::new(Box::new(0))),
+                                    });
+                                }
+                            }
+                        } else if target_type == "string" {
+                            match data.typ {
+                                1 => {
+                                    main_reg = Some(Val {
+                                        typ: 7,
+                                        data: Rc::new(RefCell::new(Box::new(
+                                            data.as_i16().to_string(),
+                                        ))),
+                                    });
+                                }
+                                2 => {
+                                    main_reg = Some(Val {
+                                        typ: 7,
+                                        data: Rc::new(RefCell::new(Box::new(
+                                            data.as_i32().to_string(),
+                                        ))),
+                                    });
+                                }
+                                3 => {
+                                    main_reg = Some(Val {
+                                        typ: 7,
+                                        data: Rc::new(RefCell::new(Box::new(
+                                            data.as_i64().to_string(),
+                                        ))),
+                                    });
+                                }
+                                4 => {
+                                    main_reg = Some(Val {
+                                        typ: 7,
+                                        data: Rc::new(RefCell::new(Box::new(
+                                            data.as_f32().to_string(),
+                                        ))),
+                                    });
+                                }
+                                5 => {
+                                    main_reg = Some(Val {
+                                        typ: 7,
+                                        data: Rc::new(RefCell::new(Box::new(
+                                            data.as_f64().to_string(),
+                                        ))),
+                                    });
+                                }
+                                6 => {
+                                    main_reg = Some(Val {
+                                        typ: 7,
+                                        data: Rc::new(RefCell::new(Box::new(
+                                            data.as_bool().to_string(),
+                                        ))),
+                                    });
+                                }
+                                7 => {
+                                    main_reg = Some(Val {
+                                        typ: 7,
+                                        data: Rc::new(RefCell::new(Box::new(data.as_string()))),
+                                    });
+                                }
+                                8 => {
+                                    main_reg = Some(Val {
+                                        typ: 7,
+                                        data: Rc::new(RefCell::new(Box::new(data.stringify()))),
+                                    });
+                                }
+                                9 => {
+                                    main_reg = Some(Val {
+                                        typ: 7,
+                                        data: Rc::new(RefCell::new(Box::new(data.stringify()))),
+                                    });
+                                }
+                                _ => {
+                                    main_reg = Some(Val {
+                                        typ: 0,
+                                        data: Rc::new(RefCell::new(Box::new(0))),
+                                    });
+                                }
+                            }
+                        }
+                        self.registers.pop();
+                        is_reg_state_final = false;
+                        continue;
+                    }
+                } else {
+                    main_reg = None;
                 }
             }
-            if terminate {
-                break;
-            }
-            if ce {
-                ce = false;
-                if self.registers.len() > 0 {
-                    if self.forward_state(Some(host_call_result.clone())) {
+            let mut terminate = false;
+            if self.pointer == self.end_at {
+                while self.pointer == self.end_at {
+                    if self.ctx.memory.len() == 1 {
+                        terminate = true;
+                        break;
+                    }
+                    self.ctx.pop_scope();
+                    if is_partial_exec && (self.ctx.memory.len() == 1) {
+                        return self.pending_func_result_value.clone();
+                    }
+                    if self.registers.len() > 0
+                        && self.registers.last().unwrap().borrow().get_type()
+                            == OperationTypes::Dummy
+                    {
+                        self.registers.pop();
+                    }
+                    if self.ctx.memory.len() > 0 {
+                        self.pointer = self.ctx.memory.last().unwrap().borrow().frozen_pointer;
+                        self.end_at = self.ctx.memory.last().unwrap().borrow().frozen_end;
+                        if self.pending_func_result_value.typ != 254 {
+                            let returned_val = self.pending_func_result_value.clone();
+                            self.pending_func_result_value = Val {
+                                typ: 254,
+                                data: Rc::new(RefCell::new(Box::new(0))),
+                            };
+                            while self.ctx.memory.last().unwrap().borrow().tag != "funcBody" {
+                                self.ctx.pop_scope();
+                            }
+                            if self.registers.len() > 0 {
+                                main_reg = Some(returned_val);
+                                is_reg_state_final = false;
+                                break;
+                            }
+                        }
+                    } else {
+                        terminate = true;
                         break;
                     }
                 }
+                if terminate {
+                    break;
+                }
+                continue;
             }
             let unit: u8 = self.program[self.pointer];
             self.pointer += 1;
@@ -4067,6 +4766,12 @@ impl Executor {
                     self.registers
                         .push(Rc::new(RefCell::new(Box::new(state_holder))));
                 }
+                // cast operation
+                0xfd => {
+                    let state_holder = CastOp::new();
+                    self.registers
+                        .push(Rc::new(RefCell::new(Box::new(state_holder))));
+                }
                 // ----------------------------------
                 // program operators:
                 // data indexer
@@ -4146,9 +4851,9 @@ impl Executor {
                                 data: Rc::new(RefCell::new(Box::new(true))),
                             }),
                         );
-                        if self.forward_state(None) {
-                            break;
-                        }
+                        main_reg = None;
+                        is_reg_state_final = true;
+                        continue;
                     }
                 }
                 // loop statement
@@ -4174,7 +4879,7 @@ impl Executor {
                     }
                     let func_start = self.extract_i64() as usize;
                     let func_end = self.extract_i64() as usize;
-                    let func = Function::new(func_start, func_end, param_names);
+                    let func = Function::new(func_name.clone(), func_start, func_end, param_names);
                     self.define(
                         func_name.clone(),
                         Val {
@@ -4197,18 +4902,25 @@ impl Executor {
                     let dest = self.extract_i64() as usize;
                     self.pointer = dest;
                 }
+                // conditional branch
+                0x16 => {
+                    let state_holder = CondBranch::new();
+                    self.registers
+                        .push(Rc::new(RefCell::new(Box::new(state_holder))));
+                }
                 // ----------------------------------
                 // expressions
                 // data expressions
                 1 | 2 | 3 | 4 | 5 | 6 | 7 | 10 | 11 => {
+                    println!("{}", unit);
                     self.pointer -= 1;
                     let val = self.extract_val();
-                    if self.forward_state(Some(val)) {
-                        break;
-                    }
+                    main_reg = Some(val);
+                    continue;
                 }
                 // object expressions
                 8 => {
+                    println!("{}", unit);
                     let typ = self.extract_i64();
                     let props_len = self.extract_i32();
                     self.registers
@@ -4218,6 +4930,13 @@ impl Executor {
                         .unwrap()
                         .borrow_mut()
                         .set_state(ExecStates::ObjExprExtractInfo, Box::new((typ, props_len)));
+                    if self.registers.last().unwrap().borrow().get_state()
+                        == ExecStates::ObjExprFinished
+                    {
+                        main_reg = None;
+                        is_reg_state_final = true;
+                        continue;
+                    }
                 }
                 // array expressions
                 9 => {
@@ -4229,6 +4948,13 @@ impl Executor {
                         .unwrap()
                         .borrow_mut()
                         .set_state(ExecStates::ArrExprExtractInfo, Box::new(arr_len));
+                    if self.registers.last().unwrap().borrow().get_state()
+                        == ExecStates::ArrExprFinished
+                    {
+                        main_reg = None;
+                        is_reg_state_final = true;
+                        continue;
+                    }
                 }
                 // ----------------------------------
                 // No-Op

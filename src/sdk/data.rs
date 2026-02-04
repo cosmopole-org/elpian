@@ -1,7 +1,6 @@
 use std::any::Any;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::ops::Deref;
 use std::rc::Rc;
 
 #[derive(Clone, Debug)]
@@ -22,13 +21,13 @@ impl Val {
             2 => self.as_i32().to_string(),
             3 => self.as_i64().to_string(),
             4 => self.as_f32().to_string(),
-            5 => self.as_i64().to_string(),
+            5 => self.as_f64().to_string(),
             6 => self.as_bool().to_string(),
-            7 => format!("\"{}\"", self.as_string()),
+            7 => serde_json::json!(self.as_string()).to_string(),
             8 => self.as_object().borrow().stringify(),
             9 => self.as_array().borrow().stringify(),
-            10 => "[Function]".to_string(),
-            _ => "undefined".to_string(),
+            10 => format!("\"{}\"", self.as_func().borrow().name.clone()),
+            _ => "\"[undefined]\"".to_string(),
         };
     }
     fn clone_data(&self) -> Self {
@@ -83,38 +82,38 @@ impl Val {
     }
     pub fn as_i16(&self) -> i16 {
         let a = self.data.clone();
-        let b = a.deref();
-        b.borrow().downcast_ref::<i16>().unwrap().clone()
+        let x = a.borrow().downcast_ref::<i16>().unwrap().clone();
+        x
     }
     pub fn as_i32(&self) -> i32 {
         let a = self.data.clone();
-        let b = a.deref();
-        b.borrow().downcast_ref::<i32>().unwrap().clone()
+        let x = a.borrow().downcast_ref::<i32>().unwrap().clone();
+        x
     }
     pub fn as_i64(&self) -> i64 {
         let a = self.data.clone();
-        let b = a.deref();
-        b.borrow().downcast_ref::<i64>().unwrap().clone()
+        let x = a.borrow().downcast_ref::<i64>().unwrap().clone();
+        x
     }
     pub fn as_f32(&self) -> f32 {
         let a = self.data.clone();
-        let b = a.deref();
-        b.borrow().downcast_ref::<f32>().unwrap().clone()
+        let x = a.borrow().downcast_ref::<f32>().unwrap().clone();
+        x
     }
     pub fn as_f64(&self) -> f64 {
         let a = self.data.clone();
-        let b = a.deref();
-        b.borrow().downcast_ref::<f64>().unwrap().clone()
+        let x = a.borrow().downcast_ref::<f64>().unwrap().clone();
+        x
     }
     pub fn as_bool(&self) -> bool {
         let a = self.data.clone();
-        let b = a.deref();
-        b.borrow().downcast_ref::<bool>().unwrap().clone()
+        let x = a.borrow().downcast_ref::<bool>().unwrap().clone();
+        x
     }
     pub fn as_string(&self) -> String {
         let a = self.data.clone();
-        let b = a.deref();
-        b.borrow().downcast_ref::<String>().unwrap().clone()
+        let x = a.borrow().downcast_ref::<String>().unwrap().clone();
+        x
     }
     pub fn as_object(&self) -> Rc<RefCell<Object>> {
         let a = self.data.clone();
@@ -164,9 +163,9 @@ impl ValGroup {
         let mut index = 0;
         for (k, v) in self.data.iter() {
             if index > 0 {
-                result = format!("{}, {}: {}", result, k, v.stringify());
+                result = format!("{}, \"{}\": {}", result, k, v.stringify());
             } else {
-                result = format!("{} {}: {}", result, k, v.stringify());
+                result = format!("{} \"{}\": {}", result, k, v.stringify());
             }
             index += 1;
         }
@@ -238,16 +237,17 @@ impl Array {
 
 #[derive(Clone, Debug)]
 pub struct Function {
+    pub name: String,
     pub start: usize,
     pub end: usize,
     pub params: Vec<String>,
 }
 
 impl Function {
-    pub fn new(start: usize, end: usize, params: Vec<String>) -> Self {
-        Function { start, end, params }
+    pub fn new(name: String, start: usize, end: usize, params: Vec<String>) -> Self {
+        Function { name, start, end, params }
     }
     pub fn clone_func(&self) -> Self {
-        return Function::new(self.start, self.end, self.params.clone());
+        return Function::new(self.name.clone(), self.start, self.end, self.params.clone());
     }
 }

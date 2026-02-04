@@ -3,22 +3,25 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use crate::sdk::data::{Val, ValGroup};
 
 pub struct Scope {
+    pub tag: String,
     pub memory: Rc<RefCell<ValGroup>>,
     pub frozen_start: usize,
     pub frozen_end: usize,
     pub frozen_pointer: usize,
 }
 impl Scope {
-    pub fn new(initial_pointer: usize, frozen_start: usize, frozen_end: usize) -> Self {
+    pub fn new(tag: String, initial_pointer: usize, frozen_start: usize, frozen_end: usize) -> Self {
         Scope {
+            tag,
             memory: Rc::new(RefCell::new(ValGroup::new_empty())),
             frozen_pointer: initial_pointer,
             frozen_start: frozen_start,
             frozen_end: frozen_end,
         }
     }
-    pub fn new_with_args(initial_pointer: usize, frozen_start: usize, frozen_end: usize, args: HashMap<String, Val>) -> Self {
+    pub fn new_with_args(tag: String, initial_pointer: usize, frozen_start: usize, frozen_end: usize, args: HashMap<String, Val>) -> Self {
         Scope {
+            tag,
             memory: Rc::new(RefCell::new(ValGroup::new(args))),
             frozen_pointer: initial_pointer,
             frozen_start: frozen_start,
@@ -66,13 +69,13 @@ impl Context {
             memory: vec![],
         }
     }
-    pub fn push_scope(&mut self, inital_pointer: usize, frozen_start: usize, frozen_end: usize) {
+    pub fn push_scope(&mut self, tag: String, inital_pointer: usize, frozen_start: usize, frozen_end: usize) {
         self.memory
-            .push(Rc::new(RefCell::new(Scope::new(inital_pointer, frozen_start, frozen_end))));
+            .push(Rc::new(RefCell::new(Scope::new(tag, inital_pointer, frozen_start, frozen_end))));
     }
-    pub fn push_scope_with_args(&mut self, inital_pointer: usize, frozen_start: usize, frozen_end: usize, args: HashMap<String, Val>) {
+    pub fn push_scope_with_args(&mut self, tag: String, inital_pointer: usize, frozen_start: usize, frozen_end: usize, args: HashMap<String, Val>) {
         self.memory
-            .push(Rc::new(RefCell::new(Scope::new_with_args(inital_pointer, frozen_start, frozen_end, args))));
+            .push(Rc::new(RefCell::new(Scope::new_with_args(tag, inital_pointer, frozen_start, frozen_end, args))));
     }
     pub fn pop_scope(&mut self) {
         self.memory.pop();
