@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use bevy::prelude::*;
 use crate::graphics::plugin::{JsonScene, JsonScenePlugin};
 

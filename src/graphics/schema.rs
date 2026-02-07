@@ -21,6 +21,46 @@ pub enum JsonNode {
     TextInput(TextInputNode),
     #[serde(rename = "progressbar")]
     ProgressBar(ProgressBarNode),
+    
+    // Material Design UI Elements
+    #[serde(rename = "fab")]
+    FloatingActionButton(FABNode),
+    #[serde(rename = "card")]
+    Card(CardNode),
+    #[serde(rename = "chip")]
+    Chip(ChipNode),
+    #[serde(rename = "appbar")]
+    AppBar(AppBarNode),
+    #[serde(rename = "dialog")]
+    Dialog(DialogNode),
+    #[serde(rename = "menu")]
+    Menu(MenuNode),
+    #[serde(rename = "bottomsheet")]
+    BottomSheet(BottomSheetNode),
+    #[serde(rename = "snackbar")]
+    Snackbar(SnackbarNode),
+    #[serde(rename = "switch")]
+    Switch(SwitchNode),
+    #[serde(rename = "tabs")]
+    Tabs(TabsNode),
+    #[serde(rename = "badge")]
+    Badge(BadgeNode),
+    #[serde(rename = "tooltip")]
+    Tooltip(TooltipNode),
+    #[serde(rename = "rating")]
+    Rating(RatingNode),
+    #[serde(rename = "segment")]
+    SegmentedButton(SegmentedButtonNode),
+    #[serde(rename = "iconbutton")]
+    IconButton(IconButtonNode),
+    #[serde(rename = "divider")]
+    Divider(DividerNode),
+    #[serde(rename = "list")]
+    List(ListNode),
+    #[serde(rename = "drawer")]
+    Drawer(DrawerNode),
+    
+    // 3D World Elements
     #[serde(rename = "mesh3d")]
     Mesh3D(Mesh3DNode),
     #[serde(rename = "light")]
@@ -31,6 +71,22 @@ pub enum JsonNode {
     Audio(AudioNode),
     #[serde(rename = "particles")]
     Particles(ParticleNode),
+    #[serde(rename = "terrain")]
+    Terrain(TerrainNode),
+    #[serde(rename = "skybox")]
+    Skybox(SkyboxNode),
+    #[serde(rename = "foliage")]
+    Foliage(FoliageNode),
+    #[serde(rename = "decal")]
+    Decal(DecalNode),
+    #[serde(rename = "billboard")]
+    Billboard(BillboardNode),
+    #[serde(rename = "water")]
+    Water(WaterNode),
+    #[serde(rename = "rigidbody")]
+    RigidBody(RigidBodyNode),
+    #[serde(rename = "environment")]
+    Environment(EnvironmentNode),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,6 +129,10 @@ pub struct ButtonNode {
     pub hover_color: Option<ColorDef>,
     #[serde(default)]
     pub pressed_color: Option<ColorDef>,
+    #[serde(default)]
+    pub glass: bool,
+    #[serde(default)]
+    pub glass_opacity: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -302,6 +362,24 @@ pub struct StyleDef {
     pub left: Option<DimensionDef>,
     #[serde(default)]
     pub right: Option<DimensionDef>,
+    
+    // Material Design properties
+    #[serde(default)]
+    pub elevation: Option<u32>,
+    #[serde(default)]
+    pub corner_radius: Option<f32>,
+    #[serde(default)]
+    pub shadow_color: Option<ColorDef>,
+    #[serde(default)]
+    pub border_color: Option<ColorDef>,
+    #[serde(default)]
+    pub border_width: Option<f32>,
+    #[serde(default)]
+    pub opacity: Option<f32>,
+    #[serde(default)]
+    pub rotation: Option<f32>,
+    #[serde(default)]
+    pub scale: Option<f32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -392,6 +470,11 @@ pub enum MeshType {
     Plane { size: f32 },
     Capsule { radius: f32, depth: f32 },
     Cylinder { radius: f32, height: f32 },
+    Cone { radius: f32, height: f32 },
+    Torus { radius: f32, tube_radius: f32 },
+    Icosphere { radius: f32, subdivisions: u32 },
+    UvSphere { radius: f32, sectors: u32, stacks: u32 },
+    Grid { width: u32, height: u32, spacing: f32 },
     File { path: String }, // Load from .obj, .gltf, etc.
 }
 
@@ -413,6 +496,27 @@ pub struct MaterialDef {
     pub metallic_roughness_texture: Option<String>,
     #[serde(default)]
     pub normal_map_texture: Option<String>,
+    
+    // Additional PBR properties
+    #[serde(default)]
+    pub ambient_occlusion_texture: Option<String>,
+    #[serde(default)]
+    pub height_map_texture: Option<String>,
+    #[serde(default)]
+    pub parallax_depth: Option<f32>,
+    #[serde(default)]
+    pub alpha_mode: Option<AlphaMode>,
+    #[serde(default)]
+    pub double_sided: bool,
+    #[serde(default)]
+    pub ior: Option<f32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AlphaMode {
+    Opaque,
+    Mask,
+    Blend,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -511,6 +615,686 @@ pub enum LightType {
 pub enum CameraType {
     Perspective,
     Orthographic,
+}
+
+// ===== MATERIAL DESIGN UI ELEMENTS =====
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FABNode {
+    #[serde(default)]
+    pub id: Option<String>,
+    pub icon: String,
+    #[serde(default)]
+    pub action: Option<String>,
+    #[serde(default)]
+    pub style: StyleDef,
+    #[serde(default)]
+    pub fab_type: FABType,
+    #[serde(default)]
+    pub color: Option<ColorDef>,
+    #[serde(default)]
+    pub elevation: u32,
+    #[serde(default)]
+    pub glass: bool,
+    #[serde(default)]
+    pub glass_opacity: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FABType {
+    FAB,
+    ExtendedFAB,
+    Small,
+    Large,
+}
+
+impl Default for FABType {
+    fn default() -> Self {
+        FABType::FAB
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CardNode {
+    #[serde(default)]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub children: Vec<JsonNode>,
+    #[serde(default)]
+    pub style: StyleDef,
+    #[serde(default)]
+    pub elevation: u32,
+    #[serde(default)]
+    pub corner_radius: f32,
+    #[serde(default)]
+    pub background_color: Option<ColorDef>,
+    #[serde(default)]
+    pub on_click: Option<String>,
+    #[serde(default)]
+    pub outlined: bool,
+    #[serde(default)]
+    pub glass: bool,
+    #[serde(default)]
+    pub glass_opacity: f32,
+}
+
+impl Default for CardNode {
+    fn default() -> Self {
+        Self {
+            id: None,
+            children: Vec::new(),
+            style: StyleDef::default(),
+            elevation: 1,
+            corner_radius: 12.0,
+            background_color: None,
+            on_click: None,
+            outlined: false,
+            glass: false,
+            glass_opacity: 0.12,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChipNode {
+    #[serde(default)]
+    pub id: Option<String>,
+    pub label: String,
+    #[serde(default)]
+    pub style: StyleDef,
+    #[serde(default)]
+    pub chip_type: ChipType,
+    #[serde(default)]
+    pub icon: Option<String>,
+    #[serde(default)]
+    pub selected: bool,
+    #[serde(default)]
+    pub color: Option<ColorDef>,
+    #[serde(default)]
+    pub on_click: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ChipType {
+    Input,
+    Filter,
+    Suggestion,
+    Assist,
+}
+
+impl Default for ChipType {
+    fn default() -> Self {
+        ChipType::Assist
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppBarNode {
+    #[serde(default)]
+    pub id: Option<String>,
+    pub title: String,
+    #[serde(default)]
+    pub style: StyleDef,
+    #[serde(default)]
+    pub app_bar_type: AppBarType,
+    #[serde(default)]
+    pub navigation_icon: Option<String>,
+    #[serde(default)]
+    pub actions: Vec<AppBarAction>,
+    #[serde(default)]
+    pub background_color: Option<ColorDef>,
+    #[serde(default)]
+    pub elevation: u32,
+    #[serde(default)]
+    pub glass: bool,
+    #[serde(default)]
+    pub glass_opacity: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AppBarType {
+    Center,
+    Small,
+    Medium,
+    Large,
+}
+
+impl Default for AppBarType {
+    fn default() -> Self {
+        AppBarType::Center
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppBarAction {
+    pub icon: String,
+    #[serde(default)]
+    pub tooltip: String,
+    #[serde(default)]
+    pub action: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DialogNode {
+    #[serde(default)]
+    pub id: Option<String>,
+    pub title: String,
+    #[serde(default)]
+    pub content: Vec<JsonNode>,
+    #[serde(default)]
+    pub actions: Vec<DialogAction>,
+    #[serde(default)]
+    pub style: StyleDef,
+    #[serde(default)]
+    pub dismissible: bool,
+    #[serde(default)]
+    pub glass: bool,
+    #[serde(default)]
+    pub glass_opacity: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DialogAction {
+    pub label: String,
+    #[serde(default)]
+    pub action: Option<String>,
+    #[serde(default)]
+    pub is_primary: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MenuNode {
+    #[serde(default)]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub items: Vec<MenuItem>,
+    #[serde(default)]
+    pub style: StyleDef,
+    #[serde(default)]
+    pub elevation: u32,
+    #[serde(default)]
+    pub glass: bool,
+    #[serde(default)]
+    pub glass_opacity: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MenuItem {
+    pub label: String,
+    #[serde(default)]
+    pub icon: Option<String>,
+    #[serde(default)]
+    pub action: Option<String>,
+    #[serde(default)]
+    pub sub_items: Vec<MenuItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BottomSheetNode {
+    #[serde(default)]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub content: Vec<JsonNode>,
+    #[serde(default)]
+    pub style: StyleDef,
+    #[serde(default)]
+    pub height: Option<f32>,
+    #[serde(default)]
+    pub dismissible: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnackbarNode {
+    #[serde(default)]
+    pub id: Option<String>,
+    pub message: String,
+    #[serde(default)]
+    pub action: Option<String>,
+    #[serde(default)]
+    pub duration_ms: u32,
+    #[serde(default)]
+    pub style: StyleDef,
+    #[serde(default)]
+    pub glass: bool,
+    #[serde(default)]
+    pub glass_opacity: f32,
+}
+
+impl Default for SnackbarNode {
+    fn default() -> Self {
+        Self {
+            id: None,
+            message: String::new(),
+            action: None,
+            duration_ms: 4000,
+            style: StyleDef::default(),
+            glass: false,
+            glass_opacity: 0.35,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SwitchNode {
+    #[serde(default)]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub style: StyleDef,
+    #[serde(default)]
+    pub on_change: Option<String>,
+    #[serde(default)]
+    pub icon_enabled: Option<String>,
+    #[serde(default)]
+    pub icon_disabled: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TabsNode {
+    #[serde(default)]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub tabs: Vec<TabItem>,
+    #[serde(default)]
+    pub style: StyleDef,
+    #[serde(default)]
+    pub selected_index: usize,
+    #[serde(default)]
+    pub on_change: Option<String>,
+    #[serde(default)]
+    pub tab_type: TabType,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TabItem {
+    pub label: String,
+    #[serde(default)]
+    pub icon: Option<String>,
+    #[serde(default)]
+    pub content: Vec<JsonNode>,
+    #[serde(default)]
+    pub badge_count: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TabType {
+    Fixed,
+    Scrollable,
+}
+
+impl Default for TabType {
+    fn default() -> Self {
+        TabType::Fixed
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BadgeNode {
+    #[serde(default)]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub count: Option<u32>,
+    pub label: String,
+    #[serde(default)]
+    pub style: StyleDef,
+    #[serde(default)]
+    pub color: Option<ColorDef>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TooltipNode {
+    #[serde(default)]
+    pub id: Option<String>,
+    pub message: String,
+    #[serde(default)]
+    pub position: TooltipPosition,
+    #[serde(default)]
+    pub style: StyleDef,
+    #[serde(default)]
+    pub glass: bool,
+    #[serde(default)]
+    pub glass_opacity: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TooltipPosition {
+    Top,
+    Bottom,
+    Left,
+    Right,
+}
+
+impl Default for TooltipPosition {
+    fn default() -> Self {
+        TooltipPosition::Top
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RatingNode {
+    #[serde(default)]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub value: f32,
+    #[serde(default)]
+    pub max: u32,
+    #[serde(default)]
+    pub style: StyleDef,
+    #[serde(default)]
+    pub on_change: Option<String>,
+    #[serde(default)]
+    pub read_only: bool,
+}
+
+impl Default for RatingNode {
+    fn default() -> Self {
+        Self {
+            id: None,
+            value: 0.0,
+            max: 5,
+            style: StyleDef::default(),
+            on_change: None,
+            read_only: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SegmentedButtonNode {
+    #[serde(default)]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub options: Vec<SegmentOption>,
+    #[serde(default)]
+    pub selected_index: usize,
+    #[serde(default)]
+    pub style: StyleDef,
+    #[serde(default)]
+    pub on_change: Option<String>,
+    #[serde(default)]
+    pub multiple_selection: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SegmentOption {
+    pub label: String,
+    #[serde(default)]
+    pub icon: Option<String>,
+    #[serde(default)]
+    pub selected: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IconButtonNode {
+    #[serde(default)]
+    pub id: Option<String>,
+    pub icon: String,
+    #[serde(default)]
+    pub style: StyleDef,
+    #[serde(default)]
+    pub action: Option<String>,
+    #[serde(default)]
+    pub tooltip: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DividerNode {
+    #[serde(default)]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub style: StyleDef,
+    #[serde(default)]
+    pub thickness: f32,
+    #[serde(default)]
+    pub color: Option<ColorDef>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListNode {
+    #[serde(default)]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub items: Vec<JsonNode>,
+    #[serde(default)]
+    pub style: StyleDef,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DrawerNode {
+    #[serde(default)]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub content: Vec<JsonNode>,
+    #[serde(default)]
+    pub style: StyleDef,
+    #[serde(default)]
+    pub open: bool,
+    #[serde(default)]
+    pub width: Option<f32>,
+}
+
+// ===== 3D GAME ELEMENTS =====
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TerrainNode {
+    #[serde(default)]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub size: f32,
+    #[serde(default)]
+    pub height: f32,
+    #[serde(default)]
+    pub subdivisions: u32,
+    #[serde(default)]
+    pub heightmap: Option<String>,
+    #[serde(default)]
+    pub material: MaterialDef,
+    #[serde(default)]
+    pub transform: TransformDef,
+    #[serde(default)]
+    pub physics: Option<PhysicsDef>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkyboxNode {
+    #[serde(default)]
+    pub id: Option<String>,
+    pub texture_path: String,
+    #[serde(default)]
+    pub rotation: Option<Vec3Def>,
+    #[serde(default)]
+    pub brightness: f32,
+}
+
+impl Default for SkyboxNode {
+    fn default() -> Self {
+        Self {
+            id: None,
+            texture_path: String::new(),
+            rotation: None,
+            brightness: 1.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FoliageNode {
+    #[serde(default)]
+    pub id: Option<String>,
+    pub foliage_type: FoliageType,
+    #[serde(default)]
+    pub density: f32,
+    #[serde(default)]
+    pub color_variation: f32,
+    #[serde(default)]
+    pub transform: TransformDef,
+    #[serde(default)]
+    pub material: MaterialDef,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FoliageType {
+    Trees,
+    Grass,
+    Bushes,
+    Custom { model_path: String },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DecalNode {
+    #[serde(default)]
+    pub id: Option<String>,
+    pub texture: String,
+    #[serde(default)]
+    pub transform: TransformDef,
+    #[serde(default)]
+    pub size: Vec3Def,
+    #[serde(default)]
+    pub sort_order: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BillboardNode {
+    #[serde(default)]
+    pub id: Option<String>,
+    pub texture: String,
+    #[serde(default)]
+    pub transform: TransformDef,
+    #[serde(default)]
+    pub size: Vec3Def,
+    #[serde(default)]
+    pub billboard_type: BillboardType,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum BillboardType {
+    ScreenAligned,
+    AxisAligned,
+    Cylindrical,
+}
+
+impl Default for BillboardType {
+    fn default() -> Self {
+        BillboardType::ScreenAligned
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WaterNode {
+    #[serde(default)]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub size: Vec3Def,
+    #[serde(default)]
+    pub transform: TransformDef,
+    #[serde(default)]
+    pub wave_amplitude: f32,
+    #[serde(default)]
+    pub wave_frequency: f32,
+    #[serde(default)]
+    pub water_color: Option<ColorDef>,
+    #[serde(default)]
+    pub transparency: f32,
+}
+
+impl Default for WaterNode {
+    fn default() -> Self {
+        Self {
+            id: None,
+            size: Vec3Def::default(),
+            transform: TransformDef::default(),
+            wave_amplitude: 0.5,
+            wave_frequency: 1.0,
+            water_color: None,
+            transparency: 0.7,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RigidBodyNode {
+    #[serde(default)]
+    pub id: Option<String>,
+    pub mesh: MeshType,
+    #[serde(default)]
+    pub material: MaterialDef,
+    #[serde(default)]
+    pub transform: TransformDef,
+    #[serde(default)]
+    pub physics: PhysicsDef,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PhysicsDef {
+    #[serde(default)]
+    pub mass: f32,
+    #[serde(default)]
+    pub friction: f32,
+    #[serde(default)]
+    pub restitution: f32,
+    #[serde(default)]
+    pub gravity_scale: f32,
+    #[serde(default)]
+    pub use_gravity: bool,
+    #[serde(default)]
+    pub collider_type: ColliderType,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ColliderType {
+    Box,
+    Sphere,
+    Capsule,
+    Mesh,
+}
+
+impl Default for ColliderType {
+    fn default() -> Self {
+        ColliderType::Box
+    }
+}
+
+impl Default for PhysicsDef {
+    fn default() -> Self {
+        Self {
+            mass: 1.0,
+            friction: 0.3,
+            restitution: 0.0,
+            gravity_scale: 1.0,
+            use_gravity: true,
+            collider_type: ColliderType::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnvironmentNode {
+    #[serde(default)]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub ambient_light: Option<ColorDef>,
+    #[serde(default)]
+    pub ambient_intensity: f32,
+    #[serde(default)]
+    pub fog_enabled: bool,
+    #[serde(default)]
+    pub fog_color: Option<ColorDef>,
+    #[serde(default)]
+    pub fog_distance: f32,
+}
+
+impl Default for EnvironmentNode {
+    fn default() -> Self {
+        Self {
+            id: None,
+            ambient_light: None,
+            ambient_intensity: 0.8,
+            fog_enabled: false,
+            fog_color: None,
+            fog_distance: 100.0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

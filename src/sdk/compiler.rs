@@ -1,6 +1,4 @@
-use wasm_bindgen::prelude::*;
-
-use std::{cell::RefCell, collections::HashMap, ops::Deref, rc::Rc, string, vec};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use serde_json::{Value, json};
 
@@ -1097,7 +1095,7 @@ struct Path {
 }
 
 pub fn compile_code(p: String) -> Vec<u8> {
-    let program = "start print(\"hello\" + \"world\" + \"keyhan\") end";
+    let program = p;
 
     let temp_prog = program;
     let mut tokens: Vec<String> = vec![];

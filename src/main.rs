@@ -1,8 +1,7 @@
 
-use elpian::{api::{compile_code, init_app}, examples::ui_demo::run_ui_demo};
+use elpian::examples::ui_demo::run_ui_demo;
 
 fn main() {
-    // init_app();
-    // compile_code("".to_string());
+    // Start the UI demo (loads `src/examples/ui_example.json`)
     run_ui_demo();
 }

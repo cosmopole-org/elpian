@@ -1,6 +1,344 @@
 use bevy::prelude::*;
 use crate::graphics::components::*;
 use crate::graphics::schema::{AnimationType, EasingType};
+use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
+use bevy::prelude::Image;
+use bevy::render::camera::RenderTarget as CameraRenderTarget;
+
+#[derive(Resource)]
+pub struct CircleMask {
+    pub handle: Handle<Image>,
+}
+
+#[derive(Resource)]
+pub struct RoundedRectImage {
+    pub handle: Handle<Image>,
+}
+
+#[derive(Resource)]
+pub struct ShadowImage {
+    pub handle: Handle<Image>,
+}
+
+#[derive(Resource)]
+pub struct GlassNoise {
+    pub handle: Handle<Image>,
+}
+
+#[derive(Resource)]
+pub struct GlassShader {
+    pub handle: Handle<Shader>,
+}
+
+#[derive(Resource)]
+pub struct CapturedScene {
+    pub handle: Handle<Image>,
+}
+
+// Generate a procedural circular alpha mask and insert as a resource
+pub fn generate_circle_mask_system(mut images: ResMut<Assets<Image>>, mut commands: Commands) {
+    let size: u32 = 128;
+    let mut data = vec![0u8; (size * size * 4) as usize];
+
+    let center = (size as f32) / 2.0;
+    for y in 0..size {
+        for x in 0..size {
+            let dx = x as f32 + 0.5 - center;
+            let dy = y as f32 + 0.5 - center;
+            let dist = (dx * dx + dy * dy).sqrt();
+            let radius = center;
+            let mut t = (radius - dist) / 1.0; // sharp edge; could smooth
+            if t < 0.0 { t = 0.0; }
+            if t > 1.0 { t = 1.0; }
+            // smoothstep for nicer edge
+            let alpha = (t * t * (3.0 - 2.0 * t) * 255.0) as u8;
+
+            let idx = ((y * size + x) * 4) as usize;
+            data[idx] = 255u8;
+            data[idx + 1] = 255u8;
+            data[idx + 2] = 255u8;
+            data[idx + 3] = alpha;
+        }
+    }
+
+    let image = Image::new(
+        Extent3d {
+            width: size,
+            height: size,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        data,
+        TextureFormat::Rgba8UnormSrgb,
+        Default::default(),
+    );
+
+    let handle = images.add(image);
+    commands.insert_resource(CircleMask { handle });
+
+    // Generate a rounded rectangle mask (white with rounded alpha)
+    let size: u32 = 128;
+    let mut rdata = vec![0u8; (size * size * 4) as usize];
+    let radius = 12.0f32;
+    let cr = radius;
+    for y in 0..size {
+        for x in 0..size {
+            let xf = x as f32 + 0.5;
+            let yf = y as f32 + 0.5;
+            // compute distance to nearest corner center
+            let dx = if xf < cr { cr - xf } else if xf > (size as f32 - cr) { xf - (size as f32 - cr) } else { 0.0 };
+            let dy = if yf < cr { cr - yf } else if yf > (size as f32 - cr) { yf - (size as f32 - cr) } else { 0.0 };
+            let dist = (dx*dx + dy*dy).sqrt();
+            let t = (1.0 - (dist / cr)).clamp(0.0, 1.0);
+            let alpha = (t * 255.0) as u8;
+            let idx = ((y * size + x) * 4) as usize;
+            rdata[idx] = 255u8;
+            rdata[idx + 1] = 255u8;
+            rdata[idx + 2] = 255u8;
+            rdata[idx + 3] = alpha;
+        }
+    }
+    let rimg = Image::new(
+        Extent3d { width: size, height: size, depth_or_array_layers: 1 },
+        TextureDimension::D2,
+        rdata,
+        TextureFormat::Rgba8UnormSrgb,
+        Default::default(),
+    );
+    let rhandle = images.add(rimg);
+    commands.insert_resource(RoundedRectImage { handle: rhandle });
+
+    // Generate a soft circular shadow texture (blurred circle) for simple shadows
+    let s_size: u32 = 256;
+    let mut sdata = vec![0u8; (s_size * s_size * 4) as usize];
+    let center = (s_size as f32) / 2.0;
+    for y in 0..s_size {
+        for x in 0..s_size {
+            let dx = x as f32 + 0.5 - center;
+            let dy = y as f32 + 0.5 - center;
+            let dist = (dx*dx + dy*dy).sqrt();
+            let maxr = center * 0.9;
+            let t = (1.0 - (dist / maxr)).clamp(0.0, 1.0);
+            // smoother falloff
+            let alpha = ((t * t) * 180.0) as u8; // max shadow alpha
+            let idx = ((y * s_size + x) * 4) as usize;
+            sdata[idx] = 0u8;
+            sdata[idx + 1] = 0u8;
+            sdata[idx + 2] = 0u8;
+            sdata[idx + 3] = alpha;
+        }
+    }
+    let simg = Image::new(
+        Extent3d { width: s_size, height: s_size, depth_or_array_layers: 1 },
+        TextureDimension::D2,
+        sdata,
+        TextureFormat::Rgba8UnormSrgb,
+        Default::default(),
+    );
+    let shandle = images.add(simg);
+    commands.insert_resource(ShadowImage { handle: shandle });
+
+    // Generate simple glass noise/overlay texture (solid white, will be tinted by opacity)
+    let g_size: u32 = 32;
+    let mut gdata = vec![0u8; (g_size * g_size * 4) as usize];
+    for y in 0..g_size {
+        for x in 0..g_size {
+            let idx = ((y * g_size + x) * 4) as usize;
+            gdata[idx] = 255u8;
+            gdata[idx + 1] = 255u8;
+            gdata[idx + 2] = 255u8;
+            gdata[idx + 3] = 255u8;
+        }
+    }
+    let gimg = Image::new(
+        Extent3d { width: g_size, height: g_size, depth_or_array_layers: 1 },
+        TextureDimension::D2,
+        gdata,
+        TextureFormat::Rgba8UnormSrgb,
+        Default::default(),
+    );
+    let ghandle = images.add(gimg);
+    commands.insert_resource(GlassNoise { handle: ghandle });
+
+    // Create a placeholder captured scene image resource. This will be replaced
+    // later by a true render-graph capture node that writes the main color
+    // attachment into this image each frame. For now we provide a small low-res
+    // texture so glass overlays can sample something and the pipeline compiles.
+    let c_size: u32 = 16;
+    let mut cdata = vec![0u8; (c_size * c_size * 4) as usize];
+    // Fill with a subtle gray so the glass overlay has visible content
+    for y in 0..c_size {
+        for x in 0..c_size {
+            let idx = ((y * c_size + x) * 4) as usize;
+            cdata[idx] = 200u8;
+            cdata[idx + 1] = 200u8;
+            cdata[idx + 2] = 200u8;
+            cdata[idx + 3] = 255u8;
+        }
+    }
+    let cimg = Image::new(
+        Extent3d { width: c_size, height: c_size, depth_or_array_layers: 1 },
+        TextureDimension::D2,
+        cdata,
+        TextureFormat::Rgba8UnormSrgb,
+        Default::default(),
+    );
+    let chandle = images.add(cimg);
+    commands.insert_resource(CapturedScene { handle: chandle });
+
+    // Note: shader asset is loaded separately in startup using AssetServer
+}
+
+pub fn load_glass_shader_system(asset_server: Res<AssetServer>, mut commands: Commands) {
+    let handle: Handle<Shader> = asset_server.load("shaders/glass.wgsl");
+    commands.insert_resource(GlassShader { handle });
+}
+
+// Generate a blurred, cropped Image for each glass overlay by sampling the
+// CapturedScene image on the CPU. This is a pragmatic fallback to obtain a
+// backdrop-blur look without full render-graph shader plumbing.
+pub fn blur_captured_overlays_system(
+    mut commands: Commands,
+    mut images: ResMut<Assets<Image>>,
+    captured: Option<Res<CapturedScene>>,
+    mut query: Query<(Entity, &ImageNode, &Node), With<crate::graphics::components::GlassOverlay>>,
+) {
+    let captured = match captured {
+        Some(c) => c,
+        None => return,
+    };
+
+    // Obtain the source captured image
+    let src_image = match images.get(&captured.handle) {
+        Some(img) => img.clone(),
+        None => return,
+    };
+
+    // parse src dimensions
+    let src_w = src_image.texture_descriptor.size.width as usize;
+    let src_h = src_image.texture_descriptor.size.height as usize;
+    let src_data = &src_image.data;
+
+    for (entity, image_node, node) in &mut query {
+        // Process all GlassOverlay entities (they were spawned with the captured
+        // handle or with the procedural glass noise). We'll generate a blurred
+        // crop regardless and replace the ImageNode handle.
+
+        // Determine pixel size
+        let mut px_w: Option<usize> = None;
+        let mut px_h: Option<usize> = None;
+        match node.width {
+            Val::Px(v) => px_w = Some(v.max(1.0) as usize),
+            _ => {}
+        }
+        match node.height {
+            Val::Px(v) => px_h = Some(v.max(1.0) as usize),
+            _ => {}
+        }
+
+        if let (Some(tw), Some(th)) = (px_w, px_h) {
+            // create target buffer and sample+scale from source
+            let mut tdata = vec![0u8; tw * th * 4];
+
+            for y in 0..th {
+                for x in 0..tw {
+                    // normalized uv over target
+                    let u = (x as f32 + 0.5) / (tw as f32);
+                    let v = (y as f32 + 0.5) / (th as f32);
+                    // map to source coords
+                    let sx = (u * (src_w as f32)).clamp(0.0, (src_w - 1) as f32) as usize;
+                    let sy = (v * (src_h as f32)).clamp(0.0, (src_h - 1) as f32) as usize;
+                    let sidx = (sy * src_w + sx) * 4;
+                    let tidx = (y * tw + x) * 4;
+                    tdata[tidx] = src_data[sidx];
+                    tdata[tidx + 1] = src_data[sidx + 1];
+                    tdata[tidx + 2] = src_data[sidx + 2];
+                    tdata[tidx + 3] = src_data[sidx + 3];
+                }
+            }
+
+            // apply a cheap box blur pass (radius = 3)
+            let radius = 3usize;
+            let mut bdata = tdata.clone();
+            for y in 0..th {
+                for x in 0..tw {
+                    let mut rr = 0u32;
+                    let mut gg = 0u32;
+                    let mut bb = 0u32;
+                    let mut aa = 0u32;
+                    let mut count = 0u32;
+                    let x0 = if x > radius { x - radius } else { 0 };
+                    let x1 = (x + radius).min(tw - 1);
+                    let y0 = if y > radius { y - radius } else { 0 };
+                    let y1 = (y + radius).min(th - 1);
+                    for yy in y0..=y1 {
+                        for xx in x0..=x1 {
+                            let idx = (yy * tw + xx) * 4;
+                            rr += tdata[idx] as u32;
+                            gg += tdata[idx + 1] as u32;
+                            bb += tdata[idx + 2] as u32;
+                            aa += tdata[idx + 3] as u32;
+                            count += 1;
+                        }
+                    }
+                    let tidx = (y * tw + x) * 4;
+                    bdata[tidx] = (rr / count) as u8;
+                    bdata[tidx + 1] = (gg / count) as u8;
+                    bdata[tidx + 2] = (bb / count) as u8;
+                    bdata[tidx + 3] = (aa / count) as u8;
+                }
+            }
+
+            let image = Image::new(
+                Extent3d { width: tw as u32, height: th as u32, depth_or_array_layers: 1 },
+                TextureDimension::D2,
+                bdata,
+                TextureFormat::Rgba8UnormSrgb,
+                Default::default(),
+            );
+
+            let handle = images.add(image);
+            // replace the image node with the newly generated blurred image
+            commands.entity(entity).insert((ImageNode::new(handle),));
+        }
+    }
+}
+
+// Spawn a camera that renders the 3D scene into an Image asset each frame.
+// This image is stored in the `CapturedScene` resource so UI overlays can
+// sample it. This is a standard render-to-texture approach; later we can
+// replace this with a render-graph node if needed.
+pub fn spawn_captured_scene_camera_system(
+    mut commands: Commands,
+    mut images: ResMut<Assets<Image>>, 
+) {
+    // create a reasonably sized render target (will be recreated/resized later if needed)
+    let size: u32 = 512;
+    let data = vec![0u8; (size * size * 4) as usize];
+    let img = Image::new(
+        Extent3d { width: size, height: size, depth_or_array_layers: 1 },
+        TextureDimension::D2,
+        data,
+        TextureFormat::Rgba8UnormSrgb,
+        Default::default(),
+    );
+
+    let handle = images.add(img);
+    commands.insert_resource(CapturedScene { handle: handle.clone() });
+
+    // spawn a camera that renders to this image
+    commands.spawn((
+        Camera3dBundle {
+            camera: Camera {
+                // RenderTarget types moved between modules across Bevy versions;
+                // use Camera::target with the Image handle.
+                target: CameraRenderTarget::Image(handle.clone()),
+                ..default()
+            },
+            ..default()
+        },
+    ));
+}
 
 // Animation system
 pub fn animation_system(
@@ -216,6 +554,134 @@ pub fn radio_button_interaction_system(
     }
 }
 
+// Icon button interaction system
+pub fn icon_button_interaction_system(
+    mut interaction_query: Query<(&Interaction, &IconButton), (Changed<Interaction>, With<Button>)>,
+    mut events: EventWriter<ComponentEvent>,
+) {
+    for (interaction, icon) in &mut interaction_query {
+        if *interaction == Interaction::Pressed {
+            if let Some(action) = &icon.action {
+                events.send(ComponentEvent {
+                    event_type: "iconbutton_click".to_string(),
+                    event_id: action.clone(),
+                    data: "clicked".to_string(),
+                });
+            }
+        }
+    }
+}
+
+// Spawn a ripple child when any button is pressed
+pub fn button_ripple_spawn_system(
+    mut commands: Commands,
+    interaction_query: Query<(Entity, &Interaction), (Changed<Interaction>, With<Button>)>,
+    circle: Option<Res<CircleMask>>,
+) {
+    for (entity, interaction) in &interaction_query {
+        if *interaction == Interaction::Pressed {
+            // If we have a generated circular mask image, spawn an ImageBundle using it
+            if let Some(circle) = &circle {
+                let style = Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Percent(50.0),
+                    top: Val::Percent(50.0),
+                    width: Val::Px(0.0),
+                    height: Val::Px(0.0),
+                    ..default()
+                };
+
+                let ripple_id = commands
+                    .spawn((
+                        ImageNode::default(),
+                        ImageNode::new(circle.handle.clone()),
+                        Node { ..style },
+                        BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.6)),
+                        RippleEffect {
+                            origin: Vec2::ZERO,
+                            radius: 0.0,
+                            max_radius: 300.0,
+                            duration: 0.6,
+                            elapsed: 0.0,
+                        },
+                    ))
+                    .id();
+
+                commands.entity(ripple_id).set_parent(entity);
+            } else {
+                // fallback to simple node ripple if no mask available
+                let ripple_id = commands.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Percent(50.0),
+                        top: Val::Percent(50.0),
+                        width: Val::Px(0.0),
+                        height: Val::Px(0.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.6)),
+                    RippleEffect {
+                        origin: Vec2::ZERO,
+                        radius: 0.0,
+                        max_radius: 300.0,
+                        duration: 0.6,
+                        elapsed: 0.0,
+                    },
+                )).id();
+
+                commands.entity(ripple_id).set_parent(entity);
+            }
+        }
+    }
+}
+
+// Animate and despawn ripples
+pub fn ripple_update_system(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut query: Query<(Entity, &mut RippleEffect, &mut Node, Option<&mut BackgroundColor>)>,
+) {
+    for (entity, mut ripple, mut style, mut bg) in &mut query {
+        ripple.elapsed += time.delta_secs();
+        let t = (ripple.elapsed / ripple.duration).min(1.0);
+        let size = ripple.max_radius * t * 2.0;
+        style.width = Val::Px(size);
+        style.height = Val::Px(size);
+
+        // Fade out by adjusting BackgroundColor alpha if available
+        if let Some(color) = bg.as_deref_mut() {
+            let alpha = (1.0 - t).clamp(0.0, 1.0);
+            color.0 = Color::srgba(1.0, 1.0, 1.0, alpha);
+        }
+
+        if ripple.elapsed >= ripple.duration {
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
+// Animate drawer open/close by interpolating left position
+pub fn drawer_animation_system(
+    time: Res<Time>,
+    mut query: Query<(&mut Node, &Drawer)>,
+) {
+    for (mut node, drawer) in &mut query {
+        let curr = match node.left {
+            Val::Px(v) => v,
+            _ => 0.0,
+        };
+
+        let target = if drawer.open { 0.0 } else { -drawer.width };
+        let step = (target - curr) * (time.delta_secs() * 8.0);
+        let next = curr + step;
+        if (target - next).abs() < 0.5 {
+            node.left = Val::Px(target);
+        } else {
+            node.left = Val::Px(next);
+        }
+    }
+}
+
 // Progress bar update system
 pub fn progress_bar_update_system(
     mut query: Query<(&ProgressBarComponent, &Children), Changed<ProgressBarComponent>>,
@@ -227,6 +693,16 @@ pub fn progress_bar_update_system(
                 style.width = Val::Percent((progress.value / progress.max) * 100.0);
             }
         }
+    }
+}
+
+// Drawer system: simple open/close immediate toggle (could be animated)
+pub fn drawer_system(
+    mut query: Query<(&mut Node, &Drawer)>,
+) {
+    for (mut node, drawer) in &mut query {
+        // adjust left based on open state
+        node.left = if drawer.open { Val::Px(0.0) } else { Val::Px(-drawer.width) };
     }
 }
 
@@ -245,5 +721,188 @@ pub fn event_logging_system(mut events: EventReader<ComponentEvent>) {
             "Component Event - Type: {}, ID: {}, Data: {}",
             event.event_type, event.event_id, event.data
         );
+    }
+}
+
+// After images are generated, apply UiImage and shadow children to entities marked with RoundedBackground
+pub fn apply_ui_images_system(
+    mut commands: Commands,
+    mut images: ResMut<Assets<Image>>,
+    shadow: Option<Res<ShadowImage>>,
+    glass: Option<Res<GlassNoise>>,
+    captured: Option<Res<CapturedScene>>,
+    query: Query<(Entity, &crate::graphics::components::RoundedBackground, &Node)>,
+) {
+    for (entity, rb, node) in &query {
+        // Determine pixel size from Node if available
+        let mut px_w: Option<u32> = None;
+        let mut px_h: Option<u32> = None;
+        match node.width {
+            Val::Px(v) => px_w = Some(v.max(1.0) as u32),
+            _ => {}
+        }
+        match node.height {
+            Val::Px(v) => px_h = Some(v.max(1.0) as u32),
+            _ => {}
+        }
+
+        if let (Some(w), Some(h)) = (px_w, px_h) {
+            // generate per-element rounded background image matching size
+            let mut data = vec![0u8; (w * h * 4) as usize];
+            let cr = rb.corner_radius.max(0.0).min((w.min(h) / 2) as f32);
+            for y in 0..h {
+                for x in 0..w {
+                    let xf = x as f32 + 0.5;
+                    let yf = y as f32 + 0.5;
+                    // distance to rounded rectangle edge
+                    let left = cr;
+                    let right = w as f32 - cr;
+                    let top = cr;
+                    let bottom = h as f32 - cr;
+
+                    let mut alpha = 1.0f32;
+
+                    if xf < left {
+                        if yf < top {
+                            // top-left corner
+                            let dx = left - xf;
+                            let dy = top - yf;
+                            let dist = (dx*dx + dy*dy).sqrt();
+                            if dist > cr { alpha = 0.0; } else { alpha = 1.0 - (dist / cr); }
+                        } else if yf > bottom {
+                            let dx = left - xf;
+                            let dy = yf - bottom;
+                            let dist = (dx*dx + dy*dy).sqrt();
+                            if dist > cr { alpha = 0.0 } else { alpha = 1.0 - (dist / cr); }
+                        }
+                    } else if xf > right {
+                        if yf < top {
+                            let dx = xf - right;
+                            let dy = top - yf;
+                            let dist = (dx*dx + dy*dy).sqrt();
+                            if dist > cr { alpha = 0.0 } else { alpha = 1.0 - (dist / cr); }
+                        } else if yf > bottom {
+                            let dx = xf - right;
+                            let dy = yf - bottom;
+                            let dist = (dx*dx + dy*dy).sqrt();
+                            if dist > cr { alpha = 0.0 } else { alpha = 1.0 - (dist / cr); }
+                        }
+                    }
+
+                    // simple smoothing at edges
+                    let alpha_u8 = (alpha.clamp(0.0, 1.0) * 255.0) as u8;
+                    let idx = ((y * w + x) * 4) as usize;
+                    // apply background color using cached numeric RGBA in the component
+                    let rr = rb.color_rgba[0];
+                    let gg = rb.color_rgba[1];
+                    let bb = rb.color_rgba[2];
+                    let r = (rr.clamp(0.0, 1.0) * 255.0) as u8;
+                    let g = (gg.clamp(0.0, 1.0) * 255.0) as u8;
+                    let b = (bb.clamp(0.0, 1.0) * 255.0) as u8;
+                    data[idx] = r;
+                    data[idx + 1] = g;
+                    data[idx + 2] = b;
+                    data[idx + 3] = alpha_u8;
+                }
+            }
+
+            let image = Image::new(
+                Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+                TextureDimension::D2,
+                data,
+                TextureFormat::Rgba8UnormSrgb,
+                Default::default(),
+            );
+
+            let handle = images.add(image);
+            // insert ImageNode with generated handle
+            commands.entity(entity).insert((
+                ImageNode::default(),
+                ImageNode::new(handle.clone()),
+            ));
+        } else {
+            // fallback: tint background color
+            commands.entity(entity).insert(BackgroundColor(rb.color));
+        }
+
+        // Add shadow child if shadow resource exists and elevation > 0
+        if let Some(s) = &shadow {
+            if rb.elevation > 0 {
+                // improved falloff: scale and alpha based on elevation with smoother curve
+                let level = rb.elevation as f32;
+                let shadow_alpha = (level.powf(0.9) * 0.08).clamp(0.03, 0.8);
+                let scale = 1.0 + level * 0.06; // grow shadow with elevation
+                let offset_y = 4.0 + level * 1.5; // vertical offset grows
+
+                let s_node = Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px((-16.0 * scale) as f32),
+                    top: Val::Px((offset_y) as f32),
+                    width: Val::Percent(100.0 * scale),
+                    height: Val::Percent(100.0 * scale),
+                    ..default()
+                };
+
+                let shadow_id = commands.spawn((
+                    ImageNode::default(),
+                    ImageNode::new(s.handle.clone()),
+                    s_node,
+                    BackgroundColor(Color::srgba(0.0, 0.0, 0.0, shadow_alpha)),
+                )).id();
+
+                commands.entity(shadow_id).set_parent(entity);
+            }
+        }
+
+        // Add glass overlay if requested. Prefer a captured scene texture if available
+        if rb.glass {
+            // If a captured scene resource exists, use it as the overlay image so
+            // the UI can sample a (placeholder) scene texture. This is a scaffold
+            // for the real render-graph-backed capture.
+            if let Some(captured) = &captured {
+                let g_node = Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(0.0),
+                    top: Val::Px(0.0),
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    ..default()
+                };
+
+                let overlay_id = commands.spawn((
+                    ImageNode::default(),
+                    ImageNode::new(captured.handle.clone()),
+                    g_node,
+                    BackgroundColor(Color::srgba(1.0, 1.0, 1.0, rb.glass_opacity)),
+                    crate::graphics::components::GlassOverlay,
+                )).id();
+
+                commands.entity(overlay_id).set_parent(entity);
+            } else if let Some(g) = &glass {
+                // fallback to the procedural glass noise texture if no captured
+                // scene is available yet.
+                let g_node = Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(0.0),
+                    top: Val::Px(0.0),
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    ..default()
+                };
+
+                let overlay_id = commands.spawn((
+                    ImageNode::default(),
+                    ImageNode::new(g.handle.clone()),
+                    g_node,
+                    BackgroundColor(Color::srgba(1.0, 1.0, 1.0, rb.glass_opacity)),
+                    crate::graphics::components::GlassOverlay,
+                )).id();
+
+                commands.entity(overlay_id).set_parent(entity);
+            }
+        }
+
+        // remove marker component to avoid re-processing
+        commands.entity(entity).remove::<crate::graphics::components::RoundedBackground>();
     }
 }

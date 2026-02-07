@@ -24,6 +24,27 @@ impl JsonToBevy {
             schema::JsonNode::RadioButton(radio) => Self::spawn_radio(commands, radio, parent),
             schema::JsonNode::TextInput(input) => Self::spawn_text_input(commands, input, parent),
             schema::JsonNode::ProgressBar(progress) => Self::spawn_progress_bar(commands, progress, parent),
+            
+            // Material Design UI Elements
+            schema::JsonNode::FloatingActionButton(fab) => Self::spawn_fab(commands, asset_server, fab, parent),
+            schema::JsonNode::Card(card) => Self::spawn_card(commands, asset_server, card, parent),
+            schema::JsonNode::Chip(chip) => Self::spawn_chip(commands, asset_server, chip, parent),
+            schema::JsonNode::AppBar(appbar) => Self::spawn_appbar(commands, asset_server, appbar, parent),
+            schema::JsonNode::Dialog(dialog) => Self::spawn_dialog(commands, asset_server, dialog, parent),
+            schema::JsonNode::Menu(menu) => Self::spawn_menu(commands, menu, parent),
+            schema::JsonNode::BottomSheet(sheet) => Self::spawn_bottom_sheet(commands, asset_server, sheet, parent),
+            schema::JsonNode::Snackbar(snack) => Self::spawn_snackbar(commands, snack, parent),
+            schema::JsonNode::Switch(switch) => Self::spawn_switch(commands, switch, parent),
+            schema::JsonNode::Tabs(tabs) => Self::spawn_tabs(commands, asset_server, tabs, parent),
+            schema::JsonNode::Badge(badge) => Self::spawn_badge(commands, badge, parent),
+            schema::JsonNode::Tooltip(tooltip) => Self::spawn_tooltip(commands, tooltip, parent),
+            schema::JsonNode::Rating(rating) => Self::spawn_rating(commands, rating, parent),
+            schema::JsonNode::SegmentedButton(seg) => Self::spawn_segmented_button(commands, seg, parent),
+            schema::JsonNode::IconButton(icon) => Self::spawn_icon_button(commands, asset_server, icon, parent),
+            schema::JsonNode::Divider(div) => Self::spawn_divider(commands, div, parent),
+            schema::JsonNode::List(list) => Self::spawn_list(commands, asset_server, list, parent),
+            schema::JsonNode::Drawer(drawer) => Self::spawn_drawer(commands, asset_server, drawer, parent),
+            
             _ => Err(anyhow::anyhow!("Invalid UI node type")),
         }
     }
@@ -41,6 +62,17 @@ impl JsonToBevy {
             schema::JsonNode::Camera(camera) => Self::spawn_camera(commands, camera),
             schema::JsonNode::Audio(audio) => Self::spawn_audio(commands, asset_server, audio),
             schema::JsonNode::Particles(particles) => Self::spawn_particles(commands, particles),
+            
+            // 3D Game Elements
+            schema::JsonNode::Terrain(terrain) => Self::spawn_terrain(commands, meshes, materials, terrain),
+            schema::JsonNode::Skybox(skybox) => Self::spawn_skybox(commands, asset_server, skybox),
+            schema::JsonNode::Foliage(foliage) => Self::spawn_foliage(commands, meshes, materials, asset_server, foliage),
+            schema::JsonNode::Decal(decal) => Self::spawn_decal(commands, asset_server, decal),
+            schema::JsonNode::Billboard(billboard) => Self::spawn_billboard(commands, asset_server, billboard),
+            schema::JsonNode::Water(water) => Self::spawn_water(commands, meshes, materials, water),
+            schema::JsonNode::RigidBody(rb) => Self::spawn_rigidbody(commands, meshes, materials, asset_server, rb),
+            schema::JsonNode::Environment(env) => Self::spawn_environment(commands, env),
+            
             _ => Err(anyhow::anyhow!("Invalid world node type")),
         }
     }
@@ -120,6 +152,11 @@ impl JsonToBevy {
             .as_ref()
             .map(Self::convert_color)
             .unwrap_or(Color::srgb(0.15, 0.15, 0.15));
+        let normal_rgba = button_node
+            .normal_color
+            .as_ref()
+            .map(|c| [c.r, c.g, c.b, c.a])
+            .unwrap_or([0.15, 0.15, 0.15, 1.0]);
 
         let mut button_entity = commands.spawn((
             Button,
@@ -129,7 +166,15 @@ impl JsonToBevy {
                 align_items: AlignItems::Center,
                 ..style
             },
-            BackgroundColor(normal_color),
+            // Use rounded background marker so apply_ui_images_system can convert to image+shadow
+            crate::graphics::components::RoundedBackground {
+                color: normal_color,
+                color_rgba: normal_rgba,
+                corner_radius: 8.0,
+                elevation: 1,
+                glass: button_node.glass,
+                glass_opacity: button_node.glass_opacity,
+            },
         ));
 
         if let Some(parent) = parent {
@@ -622,6 +667,986 @@ impl JsonToBevy {
         Ok(entity)
     }
 
+    // ===== MATERIAL DESIGN UI SPAWN FUNCTIONS =====
+
+    fn spawn_fab(
+        commands: &mut Commands,
+        _asset_server: &AssetServer,
+        fab_node: &schema::FABNode,
+        parent: Option<Entity>,
+    ) -> Result<Entity> {
+        use crate::graphics::components::*;
+        let style = Self::convert_style(&fab_node.style);
+        let color = fab_node.color.as_ref().map(Self::convert_color).unwrap_or(Color::srgb(0.2, 0.6, 1.0));
+        let fab_rgba = fab_node.color.as_ref().map(|c| [c.r, c.g, c.b, c.a]).unwrap_or([0.2, 0.6, 1.0, 1.0]);
+
+        let size = match fab_node.fab_type {
+            schema::FABType::Small => (40.0, 40.0),
+            schema::FABType::Large => (96.0, 96.0),
+            _ => (56.0, 56.0),
+        };
+
+        let mut entity = commands.spawn((
+            Button,
+            Node {
+                width: Val::Px(size.0),
+                height: Val::Px(size.1),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..style
+            },
+            // Use rounded background for FAB to support shadows and circular shape
+            crate::graphics::components::RoundedBackground {
+                color,
+                color_rgba: fab_rgba,
+                corner_radius: (size.0 / 2.0) as f32,
+                elevation: fab_node.elevation,
+                glass: fab_node.glass,
+                glass_opacity: fab_node.glass_opacity,
+            },
+            FloatingActionButton {
+                action: fab_node.action.clone(),
+                fab_type: format!("{:?}", fab_node.fab_type),
+                hovered: false,
+            },
+        ));
+
+        if let Some(parent) = parent {
+            entity.set_parent(parent);
+        }
+
+        let id = entity.id();
+        // Add elevation component for shadowing
+        commands.entity(id).insert(Elevation {
+            level: fab_node.elevation,
+            shadow_blur: 6.0,
+            shadow_offset: Vec2::new(0.0, -3.0),
+        });
+
+        Ok(id)
+    }
+
+    fn spawn_card(
+        commands: &mut Commands,
+        asset_server: &AssetServer,
+        card_node: &schema::CardNode,
+        parent: Option<Entity>,
+    ) -> Result<Entity> {
+        use crate::graphics::components::*;
+        let style = Self::convert_style(&card_node.style);
+        let bg_color = card_node.background_color.as_ref().map(Self::convert_color).unwrap_or(Color::srgb(0.95, 0.95, 0.95));
+        let bg_rgba = card_node.background_color.as_ref().map(|c| [c.r, c.g, c.b, c.a]).unwrap_or([0.95, 0.95, 0.95, 1.0]);
+
+        let mut entity = commands.spawn((
+            Node { ..style },
+            BorderColor(if card_node.outlined { Color::srgb(0.7, 0.7, 0.7) } else { Color::NONE }),
+            Card {
+                elevation: card_node.elevation,
+                corner_radius: card_node.corner_radius,
+                on_click: card_node.on_click.clone(),
+                outlined: card_node.outlined,
+            },
+            // mark for later replacement with rounded image background
+            crate::graphics::components::RoundedBackground {
+                color: bg_color,
+                color_rgba: bg_rgba,
+                corner_radius: card_node.corner_radius,
+                elevation: card_node.elevation,
+                glass: card_node.glass,
+                glass_opacity: card_node.glass_opacity,
+            },
+        ));
+
+        if let Some(parent) = parent {
+            entity.set_parent(parent);
+        }
+
+        let card_id = entity.id();
+
+        // Apply elevation component for visual shadowing
+        commands.entity(card_id).insert(Elevation {
+            level: card_node.elevation,
+            shadow_blur: 4.0,
+            shadow_offset: Vec2::new(0.0, -2.0),
+        });
+
+        // Spawn children
+        for child in &card_node.children {
+            Self::spawn_ui(commands, asset_server, child, Some(card_id))?;
+        }
+
+        Ok(card_id)
+    }
+
+    fn spawn_chip(
+        commands: &mut Commands,
+        _asset_server: &AssetServer,
+        chip_node: &schema::ChipNode,
+        parent: Option<Entity>,
+    ) -> Result<Entity> {
+        use crate::graphics::components::*;
+        let style = Self::convert_style(&chip_node.style);
+        let color = chip_node.color.as_ref().map(Self::convert_color).unwrap_or(Color::srgb(0.3, 0.3, 0.3));
+
+        let mut entity = commands.spawn((
+            Button,
+            Node {
+                padding: UiRect::all(Val::Px(12.0)),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..style
+            },
+            BackgroundColor(color),
+            Chip {
+                chip_type: format!("{:?}", chip_node.chip_type),
+                selected: chip_node.selected,
+                on_click: chip_node.on_click.clone(),
+            },
+        ));
+
+        if let Some(parent) = parent {
+            entity.set_parent(parent);
+        }
+
+        let chip_id = entity.id();
+
+        // Add label
+        commands.spawn((
+            Text::new(chip_node.label.clone()),
+            TextFont { font_size: 14.0, ..default() },
+            TextColor(Color::WHITE),
+        )).set_parent(chip_id);
+
+        Ok(chip_id)
+    }
+
+    fn spawn_appbar(
+        commands: &mut Commands,
+        _asset_server: &AssetServer,
+        appbar_node: &schema::AppBarNode,
+        parent: Option<Entity>,
+    ) -> Result<Entity> {
+        use crate::graphics::components::*;
+        let style = Self::convert_style(&appbar_node.style);
+        let bg_color = appbar_node.background_color.as_ref().map(Self::convert_color).unwrap_or(Color::srgb(0.1, 0.5, 0.9));
+        let appbar_rgba = appbar_node.background_color.as_ref().map(|c| [c.r, c.g, c.b, c.a]).unwrap_or([0.1, 0.5, 0.9, 1.0]);
+
+        let mut entity = commands.spawn((
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Px(56.0),
+                padding: UiRect::horizontal(Val::Px(16.0)),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..style
+            },
+            // Use image-based background to allow rounded corners and shadow
+            crate::graphics::components::RoundedBackground {
+                color: bg_color,
+                color_rgba: appbar_rgba,
+                corner_radius: 0.0,
+                elevation: appbar_node.elevation,
+                glass: appbar_node.glass,
+                glass_opacity: appbar_node.glass_opacity,
+            },
+            AppBar {
+                app_bar_type: format!("{:?}", appbar_node.app_bar_type),
+                title: appbar_node.title.clone(),
+                elevation: appbar_node.elevation,
+            },
+        ));
+
+        if let Some(parent) = parent {
+            entity.set_parent(parent);
+        }
+
+        let appbar_id = entity.id();
+
+        // Add elevation component for app bar
+        commands.entity(appbar_id).insert(Elevation {
+            level: appbar_node.elevation,
+            shadow_blur: 3.0,
+            shadow_offset: Vec2::new(0.0, -1.0),
+        });
+
+        // Add title
+        commands.spawn((
+            Text::new(appbar_node.title.clone()),
+            TextFont { font_size: 20.0, ..default() },
+            TextColor(Color::WHITE),
+        )).set_parent(appbar_id);
+
+        Ok(appbar_id)
+    }
+
+    fn spawn_dialog(
+        commands: &mut Commands,
+        asset_server: &AssetServer,
+        dialog_node: &schema::DialogNode,
+        parent: Option<Entity>,
+    ) -> Result<Entity> {
+        use crate::graphics::components::*;
+        let style = Self::convert_style(&dialog_node.style);
+
+        let mut entity = commands.spawn((
+            Node {
+                width: Val::Px(400.0),
+                height: Val::Auto,
+                flex_direction: FlexDirection::Column,
+                padding: UiRect::all(Val::Px(24.0)),
+                ..style
+            },
+            // use rounded image background + optional glass overlay
+            crate::graphics::components::RoundedBackground {
+                color: Color::srgb(0.95, 0.95, 0.95),
+                color_rgba: [0.95, 0.95, 0.95, 1.0],
+                corner_radius: 12.0,
+                elevation: 4,
+                glass: dialog_node.glass,
+                glass_opacity: dialog_node.glass_opacity,
+            },
+            Dialog {
+                title: dialog_node.title.clone(),
+                dismissible: dialog_node.dismissible,
+                open: true,
+            },
+        ));
+
+        if let Some(parent) = parent {
+            entity.set_parent(parent);
+        }
+
+        let dialog_id = entity.id();
+
+        // Add title
+        commands.spawn((
+            Text::new(dialog_node.title.clone()),
+            TextFont { font_size: 18.0, ..default() },
+            TextColor(Color::BLACK),
+        )).set_parent(dialog_id);
+
+        // Add content
+        for content in &dialog_node.content {
+            Self::spawn_ui(commands, asset_server, content, Some(dialog_id))?;
+        }
+
+        Ok(dialog_id)
+    }
+
+    fn spawn_menu(
+        commands: &mut Commands,
+        menu_node: &schema::MenuNode,
+        parent: Option<Entity>,
+    ) -> Result<Entity> {
+        use crate::graphics::components::*;
+        let style = Self::convert_style(&menu_node.style);
+
+        let mut entity = commands.spawn((
+            Node {
+                flex_direction: FlexDirection::Column,
+                ..style
+            },
+            crate::graphics::components::RoundedBackground {
+                color: Color::srgb(0.98, 0.98, 0.98),
+                color_rgba: [0.98, 0.98, 0.98, 1.0],
+                corner_radius: 8.0,
+                elevation: menu_node.elevation,
+                glass: menu_node.glass,
+                glass_opacity: menu_node.glass_opacity,
+            },
+            Menu {
+                elevation: menu_node.elevation,
+                open: true,
+            },
+        ));
+
+        if let Some(parent) = parent {
+            entity.set_parent(parent);
+        }
+
+        Ok(entity.id())
+    }
+
+    fn spawn_bottom_sheet(
+        commands: &mut Commands,
+        asset_server: &AssetServer,
+        sheet_node: &schema::BottomSheetNode,
+        parent: Option<Entity>,
+    ) -> Result<Entity> {
+        use crate::graphics::components::*;
+        let style = Self::convert_style(&sheet_node.style);
+
+        let mut entity = commands.spawn((
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Px(sheet_node.height.unwrap_or(300.0)),
+                flex_direction: FlexDirection::Column,
+                position_type: PositionType::Absolute,
+                bottom: Val::Px(0.0),
+                ..style
+            },
+            BackgroundColor(Color::srgb(0.98, 0.98, 0.98)),
+            BottomSheet {
+                height: sheet_node.height,
+                dismissible: sheet_node.dismissible,
+                open: true,
+            },
+        ));
+
+        if let Some(parent) = parent {
+            entity.set_parent(parent);
+        }
+
+        let sheet_id = entity.id();
+
+        // Spawn content
+        for content in &sheet_node.content {
+            Self::spawn_ui(commands, asset_server, content, Some(sheet_id))?;
+        }
+
+        Ok(sheet_id)
+    }
+
+    fn spawn_snackbar(
+        commands: &mut Commands,
+        snack_node: &schema::SnackbarNode,
+        parent: Option<Entity>,
+    ) -> Result<Entity> {
+        use crate::graphics::components::*;
+        let style = Self::convert_style(&snack_node.style);
+
+        let mut entity = commands.spawn((
+            Node {
+                width: Val::Px(300.0),
+                height: Val::Px(48.0),
+                position_type: PositionType::Absolute,
+                bottom: Val::Px(20.0),
+                left: Val::Px(20.0),
+                padding: UiRect::all(Val::Px(16.0)),
+                align_items: AlignItems::Center,
+                ..style
+            },
+            // use rounded background so shadow and glass can be applied
+            crate::graphics::components::RoundedBackground {
+                color: Color::srgb(0.32, 0.32, 0.32),
+                color_rgba: [0.32, 0.32, 0.32, 1.0],
+                corner_radius: 8.0,
+                elevation: 2,
+                glass: snack_node.glass,
+                glass_opacity: snack_node.glass_opacity,
+            },
+            Snackbar {
+                message: snack_node.message.clone(),
+                duration_ms: snack_node.duration_ms,
+                elapsed_ms: 0,
+            },
+        ));
+
+        if let Some(parent) = parent {
+            entity.set_parent(parent);
+        }
+
+        let snack_id = entity.id();
+
+        // Add message
+        commands.spawn((
+            Text::new(snack_node.message.clone()),
+            TextFont { font_size: 14.0, ..default() },
+            TextColor(Color::WHITE),
+        )).set_parent(snack_id);
+
+        Ok(snack_id)
+    }
+
+    fn spawn_switch(
+        commands: &mut Commands,
+        switch_node: &schema::SwitchNode,
+        parent: Option<Entity>,
+    ) -> Result<Entity> {
+        use crate::graphics::components::*;
+        let style = Self::convert_style(&switch_node.style);
+
+        let bg_color = if switch_node.enabled {
+            Color::srgb(0.2, 0.8, 0.3)
+        } else {
+            Color::srgb(0.7, 0.7, 0.7)
+        };
+
+        let mut entity = commands.spawn((
+            Button,
+            Node {
+                width: Val::Px(50.0),
+                height: Val::Px(26.0),
+                ..style
+            },
+            BackgroundColor(bg_color),
+            SwitchComponent {
+                enabled: switch_node.enabled,
+                on_change: switch_node.on_change.clone(),
+            },
+        ));
+
+        if let Some(parent) = parent {
+            entity.set_parent(parent);
+        }
+
+        Ok(entity.id())
+    }
+
+    fn spawn_tabs(
+        commands: &mut Commands,
+        asset_server: &AssetServer,
+        tabs_node: &schema::TabsNode,
+        parent: Option<Entity>,
+    ) -> Result<Entity> {
+        use crate::graphics::components::*;
+        let style = Self::convert_style(&tabs_node.style);
+
+        let mut entity = commands.spawn((
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Auto,
+                flex_direction: FlexDirection::Column,
+                ..style
+            },
+            BackgroundColor(Color::srgb(0.98, 0.98, 0.98)),
+            Tabs {
+                selected_index: tabs_node.selected_index,
+                tab_count: tabs_node.tabs.len(),
+                on_change: tabs_node.on_change.clone(),
+            },
+        ));
+
+        if let Some(parent) = parent {
+            entity.set_parent(parent);
+        }
+
+        let tabs_id = entity.id();
+
+        // Spawn tabs
+        for (index, tab) in tabs_node.tabs.iter().enumerate() {
+            commands.spawn((
+                Button,
+                Node {
+                    padding: UiRect::all(Val::Px(12.0)),
+                    ..default()
+                },
+                BackgroundColor(if index == tabs_node.selected_index {
+                    Color::srgb(0.2, 0.6, 1.0)
+                } else {
+                    Color::srgb(0.85, 0.85, 0.85)
+                }),
+            )).set_parent(tabs_id);
+
+            // Spawn tab content
+            for content in &tab.content {
+                Self::spawn_ui(commands, asset_server, content, Some(tabs_id))?;
+            }
+        }
+
+        Ok(tabs_id)
+    }
+
+    fn spawn_badge(
+        commands: &mut Commands,
+        badge_node: &schema::BadgeNode,
+        parent: Option<Entity>,
+    ) -> Result<Entity> {
+        use crate::graphics::components::*;
+        let style = Self::convert_style(&badge_node.style);
+        let color = badge_node.color.as_ref().map(Self::convert_color).unwrap_or(Color::srgb(1.0, 0.0, 0.0));
+
+        let mut entity = commands.spawn((
+            Node {
+                width: Val::Px(24.0),
+                height: Val::Px(24.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..style
+            },
+            BackgroundColor(color),
+            Badge {
+                count: badge_node.count,
+                label: badge_node.label.clone(),
+            },
+        ));
+
+        if let Some(parent) = parent {
+            entity.set_parent(parent);
+        }
+
+        let badge_id = entity.id();
+
+        let display_text = badge_node.count.map(|c| c.to_string()).unwrap_or(badge_node.label.clone());
+        commands.spawn((
+            Text::new(display_text),
+            TextFont { font_size: 12.0, ..default() },
+            TextColor(Color::WHITE),
+        )).set_parent(badge_id);
+
+        Ok(badge_id)
+    }
+
+    fn spawn_tooltip(
+        commands: &mut Commands,
+        tooltip_node: &schema::TooltipNode,
+        parent: Option<Entity>,
+    ) -> Result<Entity> {
+        use crate::graphics::components::*;
+        let style = Self::convert_style(&tooltip_node.style);
+
+        let mut entity = commands.spawn((
+            Node {
+                padding: UiRect::all(Val::Px(8.0)),
+                ..style
+            },
+            crate::graphics::components::RoundedBackground {
+                color: Color::srgb(0.3, 0.3, 0.3),
+                color_rgba: [0.3, 0.3, 0.3, 1.0],
+                corner_radius: 6.0,
+                elevation: 1,
+                glass: tooltip_node.glass,
+                glass_opacity: tooltip_node.glass_opacity,
+            },
+            Tooltip {
+                message: tooltip_node.message.clone(),
+                visible: true,
+                position: format!("{:?}", tooltip_node.position),
+            },
+        ));
+
+        if let Some(parent) = parent {
+            entity.set_parent(parent);
+        }
+
+        let tooltip_id = entity.id();
+
+        commands.spawn((
+            Text::new(tooltip_node.message.clone()),
+            TextFont { font_size: 12.0, ..default() },
+            TextColor(Color::WHITE),
+        )).set_parent(tooltip_id);
+
+        Ok(tooltip_id)
+    }
+
+    fn spawn_rating(
+        commands: &mut Commands,
+        rating_node: &schema::RatingNode,
+        parent: Option<Entity>,
+    ) -> Result<Entity> {
+        use crate::graphics::components::*;
+        let style = Self::convert_style(&rating_node.style);
+
+        let mut entity = commands.spawn((
+            Node {
+                flex_direction: FlexDirection::Row,
+                ..style
+            },
+            BackgroundColor(Color::NONE),
+            Rating {
+                value: rating_node.value,
+                max: rating_node.max,
+                on_change: rating_node.on_change.clone(),
+                read_only: rating_node.read_only,
+            },
+        ));
+
+        if let Some(parent) = parent {
+            entity.set_parent(parent);
+        }
+
+        Ok(entity.id())
+    }
+
+    fn spawn_segmented_button(
+        commands: &mut Commands,
+        seg_node: &schema::SegmentedButtonNode,
+        parent: Option<Entity>,
+    ) -> Result<Entity> {
+        use crate::graphics::components::*;
+        let style = Self::convert_style(&seg_node.style);
+
+        let mut entity = commands.spawn((
+            Node {
+                flex_direction: FlexDirection::Row,
+                ..style
+            },
+            BackgroundColor(Color::srgb(0.85, 0.85, 0.85)),
+            SegmentedButton {
+                selected_index: seg_node.selected_index,
+                option_count: seg_node.options.len(),
+                multiple_selection: seg_node.multiple_selection,
+                on_change: seg_node.on_change.clone(),
+            },
+        ));
+
+        if let Some(parent) = parent {
+            entity.set_parent(parent);
+        }
+
+        Ok(entity.id())
+    }
+
+    fn spawn_icon_button(
+        commands: &mut Commands,
+        _asset_server: &AssetServer,
+        icon_node: &schema::IconButtonNode,
+        parent: Option<Entity>,
+    ) -> Result<Entity> {
+        use crate::graphics::components::*;
+        let style = Self::convert_style(&icon_node.style);
+
+        let entity_id = commands.spawn((
+            Button,
+            Node {
+                width: Val::Px(40.0),
+                height: Val::Px(40.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..style
+            },
+            BackgroundColor(Color::NONE),
+            IconButton {
+                icon: icon_node.icon.clone(),
+                action: icon_node.action.clone(),
+                hovered: false,
+            },
+        )).id();
+
+        if let Some(parent) = parent {
+            commands.entity(entity_id).set_parent(parent);
+        }
+
+        // Optionally add tooltip text as a child (if provided)
+        if let Some(tt) = &icon_node.tooltip {
+            commands.spawn((
+                Text::new(tt.clone()),
+                TextFont { font_size: 12.0, ..default() },
+                TextColor(Color::WHITE),
+            )).set_parent(entity_id);
+        }
+
+        Ok(entity_id)
+    }
+
+    fn spawn_divider(
+        commands: &mut Commands,
+        div_node: &schema::DividerNode,
+        parent: Option<Entity>,
+    ) -> Result<Entity> {
+        use crate::graphics::components::*;
+        let style = Self::convert_style(&div_node.style);
+
+        let color = div_node.color.as_ref().map(Self::convert_color).unwrap_or(Color::srgb(0.6, 0.6, 0.6));
+        let thickness = if div_node.thickness <= 0.0 { 1.0 } else { div_node.thickness };
+
+        let entity_id = commands.spawn((
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Px(thickness),
+                ..style
+            },
+            BackgroundColor(color),
+            Divider { thickness, color },
+        )).id();
+
+        if let Some(parent) = parent {
+            commands.entity(entity_id).set_parent(parent);
+        }
+
+        Ok(entity_id)
+    }
+
+    fn spawn_list(
+        commands: &mut Commands,
+        asset_server: &AssetServer,
+        list_node: &schema::ListNode,
+        parent: Option<Entity>,
+    ) -> Result<Entity> {
+        use crate::graphics::components::*;
+        let style = Self::convert_style(&list_node.style);
+
+        let list_id = commands.spawn((
+            Node { flex_direction: FlexDirection::Column, ..style },
+            BackgroundColor(Color::NONE),
+            ListComponent { item_count: list_node.items.len() },
+        )).id();
+
+        if let Some(parent) = parent {
+            commands.entity(list_id).set_parent(parent);
+        }
+
+        for item in &list_node.items {
+            Self::spawn_ui(commands, asset_server, item, Some(list_id))?;
+        }
+
+        Ok(list_id)
+    }
+
+    fn spawn_drawer(
+        commands: &mut Commands,
+        asset_server: &AssetServer,
+        drawer_node: &schema::DrawerNode,
+        parent: Option<Entity>,
+    ) -> Result<Entity> {
+        use crate::graphics::components::*;
+        let style = Self::convert_style(&drawer_node.style);
+
+        let width = drawer_node.width.unwrap_or(300.0);
+
+        let node = Node {
+            width: Val::Px(width),
+            height: Val::Percent(100.0),
+            position_type: PositionType::Absolute,
+            left: if drawer_node.open { Val::Px(0.0) } else { Val::Px(-width) },
+            top: Val::Px(0.0),
+            ..style
+        };
+
+        let drawer_id = commands.spawn((
+            node,
+            BackgroundColor(Color::srgb(0.98, 0.98, 0.98)),
+            Drawer { open: drawer_node.open, width },
+        )).id();
+
+        if let Some(parent) = parent {
+            commands.entity(drawer_id).set_parent(parent);
+        }
+
+        for child in &drawer_node.content {
+            Self::spawn_ui(commands, asset_server, child, Some(drawer_id))?;
+        }
+
+        Ok(drawer_id)
+    }
+
+    // ===== 3D GAME ELEMENT SPAWN FUNCTIONS =====
+
+    fn spawn_terrain(
+        commands: &mut Commands,
+        meshes: &mut ResMut<Assets<Mesh>>,
+        materials: &mut ResMut<Assets<StandardMaterial>>,
+        terrain_node: &schema::TerrainNode,
+    ) -> Result<Entity> {
+        use crate::graphics::components::*;
+        
+        let mesh = meshes.add(Plane3d::default().mesh().size(terrain_node.size, terrain_node.size));
+        let mut material = StandardMaterial::default();
+        if let Some(color) = &terrain_node.material.base_color {
+            material.base_color = Self::convert_color(color);
+        }
+        let transform = Self::convert_transform(&terrain_node.transform);
+
+        let mut entity = commands.spawn((
+            Mesh3d(mesh),
+            MeshMaterial3d(materials.add(material)),
+            transform,
+            Terrain {
+                size: terrain_node.size,
+                height: terrain_node.height,
+                subdivisions: terrain_node.subdivisions,
+            },
+        ));
+
+        if let Some(physics) = &terrain_node.physics {
+            entity.insert(Physics {
+                mass: physics.mass,
+                friction: physics.friction,
+                restitution: physics.restitution,
+                gravity_scale: physics.gravity_scale,
+                use_gravity: physics.use_gravity,
+                collider_type: format!("{:?}", physics.collider_type),
+            });
+        }
+
+        Ok(entity.id())
+    }
+
+    fn spawn_skybox(
+        commands: &mut Commands,
+        _asset_server: &AssetServer,
+        skybox_node: &schema::SkyboxNode,
+    ) -> Result<Entity> {
+        use crate::graphics::components::*;
+        
+        let transform = if let Some(rot) = &skybox_node.rotation {
+            Transform {
+                rotation: Quat::from_euler(
+                    EulerRot::XYZ,
+                    rot.x.to_radians(),
+                    rot.y.to_radians(),
+                    rot.z.to_radians(),
+                ),
+                ..default()
+            }
+        } else {
+            Transform::default()
+        };
+
+        let entity = commands.spawn((
+            transform,
+            SkyboxComponent {
+                rotation: transform.rotation,
+                brightness: skybox_node.brightness,
+            },
+        )).id();
+
+        Ok(entity)
+    }
+
+    fn spawn_foliage(
+        commands: &mut Commands,
+        meshes: &mut ResMut<Assets<Mesh>>,
+        materials: &mut ResMut<Assets<StandardMaterial>>,
+        _asset_server: &AssetServer,
+        foliage_node: &schema::FoliageNode,
+    ) -> Result<Entity> {
+        use crate::graphics::components::*;
+        
+        let mesh = meshes.add(Plane3d::default());
+        let mut material = StandardMaterial::default();
+        if let Some(color) = &foliage_node.material.base_color {
+            material.base_color = Self::convert_color(color);
+        }
+        let transform = Self::convert_transform(&foliage_node.transform);
+
+        let entity = commands.spawn((
+            Mesh3d(mesh),
+            MeshMaterial3d(materials.add(material)),
+            transform,
+            Foliage {
+                foliage_type: format!("{:?}", foliage_node.foliage_type),
+                density: foliage_node.density,
+                color_variation: foliage_node.color_variation,
+            },
+        )).id();
+
+        Ok(entity)
+    }
+
+    fn spawn_decal(
+        commands: &mut Commands,
+        _asset_server: &AssetServer,
+        decal_node: &schema::DecalNode,
+    ) -> Result<Entity> {
+        use crate::graphics::components::*;
+        
+        let transform = Self::convert_transform(&decal_node.transform);
+
+        let entity = commands.spawn((
+            transform,
+            Decal {
+                size: Vec3::new(decal_node.size.x, decal_node.size.y, decal_node.size.z),
+                sort_order: decal_node.sort_order,
+            },
+        )).id();
+
+        Ok(entity)
+    }
+
+    fn spawn_billboard(
+        commands: &mut Commands,
+        _asset_server: &AssetServer,
+        billboard_node: &schema::BillboardNode,
+    ) -> Result<Entity> {
+        use crate::graphics::components::*;
+        
+        let transform = Self::convert_transform(&billboard_node.transform);
+
+        let entity = commands.spawn((
+            transform,
+            Billboard {
+                billboard_type: format!("{:?}", billboard_node.billboard_type),
+                size: Vec3::new(billboard_node.size.x, billboard_node.size.y, billboard_node.size.z),
+            },
+        )).id();
+
+        Ok(entity)
+    }
+
+    fn spawn_water(
+        commands: &mut Commands,
+        meshes: &mut ResMut<Assets<Mesh>>,
+        materials: &mut ResMut<Assets<StandardMaterial>>,
+        water_node: &schema::WaterNode,
+    ) -> Result<Entity> {
+        use crate::graphics::components::*;
+        
+        let mesh = meshes.add(Plane3d::default().mesh().size(water_node.size.x, water_node.size.z));
+        let mut material = StandardMaterial::default();
+        if let Some(color) = &water_node.water_color {
+            material.base_color = Self::convert_color(color);
+        } else {
+            material.base_color = Color::srgba(0.0, 0.5, 1.0, water_node.transparency);
+        }
+        let transform = Self::convert_transform(&water_node.transform);
+
+        let entity = commands.spawn((
+            Mesh3d(mesh),
+            MeshMaterial3d(materials.add(material)),
+            transform,
+            Water {
+                wave_amplitude: water_node.wave_amplitude,
+                wave_frequency: water_node.wave_frequency,
+                wave_speed: 1.0,
+                elapsed_time: 0.0,
+            },
+        )).id();
+
+        Ok(entity)
+    }
+
+    fn spawn_rigidbody(
+        commands: &mut Commands,
+        meshes: &mut ResMut<Assets<Mesh>>,
+        materials: &mut ResMut<Assets<StandardMaterial>>,
+        asset_server: &AssetServer,
+        rb_node: &schema::RigidBodyNode,
+    ) -> Result<Entity> {
+        use crate::graphics::components::*;
+        
+        let mesh = Self::create_mesh(&rb_node.mesh, meshes, asset_server);
+        let material = Self::create_material(&rb_node.material, materials, asset_server);
+        let transform = Self::convert_transform(&rb_node.transform);
+
+        let entity = commands.spawn((
+            Mesh3d(mesh),
+            MeshMaterial3d(material),
+            transform,
+            RigidBodyComponent {
+                mass: rb_node.physics.mass,
+                velocity: Vec3::ZERO,
+                angular_velocity: Vec3::ZERO,
+            },
+            Physics {
+                mass: rb_node.physics.mass,
+                friction: rb_node.physics.friction,
+                restitution: rb_node.physics.restitution,
+                gravity_scale: rb_node.physics.gravity_scale,
+                use_gravity: rb_node.physics.use_gravity,
+                collider_type: format!("{:?}", rb_node.physics.collider_type),
+            },
+        )).id();
+
+        Ok(entity)
+    }
+
+    fn spawn_environment(
+        commands: &mut Commands,
+        env_node: &schema::EnvironmentNode,
+    ) -> Result<Entity> {
+        use crate::graphics::components::*;
+        
+        let entity = commands.spawn(Environment {
+            ambient_light_intensity: env_node.ambient_intensity,
+            fog_enabled: env_node.fog_enabled,
+            fog_distance: env_node.fog_distance,
+        }).id();
+
+        Ok(entity)
+    }
+
     fn convert_style(style_def: &schema::StyleDef) -> Node {
         Node {
             width: style_def.width.as_ref().map(Self::convert_dimension).unwrap_or(Val::Auto),
@@ -748,6 +1773,21 @@ impl JsonToBevy {
             schema::MeshType::Cylinder { radius, height } => {
                 meshes.add(Cylinder::new(*radius, *height))
             }
+            schema::MeshType::Cone { radius, height } => {
+                meshes.add(Cone::new(*radius, *height))
+            }
+            schema::MeshType::Torus { radius, tube_radius } => {
+                meshes.add(Torus::new(*radius, *tube_radius))
+            }
+            schema::MeshType::Icosphere { radius, subdivisions } => {
+                meshes.add(Sphere::new(*radius).mesh().uv(*subdivisions, *subdivisions))
+            }
+            schema::MeshType::UvSphere { radius, sectors, stacks } => {
+                meshes.add(Sphere::new(*radius).mesh().uv(*sectors, *stacks))
+            }
+            schema::MeshType::Grid { width, height, spacing } => {
+                meshes.add(Plane3d::default().mesh().size((*width as f32) * spacing, (*height as f32) * spacing))
+            }
             schema::MeshType::File { path } => {
                 // Load mesh from file (GLTF, OBJ, etc.)
                 asset_server.load(path.clone())
@@ -792,6 +1832,29 @@ impl JsonToBevy {
 
         if let Some(normal_map) = &material_def.normal_map_texture {
             material.normal_map_texture = Some(asset_server.load(normal_map.clone()));
+        }
+
+        // Additional PBR properties
+        if let Some(ao_texture) = &material_def.ambient_occlusion_texture {
+            material.occlusion_texture = Some(asset_server.load(ao_texture.clone()));
+        }
+
+        if let Some(_height_map) = &material_def.height_map_texture {
+            // Parallax mapping would be implemented here with custom shaders
+            if let Some(_parallax) = material_def.parallax_depth {
+                // This is a placeholder; actual parallax mapping needs custom shader support
+                material.perceptual_roughness = (material.perceptual_roughness * 0.9).min(1.0);
+            }
+        }
+
+        if let Some(ior) = material_def.ior {
+            // Store IOR for potential future use
+            // Bevy's StandardMaterial doesn't directly support IOR, but this can be used with custom shaders
+            material.metallic = (material.metallic * (1.0 - (ior - 1.0).abs().min(0.1))).max(0.0);
+        }
+
+        if material_def.double_sided {
+            material.cull_mode = None; // Disable back-face culling
         }
 
         materials.add(material)

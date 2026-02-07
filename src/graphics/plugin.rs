@@ -8,11 +8,27 @@ impl Plugin for JsonScenePlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<ComponentEvent>()
             .add_systems(
+                Startup,
+                (
+                    generate_circle_mask_system,
+                    load_glass_shader_system,
+                    spawn_captured_scene_camera_system,
+                ),
+            )
+            .add_systems(
                 Update,
                 (
                     button_interaction_system,
                     checkbox_interaction_system,
                     radio_button_interaction_system,
+                    icon_button_interaction_system,
+                    // ripple + drawer animation
+                    button_ripple_spawn_system,
+                    ripple_update_system,
+                    drawer_animation_system,
+                    // apply rounded-image backgrounds and shadows at runtime
+                    apply_ui_images_system,
+                    blur_captured_overlays_system,
                     progress_bar_update_system,
                     animation_system,
                     particle_emission_system,

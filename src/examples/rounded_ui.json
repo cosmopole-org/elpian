@@ -1,0 +1,33 @@
+{
+  "ui": [
+    {
+      "type": "card",
+      "corner_radius": 16.0,
+      "elevation": 3,
+      "style": {
+        "width": 300,
+        "height": 180,
+        "margin": { "top": 10, "bottom": 10, "left": 10, "right": 10 }
+      },
+      "children": [
+        {
+          "type": "text",
+          "text": "Rounded Card",
+          "font_size": 24.0,
+          "color": { "r": 0.1, "g": 0.1, "b": 0.1 }
+        }
+      ]
+    },
+    {
+      "type": "fab",
+      "icon": "plus",
+      "elevation": 6,
+      "style": {
+        "position_type": "Absolute",
+        "right": 24,
+        "bottom": 24
+      }
+    }
+  ],
+  "world": []
+}
