@@ -201,6 +201,32 @@ class CSSStyle {
   final String? animationFillMode;
   final String? animationPlayState;
 
+  // Advanced Animation Properties
+  final bool? animateOnBuild;
+  final Duration? staggerDelay;
+  final int? staggerChildren;
+  final double? animationFrom;
+  final double? animationTo;
+  final Offset? slideBegin;
+  final Offset? slideEnd;
+  final double? scaleBegin;
+  final double? scaleEnd;
+  final double? rotationBegin;
+  final double? rotationEnd;
+  final double? fadeBegin;
+  final double? fadeEnd;
+  final Color? colorBegin;
+  final Color? colorEnd;
+  final EdgeInsets? paddingBegin;
+  final EdgeInsets? paddingEnd;
+  final AlignmentGeometry? alignmentBegin;
+  final AlignmentGeometry? alignmentEnd;
+  final Color? shimmerBaseColor;
+  final Color? shimmerHighlightColor;
+  final bool? animationAutoReverse;
+  final bool? animationRepeat;
+  final List<Map<String, dynamic>>? keyframes;
+
   // Content & Lists
   final String? content;
   final String? listStyleType;
@@ -382,6 +408,30 @@ class CSSStyle {
     this.animationDirection,
     this.animationFillMode,
     this.animationPlayState,
+    this.animateOnBuild,
+    this.staggerDelay,
+    this.staggerChildren,
+    this.animationFrom,
+    this.animationTo,
+    this.slideBegin,
+    this.slideEnd,
+    this.scaleBegin,
+    this.scaleEnd,
+    this.rotationBegin,
+    this.rotationEnd,
+    this.fadeBegin,
+    this.fadeEnd,
+    this.colorBegin,
+    this.colorEnd,
+    this.paddingBegin,
+    this.paddingEnd,
+    this.alignmentBegin,
+    this.alignmentEnd,
+    this.shimmerBaseColor,
+    this.shimmerHighlightColor,
+    this.animationAutoReverse,
+    this.animationRepeat,
+    this.keyframes,
     this.content,
     this.listStyleType,
     this.listStylePosition,
@@ -457,6 +507,38 @@ class CSSStyle {
     String? flexWrap,
     Duration? transitionDuration,
     Curve? transitionCurve,
+    Duration? animationDuration,
+    Curve? transitionCurveOverride,
+    String? animationName,
+    Duration? animationDelay,
+    int? animationIterationCount,
+    String? animationDirection,
+    String? animationFillMode,
+    String? animationPlayState,
+    bool? animateOnBuild,
+    Duration? staggerDelay,
+    int? staggerChildren,
+    double? animationFrom,
+    double? animationTo,
+    Offset? slideBegin,
+    Offset? slideEnd,
+    double? scaleBegin,
+    double? scaleEnd,
+    double? rotationBegin,
+    double? rotationEnd,
+    double? fadeBegin,
+    double? fadeEnd,
+    Color? colorBegin,
+    Color? colorEnd,
+    EdgeInsets? paddingBegin,
+    EdgeInsets? paddingEnd,
+    AlignmentGeometry? alignmentBegin,
+    AlignmentGeometry? alignmentEnd,
+    Color? shimmerBaseColor,
+    Color? shimmerHighlightColor,
+    bool? animationAutoReverse,
+    bool? animationRepeat,
+    List<Map<String, dynamic>>? keyframes,
   }) {
     return CSSStyle(
       width: width ?? this.width,
@@ -516,6 +598,37 @@ class CSSStyle {
       flexWrap: flexWrap ?? this.flexWrap,
       transitionDuration: transitionDuration ?? this.transitionDuration,
       transitionCurve: transitionCurve ?? this.transitionCurve,
+      animationDuration: animationDuration ?? this.animationDuration,
+      animationName: animationName ?? this.animationName,
+      animationDelay: animationDelay ?? this.animationDelay,
+      animationIterationCount: animationIterationCount ?? this.animationIterationCount,
+      animationDirection: animationDirection ?? this.animationDirection,
+      animationFillMode: animationFillMode ?? this.animationFillMode,
+      animationPlayState: animationPlayState ?? this.animationPlayState,
+      animateOnBuild: animateOnBuild ?? this.animateOnBuild,
+      staggerDelay: staggerDelay ?? this.staggerDelay,
+      staggerChildren: staggerChildren ?? this.staggerChildren,
+      animationFrom: animationFrom ?? this.animationFrom,
+      animationTo: animationTo ?? this.animationTo,
+      slideBegin: slideBegin ?? this.slideBegin,
+      slideEnd: slideEnd ?? this.slideEnd,
+      scaleBegin: scaleBegin ?? this.scaleBegin,
+      scaleEnd: scaleEnd ?? this.scaleEnd,
+      rotationBegin: rotationBegin ?? this.rotationBegin,
+      rotationEnd: rotationEnd ?? this.rotationEnd,
+      fadeBegin: fadeBegin ?? this.fadeBegin,
+      fadeEnd: fadeEnd ?? this.fadeEnd,
+      colorBegin: colorBegin ?? this.colorBegin,
+      colorEnd: colorEnd ?? this.colorEnd,
+      paddingBegin: paddingBegin ?? this.paddingBegin,
+      paddingEnd: paddingEnd ?? this.paddingEnd,
+      alignmentBegin: alignmentBegin ?? this.alignmentBegin,
+      alignmentEnd: alignmentEnd ?? this.alignmentEnd,
+      shimmerBaseColor: shimmerBaseColor ?? this.shimmerBaseColor,
+      shimmerHighlightColor: shimmerHighlightColor ?? this.shimmerHighlightColor,
+      animationAutoReverse: animationAutoReverse ?? this.animationAutoReverse,
+      animationRepeat: animationRepeat ?? this.animationRepeat,
+      keyframes: keyframes ?? this.keyframes,
     );
   }
 }

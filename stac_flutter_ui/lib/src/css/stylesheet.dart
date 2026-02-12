@@ -7,6 +7,7 @@ class CSSStylesheet {
   final Map<String, Map<String, dynamic>> _classRules = {};
   final Map<String, Map<String, dynamic>> _idRules = {};
   final List<CSSRule> _orderedRules = [];
+  final Map<String, List<KeyframeFrame>> _keyframes = {};
   
   /// Parse CSS string
   void parseCSS(String cssString) {
@@ -171,6 +172,17 @@ class CSSStylesheet {
   
   /// Get all rules
   List<CSSRule> get rules => List.unmodifiable(_orderedRules);
+
+  /// Register a keyframe animation
+  void addKeyframeAnimation(String name, List<KeyframeFrame> frames) {
+    _keyframes[name] = frames;
+  }
+
+  /// Get keyframe animation by name
+  List<KeyframeFrame>? getKeyframes(String name) => _keyframes[name];
+
+  /// Get all keyframe names
+  Set<String> get keyframeNames => _keyframes.keys.toSet();
 }
 
 /// Represents a single CSS rule
@@ -245,6 +257,17 @@ class MediaQuery {
     
     return true;
   }
+}
+
+/// Represents a single keyframe frame with offset and styles
+class KeyframeFrame {
+  final double offset; // 0.0 to 1.0
+  final Map<String, dynamic> styles;
+
+  KeyframeFrame({
+    required this.offset,
+    required this.styles,
+  });
 }
 
 /// Global stylesheet manager

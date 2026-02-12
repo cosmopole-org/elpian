@@ -81,10 +81,74 @@ class CSSParser {
           styleMap['pointerEvents'] ?? styleMap['pointer-events'] as String?,
       gap: parseDouble(styleMap['gap']),
       flexWrap: styleMap['flexWrap'] ?? styleMap['flex-wrap'] as String?,
-      transitionDuration: _parseDuration(
+      transitionDuration: parseDuration(
           styleMap['transitionDuration'] ?? styleMap['transition-duration']),
-      transitionCurve: _parseCurve(
+      transitionCurve: parseCurve(
           styleMap['transitionCurve'] ?? styleMap['transition-curve']),
+      transitionProperty:
+          styleMap['transitionProperty'] ?? styleMap['transition-property'] as String?,
+      transitionDelay: parseDuration(
+          styleMap['transitionDelay'] ?? styleMap['transition-delay']),
+      animationName:
+          styleMap['animationName'] ?? styleMap['animation-name'] as String?,
+      animationDuration: parseDuration(
+          styleMap['animationDuration'] ?? styleMap['animation-duration']),
+      animationTimingFunction:
+          styleMap['animationTimingFunction'] ?? styleMap['animation-timing-function'] as String?,
+      animationDelay: parseDuration(
+          styleMap['animationDelay'] ?? styleMap['animation-delay']),
+      animationIterationCount: parseInt(
+          styleMap['animationIterationCount'] ?? styleMap['animation-iteration-count']),
+      animationDirection:
+          styleMap['animationDirection'] ?? styleMap['animation-direction'] as String?,
+      animationFillMode:
+          styleMap['animationFillMode'] ?? styleMap['animation-fill-mode'] as String?,
+      animationPlayState:
+          styleMap['animationPlayState'] ?? styleMap['animation-play-state'] as String?,
+      animateOnBuild: styleMap['animateOnBuild'] ?? styleMap['animate-on-build'] as bool?,
+      staggerDelay: parseDuration(
+          styleMap['staggerDelay'] ?? styleMap['stagger-delay']),
+      staggerChildren: parseInt(
+          styleMap['staggerChildren'] ?? styleMap['stagger-children']),
+      animationFrom: parseDouble(
+          styleMap['animationFrom'] ?? styleMap['animation-from']),
+      animationTo: parseDouble(
+          styleMap['animationTo'] ?? styleMap['animation-to']),
+      slideBegin: parseOffset(
+          styleMap['slideBegin'] ?? styleMap['slide-begin']),
+      slideEnd: parseOffset(
+          styleMap['slideEnd'] ?? styleMap['slide-end']),
+      scaleBegin: parseDouble(
+          styleMap['scaleBegin'] ?? styleMap['scale-begin']),
+      scaleEnd: parseDouble(
+          styleMap['scaleEnd'] ?? styleMap['scale-end']),
+      rotationBegin: parseDouble(
+          styleMap['rotationBegin'] ?? styleMap['rotation-begin']),
+      rotationEnd: parseDouble(
+          styleMap['rotationEnd'] ?? styleMap['rotation-end']),
+      fadeBegin: parseDouble(
+          styleMap['fadeBegin'] ?? styleMap['fade-begin']),
+      fadeEnd: parseDouble(
+          styleMap['fadeEnd'] ?? styleMap['fade-end']),
+      colorBegin: parseColor(
+          styleMap['colorBegin'] ?? styleMap['color-begin']),
+      colorEnd: parseColor(
+          styleMap['colorEnd'] ?? styleMap['color-end']),
+      paddingBegin: _parseEdgeInsets(
+          styleMap['paddingBegin'] ?? styleMap['padding-begin']),
+      paddingEnd: _parseEdgeInsets(
+          styleMap['paddingEnd'] ?? styleMap['padding-end']),
+      alignmentBegin: parseAlignment(
+          styleMap['alignmentBegin'] ?? styleMap['alignment-begin']),
+      alignmentEnd: parseAlignment(
+          styleMap['alignmentEnd'] ?? styleMap['alignment-end']),
+      shimmerBaseColor: parseColor(
+          styleMap['shimmerBaseColor'] ?? styleMap['shimmer-base-color']),
+      shimmerHighlightColor: parseColor(
+          styleMap['shimmerHighlightColor'] ?? styleMap['shimmer-highlight-color']),
+      animationAutoReverse: styleMap['animationAutoReverse'] ?? styleMap['animation-auto-reverse'] as bool?,
+      animationRepeat: styleMap['animationRepeat'] ?? styleMap['animation-repeat'] as bool?,
+      keyframes: _parseKeyframes(styleMap['keyframes']),
     );
   }
 
@@ -93,7 +157,7 @@ class CSSParser {
     if (value is double) return value;
     if (value is int) return value.toDouble();
     if (value is String) {
-      final numStr = value.replaceAll(RegExp(r'[^0-9.]'), '');
+      final numStr = value.replaceAll(RegExp(r'[^0-9.\-]'), '');
       return double.tryParse(numStr);
     }
     return null;
@@ -103,7 +167,10 @@ class CSSParser {
     if (value == null) return null;
     if (value is int) return value;
     if (value is double) return value.toInt();
-    if (value is String) return int.tryParse(value);
+    if (value is String) {
+      if (value.toLowerCase() == 'infinite') return -1;
+      return int.tryParse(value);
+    }
     return null;
   }
 
@@ -135,6 +202,22 @@ class CSSParser {
               ? (double.parse(match.group(4)!) * 255).toInt()
               : 255;
           return Color.fromARGB(a, r, g, b);
+        }
+      }
+
+      // HSL/HSLA
+      if (colorStr.startsWith('hsl')) {
+        final match =
+            RegExp(r'hsla?\((\d+),\s*(\d+)%?,\s*(\d+)%?(?:,\s*([\d.]+))?\)')
+                .firstMatch(colorStr);
+        if (match != null) {
+          final h = double.parse(match.group(1)!);
+          final s = double.parse(match.group(2)!) / 100;
+          final l = double.parse(match.group(3)!) / 100;
+          final a = match.group(4) != null
+              ? double.parse(match.group(4)!)
+              : 1.0;
+          return HSLColor.fromAHSL(a, h, s, l).toColor();
         }
       }
 
@@ -209,6 +292,11 @@ class CSSParser {
         case 'bottom-right':
           return Alignment.bottomRight;
       }
+    }
+    if (value is Map) {
+      final x = parseDouble(value['x']) ?? 0.0;
+      final y = parseDouble(value['y']) ?? 0.0;
+      return Alignment(x, y);
     }
     return null;
   }
@@ -434,15 +522,26 @@ class CSSParser {
     if (value == null) return null;
     if (value is Map) {
       return Offset(
-        parseDouble(value['x']) ?? 0,
-        parseDouble(value['y']) ?? 0,
+        parseDouble(value['x'] ?? value['dx']) ?? 0,
+        parseDouble(value['y'] ?? value['dy']) ?? 0,
+      );
+    }
+    if (value is List && value.length == 2) {
+      return Offset(
+        parseDouble(value[0]) ?? 0,
+        parseDouble(value[1]) ?? 0,
       );
     }
     return null;
   }
 
   static Matrix4? _parseTransform(dynamic value) {
-    // Simplified transform parsing
+    if (value == null) return null;
+    if (value is List && value.length == 16) {
+      return Matrix4.fromList(
+        value.map((e) => (e as num).toDouble()).toList(),
+      );
+    }
     return null;
   }
 
@@ -469,23 +568,43 @@ class CSSParser {
             center: parseAlignment(value['center']) as Alignment? ??
                 Alignment.center,
           );
+        } else if (type == 'sweep') {
+          return SweepGradient(
+            colors: colors,
+            center: parseAlignment(value['center']) as Alignment? ??
+                Alignment.center,
+          );
         }
       }
     }
     return null;
   }
 
-  static Duration? _parseDuration(dynamic value) {
+  static Duration? parseDuration(dynamic value) {
     if (value == null) return null;
     if (value is int) return Duration(milliseconds: value);
+    if (value is double) return Duration(milliseconds: value.toInt());
     if (value is String) {
+      final trimmed = value.trim().toLowerCase();
+      // Support 's' suffix for seconds
+      if (trimmed.endsWith('s') && !trimmed.endsWith('ms')) {
+        final numStr = trimmed.substring(0, trimmed.length - 1);
+        final seconds = double.tryParse(numStr);
+        if (seconds != null) return Duration(milliseconds: (seconds * 1000).toInt());
+      }
+      // Support 'ms' suffix for milliseconds
+      if (trimmed.endsWith('ms')) {
+        final numStr = trimmed.substring(0, trimmed.length - 2);
+        final ms = int.tryParse(numStr);
+        if (ms != null) return Duration(milliseconds: ms);
+      }
       final ms = int.tryParse(value.replaceAll(RegExp(r'[^0-9]'), ''));
       if (ms != null) return Duration(milliseconds: ms);
     }
     return null;
   }
 
-  static Curve? _parseCurve(dynamic value) {
+  static Curve? parseCurve(dynamic value) {
     if (value == null) return null;
     if (value is String) {
       switch (value.toLowerCase()) {
@@ -503,8 +622,99 @@ class CSSParser {
         case 'ease-in-out':
           return Curves.easeInOut;
         case 'bounce':
+        case 'bouncein':
+        case 'bounce-in':
           return Curves.bounceIn;
+        case 'bounceout':
+        case 'bounce-out':
+          return Curves.bounceOut;
+        case 'bounceinout':
+        case 'bounce-in-out':
+          return Curves.bounceInOut;
+        case 'elastic':
+        case 'elasticin':
+        case 'elastic-in':
+          return Curves.elasticIn;
+        case 'elasticout':
+        case 'elastic-out':
+          return Curves.elasticOut;
+        case 'elasticinout':
+        case 'elastic-in-out':
+          return Curves.elasticInOut;
+        case 'decelerate':
+          return Curves.decelerate;
+        case 'fastoutslowin':
+        case 'fast-out-slow-in':
+          return Curves.fastOutSlowIn;
+        case 'slowmiddle':
+        case 'slow-middle':
+          return Curves.slowMiddle;
+        case 'easeincubic':
+        case 'ease-in-cubic':
+          return Curves.easeInCubic;
+        case 'easeoutcubic':
+        case 'ease-out-cubic':
+          return Curves.easeOutCubic;
+        case 'easeinoutcubic':
+        case 'ease-in-out-cubic':
+          return Curves.easeInOutCubic;
+        case 'easeinquart':
+        case 'ease-in-quart':
+          return Curves.easeInQuart;
+        case 'easeoutquart':
+        case 'ease-out-quart':
+          return Curves.easeOutQuart;
+        case 'easeinoutquart':
+        case 'ease-in-out-quart':
+          return Curves.easeInOutQuart;
+        case 'easeinquint':
+        case 'ease-in-quint':
+          return Curves.easeInQuint;
+        case 'easeoutquint':
+        case 'ease-out-quint':
+          return Curves.easeOutQuint;
+        case 'easeinoutquint':
+        case 'ease-in-out-quint':
+          return Curves.easeInOutQuint;
+        case 'easeinexpo':
+        case 'ease-in-expo':
+          return Curves.easeInExpo;
+        case 'easeoutexpo':
+        case 'ease-out-expo':
+          return Curves.easeOutExpo;
+        case 'easeinoutexpo':
+        case 'ease-in-out-expo':
+          return Curves.easeInOutExpo;
+        case 'easeincirc':
+        case 'ease-in-circ':
+          return Curves.easeInCirc;
+        case 'easeoutcirc':
+        case 'ease-out-circ':
+          return Curves.easeOutCirc;
+        case 'easeinoutcirc':
+        case 'ease-in-out-circ':
+          return Curves.easeInOutCirc;
+        case 'easeinback':
+        case 'ease-in-back':
+          return Curves.easeInBack;
+        case 'easeoutback':
+        case 'ease-out-back':
+          return Curves.easeOutBack;
+        case 'easeinoutback':
+        case 'ease-in-out-back':
+          return Curves.easeInOutBack;
       }
+    }
+    return null;
+  }
+
+  static List<Map<String, dynamic>>? _parseKeyframes(dynamic value) {
+    if (value == null) return null;
+    if (value is List) {
+      return value
+          .where((item) => item is Map<String, dynamic>)
+          .map((item) => item as Map<String, dynamic>)
+          .toList();
     }
     return null;
   }
@@ -527,5 +737,16 @@ class CSSParser {
     'indigo': Colors.indigo,
     'lime': Colors.lime,
     'teal': Colors.teal,
+    'amber': Colors.amber,
+    'deeporange': Colors.deepOrange,
+    'deep-orange': Colors.deepOrange,
+    'deeppurple': Colors.deepPurple,
+    'deep-purple': Colors.deepPurple,
+    'lightblue': Colors.lightBlue,
+    'light-blue': Colors.lightBlue,
+    'lightgreen': Colors.lightGreen,
+    'light-green': Colors.lightGreen,
+    'bluegrey': Colors.blueGrey,
+    'blue-grey': Colors.blueGrey,
   };
 }

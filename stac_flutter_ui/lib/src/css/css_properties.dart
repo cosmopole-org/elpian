@@ -106,6 +106,47 @@ class CSSProperties {
       );
     }
 
+    // Wrap with implicit animations if transition properties are set
+    if (style.transitionDuration != null && style.animateOnBuild == true) {
+      result = _wrapWithAnimations(result, style);
+    }
+
+    return result;
+  }
+
+  /// Wrap widget with implicit animation wrappers based on style
+  static Widget _wrapWithAnimations(Widget child, CSSStyle style) {
+    Widget result = child;
+    final duration = style.transitionDuration ?? const Duration(milliseconds: 300);
+    final curve = style.transitionCurve ?? Curves.linear;
+
+    if (style.opacity != null) {
+      result = AnimatedOpacity(
+        opacity: style.opacity!,
+        duration: duration,
+        curve: curve,
+        child: result,
+      );
+    }
+
+    if (style.padding != null) {
+      result = AnimatedPadding(
+        padding: style.padding!,
+        duration: duration,
+        curve: curve,
+        child: result,
+      );
+    }
+
+    if (style.alignment != null) {
+      result = AnimatedAlign(
+        alignment: style.alignment!,
+        duration: duration,
+        curve: curve,
+        child: result,
+      );
+    }
+
     return result;
   }
 
