@@ -79,6 +79,34 @@ class StacEngine {
     _registry.register('AppBar', StacAppBar.build);
     _registry.register('Canvas', StacCanvasWidget.build);
 
+    // Animation widgets - Implicit
+    _registry.register('AnimatedContainer', StacAnimatedContainer.build);
+    _registry.register('AnimatedOpacity', StacAnimatedOpacity.build);
+    _registry.register('AnimatedCrossFade', StacAnimatedCrossFade.build);
+    _registry.register('AnimatedSwitcher', StacAnimatedSwitcher.build);
+    _registry.register('AnimatedAlign', StacAnimatedAlign.build);
+    _registry.register('AnimatedPadding', StacAnimatedPadding.build);
+    _registry.register('AnimatedPositioned', StacAnimatedPositioned.build);
+    _registry.register('AnimatedScale', StacAnimatedScale.build);
+    _registry.register('AnimatedRotation', StacAnimatedRotation.build);
+    _registry.register('AnimatedSlide', StacAnimatedSlide.build);
+    _registry.register('AnimatedSize', StacAnimatedSize.build);
+    _registry.register('AnimatedDefaultTextStyle', StacAnimatedDefaultTextStyle.build);
+
+    // Animation widgets - Explicit
+    _registry.register('FadeTransition', StacFadeTransition.build);
+    _registry.register('SlideTransition', StacSlideTransition.build);
+    _registry.register('ScaleTransition', StacScaleTransition.build);
+    _registry.register('RotationTransition', StacRotationTransition.build);
+    _registry.register('SizeTransition', StacSizeTransition.build);
+
+    // Animation widgets - Custom
+    _registry.register('TweenAnimationBuilder', StacTweenAnimationBuilder.build);
+    _registry.register('StaggeredAnimation', StacStaggeredAnimation.build);
+    _registry.register('Shimmer', StacShimmer.build);
+    _registry.register('Pulse', StacPulse.build);
+    _registry.register('AnimatedGradient', StacAnimatedGradient.build);
+
     // HTML widgets
     _registry.register('div', HtmlDiv.build);
     _registry.register('span', HtmlSpan.build);

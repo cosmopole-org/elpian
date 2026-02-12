@@ -315,14 +315,28 @@ class CSSParserExtensions {
       case 'ease-in-out':
         return Curves.easeInOut;
       case 'bounce':
+      case 'bounce-in':
         return Curves.bounceIn;
+      case 'bounce-out':
+        return Curves.bounceOut;
+      case 'bounce-in-out':
+        return Curves.bounceInOut;
       case 'elastic':
+      case 'elastic-in':
         return Curves.elasticIn;
+      case 'elastic-out':
+        return Curves.elasticOut;
+      case 'elastic-in-out':
+        return Curves.elasticInOut;
+      case 'decelerate':
+        return Curves.decelerate;
+      case 'fast-out-slow-in':
+        return Curves.fastOutSlowIn;
       default:
         return Curves.linear;
     }
   }
-  
+
   /// Parse iteration count
   static int? parseIterationCount(dynamic value) {
     if (value == null) return null;
@@ -332,6 +346,36 @@ class CSSParserExtensions {
       return int.tryParse(value);
     }
     return null;
+  }
+
+  /// Parse animation direction to determine if it should reverse
+  static bool parseAnimationReverse(String? direction) {
+    switch (direction?.toLowerCase()) {
+      case 'reverse':
+      case 'alternate':
+      case 'alternate-reverse':
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  /// Parse animation fill mode
+  static String parseAnimationFillMode(String? value) {
+    switch (value?.toLowerCase()) {
+      case 'forwards':
+      case 'backwards':
+      case 'both':
+      case 'none':
+        return value!.toLowerCase();
+      default:
+        return 'none';
+    }
+  }
+
+  /// Parse animation play state
+  static bool parseAnimationRunning(String? value) {
+    return value?.toLowerCase() != 'paused';
   }
   
   /// Parse background repeat

@@ -111,22 +111,25 @@ class JsonStylesheetParser {
   static void _parseKeyframe(Map<String, dynamic> keyframe, CSSStylesheet stylesheet) {
     final name = keyframe['name'] as String?;
     if (name == null) return;
-    
-    // Store keyframe data for later use
-    // In a real implementation, this would be used by animation system
+
     final frames = keyframe['frames'] as List?;
     if (frames != null) {
+      final keyframeFrames = <KeyframeFrame>[];
       for (final frame in frames) {
         if (frame is Map<String, dynamic>) {
           final offset = frame['offset'] as num?;
           final styles = frame['styles'] as Map<String, dynamic>?;
-          
+
           if (offset != null && styles != null) {
-            // Store keyframe data
+            keyframeFrames.add(KeyframeFrame(
+              offset: offset.toDouble(),
+              styles: styles,
+            ));
             stylesheet.addRule('@keyframes $name $offset', styles);
           }
         }
       }
+      stylesheet.addKeyframeAnimation(name, keyframeFrames);
     }
   }
   
@@ -505,5 +508,123 @@ class StylePresets {
   }) => {
     'fontSize': mobile ?? 14,
     // Media queries would be handled separately
+  };
+
+  /// Fade-in animation preset
+  static Map<String, dynamic> fadeIn({
+    int duration = 300,
+    String curve = 'ease',
+  }) => {
+    'fadeBegin': 0.0,
+    'fadeEnd': 1.0,
+    'animationDuration': duration,
+    'transitionCurve': curve,
+    'animateOnBuild': true,
+  };
+
+  /// Fade-out animation preset
+  static Map<String, dynamic> fadeOut({
+    int duration = 300,
+    String curve = 'ease',
+  }) => {
+    'fadeBegin': 1.0,
+    'fadeEnd': 0.0,
+    'animationDuration': duration,
+    'transitionCurve': curve,
+    'animateOnBuild': true,
+  };
+
+  /// Slide-in from left
+  static Map<String, dynamic> slideInLeft({
+    int duration = 300,
+    String curve = 'ease-out',
+  }) => {
+    'slideBegin': {'x': -1.0, 'y': 0.0},
+    'slideEnd': {'x': 0.0, 'y': 0.0},
+    'animationDuration': duration,
+    'transitionCurve': curve,
+    'animateOnBuild': true,
+  };
+
+  /// Slide-in from right
+  static Map<String, dynamic> slideInRight({
+    int duration = 300,
+    String curve = 'ease-out',
+  }) => {
+    'slideBegin': {'x': 1.0, 'y': 0.0},
+    'slideEnd': {'x': 0.0, 'y': 0.0},
+    'animationDuration': duration,
+    'transitionCurve': curve,
+    'animateOnBuild': true,
+  };
+
+  /// Slide-in from bottom
+  static Map<String, dynamic> slideInUp({
+    int duration = 300,
+    String curve = 'ease-out',
+  }) => {
+    'slideBegin': {'x': 0.0, 'y': 1.0},
+    'slideEnd': {'x': 0.0, 'y': 0.0},
+    'animationDuration': duration,
+    'transitionCurve': curve,
+    'animateOnBuild': true,
+  };
+
+  /// Scale-in animation preset
+  static Map<String, dynamic> scaleIn({
+    int duration = 300,
+    String curve = 'ease-out',
+  }) => {
+    'scaleBegin': 0.0,
+    'scaleEnd': 1.0,
+    'animationDuration': duration,
+    'transitionCurve': curve,
+    'animateOnBuild': true,
+  };
+
+  /// Pulse animation preset
+  static Map<String, dynamic> pulse({
+    int duration = 1000,
+  }) => {
+    'scaleBegin': 1.0,
+    'scaleEnd': 1.05,
+    'animationDuration': duration,
+    'transitionCurve': 'ease-in-out',
+    'animationRepeat': true,
+    'animationAutoReverse': true,
+  };
+
+  /// Shimmer animation preset
+  static Map<String, dynamic> shimmer({
+    String baseColor = '#E0E0E0',
+    String highlightColor = '#F5F5F5',
+    int duration = 1500,
+  }) => {
+    'shimmerBaseColor': baseColor,
+    'shimmerHighlightColor': highlightColor,
+    'animationDuration': duration,
+    'animationRepeat': true,
+  };
+
+  /// Bounce animation preset
+  static Map<String, dynamic> bounce({
+    int duration = 600,
+  }) => {
+    'scaleBegin': 0.3,
+    'scaleEnd': 1.0,
+    'animationDuration': duration,
+    'transitionCurve': 'bounce-out',
+    'animateOnBuild': true,
+  };
+
+  /// Rotation animation preset
+  static Map<String, dynamic> spin({
+    int duration = 1000,
+  }) => {
+    'rotationBegin': 0.0,
+    'rotationEnd': 1.0,
+    'animationDuration': duration,
+    'transitionCurve': 'linear',
+    'animationRepeat': true,
   };
 }
