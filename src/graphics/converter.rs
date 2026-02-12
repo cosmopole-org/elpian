@@ -206,7 +206,6 @@ impl JsonToBevy {
         let image_handle = asset_server.load(&image_node.path);
 
         let mut entity_commands = commands.spawn((
-            ImageNode::default(),
             ImageNode::new(image_handle),
             Node{..style},
         ));

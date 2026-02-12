@@ -1,9 +1,8 @@
-#![allow(dead_code)]
 
 use bevy::prelude::*;
 use crate::graphics::plugin::{JsonScene, JsonScenePlugin};
 
-fn main() {
+pub fn run_demo() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_plugins(JsonScenePlugin)

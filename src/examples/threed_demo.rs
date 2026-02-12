@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use crate::graphics::plugin::{JsonScene, JsonScenePlugin};
 
-pub fn run_ui_demo() {
+pub fn run_demo() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_plugins(JsonScenePlugin)

@@ -1,4 +1,5 @@
 use crate::graphics::{converter::JsonToBevy, schema::*, validation::JsonValidator, systems::*};
+use crate::graphics::gpu_blur::*;
 use bevy::prelude::*;
 use std::path::Path;
 
@@ -13,6 +14,7 @@ impl Plugin for JsonScenePlugin {
                     generate_circle_mask_system,
                     load_glass_shader_system,
                     spawn_captured_scene_camera_system,
+                    prepare_gpu_blur_system,
                 ),
             )
             .add_systems(
@@ -22,13 +24,14 @@ impl Plugin for JsonScenePlugin {
                     checkbox_interaction_system,
                     radio_button_interaction_system,
                     icon_button_interaction_system,
-                    // ripple + drawer animation
                     button_ripple_spawn_system,
                     ripple_update_system,
-                    drawer_animation_system,
+                    drawer_system,
+                    // apply rounded-image backgrounds and shadows at runtime
                     // apply rounded-image backgrounds and shadows at runtime
                     apply_ui_images_system,
                     blur_captured_overlays_system,
+                    dispatch_gpu_blur_system,
                     progress_bar_update_system,
                     animation_system,
                     particle_emission_system,

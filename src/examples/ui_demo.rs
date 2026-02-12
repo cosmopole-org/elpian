@@ -1,8 +1,8 @@
-use crate::graphics::plugin::{JsonScene, JsonScenePlugin};
 use bevy::prelude::*;
+use crate::graphics::plugin::{JsonScene, JsonScenePlugin};
 
-pub fn run_ui_demo() {
-    run_scene_from_file("src/examples/ui_example.json");
+pub fn run_demo() {
+    run_scene_from_file("src/examples/material_and_3d.json");
 }
 
 pub fn run_scene_from_file<P: AsRef<std::path::Path>>(path: P) {

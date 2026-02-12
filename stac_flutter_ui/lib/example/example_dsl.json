@@ -1,0 +1,420 @@
+{
+  "type": "div",
+  "style": {
+    "padding": "20",
+    "backgroundColor": "#F8F9FA"
+  },
+  "children": [
+    {
+      "type": "header",
+      "style": {
+        "backgroundColor": "#343A40",
+        "padding": "20",
+        "margin": "0 0 20 0",
+        "borderRadius": 8
+      },
+      "children": [
+        {
+          "type": "h1",
+          "props": {
+            "text": "STAC Flutter UI - Complete Example"
+          },
+          "style": {
+            "color": "white",
+            "margin": "0",
+            "fontSize": 32,
+            "fontWeight": "bold"
+          }
+        },
+        {
+          "type": "p",
+          "props": {
+            "text": "A comprehensive demonstration of server-driven UI capabilities"
+          },
+          "style": {
+            "color": "#CED4DA",
+            "margin": "8 0 0 0"
+          }
+        }
+      ]
+    },
+    {
+      "type": "section",
+      "style": {
+        "margin": "0 0 20 0"
+      },
+      "children": [
+        {
+          "type": "h2",
+          "props": {
+            "text": "Dashboard Metrics"
+          },
+          "style": {
+            "color": "#495057",
+            "fontSize": 24
+          }
+        },
+        {
+          "type": "Row",
+          "style": {
+            "justifyContent": "space-between",
+            "flexWrap": "wrap"
+          },
+          "children": [
+            {
+              "type": "Card",
+              "style": {
+                "flex": 1,
+                "margin": "8",
+                "backgroundColor": "#28A745",
+                "borderRadius": 12,
+                "minWidth": 150
+              },
+              "children": [
+                {
+                  "type": "Container",
+                  "style": {
+                    "padding": "20"
+                  },
+                  "children": [
+                    {
+                      "type": "Text",
+                      "props": {
+                        "text": "2,459"
+                      },
+                      "style": {
+                        "fontSize": 36,
+                        "fontWeight": "bold",
+                        "color": "white"
+                      }
+                    },
+                    {
+                      "type": "Text",
+                      "props": {
+                        "text": "Active Users"
+                      },
+                      "style": {
+                        "fontSize": 14,
+                        "color": "white",
+                        "margin": "4 0 0 0"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "Card",
+              "style": {
+                "flex": 1,
+                "margin": "8",
+                "backgroundColor": "#007BFF",
+                "borderRadius": 12,
+                "minWidth": 150
+              },
+              "children": [
+                {
+                  "type": "Container",
+                  "style": {
+                    "padding": "20"
+                  },
+                  "children": [
+                    {
+                      "type": "Text",
+                      "props": {
+                        "text": "$48,392"
+                      },
+                      "style": {
+                        "fontSize": 36,
+                        "fontWeight": "bold",
+                        "color": "white"
+                      }
+                    },
+                    {
+                      "type": "Text",
+                      "props": {
+                        "text": "Revenue"
+                      },
+                      "style": {
+                        "fontSize": 14,
+                        "color": "white",
+                        "margin": "4 0 0 0"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "Card",
+              "style": {
+                "flex": 1,
+                "margin": "8",
+                "backgroundColor": "#FFC107",
+                "borderRadius": 12,
+                "minWidth": 150
+              },
+              "children": [
+                {
+                  "type": "Container",
+                  "style": {
+                    "padding": "20"
+                  },
+                  "children": [
+                    {
+                      "type": "Text",
+                      "props": {
+                        "text": "1,893"
+                      },
+                      "style": {
+                        "fontSize": 36,
+                        "fontWeight": "bold",
+                        "color": "white"
+                      }
+                    },
+                    {
+                      "type": "Text",
+                      "props": {
+                        "text": "Orders"
+                      },
+                      "style": {
+                        "fontSize": 14,
+                        "color": "white",
+                        "margin": "4 0 0 0"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "Card",
+              "style": {
+                "flex": 1,
+                "margin": "8",
+                "backgroundColor": "#DC3545",
+                "borderRadius": 12,
+                "minWidth": 150
+              },
+              "children": [
+                {
+                  "type": "Container",
+                  "style": {
+                    "padding": "20"
+                  },
+                  "children": [
+                    {
+                      "type": "Text",
+                      "props": {
+                        "text": "23"
+                      },
+                      "style": {
+                        "fontSize": 36,
+                        "fontWeight": "bold",
+                        "color": "white"
+                      }
+                    },
+                    {
+                      "type": "Text",
+                      "props": {
+                        "text": "Issues"
+                      },
+                      "style": {
+                        "fontSize": 14,
+                        "color": "white",
+                        "margin": "4 0 0 0"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "article",
+      "style": {
+        "backgroundColor": "white",
+        "padding": "20",
+        "borderRadius": 8,
+        "margin": "0 0 20 0",
+        "boxShadow": [
+          {
+            "color": "rgba(0,0,0,0.1)",
+            "offset": {"x": 0, "y": 2},
+            "blur": 4,
+            "spread": 0
+          }
+        ]
+      },
+      "children": [
+        {
+          "type": "h3",
+          "props": {
+            "text": "Recent Activity"
+          },
+          "style": {
+            "color": "#343A40",
+            "fontSize": 20
+          }
+        },
+        {
+          "type": "ul",
+          "children": [
+            {
+              "type": "li",
+              "props": {
+                "text": "New user registration: john@example.com"
+              }
+            },
+            {
+              "type": "li",
+              "props": {
+                "text": "Order #1234 shipped successfully"
+              }
+            },
+            {
+              "type": "li",
+              "props": {
+                "text": "Payment received: $299.99"
+              }
+            },
+            {
+              "type": "li",
+              "props": {
+                "text": "System backup completed"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "section",
+      "style": {
+        "backgroundColor": "white",
+        "padding": "20",
+        "borderRadius": 8,
+        "margin": "0 0 20 0"
+      },
+      "children": [
+        {
+          "type": "h3",
+          "props": {
+            "text": "HTML Form Elements"
+          }
+        },
+        {
+          "type": "form",
+          "children": [
+            {
+              "type": "label",
+              "props": {
+                "text": "Email Address"
+              },
+              "style": {
+                "margin": "0 0 8 0"
+              }
+            },
+            {
+              "type": "input",
+              "props": {
+                "type": "text",
+                "placeholder": "Enter your email"
+              },
+              "style": {
+                "margin": "0 0 16 0"
+              }
+            },
+            {
+              "type": "label",
+              "props": {
+                "text": "Message"
+              },
+              "style": {
+                "margin": "0 0 8 0"
+              }
+            },
+            {
+              "type": "textarea",
+              "props": {
+                "placeholder": "Type your message here..."
+              },
+              "style": {
+                "margin": "0 0 16 0"
+              }
+            },
+            {
+              "type": "button",
+              "props": {
+                "text": "Submit"
+              },
+              "style": {
+                "backgroundColor": "#007BFF"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "footer",
+      "style": {
+        "backgroundColor": "#E9ECEF",
+        "padding": "20",
+        "borderRadius": 8,
+        "textAlign": "center"
+      },
+      "children": [
+        {
+          "type": "p",
+          "props": {
+            "text": "© 2024 STAC Flutter UI. All rights reserved."
+          },
+          "style": {
+            "margin": "0",
+            "color": "#6C757D"
+          }
+        },
+        {
+          "type": "nav",
+          "style": {
+            "margin": "16 0 0 0",
+            "justifyContent": "center"
+          },
+          "children": [
+            {
+              "type": "a",
+              "props": {
+                "text": "About",
+                "href": "#about"
+              },
+              "style": {
+                "margin": "0 16 0 0"
+              }
+            },
+            {
+              "type": "a",
+              "props": {
+                "text": "Contact",
+                "href": "#contact"
+              },
+              "style": {
+                "margin": "0 16 0 0"
+              }
+            },
+            {
+              "type": "a",
+              "props": {
+                "text": "Privacy",
+                "href": "#privacy"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

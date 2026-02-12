@@ -95,6 +95,51 @@ impl JsonValidator {
                 }
                 Self::validate_style(&p.style)?;
             }
+            // Material design UI nodes: perform light validation
+            JsonNode::FloatingActionButton(fab) => {
+                if fab.icon.is_empty() {
+                    return Err(anyhow!("FAB must have an icon"));
+                }
+                Self::validate_style(&fab.style)?;
+            }
+            JsonNode::Card(card) => {
+                Self::validate_style(&card.style)?;
+                for child in &card.children { Self::validate_ui_node(child)?; }
+            }
+            JsonNode::Chip(chip) => {
+                if chip.label.is_empty() { return Err(anyhow!("Chip must have a label")); }
+                Self::validate_style(&chip.style)?;
+            }
+            JsonNode::AppBar(app) => {
+                if app.title.is_empty() { return Err(anyhow!("AppBar must have a title")); }
+                Self::validate_style(&app.style)?;
+            }
+            JsonNode::Dialog(dlg) => {
+                if dlg.title.is_empty() { return Err(anyhow!("Dialog must have a title")); }
+                Self::validate_style(&dlg.style)?;
+                for child in &dlg.content { Self::validate_ui_node(child)?; }
+            }
+            JsonNode::Menu(menu) => {
+                Self::validate_style(&menu.style)?;
+            }
+            JsonNode::BottomSheet(bs) => {
+                Self::validate_style(&bs.style)?;
+                for child in &bs.content { Self::validate_ui_node(child)?; }
+            }
+            JsonNode::Snackbar(sn) => {
+                if sn.message.is_empty() { return Err(anyhow!("Snackbar must have a message")); }
+                Self::validate_style(&sn.style)?;
+            }
+            JsonNode::Switch(sw) => { Self::validate_style(&sw.style)?; }
+            JsonNode::Tabs(tabs) => { Self::validate_style(&tabs.style)?; }
+            JsonNode::Badge(b) => { if b.label.is_empty() { return Err(anyhow!("Badge must have a label")); } Self::validate_style(&b.style)?; }
+            JsonNode::Tooltip(tt) => { if tt.message.is_empty() { return Err(anyhow!("Tooltip must have a message")); } Self::validate_style(&tt.style)?; }
+            JsonNode::Rating(r) => { Self::validate_style(&r.style)?; }
+            JsonNode::SegmentedButton(sb) => { Self::validate_style(&sb.style)?; }
+            JsonNode::IconButton(ib) => { if ib.icon.is_empty() { return Err(anyhow!("IconButton must have an icon")); } Self::validate_style(&ib.style)?; }
+            JsonNode::Divider(div) => { Self::validate_style(&div.style)?; }
+            JsonNode::List(list) => { Self::validate_style(&list.style)?; for item in &list.items { Self::validate_ui_node(item)?; } }
+            JsonNode::Drawer(drawer) => { Self::validate_style(&drawer.style)?; for item in &drawer.content { Self::validate_ui_node(item)?; } }
             _ => {
                 return Err(anyhow!("Invalid node type for UI"));
             }

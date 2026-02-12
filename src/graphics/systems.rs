@@ -3,7 +3,7 @@ use crate::graphics::components::*;
 use crate::graphics::schema::{AnimationType, EasingType};
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::prelude::Image;
-use bevy::render::camera::RenderTarget as CameraRenderTarget;
+// RenderTarget alias removed; captured-scene camera is not spawned by default.
 
 #[derive(Resource)]
 pub struct CircleMask {
@@ -183,6 +183,11 @@ pub fn generate_circle_mask_system(mut images: ResMut<Assets<Image>>, mut comman
         TextureFormat::Rgba8UnormSrgb,
         Default::default(),
     );
+    // Ensure this image can be used as a render target by the camera: add RENDER_ATTACHMENT usage
+    let mut cimg = cimg;
+    cimg.texture_descriptor.usage = bevy::render::render_resource::TextureUsages::RENDER_ATTACHMENT
+        | bevy::render::render_resource::TextureUsages::TEXTURE_BINDING
+        | bevy::render::render_resource::TextureUsages::COPY_SRC;
     let chandle = images.add(cimg);
     commands.insert_resource(CapturedScene { handle: chandle });
 
@@ -219,7 +224,7 @@ pub fn blur_captured_overlays_system(
     let src_h = src_image.texture_descriptor.size.height as usize;
     let src_data = &src_image.data;
 
-    for (entity, image_node, node) in &mut query {
+    for (entity, _image_node, node) in &mut query {
         // Process all GlassOverlay entities (they were spawned with the captured
         // handle or with the procedural glass noise). We'll generate a blurred
         // crop regardless and replace the ImageNode handle.
@@ -326,18 +331,12 @@ pub fn spawn_captured_scene_camera_system(
     let handle = images.add(img);
     commands.insert_resource(CapturedScene { handle: handle.clone() });
 
-    // spawn a camera that renders to this image
-    commands.spawn((
-        Camera3dBundle {
-            camera: Camera {
-                // RenderTarget types moved between modules across Bevy versions;
-                // use Camera::target with the Image handle.
-                target: CameraRenderTarget::Image(handle.clone()),
-                ..default()
-            },
-            ..default()
-        },
-    ));
+        // Note: spawning an offscreen camera that renders into this Image
+        // caused validation errors on some platforms when the texture usages
+        // didn't match expectations. For stability across environments (and
+        // to keep the CPU fallback working), we do not spawn the camera here.
+        // A render-graph based implementation will be added later to perform
+        // a correct GPU-side capture and blur.
 }
 
 // Animation system
@@ -575,109 +574,147 @@ pub fn icon_button_interaction_system(
 // Spawn a ripple child when any button is pressed
 pub fn button_ripple_spawn_system(
     mut commands: Commands,
-    interaction_query: Query<(Entity, &Interaction), (Changed<Interaction>, With<Button>)>,
+    interaction_query: Query<(Entity, &Interaction, &Node, &GlobalTransform), (Changed<Interaction>, With<Button>)>,
     circle: Option<Res<CircleMask>>,
+    windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
 ) {
-    for (entity, interaction) in &interaction_query {
-        if *interaction == Interaction::Pressed {
-            // If we have a generated circular mask image, spawn an ImageBundle using it
-            if let Some(circle) = &circle {
-                let style = Node {
-                    position_type: PositionType::Absolute,
-                    left: Val::Percent(50.0),
-                    top: Val::Percent(50.0),
-                    width: Val::Px(0.0),
-                    height: Val::Px(0.0),
-                    ..default()
-                };
+    // obtain primary window if present
+    let primary_window = windows.get_single().ok();
 
-                let ripple_id = commands
-                    .spawn((
-                        ImageNode::default(),
-                        ImageNode::new(circle.handle.clone()),
-                        Node { ..style },
-                        BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.6)),
-                        RippleEffect {
-                            origin: Vec2::ZERO,
-                            radius: 0.0,
-                            max_radius: 300.0,
-                            duration: 0.6,
-                            elapsed: 0.0,
-                        },
-                    ))
-                    .id();
+    for (entity, interaction, button_node, global_transform) in &interaction_query {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
 
-                commands.entity(ripple_id).set_parent(entity);
-            } else {
-                // fallback to simple node ripple if no mask available
-                let ripple_id = commands.spawn((
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: Val::Percent(50.0),
-                        top: Val::Percent(50.0),
-                        width: Val::Px(0.0),
-                        height: Val::Px(0.0),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.6)),
-                    RippleEffect {
-                        origin: Vec2::ZERO,
-                        radius: 0.0,
-                        max_radius: 300.0,
-                        duration: 0.6,
-                        elapsed: 0.0,
-                    },
-                )).id();
+        // determine button size in pixels
+        let bw = match button_node.width { Val::Px(v) => v.max(1.0), _ => 64.0 };
+        let bh = match button_node.height { Val::Px(v) => v.max(1.0), _ => 32.0 };
 
-                commands.entity(ripple_id).set_parent(entity);
+        // compute click origin relative to button top-left in pixels
+        let mut origin = Vec2::new(bw * 0.5, bh * 0.5); // default center
+        if let Some(window) = primary_window {
+            if let Some(cursor) = window.cursor_position() {
+                // convert cursor (bottom-left origin) to world coords (center origin)
+                let win_w = window.width();
+                let win_h = window.height();
+                let world_x = cursor.x - (win_w * 0.5);
+                let world_y = cursor.y - (win_h * 0.5);
+
+                let parent_center = global_transform.translation();
+                let parent_center = Vec2::new(parent_center.x, parent_center.y);
+
+                // top-left of parent in world coords
+                let top_left = parent_center - Vec2::new(bw * 0.5, bh * 0.5);
+
+                // local pixel coordinates from top-left
+                origin = Vec2::new(world_x - top_left.x, world_y - top_left.y);
+
+                // If cursor values appear normalized (0..1), convert to pixels
+                if origin.x >= 0.0 && origin.x <= 1.0 && origin.y >= 0.0 && origin.y <= 1.0 {
+                    origin.x *= bw;
+                    origin.y *= bh;
+                }
+
+                // clamp to button rect
+                origin.x = origin.x.clamp(0.0, bw);
+                origin.y = origin.y.clamp(0.0, bh);
             }
+        }
+
+        // max radius is distance to farthest corner from origin
+        let corners = [Vec2::new(0.0, 0.0), Vec2::new(bw, 0.0), Vec2::new(0.0, bh), Vec2::new(bw, bh)];
+        let mut max_r = 0.0f32;
+        for c in &corners {
+            let d = (*c - origin).length();
+            if d > max_r { max_r = d; }
+        }
+
+        // spawn ripple (use circle mask if available)
+        // use a soft, low alpha so ripple shows as a subtle highlight
+        let base_alpha = 0.12f32;
+        if let Some(circle) = &circle {
+            let node = Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(origin.x),
+                top: Val::Px(origin.y),
+                width: Val::Px(0.0),
+                height: Val::Px(0.0),
+                ..default()
+            };
+
+            let ripple_id = commands.spawn((
+                ImageNode::new(circle.handle.clone()),
+                node,
+                BackgroundColor(Color::srgba(1.0, 1.0, 1.0, base_alpha)),
+                RippleEffect {
+                    origin,
+                    radius: 0.0,
+                    max_radius: max_r as f32,
+                    duration: 0.5,
+                    elapsed: 0.0,
+                },
+            )).id();
+
+            commands.entity(ripple_id).set_parent(entity);
+        } else {
+            let node = Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(origin.x),
+                top: Val::Px(origin.y),
+                width: Val::Px(0.0),
+                height: Val::Px(0.0),
+                ..default()
+            };
+
+            let ripple_id = commands.spawn((
+                node,
+                BackgroundColor(Color::srgba(1.0, 1.0, 1.0, base_alpha)),
+                RippleEffect {
+                    origin,
+                    radius: 0.0,
+                    max_radius: max_r as f32,
+                    duration: 0.5,
+                    elapsed: 0.0,
+                },
+            )).id();
+
+            commands.entity(ripple_id).set_parent(entity);
         }
     }
 }
 
 // Animate and despawn ripples
 pub fn ripple_update_system(
-    mut commands: Commands,
     time: Res<Time>,
+    mut commands: Commands,
     mut query: Query<(Entity, &mut RippleEffect, &mut Node, Option<&mut BackgroundColor>)>,
 ) {
-    for (entity, mut ripple, mut style, mut bg) in &mut query {
+    for (entity, mut ripple, mut node, bg) in &mut query {
         ripple.elapsed += time.delta_secs();
-        let t = (ripple.elapsed / ripple.duration).min(1.0);
-        let size = ripple.max_radius * t * 2.0;
-        style.width = Val::Px(size);
-        style.height = Val::Px(size);
+        let t = if ripple.duration > 0.0 { (ripple.elapsed / ripple.duration).min(1.0) } else { 1.0 };
 
-        // Fade out by adjusting BackgroundColor alpha if available
-        if let Some(color) = bg.as_deref_mut() {
-            let alpha = (1.0 - t).clamp(0.0, 1.0);
+        // apply easing (ease out cubic)
+        let eased = 1.0 - (1.0 - t).powf(3.0);
+
+        // start slightly visible and expand to max_radius
+        let size = ripple.max_radius * 2.0 * eased;
+
+        // position the ripple so its center follows the origin
+        let left = ripple.origin.x - size * 0.5;
+        let top = ripple.origin.y - size * 0.5;
+        node.width = Val::Px(size);
+        node.height = Val::Px(size);
+        node.left = Val::Px(left);
+        node.top = Val::Px(top);
+
+        if let Some(mut color) = bg {
+            // fade alpha over time with a subtle multiplier
+            let alpha = (1.0 - eased).clamp(0.0, 1.0) * 0.18;
             color.0 = Color::srgba(1.0, 1.0, 1.0, alpha);
         }
 
         if ripple.elapsed >= ripple.duration {
-            commands.entity(entity).despawn();
-        }
-    }
-}
-
-// Animate drawer open/close by interpolating left position
-pub fn drawer_animation_system(
-    time: Res<Time>,
-    mut query: Query<(&mut Node, &Drawer)>,
-) {
-    for (mut node, drawer) in &mut query {
-        let curr = match node.left {
-            Val::Px(v) => v,
-            _ => 0.0,
-        };
-
-        let target = if drawer.open { 0.0 } else { -drawer.width };
-        let step = (target - curr) * (time.delta_secs() * 8.0);
-        let next = curr + step;
-        if (target - next).abs() < 0.5 {
-            node.left = Val::Px(target);
-        } else {
-            node.left = Val::Px(next);
+            commands.entity(entity).despawn_recursive();
         }
     }
 }
@@ -815,11 +852,8 @@ pub fn apply_ui_images_system(
             );
 
             let handle = images.add(image);
-            // insert ImageNode with generated handle
-            commands.entity(entity).insert((
-                ImageNode::default(),
-                ImageNode::new(handle.clone()),
-            ));
+            // insert ImageNode with generated handle (replace existing)
+            commands.entity(entity).insert(ImageNode::new(handle.clone()));
         } else {
             // fallback: tint background color
             commands.entity(entity).insert(BackgroundColor(rb.color));
@@ -844,7 +878,6 @@ pub fn apply_ui_images_system(
                 };
 
                 let shadow_id = commands.spawn((
-                    ImageNode::default(),
                     ImageNode::new(s.handle.clone()),
                     s_node,
                     BackgroundColor(Color::srgba(0.0, 0.0, 0.0, shadow_alpha)),
@@ -870,7 +903,6 @@ pub fn apply_ui_images_system(
                 };
 
                 let overlay_id = commands.spawn((
-                    ImageNode::default(),
                     ImageNode::new(captured.handle.clone()),
                     g_node,
                     BackgroundColor(Color::srgba(1.0, 1.0, 1.0, rb.glass_opacity)),
@@ -891,7 +923,6 @@ pub fn apply_ui_images_system(
                 };
 
                 let overlay_id = commands.spawn((
-                    ImageNode::default(),
                     ImageNode::new(g.handle.clone()),
                     g_node,
                     BackgroundColor(Color::srgba(1.0, 1.0, 1.0, rb.glass_opacity)),

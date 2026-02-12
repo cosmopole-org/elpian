@@ -1,10 +1,11 @@
-pub mod schema;
-pub mod converter;
-pub mod plugin;
 pub mod components;
+pub mod converter;
+pub mod hot_reload;
+pub mod plugin;
+pub mod schema;
 pub mod systems;
 pub mod validation;
-pub mod hot_reload;
+pub mod gpu_blur;
 
 pub use schema::*;
 pub use converter::JsonToBevy;

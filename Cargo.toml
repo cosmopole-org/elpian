@@ -15,19 +15,3 @@ jsonschema = "0.18"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
-
-[[example]]
-name = "ui_demo"
-path = "examples/ui_demo.rs"
-
-[[example]]
-name = "3d_demo"
-path = "examples/3d_demo.rs"
-
-[[example]]
-name = "advanced_ui_demo"
-path = "examples/advanced_ui_demo.rs"
-
-[[example]]
-name = "animations_demo"
-path = "examples/animations_demo.rs"

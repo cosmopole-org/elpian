@@ -1,7 +1,6 @@
-
-use elpian::examples::ui_demo::run_ui_demo;
+use elpian::examples::ui_demo::run_demo;
 
 fn main() {
-    // Start the UI demo (loads `src/examples/ui_example.json`)
-    run_ui_demo();
+    println!("Running UI Demo...");
+    run_demo();
 }
