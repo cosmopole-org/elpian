@@ -176,6 +176,7 @@ class CSSParser {
 
   static Color? parseColor(dynamic value) {
     if (value == null) return null;
+    if (value is Color) return value;
     if (value is String) {
       String colorStr = value.trim();
 
@@ -229,6 +230,7 @@ class CSSParser {
 
   static EdgeInsets? _parseEdgeInsets(dynamic value) {
     if (value == null) return null;
+    if (value is EdgeInsets) return value;
 
     if (value is Map) {
       return EdgeInsets.only(
@@ -303,6 +305,7 @@ class CSSParser {
 
   static BorderRadius? _parseBorderRadius(dynamic value) {
     if (value == null) return null;
+    if (value is BorderRadius) return value;
     final radius = parseDouble(value);
     if (radius != null) {
       return BorderRadius.circular(radius);
@@ -338,6 +341,7 @@ class CSSParser {
 
   static FontWeight? _parseFontWeight(dynamic value) {
     if (value == null) return null;
+    if (value is FontWeight) return value;
     if (value is String) {
       switch (value.toLowerCase()) {
         case 'bold':
@@ -364,6 +368,24 @@ class CSSParser {
           return FontWeight.w800;
         case '900':
           return FontWeight.w900;
+        case 'w100':
+          return FontWeight.w100;
+        case 'w200':
+          return FontWeight.w200;
+        case 'w300':
+          return FontWeight.w300;
+        case 'w400':
+          return FontWeight.w400;
+        case 'w500':
+          return FontWeight.w500;
+        case 'w600':
+          return FontWeight.w600;
+        case 'w700':
+          return FontWeight.w700;
+        case 'w800':
+          return FontWeight.w800;
+        case 'w900':
+          return FontWeight.w900;
       }
     }
     if (value is int) {
@@ -387,6 +409,7 @@ class CSSParser {
 
   static TextAlign? _parseTextAlign(dynamic value) {
     if (value == null) return null;
+    if (value is TextAlign) return value;
     if (value is String) {
       switch (value.toLowerCase()) {
         case 'left':
@@ -482,6 +505,7 @@ class CSSParser {
 
   static List<BoxShadow>? _parseBoxShadow(dynamic value) {
     if (value == null) return null;
+    if (value is List<BoxShadow>) return value;
     if (value is List) {
       return value.map((shadow) {
         if (shadow is Map) {
@@ -547,6 +571,7 @@ class CSSParser {
 
   static Gradient? _parseGradient(dynamic value) {
     if (value == null) return null;
+    if (value is Gradient) return value;
     if (value is Map) {
       final type = value['type'] as String?;
       final colors = (value['colors'] as List?)

@@ -18,9 +18,16 @@ class StacNode {
   });
 
   factory StacNode.fromJson(Map<String, dynamic> json) {
+    final props = Map<String, dynamic>.from(
+      json['props'] as Map<String, dynamic>? ?? {},
+    );
+    // Include top-level style in props so the engine can parse it
+    if (json['style'] != null && !props.containsKey('style')) {
+      props['style'] = json['style'];
+    }
     return StacNode(
       type: json['type'] as String,
-      props: json['props'] as Map<String, dynamic>? ?? {},
+      props: props,
       children: (json['children'] as List<dynamic>?)
               ?.map((child) => StacNode.fromJson(child as Map<String, dynamic>))
               .toList() ??
