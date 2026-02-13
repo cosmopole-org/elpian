@@ -4,8 +4,17 @@ import '../css/css_properties.dart';
 
 class StacContainer {
   static Widget build(StacNode node, List<Widget> children) {
-    final child = children.isNotEmpty ? children.first : null;
-    
+    Widget? child;
+    if (children.isNotEmpty) {
+      child = children.length == 1
+          ? children.first
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: children,
+            );
+    }
+
     Widget result = Container(
       width: node.props['width'] as double?,
       height: node.props['height'] as double?,

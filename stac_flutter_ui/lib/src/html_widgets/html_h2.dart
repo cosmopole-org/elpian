@@ -6,17 +6,30 @@ import '../models/css_style.dart';
 class HtmlH2 {
   static Widget build(StacNode node, List<Widget> children) {
     final text = node.props['text'] as String? ?? '';
-    
-    final defaultStyle = const CSSStyle(
-      fontSize: 28.0,
-      fontWeight: FontWeight.bold,
-      margin: EdgeInsets.symmetric(vertical: 14.0),
+
+    final mergedStyle = CSSStyle(
+      fontSize: node.style?.fontSize ?? 28.0,
+      fontWeight: node.style?.fontWeight ?? FontWeight.bold,
+      margin: node.style?.margin ?? const EdgeInsets.symmetric(vertical: 14.0),
+      color: node.style?.color,
+      fontFamily: node.style?.fontFamily,
+      letterSpacing: node.style?.letterSpacing,
+      lineHeight: node.style?.lineHeight,
+      textAlign: node.style?.textAlign,
+      textDecoration: node.style?.textDecoration,
+      backgroundColor: node.style?.backgroundColor,
+      padding: node.style?.padding,
+      opacity: node.style?.opacity,
     );
-    
-    final mergedStyle = node.style ?? defaultStyle;
     final textStyle = CSSProperties.createTextStyle(mergedStyle);
 
-    Widget result = Text(text, style: textStyle);
+    Widget result = children.isNotEmpty
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [Text(text, style: textStyle), ...children],
+          )
+        : Text(text, style: textStyle, textAlign: mergedStyle.textAlign);
     result = CSSProperties.applyStyle(result, mergedStyle);
 
     return result;

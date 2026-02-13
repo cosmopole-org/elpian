@@ -298,13 +298,20 @@ class GlobalStylesheetManager {
   }) {
     final mergedStyles = <String, dynamic>{};
     
-    // Start with global styles
-    _globalStylesheet.getComputedStyle(
+    // Start with global styles - use the result
+    final globalStyle = _globalStylesheet.getComputedStyle(
       tagName: tagName,
       id: id,
       classes: classes,
       inlineStyles: null,
     );
+    // Merge global styles into the map
+    if (globalStyle.backgroundColor != null) mergedStyles['backgroundColor'] = globalStyle.backgroundColor;
+    if (globalStyle.color != null) mergedStyles['color'] = globalStyle.color;
+    if (globalStyle.fontSize != null) mergedStyles['fontSize'] = globalStyle.fontSize;
+    if (globalStyle.fontWeight != null) mergedStyles['fontWeight'] = globalStyle.fontWeight;
+    if (globalStyle.padding != null) mergedStyles['padding'] = globalStyle.padding;
+    if (globalStyle.margin != null) mergedStyles['margin'] = globalStyle.margin;
     
     // Add media query styles
     if (screenWidth != null && screenHeight != null) {

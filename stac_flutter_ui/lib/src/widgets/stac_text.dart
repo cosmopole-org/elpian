@@ -6,7 +6,10 @@ class StacText {
   static Widget build(StacNode node, List<Widget> children) {
     final text = node.props['text'] as String? ?? node.props['data'] as String? ?? '';
     
-    TextStyle? textStyle = node.props['style'] as TextStyle?;
+    TextStyle? textStyle;
+    if (node.props['style'] is TextStyle) {
+      textStyle = node.props['style'] as TextStyle;
+    }
     if (node.style != null) {
       textStyle = CSSProperties.createTextStyle(node.style);
     }

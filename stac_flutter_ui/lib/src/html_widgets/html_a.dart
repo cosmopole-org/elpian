@@ -7,24 +7,40 @@ class HtmlA {
   static Widget build(StacNode node, List<Widget> children) {
     final text = node.props['text'] as String? ?? '';
     final href = node.props['href'] as String? ?? '#';
-    
-    final defaultStyle = const CSSStyle(
-      color: Colors.blue,
-      textDecoration: TextDecoration.underline,
+
+    // Merge defaults with custom style
+    final mergedStyle = CSSStyle(
+      color: node.style?.color ?? Colors.blue,
+      textDecoration: node.style?.textDecoration ?? TextDecoration.underline,
+      fontSize: node.style?.fontSize,
+      fontWeight: node.style?.fontWeight,
+      fontFamily: node.style?.fontFamily,
+      letterSpacing: node.style?.letterSpacing,
+      lineHeight: node.style?.lineHeight,
+      backgroundColor: node.style?.backgroundColor,
+      padding: node.style?.padding,
+      margin: node.style?.margin,
+      opacity: node.style?.opacity,
     );
-    
-    final mergedStyle = node.style ?? defaultStyle;
     final textStyle = CSSProperties.createTextStyle(mergedStyle);
 
     Widget result = GestureDetector(
       onTap: () {
         debugPrint('Link clicked: $href');
       },
-      child: Text(text, style: textStyle),
+      child: children.isNotEmpty
+          ? Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                if (text.isNotEmpty) Text(text, style: textStyle),
+                ...children,
+              ],
+            )
+          : Text(text, style: textStyle),
     );
 
     result = CSSProperties.applyStyle(result, mergedStyle);
-  
+
     return result;
   }
 }

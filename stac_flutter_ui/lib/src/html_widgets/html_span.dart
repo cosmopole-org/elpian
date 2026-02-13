@@ -5,13 +5,26 @@ import '../css/css_properties.dart';
 class HtmlSpan {
   static Widget build(StacNode node, List<Widget> children) {
     final text = node.props['text'] as String? ?? '';
-    
+
     TextStyle? textStyle;
     if (node.style != null) {
       textStyle = CSSProperties.createTextStyle(node.style);
     }
 
-    Widget result = Text(text, style: textStyle);
+    Widget result;
+    if (children.isNotEmpty) {
+      final widgets = <Widget>[];
+      if (text.isNotEmpty) {
+        widgets.add(Text(text, style: textStyle));
+      }
+      widgets.addAll(children);
+      result = Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: widgets,
+      );
+    } else {
+      result = Text(text, style: textStyle);
+    }
 
     if (node.style != null) {
       result = CSSProperties.applyStyle(result, node.style);
