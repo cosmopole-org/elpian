@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - master
+      - 'claude/**'
   workflow_dispatch:
 
 permissions:
