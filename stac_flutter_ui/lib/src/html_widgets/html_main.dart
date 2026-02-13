@@ -26,14 +26,14 @@ class HtmlMain {
         child = Row(
           mainAxisAlignment: CSSProperties.getMainAxisAlignment(node.style?.justifyContent),
           crossAxisAlignment: CSSProperties.getCrossAxisAlignment(node.style?.alignItems),
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize: MainAxisSize.max,
           children: _addGap(children, gap, Axis.horizontal),
         );
       } else {
         child = Column(
           mainAxisAlignment: CSSProperties.getMainAxisAlignment(node.style?.justifyContent),
           crossAxisAlignment: CSSProperties.getCrossAxisAlignment(node.style?.alignItems),
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize: MainAxisSize.max,
           children: _addGap(children, gap, Axis.vertical),
         );
       }

@@ -51,15 +51,7 @@ class CSSProperties {
       );
     }
 
-    // Apply flex
-    if (style.flex != null) {
-      result = Flexible(
-        flex: style.flex!,
-        child: result,
-      );
-    }
-
-    // Apply size constraints
+    // Apply size constraints (before flex so Flexible is outermost)
     if (style.width != null || style.height != null ||
         style.minWidth != null || style.maxWidth != null ||
         style.minHeight != null || style.maxHeight != null) {
@@ -109,6 +101,14 @@ class CSSProperties {
     // Wrap with implicit animations if transition properties are set
     if (style.transitionDuration != null && style.animateOnBuild == true) {
       result = _wrapWithAnimations(result, style);
+    }
+
+    // Apply flex LAST so Flexible is a direct child of Row/Column/Flex
+    if (style.flex != null) {
+      result = Flexible(
+        flex: style.flex!,
+        child: result,
+      );
     }
 
     return result;

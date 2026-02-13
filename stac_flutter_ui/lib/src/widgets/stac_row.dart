@@ -10,7 +10,7 @@ class StacRow {
     Widget result = Row(
       mainAxisAlignment: CSSProperties.getMainAxisAlignment(node.style?.justifyContent),
       crossAxisAlignment: CSSProperties.getCrossAxisAlignment(node.style?.alignItems),
-      mainAxisSize: MainAxisSize.min,
+      mainAxisSize: MainAxisSize.max,
       children: spacedChildren,
     );
 

@@ -163,6 +163,7 @@ class StacIcon {
     'shield': Icons.shield,
     'verified': Icons.verified,
     'auto_awesome': Icons.auto_awesome,
+    'touch_app': Icons.touch_app,
     'bolt': Icons.bolt,
     'eco': Icons.eco,
     'palette': Icons.palette,

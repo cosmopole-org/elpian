@@ -43,7 +43,7 @@ class HtmlDiv {
           crossAxisAlignment: CSSProperties.getCrossAxisAlignment(
             node.style?.alignItems,
           ),
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize: MainAxisSize.max,
           children: _addGap(children, gap, Axis.horizontal),
         );
       } else {
@@ -54,7 +54,7 @@ class HtmlDiv {
           crossAxisAlignment: CSSProperties.getCrossAxisAlignment(
             node.style?.alignItems,
           ),
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize: MainAxisSize.max,
           children: _addGap(children, gap, Axis.vertical),
         );
       }

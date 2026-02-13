@@ -250,6 +250,16 @@ class CSSParser {
         final v = parseDouble(parts[0]) ?? 0;
         final h = parseDouble(parts[1]) ?? 0;
         return EdgeInsets.symmetric(vertical: v, horizontal: h);
+      } else if (parts.length == 3) {
+        final top = parseDouble(parts[0]) ?? 0;
+        final h = parseDouble(parts[1]) ?? 0;
+        final bottom = parseDouble(parts[2]) ?? 0;
+        return EdgeInsets.only(
+          top: top,
+          right: h,
+          bottom: bottom,
+          left: h,
+        );
       } else if (parts.length == 4) {
         return EdgeInsets.only(
           top: parseDouble(parts[0]) ?? 0,
@@ -526,6 +536,7 @@ class CSSParser {
 
   static List<Shadow>? _parseTextShadow(dynamic value) {
     if (value == null) return null;
+    if (value is List<Shadow>) return value;
     if (value is List) {
       return value.map((shadow) {
         if (shadow is Map) {

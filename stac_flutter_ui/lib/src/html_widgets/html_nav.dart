@@ -13,7 +13,7 @@ class HtmlNav {
       crossAxisAlignment: CSSProperties.getCrossAxisAlignment(
         node.style?.alignItems,
       ),
-      mainAxisSize: MainAxisSize.min,
+      mainAxisSize: MainAxisSize.max,
       children: _addGap(children, gap),
     );
 
