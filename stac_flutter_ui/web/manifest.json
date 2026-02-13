@@ -1,0 +1,9 @@
+{
+  "name": "Elpian - STAC Flutter UI",
+  "short_name": "Elpian",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0F172A",
+  "theme_color": "#6366F1",
+  "description": "Server-driven UI rendering engine for Flutter"
+}
