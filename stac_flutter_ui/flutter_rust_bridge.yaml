@@ -1,0 +1,4 @@
+rust_input: rust/src/api/mod.rs
+dart_output: lib/src/vm/frb_generated
+rust_root: rust/
+dart_root: .

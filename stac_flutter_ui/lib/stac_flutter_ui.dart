@@ -1,5 +1,11 @@
 library stac_flutter_ui;
 
+// VM - Elpian Rust VM integration via Flutter Rust Bridge
+export 'src/vm/elpian_vm.dart';
+export 'src/vm/elpian_vm_widget.dart';
+export 'src/vm/host_handler.dart';
+export 'src/vm/frb_generated/api.dart';
+
 // Core
 export 'src/core/stac_engine.dart';
 export 'src/core/widget_registry.dart';
