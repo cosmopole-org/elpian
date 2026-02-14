@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'frb_generated/api.dart';
+import 'frb_generated/api.dart'
+    if (dart.library.js_interop) 'frb_generated/api_web.dart';
 
 /// Callback for handling host function calls from the Rust VM.
 ///

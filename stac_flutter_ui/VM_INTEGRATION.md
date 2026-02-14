@@ -1,7 +1,8 @@
-# Elpian VM - Flutter Rust Bridge Integration
+# Elpian VM - Flutter Integration via Rust FFI
 
 This document describes how the Elpian Rust VM sandbox is integrated into
-the `stac_flutter_ui` Flutter library via Flutter Rust Bridge (FRB).
+the `stac_flutter_ui` Flutter library via direct FFI (native) and
+wasm-bindgen (web).
 
 ## Architecture
 
@@ -38,7 +39,7 @@ the `stac_flutter_ui` Flutter library via Flutter Rust Bridge (FRB).
 
 ## How It Works
 
-1. **VM Creation**: Dart creates a Rust VM instance via FRB, providing
+1. **VM Creation**: Dart creates a Rust VM instance via FFI, providing
    either source code or a pre-compiled AST.
 
 2. **Execution**: The VM compiles code to bytecode and executes it.
@@ -56,14 +57,14 @@ the `stac_flutter_ui` Flutter library via Flutter Rust Bridge (FRB).
 
 ## Platform Support
 
-| Platform | Mechanism | Status |
-|----------|-----------|--------|
-| Android  | FFI (NDK) | Configured via rust_builder |
-| iOS      | FFI (staticlib) | Configured via CocoaPods |
-| macOS    | FFI (staticlib) | Configured via CocoaPods |
-| Linux    | FFI (cdylib) | Configured via CMake |
-| Windows  | FFI (cdylib) | Configured via CMake |
-| Web      | WASM | Supported via FRB WASM compilation |
+| Platform | Mechanism | Library |
+|----------|-----------|---------|
+| Android  | dart:ffi | libelpian_vm.so (NDK) |
+| iOS      | dart:ffi | linked via CocoaPods |
+| macOS    | dart:ffi | linked via CocoaPods |
+| Linux    | dart:ffi | libelpian_vm.so (CMake) |
+| Windows  | dart:ffi | elpian_vm.dll (CMake) |
+| Web      | dart:js_interop | WASM via wasm-bindgen |
 
 ## Setup
 
@@ -71,12 +72,12 @@ the `stac_flutter_ui` Flutter library via Flutter Rust Bridge (FRB).
 
 - Rust toolchain (`rustup`)
 - Flutter SDK (>=3.0.0)
-- `flutter_rust_bridge_codegen` CLI tool
 
-### Install FRB Codegen
+### Build the Rust library
 
 ```bash
-cargo install flutter_rust_bridge_codegen
+cd stac_flutter_ui/rust
+cargo build --release
 ```
 
 ### For mobile cross-compilation targets:
@@ -90,20 +91,18 @@ rustup target add aarch64-apple-ios x86_64-apple-ios aarch64-apple-ios-sim
 
 # Web (WASM)
 rustup target add wasm32-unknown-unknown
+cargo install wasm-pack
+wasm-pack build --target web
 ```
 
-### Generate Bindings
+### Add the `ffi` package
+
+The `ffi` package is already listed in `pubspec.yaml`. Run:
 
 ```bash
 cd stac_flutter_ui
-flutter_rust_bridge_codegen generate
+flutter pub get
 ```
-
-This will:
-1. Parse `rust/src/api/mod.rs` for public functions
-2. Generate Dart bindings in `lib/src/vm/frb_generated/`
-3. Generate Rust FFI glue code
-4. Handle platform-specific compilation setup
 
 ### Run the App
 
@@ -212,11 +211,13 @@ When returning values from host handlers, use the typed format:
 ```
 stac_flutter_ui/
 ├── rust/                              # Rust VM crate
-│   ├── Cargo.toml                     # FRB-compatible Rust config
+│   ├── Cargo.toml                     # Rust crate config
 │   └── src/
 │       ├── lib.rs                     # Crate root
 │       ├── api/
-│       │   └── mod.rs                 # FRB public API (create/execute/continue)
+│       │   ├── mod.rs                 # VM manager (create/execute/continue)
+│       │   ├── ffi.rs                 # extern "C" FFI for native platforms
+│       │   └── wasm_ffi.rs            # wasm-bindgen FFI for web
 │       └── sdk/
 │           ├── mod.rs                 # SDK module exports
 │           ├── vm.rs                  # VM instance manager
@@ -224,8 +225,8 @@ stac_flutter_ui/
 │           ├── executor.rs            # Bytecode interpreter
 │           ├── context.rs             # Variable scope management
 │           └── data.rs                # Type system (Val, Object, Array, etc.)
-├── rust_builder/                      # FRB build integration
-│   ├── pubspec.yaml                   # Flutter plugin for native build
+├── rust_builder/                      # Flutter plugin for native build
+│   ├── pubspec.yaml                   # ffiPlugin config
 │   ├── android/                       # Android NDK config
 │   ├── ios/                           # iOS CocoaPods config
 │   ├── macos/                         # macOS CocoaPods config
@@ -236,7 +237,26 @@ stac_flutter_ui/
 │   ├── elpian_vm_widget.dart          # Flutter widget + controller
 │   ├── host_handler.dart              # Host call → StacEngine bridge
 │   └── frb_generated/
-│       └── api.dart                   # FRB generated bindings (stub/generated)
-├── flutter_rust_bridge.yaml           # FRB codegen configuration
-└── pubspec.yaml                       # Flutter deps (includes FRB + rust_builder)
+│       ├── vm_types.dart              # Shared types (VmExecResult)
+│       ├── api.dart                   # Native FFI bindings (dart:ffi)
+│       └── api_web.dart               # Web bindings (dart:js_interop)
+└── pubspec.yaml                       # Flutter deps (ffi + rust_builder)
 ```
+
+## FFI Symbol Reference
+
+The Rust library exports these C-compatible symbols:
+
+| Symbol | Description |
+|--------|-------------|
+| `elpian_init` | Initialize VM subsystem |
+| `elpian_create_vm_from_ast` | Create VM from AST JSON |
+| `elpian_create_vm_from_code` | Create VM from source code |
+| `elpian_validate_ast` | Validate AST without creating VM |
+| `elpian_execute` | Execute VM main program |
+| `elpian_execute_func` | Execute named function |
+| `elpian_execute_func_with_input` | Execute function with input |
+| `elpian_continue_execution` | Continue after host call |
+| `elpian_destroy_vm` | Destroy VM instance |
+| `elpian_vm_exists` | Check if VM exists |
+| `elpian_free_string` | Free Rust-allocated string |

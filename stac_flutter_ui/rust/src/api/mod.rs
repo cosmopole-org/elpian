@@ -1,3 +1,6 @@
+pub mod ffi;
+pub mod wasm_ffi;
+
 use std::collections::HashMap;
 use std::sync::Mutex;
 

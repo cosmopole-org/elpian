@@ -8,7 +8,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_rust_bridge: ^2.9.0
 
 flutter:
   plugin:
