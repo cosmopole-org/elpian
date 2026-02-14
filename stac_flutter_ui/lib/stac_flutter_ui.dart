@@ -1,5 +1,14 @@
 library stac_flutter_ui;
 
+// VM - Elpian Rust VM integration
+export 'src/vm/elpian_vm.dart';
+export 'src/vm/elpian_vm_widget.dart';
+export 'src/vm/host_handler.dart';
+export 'src/vm/frb_generated/vm_types.dart';
+export 'src/vm/frb_generated/api.dart'
+    if (dart.library.js_interop) 'src/vm/frb_generated/api_web.dart'
+    show ElpianVmApi;
+
 // Core
 export 'src/core/stac_engine.dart';
 export 'src/core/widget_registry.dart';
