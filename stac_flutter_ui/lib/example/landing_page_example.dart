@@ -23,7 +23,7 @@ class LandingPageApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const BevySceneJsonGuiExample(),
+      home: BevySceneJsonGuiExample(),
     );
   }
 }
