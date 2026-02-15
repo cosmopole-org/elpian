@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:stac_flutter_ui/stac_flutter_ui.dart';
-
+import 'package:stac_flutter_ui/example/bevy_scene_example.dart';
 void main() {
   runApp(const LandingPageApp());
 }
@@ -22,7 +22,7 @@ class LandingPageApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const LandingPage(),
+      home: const BevySceneExample(),
     );
   }
 }
