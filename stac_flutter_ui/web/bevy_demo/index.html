@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Elpian - JSON to 3D Bevy Scene Renderer</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0a14;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;overflow-x:hidden}
+.header{background:rgba(15,23,42,.95);padding:16px 24px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(99,102,241,.2)}
+.logo{display:flex;align-items:center;gap:10px;font-size:20px;font-weight:700;letter-spacing:1px}
+.logo svg{width:28px;height:28px}
+.badge{background:rgba(99,102,241,.15);color:#818cf8;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600}
+.main{display:flex;height:calc(100vh - 57px)}
+.canvas-wrap{flex:1;position:relative;background:#0f0f1a}
+canvas{display:block;width:100%;height:100%}
+.sidebar{width:420px;background:#111827;border-left:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;overflow:hidden}
+.sidebar-header{padding:16px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:center;justify-content:space-between}
+.sidebar-header h3{font-size:14px;font-weight:600;color:#94a3b8}
+.tabs{display:flex;gap:0;border-bottom:1px solid rgba(255,255,255,.06)}
+.tab{padding:10px 16px;font-size:13px;cursor:pointer;color:#64748b;border-bottom:2px solid transparent;transition:.2s}
+.tab.active{color:#818cf8;border-bottom-color:#818cf8}
+.tab:hover{color:#e2e8f0}
+.editor-wrap{flex:1;overflow:auto;padding:0}
+textarea{width:100%;height:100%;background:#0d1117;color:#c9d1d9;border:none;padding:16px;font-family:'JetBrains Mono',Consolas,monospace;font-size:12px;line-height:1.6;resize:none;outline:none;tab-size:2}
+.controls{padding:12px 16px;border-top:1px solid rgba(255,255,255,.06);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.btn{padding:8px 16px;border-radius:6px;border:none;cursor:pointer;font-size:13px;font-weight:500;transition:.2s}
+.btn-primary{background:#6366f1;color:#fff}.btn-primary:hover{background:#4f46e5}
+.btn-secondary{background:rgba(255,255,255,.06);color:#e2e8f0}.btn-secondary:hover{background:rgba(255,255,255,.12)}
+.stats{margin-left:auto;font-size:11px;color:#64748b;display:flex;gap:12px}
+.stats span{display:flex;align-items:center;gap:4px}
+.overlay-info{position:absolute;top:16px;left:16px;background:rgba(0,0,0,.6);backdrop-filter:blur(8px);padding:10px 16px;border-radius:8px;font-size:12px;color:#94a3b8;pointer-events:none}
+.overlay-info b{color:#818cf8}
+@media(max-width:900px){.sidebar{display:none}.canvas-wrap{width:100%}}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="logo">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+    Elpian
+  </div>
+  <div class="badge">JSON &rarr; 3D Bevy Scene Renderer</div>
+</div>
+<div class="main">
+  <div class="canvas-wrap">
+    <canvas id="gl"></canvas>
+    <div class="overlay-info">
+      <b>Drag</b> to orbit &middot; <b>Scroll</b> to zoom &middot; <b>Right-drag</b> to pan
+    </div>
+  </div>
+  <div class="sidebar">
+    <div class="sidebar-header"><h3>SCENE JSON</h3></div>
+    <div class="tabs">
+      <div class="tab active" data-tab="scene">Scene</div>
+      <div class="tab" data-tab="presets">Presets</div>
+    </div>
+    <div class="editor-wrap"><textarea id="editor" spellcheck="false"></textarea></div>
+    <div class="controls">
+      <button class="btn btn-primary" id="btnApply">Apply Scene</button>
+      <button class="btn btn-secondary" id="btnReset">Reset Camera</button>
+      <div class="stats">
+        <span id="statFps">0 FPS</span>
+        <span id="statTris">0 tris</span>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+"use strict";
+
+// ── Default Scene JSON ──────────────────────────────────────────────
+const DEFAULT_SCENE = {
+  world: [
+    { type:"environment", ambient_light:{r:.4,g:.4,b:.5,a:1}, ambient_intensity:.3, fog_enabled:true, fog_color:{r:.06,g:.06,b:.1,a:1}, fog_distance:60 },
+    { type:"camera", camera_type:"Perspective", fov:60, near:.1, far:1e3, transform:{ position:{x:5,y:5,z:10}, rotation:{x:-20,y:25,z:0} } },
+    { type:"light", light_type:"Directional", color:{r:1,g:.95,b:.9,a:1}, intensity:1.2, transform:{ position:{x:5,y:10,z:5}, rotation:{x:-50,y:30,z:0} } },
+    { type:"light", light_type:"Point", color:{r:.3,g:.5,b:1,a:1}, intensity:.8, transform:{ position:{x:-3,y:3,z:2} } },
+    { type:"mesh3d", mesh:"Cube", material:{ base_color:{r:.8,g:.2,b:.2,a:1}, metallic:.3, roughness:.5 }, transform:{ position:{x:0,y:1,z:0}, rotation:{x:0,y:45,z:0} }, animation:{ animation_type:{type:"Rotate",axis:{x:0,y:1,z:0},degrees:360}, duration:4, looping:true, easing:"Linear" } },
+    { type:"mesh3d", mesh:{shape:"Sphere",radius:.8,subdivisions:24}, material:{ base_color:{r:.2,g:.6,b:.9,a:1}, metallic:.8, roughness:.2 }, transform:{ position:{x:3,y:1,z:0} }, animation:{ animation_type:{type:"Bounce",height:1.5}, duration:2, looping:true, easing:"EaseInOut" } },
+    { type:"mesh3d", mesh:{shape:"Cylinder",radius:.4,height:2}, material:{ base_color:{r:.2,g:.8,b:.3,a:1}, metallic:.1, roughness:.8 }, transform:{ position:{x:-3,y:1,z:0} }, animation:{ animation_type:{type:"Pulse",min_scale:.8,max_scale:1.2}, duration:1.5, looping:true, easing:"EaseInOut" } },
+    { type:"mesh3d", mesh:{shape:"Torus",radius:1,tube_radius:.3}, material:{ base_color:{r:.9,g:.7,b:.1,a:1}, metallic:.9, roughness:.1 }, transform:{ position:{x:0,y:2.5,z:-4} }, animation:{ animation_type:{type:"Rotate",axis:{x:1,y:0,z:.5},degrees:360}, duration:3, looping:true, easing:"Linear" } },
+    { type:"mesh3d", mesh:{shape:"Cone",radius:.6,height:1.5}, material:{ base_color:{r:.7,g:.2,b:.8,a:1}, metallic:.4, roughness:.4 }, transform:{ position:{x:-2,y:.75,z:3} } },
+    { type:"mesh3d", mesh:{shape:"Plane",size:20}, material:{ base_color:{r:.2,g:.2,b:.25,a:1}, metallic:0, roughness:.9 }, transform:{ position:{x:0,y:0,z:0} } },
+    { type:"mesh3d", mesh:"Cube", material:{ base_color:{r:.15,g:.15,b:.2,a:1}, metallic:.5, roughness:.3 }, transform:{ position:{x:5,y:.5,z:-3}, scale:{x:1,y:1,z:1} } },
+    { type:"mesh3d", mesh:{shape:"Sphere",radius:.4,subdivisions:16}, material:{ base_color:{r:1,g:.4,b:.2,a:1}, metallic:0, roughness:1, emissive:{r:.5,g:.2,b:.05,a:1} }, transform:{ position:{x:-5,y:1.5,z:-2} }, animation:{ animation_type:{type:"Bounce",height:.8}, duration:1.8, looping:true, easing:"Bounce" } },
+  ]
+};
+
+// ── WebGL Setup ─────────────────────────────────────────────────────
+const canvas = document.getElementById('gl');
+const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+if (!gl) { document.body.innerHTML = '<h1 style="color:red;text-align:center;margin-top:40vh">WebGL not supported</h1>'; throw new Error('No WebGL'); }
+
+function resize() {
+  const r = canvas.parentElement.getBoundingClientRect();
+  canvas.width = r.width * devicePixelRatio;
+  canvas.height = r.height * devicePixelRatio;
+  gl.viewport(0, 0, canvas.width, canvas.height);
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ── Shader Programs ─────────────────────────────────────────────────
+const VS = `
+attribute vec3 aPos;
+attribute vec3 aNorm;
+uniform mat4 uMVP;
+uniform mat4 uModel;
+uniform mat3 uNormalMat;
+varying vec3 vWorldPos;
+varying vec3 vNormal;
+void main(){
+  vec4 wp=uModel*vec4(aPos,1.0);
+  vWorldPos=wp.xyz;
+  vNormal=normalize(uNormalMat*aNorm);
+  gl_Position=uMVP*vec4(aPos,1.0);
+}`;
+
+const FS = `
+precision mediump float;
+varying vec3 vWorldPos;
+varying vec3 vNormal;
+uniform vec3 uCamPos;
+uniform vec3 uBaseColor;
+uniform vec3 uEmissive;
+uniform float uMetallic;
+uniform float uRoughness;
+uniform float uAlpha;
+uniform vec3 uAmbientColor;
+uniform float uAmbientIntensity;
+uniform int uFogEnabled;
+uniform vec3 uFogColor;
+uniform float uFogDist;
+struct Light{int type;vec3 pos;vec3 dir;vec3 color;float intensity;};
+uniform Light uLights[8];
+uniform int uLightCount;
+void main(){
+  vec3 n=normalize(vNormal);
+  vec3 viewDir=normalize(uCamPos-vWorldPos);
+  vec3 ambient=uAmbientColor*uAmbientIntensity*uBaseColor;
+  vec3 diffTotal=vec3(0.0);
+  vec3 specTotal=vec3(0.0);
+  for(int i=0;i<8;i++){
+    if(i>=uLightCount)break;
+    Light l=uLights[i];
+    vec3 lDir;float att=1.0;
+    if(l.type==1){lDir=normalize(-l.dir);}
+    else if(l.type==0){
+      vec3 toL=l.pos-vWorldPos;float d=length(toL);lDir=toL/max(d,.001);
+      att=1.0/(1.0+.09*d+.032*d*d);
+    }else{
+      vec3 toL=l.pos-vWorldPos;float d=length(toL);lDir=toL/max(d,.001);
+      float sd=dot(lDir,normalize(-l.dir));
+      float sa=sd>.9?1.0:sd>.8?(sd-.8)*10.0:0.0;
+      att=sa/(1.0+.09*d+.032*d*d);
+    }
+    float ndl=max(dot(n,lDir),0.0);
+    diffTotal+=uBaseColor*l.color*l.intensity*ndl*att;
+    vec3 h=normalize(lDir+viewDir);
+    float ndh=max(dot(n,h),0.0);
+    float shin=max((1.0-uRoughness)*128.0,1.0);
+    float ss=uMetallic>.0?uMetallic*.8:.04;
+    specTotal+=l.color*l.intensity*pow(ndh,shin)*ss*att;
+  }
+  vec3 col=ambient+diffTotal+specTotal+uEmissive;
+  if(uFogEnabled==1){
+    float fd=length(uCamPos-vWorldPos)/max(uFogDist,1.0);
+    fd=clamp(fd,0.0,1.0);col=mix(col,uFogColor,fd*fd);
+  }
+  gl_FragColor=vec4(col,uAlpha);
+}`;
+
+function compileShader(src,type){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){console.error(gl.getShaderInfoLog(s));gl.deleteShader(s);return null;}return s;}
+function createProgram(vs,fs){const p=gl.createProgram();gl.attachShader(p,vs);gl.attachShader(p,fs);gl.linkProgram(p);if(!gl.getProgramParameter(p,gl.LINK_STATUS)){console.error(gl.getProgramInfoLog(p));return null;}return p;}
+const prog=createProgram(compileShader(VS,gl.VERTEX_SHADER),compileShader(FS,gl.FRAGMENT_SHADER));
+gl.useProgram(prog);
+
+const loc={
+  aPos:gl.getAttribLocation(prog,'aPos'), aNorm:gl.getAttribLocation(prog,'aNorm'),
+  uMVP:gl.getUniformLocation(prog,'uMVP'), uModel:gl.getUniformLocation(prog,'uModel'),
+  uNormalMat:gl.getUniformLocation(prog,'uNormalMat'), uCamPos:gl.getUniformLocation(prog,'uCamPos'),
+  uBaseColor:gl.getUniformLocation(prog,'uBaseColor'), uEmissive:gl.getUniformLocation(prog,'uEmissive'),
+  uMetallic:gl.getUniformLocation(prog,'uMetallic'), uRoughness:gl.getUniformLocation(prog,'uRoughness'),
+  uAlpha:gl.getUniformLocation(prog,'uAlpha'),
+  uAmbientColor:gl.getUniformLocation(prog,'uAmbientColor'), uAmbientIntensity:gl.getUniformLocation(prog,'uAmbientIntensity'),
+  uFogEnabled:gl.getUniformLocation(prog,'uFogEnabled'), uFogColor:gl.getUniformLocation(prog,'uFogColor'), uFogDist:gl.getUniformLocation(prog,'uFogDist'),
+  uLightCount:gl.getUniformLocation(prog,'uLightCount'),
+};
+for(let i=0;i<8;i++){
+  loc[`uLights${i}`]={
+    type:gl.getUniformLocation(prog,`uLights[${i}].type`),
+    pos:gl.getUniformLocation(prog,`uLights[${i}].pos`),
+    dir:gl.getUniformLocation(prog,`uLights[${i}].dir`),
+    color:gl.getUniformLocation(prog,`uLights[${i}].color`),
+    intensity:gl.getUniformLocation(prog,`uLights[${i}].intensity`),
+  };
+}
+
+// ── Math Helpers ────────────────────────────────────────────────────
+const {sin,cos,tan,sqrt,PI,min,max,abs}=Math;
+const TAU=PI*2;
+const v3=(x,y,z)=>new Float32Array([x,y,z]);
+function normalize(v){const l=sqrt(v[0]*v[0]+v[1]*v[1]+v[2]*v[2])||1;return v3(v[0]/l,v[1]/l,v[2]/l);}
+function cross(a,b){return v3(a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]);}
+function sub(a,b){return v3(a[0]-b[0],a[1]-b[1],a[2]-b[2]);}
+function mat4(){return new Float32Array(16);}
+function identity(){const m=mat4();m[0]=m[5]=m[10]=m[15]=1;return m;}
+function perspective(fov,asp,near,far){const f=1/tan(fov/2),nf=1/(near-far),m=mat4();m[0]=f/asp;m[5]=f;m[10]=(far+near)*nf;m[11]=-1;m[14]=2*far*near*nf;return m;}
+function lookAt(eye,center,up){const z=normalize(sub(eye,center)),x=normalize(cross(up,z)),y=cross(z,x),m=identity();m[0]=x[0];m[4]=x[1];m[8]=x[2];m[1]=y[0];m[5]=y[1];m[9]=y[2];m[2]=z[0];m[6]=z[1];m[10]=z[2];m[12]=-(x[0]*eye[0]+x[1]*eye[1]+x[2]*eye[2]);m[13]=-(y[0]*eye[0]+y[1]*eye[1]+y[2]*eye[2]);m[14]=-(z[0]*eye[0]+z[1]*eye[1]+z[2]*eye[2]);return m;}
+function mulMat4(a,b){const o=mat4();for(let i=0;i<4;i++)for(let j=0;j<4;j++){let s=0;for(let k=0;k<4;k++)s+=a[i+k*4]*b[k+j*4];o[i+j*4]=s;}return o;}
+function translate(x,y,z){const m=identity();m[12]=x;m[13]=y;m[14]=z;return m;}
+function scale(x,y,z){const m=identity();m[0]=x;m[5]=y;m[10]=z;return m;}
+function rotateX(a){const m=identity(),c=cos(a),s=sin(a);m[5]=c;m[6]=s;m[9]=-s;m[10]=c;return m;}
+function rotateY(a){const m=identity(),c=cos(a),s=sin(a);m[0]=c;m[2]=-s;m[8]=s;m[10]=c;return m;}
+function rotateZ(a){const m=identity(),c=cos(a),s=sin(a);m[0]=c;m[1]=s;m[4]=-s;m[5]=c;return m;}
+function eulerToMat(rx,ry,rz){return mulMat4(mulMat4(rotateX(rx),rotateY(ry)),rotateZ(rz));}
+function normalMat3(m){const a=m[0],b=m[1],c=m[2],d=m[4],e=m[5],f=m[6],g=m[8],h=m[9],i=m[10],det=a*(e*i-f*h)-b*(d*i-f*g)+c*(d*h-e*g);if(!det)return new Float32Array([1,0,0,0,1,0,0,0,1]);const id=1/det;return new Float32Array([
+  (e*i-f*h)*id,(c*h-b*i)*id,(b*f-c*e)*id,
+  (f*g-d*i)*id,(a*i-c*g)*id,(c*d-a*f)*id,
+  (d*h-e*g)*id,(b*g-a*h)*id,(a*e-b*d)*id]);}
+
+// ── Mesh Generators ─────────────────────────────────────────────────
+function genCube(s=1){
+  const h=s/2,V=[],N=[],I=[];
+  const faces=[
+    [[- h,-h, h],[ h,-h, h],[ h, h, h],[-h, h, h],[0,0,1]],
+    [[-h,-h,-h],[-h, h,-h],[ h, h,-h],[ h,-h,-h],[0,0,-1]],
+    [[-h, h,-h],[-h, h, h],[ h, h, h],[ h, h,-h],[0,1,0]],
+    [[-h,-h,-h],[ h,-h,-h],[ h,-h, h],[-h,-h, h],[0,-1,0]],
+    [[ h,-h,-h],[ h, h,-h],[ h, h, h],[ h,-h, h],[1,0,0]],
+    [[-h,-h,-h],[-h,-h, h],[-h, h, h],[-h, h,-h],[-1,0,0]],
+  ];
+  faces.forEach(([a,b,c,d,n],fi)=>{const o=fi*4;V.push(...a,...b,...c,...d);for(let i=0;i<4;i++)N.push(...n);I.push(o,o+1,o+2,o,o+2,o+3);});
+  return bufMesh(V,N,I);
+}
+function genSphere(r=1,seg=16){
+  const V=[],N=[],I=[];
+  for(let i=0;i<=seg;i++){const t=PI*i/seg;for(let j=0;j<=seg;j++){const p=TAU*j/seg;const x=r*sin(t)*cos(p),y=r*cos(t),z=r*sin(t)*sin(p);V.push(x,y,z);const n=normalize(v3(x,y,z));N.push(n[0],n[1],n[2]);}}
+  for(let i=0;i<seg;i++)for(let j=0;j<seg;j++){const a=i*(seg+1)+j,b=a+seg+1;I.push(a,b,a+1,b,b+1,a+1);}
+  return bufMesh(V,N,I);
+}
+function genPlane(s=1){const h=s/2;return bufMesh([-h,0,-h,h,0,-h,h,0,h,-h,0,h],[0,1,0,0,1,0,0,1,0,0,1,0],[0,1,2,0,2,3]);}
+function genCylinder(r=.5,ht=1,seg=16){
+  const V=[],N=[],I=[],hh=ht/2;
+  for(let i=0;i<=seg;i++){const a=TAU*i/seg,x=r*cos(a),z=r*sin(a),nx=cos(a),nz=sin(a);V.push(x,-hh,z,x,hh,z);N.push(nx,0,nz,nx,0,nz);}
+  for(let i=0;i<seg;i++){const a=i*2,b=a+2;I.push(a,b,a+1,b,b+1,a+1);}
+  const bc=(seg+1)*2;V.push(0,hh,0);N.push(0,1,0);const ti=bc;
+  for(let i=0;i<=seg;i++){const a=TAU*i/seg;V.push(r*cos(a),hh,r*sin(a));N.push(0,1,0);}
+  for(let i=0;i<seg;i++)I.push(ti,ti+1+i,ti+2+i);
+  const bc2=V.length/3;V.push(0,-hh,0);N.push(0,-1,0);const bi=bc2;
+  for(let i=0;i<=seg;i++){const a=TAU*i/seg;V.push(r*cos(a),-hh,r*sin(a));N.push(0,-1,0);}
+  for(let i=0;i<seg;i++)I.push(bi,bi+2+i,bi+1+i);
+  return bufMesh(V,N,I);
+}
+function genCone(r=.5,ht=1,seg=16){
+  const V=[],N=[],I=[];
+  const apexI=0;V.push(0,ht,0);N.push(0,1,0);
+  for(let i=0;i<=seg;i++){const a=TAU*i/seg,x=r*cos(a),z=r*sin(a);V.push(x,0,z);const n=normalize(v3(x,r/ht,z));N.push(n[0],n[1],n[2]);}
+  for(let i=0;i<seg;i++)I.push(0,1+i,2+i);
+  const ci=V.length/3;V.push(0,0,0);N.push(0,-1,0);
+  for(let i=0;i<=seg;i++){const a=TAU*i/seg;V.push(r*cos(a),0,r*sin(a));N.push(0,-1,0);}
+  for(let i=0;i<seg;i++)I.push(ci,ci+2+i,ci+1+i);
+  return bufMesh(V,N,I);
+}
+function genTorus(R=1,r=.3,rSeg=24,tSeg=12){
+  const V=[],N=[],I=[];
+  for(let i=0;i<=rSeg;i++){const t=TAU*i/rSeg;for(let j=0;j<=tSeg;j++){const p=TAU*j/tSeg;const cx=R*cos(t),cz=R*sin(t);const x=(R+r*cos(p))*cos(t),y=r*sin(p),z=(R+r*cos(p))*sin(t);V.push(x,y,z);const n=normalize(v3(x-cx,y,z-cz));N.push(n[0],n[1],n[2]);}}
+  for(let i=0;i<rSeg;i++)for(let j=0;j<tSeg;j++){const a=i*(tSeg+1)+j,b=a+tSeg+1;I.push(a,b,a+1,b,b+1,a+1);}
+  return bufMesh(V,N,I);
+}
+
+function bufMesh(V,N,I){
+  const vb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,vb);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(V),gl.STATIC_DRAW);
+  const nb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,nb);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(N),gl.STATIC_DRAW);
+  const ib=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ib);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(I),gl.STATIC_DRAW);
+  return {vb,nb,ib,count:I.length};
+}
+
+const meshCache={};
+function getMesh(def){
+  let key;
+  if(typeof def==='string') key=def;
+  else if(def&&def.shape) key=JSON.stringify(def);
+  else key='Cube';
+  if(meshCache[key])return meshCache[key];
+  let m;
+  if(typeof def==='string'){
+    if(def==='Cube')m=genCube(1);
+    else m=genCube(1);
+  } else if(def&&def.shape){
+    switch(def.shape){
+      case'Sphere':m=genSphere(def.radius||1,def.subdivisions||16);break;
+      case'Plane':m=genPlane(def.size||1);break;
+      case'Cylinder':m=genCylinder(def.radius||.5,def.height||1,16);break;
+      case'Cone':m=genCone(def.radius||.5,def.height||1,16);break;
+      case'Torus':m=genTorus(def.radius||1,def.tube_radius||.3,24,12);break;
+      case'Capsule':m=genCylinder(def.radius||.5,def.depth||1,16);break;
+      default:m=genCube(1);
+    }
+  } else m=genCube(1);
+  meshCache[key]=m;
+  return m;
+}
+
+// ── Scene State ─────────────────────────────────────────────────────
+let scene=DEFAULT_SCENE;
+let camOrbitX=-20*PI/180, camOrbitY=25*PI/180, camDist=12, camPanX=0, camPanY=1.5;
+let elapsed=0, triCount=0;
+
+// ── Camera Controls ─────────────────────────────────────────────────
+let dragging=false, dragBtn=0, lastMX=0, lastMY=0;
+canvas.addEventListener('mousedown',e=>{dragging=true;dragBtn=e.button;lastMX=e.clientX;lastMY=e.clientY;e.preventDefault();});
+window.addEventListener('mouseup',()=>dragging=false);
+window.addEventListener('mousemove',e=>{
+  if(!dragging)return;
+  const dx=e.clientX-lastMX, dy=e.clientY-lastMY;
+  lastMX=e.clientX; lastMY=e.clientY;
+  if(dragBtn===0){camOrbitY+=dx*.005;camOrbitX+=dy*.005;camOrbitX=max(-PI/2+.01,min(PI/2-.01,camOrbitX));}
+  else if(dragBtn===2){camPanX-=dx*.01;camPanY+=dy*.01;}
+});
+canvas.addEventListener('wheel',e=>{camDist*=1+e.deltaY*.001;camDist=max(1,min(100,camDist));e.preventDefault();},{passive:false});
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
+
+// Touch support
+let touches={};
+canvas.addEventListener('touchstart',e=>{e.preventDefault();for(const t of e.changedTouches)touches[t.identifier]={x:t.clientX,y:t.clientY};},{passive:false});
+canvas.addEventListener('touchmove',e=>{
+  e.preventDefault();
+  const ts=[...e.touches];
+  if(ts.length===1&&touches[ts[0].identifier]){
+    const t=touches[ts[0].identifier];const dx=ts[0].clientX-t.x,dy=ts[0].clientY-t.y;
+    camOrbitY+=dx*.005;camOrbitX+=dy*.005;camOrbitX=max(-PI/2+.01,min(PI/2-.01,camOrbitX));
+    t.x=ts[0].clientX;t.y=ts[0].clientY;
+  } else if(ts.length===2){
+    const d=sqrt((ts[0].clientX-ts[1].clientX)**2+(ts[0].clientY-ts[1].clientY)**2);
+    if(touches._pinchDist){camDist*=1+(touches._pinchDist-d)*.005;camDist=max(1,min(100,camDist));}
+    touches._pinchDist=d;
+  }
+},{passive:false});
+canvas.addEventListener('touchend',e=>{for(const t of e.changedTouches)delete touches[t.identifier];delete touches._pinchDist;});
+
+// ── Animation Helpers ───────────────────────────────────────────────
+function easing(t,type){
+  switch(type){
+    case'EaseIn':return t*t;
+    case'EaseOut':return t*(2-t);
+    case'EaseInOut':return t<.5?2*t*t:-1+(4-2*t)*t;
+    case'Bounce':{const n=7.5625,d=2.75;if(t<1/d)return n*t*t;if(t<2/d){t-=1.5/d;return n*t*t+.75;}if(t<2.5/d){t-=2.25/d;return n*t*t+.9375;}t-=2.625/d;return n*t*t+.984375;}
+    default:return t;
+  }
+}
+
+function getAnimTransform(anim,baseModel){
+  if(!anim)return baseModel;
+  const dur=anim.duration||1;
+  const raw=anim.looping?(elapsed%dur)/dur:min(elapsed/dur,1);
+  const t=easing(raw,anim.easing||'Linear');
+  const at=anim.animation_type;
+  if(!at)return baseModel;
+  switch(at.type){
+    case'Rotate':{
+      const ax=normalize(v3(at.axis?.x||0,at.axis?.y||1,at.axis?.z||0));
+      const ang=(at.degrees||360)*PI/180*t;
+      const c=cos(ang),s=sin(ang),ic=1-c,x=ax[0],y=ax[1],z=ax[2];
+      const r=identity();
+      r[0]=c+x*x*ic;r[1]=y*x*ic+z*s;r[2]=z*x*ic-y*s;
+      r[4]=x*y*ic-z*s;r[5]=c+y*y*ic;r[6]=z*y*ic+x*s;
+      r[8]=x*z*ic+y*s;r[9]=y*z*ic-x*s;r[10]=c+z*z*ic;
+      return mulMat4(baseModel,r);
+    }
+    case'Bounce':{
+      const h=at.height||1;
+      const y=sin(t*PI)*h;
+      return mulMat4(baseModel,translate(0,y,0));
+    }
+    case'Pulse':{
+      const mn=at.min_scale||.8,mx=at.max_scale||1.2;
+      const s=mn+(mx-mn)*(.5+.5*sin(t*TAU));
+      return mulMat4(baseModel,scale(s,s,s));
+    }
+    case'Translate':{
+      const f=at.from||{x:0,y:0,z:0},to=at.to||{x:0,y:0,z:0};
+      return mulMat4(baseModel,translate(f.x+(to.x-f.x)*t,f.y+(to.y-f.y)*t,f.z+(to.z-f.z)*t));
+    }
+    case'Scale':{
+      const f=at.from||{x:1,y:1,z:1},to=at.to||{x:1,y:1,z:1};
+      return mulMat4(baseModel,scale(f.x+(to.x-f.x)*t,f.y+(to.y-f.y)*t,f.z+(to.z-f.z)*t));
+    }
+    default:return baseModel;
+  }
+}
+
+// ── Scene Rendering ─────────────────────────────────────────────────
+function buildModelMatrix(tf){
+  if(!tf)return identity();
+  let m=identity();
+  const p=tf.position||{x:0,y:0,z:0};
+  const r=tf.rotation||{x:0,y:0,z:0};
+  const s=tf.scale||{x:1,y:1,z:1};
+  m=mulMat4(translate(p.x,p.y,p.z),eulerToMat(r.x*PI/180,r.y*PI/180,r.z*PI/180));
+  m=mulMat4(m,scale(s.x,s.y,s.z));
+  return m;
+}
+
+function drawMesh(mesh,model,vp,mat){
+  const m=mesh;
+  gl.bindBuffer(gl.ARRAY_BUFFER,m.vb);gl.enableVertexAttribArray(loc.aPos);gl.vertexAttribPointer(loc.aPos,3,gl.FLOAT,false,0,0);
+  gl.bindBuffer(gl.ARRAY_BUFFER,m.nb);gl.enableVertexAttribArray(loc.aNorm);gl.vertexAttribPointer(loc.aNorm,3,gl.FLOAT,false,0,0);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,m.ib);
+  const mvp=mulMat4(vp,model);
+  gl.uniformMatrix4fv(loc.uMVP,false,mvp);
+  gl.uniformMatrix4fv(loc.uModel,false,model);
+  gl.uniformMatrix3fv(loc.uNormalMat,false,normalMat3(model));
+  const bc=mat.base_color||{r:.8,g:.8,b:.8};
+  const em=mat.emissive||{r:0,g:0,b:0};
+  gl.uniform3f(loc.uBaseColor,bc.r,bc.g,bc.b);
+  gl.uniform3f(loc.uEmissive,em.r,em.g,em.b);
+  gl.uniform1f(loc.uMetallic,mat.metallic||0);
+  gl.uniform1f(loc.uRoughness,mat.roughness!=null?mat.roughness:.5);
+  gl.uniform1f(loc.uAlpha,mat.alpha!=null?mat.alpha:1);
+  gl.drawElements(gl.TRIANGLES,m.count,gl.UNSIGNED_SHORT,0);
+  triCount+=m.count/3;
+}
+
+function renderScene(dt){
+  elapsed+=dt;
+  triCount=0;
+  const nodes=scene.world||[];
+
+  // Collect environment
+  let env={ambient_color:{r:.3,g:.3,b:.4},ambient_intensity:.3,fog_enabled:false,fog_color:{r:.1,g:.1,b:.15},fog_distance:100};
+  for(const n of nodes)if(n.type==='environment'){
+    if(n.ambient_light)env.ambient_color=n.ambient_light;
+    if(n.ambient_intensity!=null)env.ambient_intensity=n.ambient_intensity;
+    env.fog_enabled=!!n.fog_enabled;
+    if(n.fog_color)env.fog_color=n.fog_color;
+    if(n.fog_distance)env.fog_distance=n.fog_distance;
+  }
+
+  // Collect lights
+  const lights=[];
+  for(const n of nodes)if(n.type==='light'){
+    const tf=n.transform||{};
+    const pos=tf.position||{x:0,y:5,z:5};
+    const rot=tf.rotation||{x:0,y:0,z:0};
+    const rm=eulerToMat(rot.x*PI/180,rot.y*PI/180,rot.z*PI/180);
+    lights.push({type:n.light_type==='Directional'?1:n.light_type==='Spot'?2:0,pos:[pos.x,pos.y,pos.z],dir:[-rm[8],-rm[9],-rm[10]],color:n.color||{r:1,g:1,b:1},intensity:n.intensity!=null?n.intensity:1});
+  }
+  if(!lights.length)lights.push({type:1,pos:[5,10,5],dir:[-.5,-1,-.5],color:{r:1,g:1,b:1},intensity:1});
+
+  // Camera from orbit controls
+  const cx=camDist*cos(camOrbitX)*sin(camOrbitY)+camPanX;
+  const cy=camDist*sin(camOrbitX)+camPanY;
+  const cz=camDist*cos(camOrbitX)*cos(camOrbitY);
+  const camPos=v3(cx,cy,cz);
+  const camTarget=v3(camPanX,camPanY,0);
+  const aspect=canvas.width/canvas.height;
+  const view=lookAt(camPos,camTarget,v3(0,1,0));
+  const proj=perspective(60*PI/180,aspect,.1,1000);
+  const vp=mulMat4(proj,view);
+
+  // Clear
+  const fc=env.fog_enabled?env.fog_color:{r:.04,g:.04,b:.08};
+  gl.clearColor(fc.r,fc.g,fc.b,1);
+  gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.DEPTH_TEST);
+  gl.enable(gl.CULL_FACE);
+
+  // Set uniforms
+  gl.uniform3f(loc.uCamPos,cx,cy,cz);
+  gl.uniform3f(loc.uAmbientColor,env.ambient_color.r,env.ambient_color.g,env.ambient_color.b);
+  gl.uniform1f(loc.uAmbientIntensity,env.ambient_intensity);
+  gl.uniform1i(loc.uFogEnabled,env.fog_enabled?1:0);
+  gl.uniform3f(loc.uFogColor,env.fog_color.r,env.fog_color.g,env.fog_color.b);
+  gl.uniform1f(loc.uFogDist,env.fog_distance);
+  gl.uniform1i(loc.uLightCount,min(lights.length,8));
+  for(let i=0;i<min(lights.length,8);i++){
+    const l=lights[i],u=loc[`uLights${i}`];
+    gl.uniform1i(u.type,l.type);
+    gl.uniform3f(u.pos,l.pos[0],l.pos[1],l.pos[2]);
+    gl.uniform3f(u.dir,l.dir[0],l.dir[1],l.dir[2]);
+    gl.uniform3f(u.color,l.color.r,l.color.g,l.color.b);
+    gl.uniform1f(u.intensity,l.intensity);
+  }
+
+  // Render meshes
+  function renderNode(n,parentModel){
+    if(n.type==='mesh3d'){
+      let model=mulMat4(parentModel,buildModelMatrix(n.transform));
+      model=getAnimTransform(n.animation,model);
+      const mesh=getMesh(n.mesh);
+      drawMesh(mesh,model,vp,n.material||{});
+      if(n.children)for(const c of n.children)renderNode(c,model);
+    }else if(n.type==='group'){
+      const model=mulMat4(parentModel,buildModelMatrix(n.transform));
+      if(n.children)for(const c of n.children)renderNode(c,model);
+    }else if(n.type==='terrain'){
+      const model=mulMat4(parentModel,buildModelMatrix(n.transform));
+      const mesh=genPlane(n.size||100);
+      drawMesh(mesh,model,vp,n.material||{base_color:{r:.3,g:.3,b:.35}});
+    }else if(n.type==='water'){
+      let model=mulMat4(parentModel,buildModelMatrix(n.transform));
+      const sz=n.size||{x:10,y:0,z:10};
+      const mesh=genPlane(max(sz.x,sz.z)||10);
+      const wc=n.water_color||{r:0,g:.5,b:1};
+      const amp=n.wave_amplitude||.5,freq=n.wave_frequency||1;
+      const y=sin(elapsed*freq)*amp;
+      model=mulMat4(model,translate(0,y,0));
+      drawMesh(mesh,model,vp,{base_color:wc,metallic:.6,roughness:.2,alpha:n.transparency||.7});
+    }else if(n.type==='rigidbody'){
+      const model=mulMat4(parentModel,buildModelMatrix(n.transform));
+      const mesh=getMesh(n.mesh);
+      drawMesh(mesh,model,vp,n.material||{});
+    }
+  }
+  for(const n of nodes)renderNode(n,identity());
+}
+
+// ── Render Loop ─────────────────────────────────────────────────────
+let lastTime=0, fpsAccum=0, fpsFrames=0, fpsDisplay=0;
+function frame(now){
+  const dt=(now-lastTime)/1000;lastTime=now;
+  fpsAccum+=dt;fpsFrames++;
+  if(fpsAccum>=.5){fpsDisplay=Math.round(fpsFrames/fpsAccum);fpsAccum=0;fpsFrames=0;document.getElementById('statFps').textContent=fpsDisplay+' FPS';}
+  renderScene(dt);
+  document.getElementById('statTris').textContent=triCount+' tris';
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// ── Editor ──────────────────────────────────────────────────────────
+const editor=document.getElementById('editor');
+editor.value=JSON.stringify(DEFAULT_SCENE,null,2);
+
+document.getElementById('btnApply').addEventListener('click',()=>{
+  try{
+    const parsed=JSON.parse(editor.value);
+    scene=parsed;
+    // Clear mesh cache for fresh geometry
+    for(const k in meshCache)delete meshCache[k];
+  }catch(e){alert('Invalid JSON: '+e.message);}
+});
+document.getElementById('btnReset').addEventListener('click',()=>{
+  camOrbitX=-20*PI/180;camOrbitY=25*PI/180;camDist=12;camPanX=0;camPanY=1.5;
+});
+
+// Tabs
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    tab.classList.add('active');
+    if(tab.dataset.tab==='presets'){
+      const presets={
+        "Minimal Cube":{world:[{type:"camera",camera_type:"Perspective",transform:{position:{x:0,y:3,z:5}}},{type:"light",light_type:"Directional",intensity:1,transform:{rotation:{x:-45,y:30,z:0}}},{type:"mesh3d",mesh:"Cube",material:{base_color:{r:.9,g:.3,b:.1}},transform:{position:{x:0,y:.5,z:0}},animation:{animation_type:{type:"Rotate",axis:{x:0,y:1,z:0},degrees:360},duration:3,looping:true}}]},
+        "Solar System":{world:[{type:"environment",ambient_intensity:.1},{type:"camera",camera_type:"Perspective",fov:60,transform:{position:{x:0,y:8,z:15}}},{type:"light",light_type:"Point",color:{r:1,g:.9,b:.7},intensity:2,transform:{position:{x:0,y:0,z:0}}},{type:"mesh3d",mesh:{shape:"Sphere",radius:1.5,subdivisions:24},material:{base_color:{r:1,g:.8,b:.2},emissive:{r:.5,g:.3,b:.05},roughness:1},transform:{position:{x:0,y:0,z:0}}},{type:"mesh3d",mesh:{shape:"Sphere",radius:.3,subdivisions:16},material:{base_color:{r:.6,g:.6,b:.7},roughness:.8},transform:{position:{x:3,y:0,z:0}},animation:{animation_type:{type:"Rotate",axis:{x:0,y:1,z:0},degrees:360},duration:4,looping:true}},{type:"mesh3d",mesh:{shape:"Sphere",radius:.5,subdivisions:16},material:{base_color:{r:.2,g:.5,b:.9},roughness:.5},transform:{position:{x:5.5,y:0,z:0}},animation:{animation_type:{type:"Rotate",axis:{x:0,y:1,z:0},degrees:360},duration:7,looping:true}},{type:"mesh3d",mesh:{shape:"Sphere",radius:.4,subdivisions:16},material:{base_color:{r:.8,g:.3,b:.1},roughness:.7},transform:{position:{x:8,y:0,z:0}},animation:{animation_type:{type:"Rotate",axis:{x:0,y:1,z:0},degrees:360},duration:11,looping:true}},{type:"mesh3d",mesh:{shape:"Torus",radius:3,tube_radius:.02},material:{base_color:{r:.3,g:.3,b:.4},roughness:.9}},{type:"mesh3d",mesh:{shape:"Torus",radius:5.5,tube_radius:.02},material:{base_color:{r:.3,g:.3,b:.4},roughness:.9}},{type:"mesh3d",mesh:{shape:"Torus",radius:8,tube_radius:.02},material:{base_color:{r:.3,g:.3,b:.4},roughness:.9}}]},
+        "Metallic Shapes":{world:[{type:"environment",ambient_intensity:.2,fog_enabled:true,fog_color:{r:.02,g:.02,b:.05},fog_distance:40},{type:"camera",camera_type:"Perspective",transform:{position:{x:0,y:4,z:8}}},{type:"light",light_type:"Directional",intensity:1.5,transform:{rotation:{x:-40,y:20,z:0}}},{type:"light",light_type:"Point",color:{r:.5,g:.2,b:1},intensity:1,transform:{position:{x:3,y:3,z:0}}},{type:"light",light_type:"Point",color:{r:1,g:.3,b:.1},intensity:1,transform:{position:{x:-3,y:3,z:0}}},{type:"mesh3d",mesh:{shape:"Sphere",radius:1,subdivisions:32},material:{base_color:{r:.9,g:.9,b:1},metallic:1,roughness:.05},transform:{position:{x:0,y:1.5,z:0}},animation:{animation_type:{type:"Bounce",height:.5},duration:2,looping:true,easing:"EaseInOut"}},{type:"mesh3d",mesh:{shape:"Torus",radius:2,tube_radius:.15},material:{base_color:{r:1,g:.8,b:.2},metallic:.9,roughness:.1},transform:{position:{x:0,y:1.5,z:0}},animation:{animation_type:{type:"Rotate",axis:{x:0,y:1,z:.3},degrees:360},duration:5,looping:true}},{type:"mesh3d",mesh:{shape:"Plane",size:30},material:{base_color:{r:.1,g:.1,b:.12},metallic:.5,roughness:.3}}]}
+      };
+      let html='<div style="padding:16px;display:flex;flex-direction:column;gap:8px">';
+      for(const[name,s]of Object.entries(presets))html+=`<button class="btn btn-secondary" onclick="loadPreset('${name}')" style="text-align:left">${name}</button>`;
+      html+='</div>';
+      const wrap=document.querySelector('.editor-wrap');
+      wrap.innerHTML=html;
+      window._presets=presets;
+    }else{
+      document.querySelector('.editor-wrap').innerHTML='<textarea id="editor" spellcheck="false"></textarea>';
+      const ed=document.getElementById('editor');
+      ed.value=JSON.stringify(scene,null,2);
+    }
+  });
+});
+window.loadPreset=function(name){
+  scene=window._presets[name];
+  for(const k in meshCache)delete meshCache[k];
+  document.querySelector('.tab[data-tab="scene"]').click();
+  setTimeout(()=>{document.getElementById('editor').value=JSON.stringify(scene,null,2);},50);
+};
+</script>
+</body>
+</html>
