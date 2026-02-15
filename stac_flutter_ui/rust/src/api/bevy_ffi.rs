@@ -112,21 +112,18 @@ pub extern "C" fn elpian_bevy_get_frame_ptr(
 /// Get the rendered frame as a JSON string containing base64-encoded RGBA data.
 ///
 /// This is used for web/WASM where direct pointer access isn't available.
-/// Returns a JSON string: {"width": N, "height": N, "data": "<base64>"}
+/// Returns a JSON string: {"width": N, "height": N, "data": "<base64>", "frameCount": N}
 /// Caller must free the returned string with elpian_free_string.
+///
+/// Uses an atomic snapshot to avoid inconsistent data from separate lock/unlock cycles.
 #[unsafe(no_mangle)]
 pub extern "C" fn elpian_bevy_get_frame_json(
     scene_id: *const c_char,
 ) -> *mut c_char {
     let sid = unsafe { c_str_to_string(scene_id) };
 
-    let dims = match manager::get_scene_dimensions(&sid) {
-        Some(d) => d,
-        None => return string_to_c_str("{}".to_string()),
-    };
-
-    let pixels = match manager::get_frame_copy(&sid) {
-        Some(p) => p,
+    let (width, height, pixels, frame_count) = match manager::get_frame_snapshot(&sid) {
+        Some(snapshot) => snapshot,
         None => return string_to_c_str("{}".to_string()),
     };
 
@@ -134,10 +131,10 @@ pub extern "C" fn elpian_bevy_get_frame_json(
     let encoded = base64_encode(&pixels);
 
     let result = json!({
-        "width": dims.0,
-        "height": dims.1,
+        "width": width,
+        "height": height,
         "data": encoded,
-        "frameCount": manager::get_frame_count(&sid),
+        "frameCount": frame_count,
     });
 
     string_to_c_str(result.to_string())

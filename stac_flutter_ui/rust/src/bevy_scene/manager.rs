@@ -121,6 +121,22 @@ pub fn get_frame_copy(scene_id: &str) -> Option<Vec<u8>> {
     }
 }
 
+/// Atomically get a complete frame snapshot: dimensions, pixels, and frame count.
+/// This avoids separate lock/unlock cycles that could return inconsistent data.
+pub fn get_frame_snapshot(scene_id: &str) -> Option<(u32, u32, Vec<u8>, u64)> {
+    let scenes = SCENES.lock().unwrap();
+    if let Some(instance) = scenes.get(scene_id) {
+        Some((
+            instance.renderer.width,
+            instance.renderer.height,
+            instance.renderer.pixels.clone(),
+            instance.frame_count,
+        ))
+    } else {
+        None
+    }
+}
+
 /// Get the scene's render dimensions.
 pub fn get_scene_dimensions(scene_id: &str) -> Option<(u32, u32)> {
     let scenes = SCENES.lock().unwrap();

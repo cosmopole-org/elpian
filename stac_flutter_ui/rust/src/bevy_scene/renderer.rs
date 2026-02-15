@@ -16,7 +16,7 @@
 //! - Particle system rendering
 //! - Environment settings (ambient light, fog)
 
-use glam::{Vec2, Vec3, Vec4, Mat4, Quat, EulerRot};
+use glam::{Vec2, Vec3, Vec4, Mat4};
 
 use crate::bevy_scene::schema::*;
 
@@ -401,6 +401,7 @@ impl SceneRenderer {
     ) {
         let mvp = *view_proj * *world;
         let normal_matrix = world.inverse().transpose();
+        let w_clip_plane = 0.001_f32;
 
         for tri in triangles {
             // Transform vertices to world space
@@ -421,22 +422,75 @@ impl SceneRenderer {
                 continue;
             }
 
-            // Perspective divide
-            let ndc0 = if c0.w > 0.001 { Vec3::new(c0.x / c0.w, c0.y / c0.w, c0.z / c0.w) } else { continue };
-            let ndc1 = if c1.w > 0.001 { Vec3::new(c1.x / c1.w, c1.y / c1.w, c1.z / c1.w) } else { continue };
-            let ndc2 = if c2.w > 0.001 { Vec3::new(c2.x / c2.w, c2.y / c2.w, c2.z / c2.w) } else { continue };
+            // Near-plane clipping: clip triangles that cross the w=0 plane.
+            // Count vertices that are in front of the camera (w > threshold).
+            let in0 = c0.w > w_clip_plane;
+            let in1 = c1.w > w_clip_plane;
+            let in2 = c2.w > w_clip_plane;
+            let inside_count = in0 as u8 + in1 as u8 + in2 as u8;
 
-            // NDC to screen coordinates
-            let s0 = self.ndc_to_screen(ndc0);
-            let s1 = self.ndc_to_screen(ndc1);
-            let s2 = self.ndc_to_screen(ndc2);
+            if inside_count == 0 {
+                continue;
+            }
 
             // Compute lighting for triangle center (flat shading)
             let center = (w0 + w1 + w2) / 3.0;
             let lit_color = compute_lighting(center, n, camera, lights, material, env);
 
-            // Rasterize triangle
-            self.fill_triangle(s0, s1, s2, ndc0.z, ndc1.z, ndc2.z, &lit_color, material.alpha);
+            if inside_count == 3 {
+                // All vertices in front: render directly
+                let ndc0 = Vec3::new(c0.x / c0.w, c0.y / c0.w, c0.z / c0.w);
+                let ndc1 = Vec3::new(c1.x / c1.w, c1.y / c1.w, c1.z / c1.w);
+                let ndc2 = Vec3::new(c2.x / c2.w, c2.y / c2.w, c2.z / c2.w);
+
+                let s0 = self.ndc_to_screen(ndc0);
+                let s1 = self.ndc_to_screen(ndc1);
+                let s2 = self.ndc_to_screen(ndc2);
+
+                self.fill_triangle(s0, s1, s2, ndc0.z, ndc1.z, ndc2.z, &lit_color, material.alpha);
+            } else {
+                // Triangle crosses near plane: clip against w = w_clip_plane.
+                // Collect clip-space vertices, splitting edges that cross.
+                let clips = [c0, c1, c2];
+                let inside = [in0, in1, in2];
+                let mut clipped: Vec<Vec4> = Vec::with_capacity(4);
+
+                for i in 0..3 {
+                    let j = (i + 1) % 3;
+                    let ci = clips[i];
+                    let cj = clips[j];
+
+                    if inside[i] {
+                        clipped.push(ci);
+                    }
+
+                    // If this edge crosses the plane, compute intersection
+                    if inside[i] != inside[j] {
+                        let t = (ci.w - w_clip_plane) / (ci.w - cj.w);
+                        let intersect = ci + (cj - ci) * t;
+                        clipped.push(intersect);
+                    }
+                }
+
+                // Fan-triangulate the clipped polygon (3 or 4 vertices)
+                if clipped.len() >= 3 {
+                    for k in 1..(clipped.len() - 1) {
+                        let a = clipped[0];
+                        let b = clipped[k];
+                        let c = clipped[k + 1];
+
+                        let ndc_a = Vec3::new(a.x / a.w, a.y / a.w, a.z / a.w);
+                        let ndc_b = Vec3::new(b.x / b.w, b.y / b.w, b.z / b.w);
+                        let ndc_c = Vec3::new(c.x / c.w, c.y / c.w, c.z / c.w);
+
+                        let sa = self.ndc_to_screen(ndc_a);
+                        let sb = self.ndc_to_screen(ndc_b);
+                        let sc = self.ndc_to_screen(ndc_c);
+
+                        self.fill_triangle(sa, sb, sc, ndc_a.z, ndc_b.z, ndc_c.z, &lit_color, material.alpha);
+                    }
+                }
+            }
         }
     }
 
@@ -855,12 +909,13 @@ struct MaterialState {
 
 impl MaterialState {
     fn from_def(def: &MaterialDef) -> Self {
+        let alpha = def.base_color.as_ref().map(|c| c.a).unwrap_or(1.0);
         Self {
             base_color: def.base_color.as_ref().map(|c| c.to_vec3()).unwrap_or(Vec3::new(0.8, 0.8, 0.8)),
             metallic: def.metallic.unwrap_or(0.0),
             roughness: def.roughness.unwrap_or(0.5),
             emissive: def.emissive.as_ref().map(|c| c.to_vec3()).unwrap_or(Vec3::ZERO),
-            alpha: 1.0,
+            alpha,
         }
     }
 }

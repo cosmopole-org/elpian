@@ -147,7 +147,7 @@ class _BevySceneWidgetState extends State<BevySceneWidget>
   ui.Image? _currentImage;
   bool _isInitialized = false;
   Duration _lastFrameTime = Duration.zero;
-  int _sceneIdCounter = 0;
+  Offset _lastTouchPosition = Offset.zero;
 
   static int _globalSceneCounter = 0;
   static bool _systemInitialized = false;
@@ -341,31 +341,43 @@ class _BevySceneWidgetState extends State<BevySceneWidget>
 
     // Wrap with gesture detector for interactive scenes
     if (widget.interactive) {
+      // Use onScale* instead of onPan* because Flutter does not allow
+      // both pan and scale gesture recognizers on the same GestureDetector
+      // (scale is a superset of pan).
       child = GestureDetector(
-        onPanStart: (details) {
+        onScaleStart: (details) {
+          _lastTouchPosition = details.localFocalPoint;
           _controller.sendTouchDown(
-            details.localPosition.dx,
-            details.localPosition.dy,
+            details.localFocalPoint.dx,
+            details.localFocalPoint.dy,
           );
-        },
-        onPanUpdate: (details) {
-          _controller.sendTouchMove(
-            details.localPosition.dx,
-            details.localPosition.dy,
-            deltaX: details.delta.dx,
-            deltaY: details.delta.dy,
-          );
-        },
-        onPanEnd: (details) {
-          // Send touch up at last known position
-          _controller.sendTouchUp(0, 0);
         },
         onScaleUpdate: (details) {
-          if (details.pointerCount == 1) return;
-          _controller.sendMouseWheel(
-            details.focalPoint.dx,
-            details.focalPoint.dy,
-            deltaY: details.scale - 1.0,
+          final pos = details.localFocalPoint;
+          final delta = pos - _lastTouchPosition;
+          _lastTouchPosition = pos;
+
+          if (details.pointerCount > 1) {
+            // Multi-touch: treat as zoom/scroll
+            _controller.sendMouseWheel(
+              pos.dx,
+              pos.dy,
+              deltaY: details.scale - 1.0,
+            );
+          } else {
+            // Single touch: treat as drag/pan
+            _controller.sendTouchMove(
+              pos.dx,
+              pos.dy,
+              deltaX: delta.dx,
+              deltaY: delta.dy,
+            );
+          }
+        },
+        onScaleEnd: (details) {
+          _controller.sendTouchUp(
+            _lastTouchPosition.dx,
+            _lastTouchPosition.dy,
           );
         },
         child: child,

@@ -264,11 +264,8 @@ class BevySceneApi {
       final width = (dims >> 32) & 0xFFFFFFFF;
       final height = dims & 0xFFFFFFFF;
 
-      // Copy pixels from native memory into a Dart Uint8List
-      final pixels = Uint8List(size);
-      for (var i = 0; i < size; i++) {
-        pixels[i] = ptr[i];
-      }
+      // Bulk copy pixels from native memory into a Dart Uint8List
+      final pixels = Uint8List.fromList(ptr.asTypedList(size));
 
       return BevyFrameData(
         width: width,

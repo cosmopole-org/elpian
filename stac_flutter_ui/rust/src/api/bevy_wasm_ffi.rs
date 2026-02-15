@@ -39,27 +39,20 @@ mod wasm {
         manager::resize_scene(&scene_id, width, height)
     }
 
-    /// Returns the rendered frame as a JSON string with base64-encoded RGBA data.
-    /// Format: {"width": N, "height": N, "data": "<base64>", "frameCount": N}
+    /// Returns the rendered frame metadata as a JSON string.
+    /// Format: {"width": N, "height": N, "frameCount": N, "pixelCount": N}
+    /// Use `elpian_bevy_wasm_get_frame_bytes` to get the raw pixel data.
+    /// Uses an atomic snapshot to avoid inconsistent data.
     #[wasm_bindgen]
     pub fn elpian_bevy_wasm_get_frame(scene_id: String) -> String {
-        let dims = match manager::get_scene_dimensions(&scene_id) {
-            Some(d) => d,
+        let (width, height, pixels, frame_count) = match manager::get_frame_snapshot(&scene_id) {
+            Some(snapshot) => snapshot,
             None => return "{}".to_string(),
         };
-
-        let pixels = match manager::get_frame_copy(&scene_id) {
-            Some(p) => p,
-            None => return "{}".to_string(),
-        };
-
-        // For WASM, return raw pixel data as a comma-separated list of bytes
-        // (more efficient than base64 for JS typed arrays)
-        let frame_count = manager::get_frame_count(&scene_id);
 
         json!({
-            "width": dims.0,
-            "height": dims.1,
+            "width": width,
+            "height": height,
             "frameCount": frame_count,
             "pixelCount": pixels.len(),
         })
