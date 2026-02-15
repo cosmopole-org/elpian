@@ -1,5 +1,7 @@
 pub mod ffi;
 pub mod wasm_ffi;
+pub mod bevy_ffi;
+pub mod bevy_wasm_ffi;
 
 use std::collections::HashMap;
 use std::sync::Mutex;
