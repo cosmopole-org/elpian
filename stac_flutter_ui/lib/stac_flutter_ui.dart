@@ -38,6 +38,7 @@ export 'src/canvas/canvas_widget.dart';
 // Bevy 3D Scene Renderer
 export 'src/bevy/bevy_scene_widget.dart';
 export 'src/bevy/bevy_scene_controller.dart';
+export 'src/bevy/dart_scene_renderer.dart';
 export 'src/bevy/bevy_scene_api.dart'
     if (dart.library.js_interop) 'src/bevy/bevy_scene_api_web.dart'
     show BevySceneApi, BevyFrameData;
