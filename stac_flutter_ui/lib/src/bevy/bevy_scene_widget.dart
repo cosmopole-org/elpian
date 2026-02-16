@@ -1,5 +1,4 @@
-import 'dart:async';
-import 'dart:typed_data';
+import 'dart:convert';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -8,30 +7,18 @@ import 'package:flutter/scheduler.dart';
 import 'bevy_scene_controller.dart';
 import 'bevy_scene_api.dart'
     if (dart.library.js_interop) 'bevy_scene_api_web.dart';
+import 'dart_scene_renderer.dart';
 import '../models/stac_node.dart';
 
 /// A Flutter widget that renders a Bevy 3D scene from JSON.
 ///
-/// This widget creates a high-performance bridge between the Rust-based
-/// Bevy 3D renderer and Flutter's widget system. It supports:
+/// This widget supports two rendering paths:
+/// 1. **FFI path** (native/WASM): Uses the Rust software renderer via FFI
+/// 2. **Dart path** (fallback): Pure-Dart Canvas-based 3D renderer
 ///
-/// - JSON-defined 3D scenes (meshes, lights, cameras, particles, etc.)
-/// - Real-time animation with configurable FPS
-/// - Touch/gesture input forwarding
-/// - Dynamic scene updates
-/// - Automatic resize handling
-/// - Cross-platform support (mobile, desktop, web)
-///
-/// Usage:
-/// ```dart
-/// BevySceneWidget(
-///   sceneJson: '{"world": [{"type": "mesh3d", "mesh": "Cube", ...}]}',
-///   width: 800,
-///   height: 600,
-///   fps: 60,
-///   interactive: true,
-/// )
-/// ```
+/// The Dart fallback activates automatically when the native library is
+/// unavailable, ensuring the 3D scene renders on all platforms including
+/// Flutter web / GitHub Pages without requiring Rust compilation.
 class BevySceneWidget extends StatefulWidget {
   /// JSON string defining the 3D scene.
   final String? sceneJson;
@@ -119,20 +106,13 @@ class BevySceneWidget extends StatefulWidget {
 
   static BoxFit _parseFit(String? fit) {
     switch (fit) {
-      case 'fill':
-        return BoxFit.fill;
-      case 'cover':
-        return BoxFit.cover;
-      case 'fitWidth':
-        return BoxFit.fitWidth;
-      case 'fitHeight':
-        return BoxFit.fitHeight;
-      case 'none':
-        return BoxFit.none;
-      case 'scaleDown':
-        return BoxFit.scaleDown;
-      default:
-        return BoxFit.contain;
+      case 'fill': return BoxFit.fill;
+      case 'cover': return BoxFit.cover;
+      case 'fitWidth': return BoxFit.fitWidth;
+      case 'fitHeight': return BoxFit.fitHeight;
+      case 'none': return BoxFit.none;
+      case 'scaleDown': return BoxFit.scaleDown;
+      default: return BoxFit.contain;
     }
   }
 
@@ -142,133 +122,163 @@ class BevySceneWidget extends StatefulWidget {
 
 class _BevySceneWidgetState extends State<BevySceneWidget>
     with SingleTickerProviderStateMixin {
-  late final BevySceneController _controller;
+  BevySceneController? _controller;
   late final Ticker _ticker;
   ui.Image? _currentImage;
   bool _isInitialized = false;
   Duration _lastFrameTime = Duration.zero;
   Offset _lastTouchPosition = Offset.zero;
 
+  /// True when using the pure-Dart fallback renderer.
+  bool _useDartRenderer = false;
+  DartSceneRenderer? _dartRenderer;
+  Map<String, dynamic>? _parsedScene;
+
   static int _globalSceneCounter = 0;
   static bool _systemInitialized = false;
+  static bool _ffiAvailable = false;
 
   @override
   void initState() {
     super.initState();
-
-    // Initialize the Bevy scene subsystem once
-    if (!_systemInitialized) {
-      BevySceneController.initialize();
-      _systemInitialized = true;
-    }
-
-    final id = widget.sceneId ?? 'bevy_scene_${_globalSceneCounter++}';
-    _controller = BevySceneController(sceneId: id);
-
     _ticker = createTicker(_onTick);
+    _parseSceneJson();
 
-    // Load scene after first layout
+    // Try to initialize FFI; fall back to Dart renderer on failure
+    _tryInitFFI();
+
+    // Start rendering after first layout
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initScene();
     });
   }
 
+  void _parseSceneJson() {
+    try {
+      if (widget.sceneJson != null) {
+        _parsedScene = jsonDecode(widget.sceneJson!) as Map<String, dynamic>;
+      } else if (widget.sceneMap != null) {
+        _parsedScene = widget.sceneMap;
+      }
+    } catch (_) {
+      _parsedScene = {'world': []};
+    }
+  }
+
+  void _tryInitFFI() {
+    if (_systemInitialized) {
+      if (!_ffiAvailable) {
+        _useDartRenderer = true;
+        _dartRenderer = DartSceneRenderer();
+      }
+      return;
+    }
+
+    try {
+      BevySceneController.initialize();
+      _systemInitialized = true;
+      _ffiAvailable = true;
+    } catch (_) {
+      // FFI library not available - use Dart renderer
+      _systemInitialized = true;
+      _ffiAvailable = false;
+      _useDartRenderer = true;
+      _dartRenderer = DartSceneRenderer();
+    }
+  }
+
   void _initScene() {
     if (!mounted) return;
 
-    final renderBox = context.findRenderObject() as RenderBox?;
-    final size = renderBox?.size ?? const Size(512, 512);
-
-    final renderWidth = (widget.width ?? size.width).toInt().clamp(1, 4096);
-    final renderHeight = (widget.height ?? size.height).toInt().clamp(1, 4096);
-
-    final json = widget.sceneJson ?? _encodeSceneMap(widget.sceneMap!);
-    final success = _controller.loadScene(
-      json,
-      width: renderWidth,
-      height: renderHeight,
-    );
-
-    if (success) {
+    if (_useDartRenderer) {
+      // Dart renderer path: start animation loop immediately
       _isInitialized = true;
-      widget.onSceneCreated?.call(_controller);
-
-      // Render first frame immediately
-      _controller.renderFrame(deltaTime: 0);
-      _updateImage();
-
-      // Start render loop if autoStart is enabled
       if (widget.autoStart && !_ticker.isActive) {
         _ticker.start();
       }
+      // Force first paint
+      setState(() {});
+      return;
     }
-  }
 
-  String _encodeSceneMap(Map<String, dynamic> map) {
-    // Use a simple JSON encode; the Rust side handles parsing
+    // FFI path
+    final renderBox = context.findRenderObject() as RenderBox?;
+    final size = renderBox?.size ?? const Size(512, 512);
+    final renderWidth = (widget.width ?? size.width).toInt().clamp(1, 4096);
+    final renderHeight = (widget.height ?? size.height).toInt().clamp(1, 4096);
+
+    final id = widget.sceneId ?? 'bevy_scene_${_globalSceneCounter++}';
+    _controller = BevySceneController(sceneId: id);
+
+    final json = widget.sceneJson ?? jsonEncode(widget.sceneMap);
+    bool success;
     try {
-      return _jsonEncode(map);
+      success = _controller!.loadScene(
+        json!,
+        width: renderWidth,
+        height: renderHeight,
+      );
     } catch (_) {
-      return '{"world":[]}';
+      // FFI call failed at runtime; fall back to Dart renderer
+      _useDartRenderer = true;
+      _dartRenderer = DartSceneRenderer();
+      _ffiAvailable = false;
+      _isInitialized = true;
+      if (widget.autoStart && !_ticker.isActive) {
+        _ticker.start();
+      }
+      setState(() {});
+      return;
     }
-  }
 
-  // Inline JSON encode to avoid importing dart:convert at top level
-  String _jsonEncode(Object? value) {
-    if (value == null) return 'null';
-    if (value is String) return '"${_escapeString(value)}"';
-    if (value is num || value is bool) return value.toString();
-    if (value is List) {
-      return '[${value.map(_jsonEncode).join(',')}]';
+    if (success) {
+      _isInitialized = true;
+      widget.onSceneCreated?.call(_controller!);
+      _controller!.renderFrame(deltaTime: 0);
+      _updateImage();
+      if (widget.autoStart && !_ticker.isActive) {
+        _ticker.start();
+      }
+    } else {
+      // Scene creation failed; fall back to Dart renderer
+      _useDartRenderer = true;
+      _dartRenderer = DartSceneRenderer();
+      _isInitialized = true;
+      if (widget.autoStart && !_ticker.isActive) {
+        _ticker.start();
+      }
+      setState(() {});
     }
-    if (value is Map) {
-      final entries = value.entries
-          .map((e) => '"${_escapeString(e.key.toString())}":${_jsonEncode(e.value)}')
-          .join(',');
-      return '{$entries}';
-    }
-    return '"$value"';
-  }
-
-  String _escapeString(String s) {
-    return s
-        .replaceAll('\\', '\\\\')
-        .replaceAll('"', '\\"')
-        .replaceAll('\n', '\\n')
-        .replaceAll('\r', '\\r')
-        .replaceAll('\t', '\\t');
   }
 
   void _onTick(Duration elapsed) {
     if (!_isInitialized || !mounted) return;
 
-    // Calculate delta time
     final deltaTime = _lastFrameTime == Duration.zero
         ? 1.0 / widget.fps
         : (elapsed - _lastFrameTime).inMicroseconds / 1000000.0;
     _lastFrameTime = elapsed;
-
-    // Cap delta time to avoid huge jumps (e.g., after tab switch)
     final cappedDelta = deltaTime.clamp(0.0, 0.1);
 
-    // Render frame
-    _controller.renderFrame(deltaTime: cappedDelta);
-    _updateImage();
+    if (_useDartRenderer) {
+      // Advance animation clock, then trigger repaint
+      _dartRenderer!.advanceTime(cappedDelta);
+      setState(() {});
+      widget.onFrameRendered?.call();
+    } else {
+      _controller?.renderFrame(deltaTime: cappedDelta);
+      _updateImage();
+    }
   }
 
   void _updateImage() {
-    final frame = _controller.getFrame();
+    final frame = _controller?.getFrame();
     if (frame == null || frame.isEmpty) return;
 
-    // Decode RGBA pixels into a dart:ui Image
-    _decodePixelsToImage(frame.pixels, frame.width, frame.height);
-  }
-
-  void _decodePixelsToImage(Uint8List pixels, int width, int height) {
     ui.decodeImageFromPixels(
-      pixels,
-      width,
-      height,
+      frame.pixels,
+      frame.width,
+      frame.height,
       ui.PixelFormat.rgba8888,
       (ui.Image image) {
         if (!mounted) {
@@ -289,21 +299,12 @@ class _BevySceneWidgetState extends State<BevySceneWidget>
   void didUpdateWidget(BevySceneWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    // Update scene if JSON changed
     if (widget.sceneJson != oldWidget.sceneJson ||
         widget.sceneMap != oldWidget.sceneMap) {
-      final json = widget.sceneJson ?? _encodeSceneMap(widget.sceneMap!);
-      _controller.updateScene(json);
-    }
-
-    // Handle FPS change (ticker rate is fixed; fps controls frame skip)
-    // Handle resize
-    if (widget.width != oldWidget.width || widget.height != oldWidget.height) {
-      if (widget.width != null && widget.height != null) {
-        _controller.resize(
-          width: widget.width!.toInt(),
-          height: widget.height!.toInt(),
-        );
+      _parseSceneJson();
+      if (!_useDartRenderer) {
+        final json = widget.sceneJson ?? jsonEncode(widget.sceneMap);
+        _controller?.updateScene(json!);
       }
     }
   }
@@ -312,7 +313,7 @@ class _BevySceneWidgetState extends State<BevySceneWidget>
   void dispose() {
     _ticker.dispose();
     _currentImage?.dispose();
-    _controller.dispose();
+    _controller?.dispose();
     super.dispose();
   }
 
@@ -320,7 +321,21 @@ class _BevySceneWidgetState extends State<BevySceneWidget>
   Widget build(BuildContext context) {
     Widget child;
 
-    if (_currentImage != null) {
+    if (_useDartRenderer && _isInitialized) {
+      // Pure-Dart Canvas renderer
+      child = CustomPaint(
+        painter: _DartScenePainter(
+          renderer: _dartRenderer!,
+          scene: _parsedScene ?? {'world': []},
+          backgroundColor: widget.backgroundColor,
+        ),
+        size: Size(
+          widget.width ?? double.infinity,
+          widget.height ?? double.infinity,
+        ),
+      );
+    } else if (_currentImage != null) {
+      // FFI renderer
       child = CustomPaint(
         painter: _BevyScenePainter(
           image: _currentImage!,
@@ -340,14 +355,11 @@ class _BevySceneWidgetState extends State<BevySceneWidget>
     }
 
     // Wrap with gesture detector for interactive scenes
-    if (widget.interactive) {
-      // Use onScale* instead of onPan* because Flutter does not allow
-      // both pan and scale gesture recognizers on the same GestureDetector
-      // (scale is a superset of pan).
+    if (widget.interactive && _isInitialized) {
       child = GestureDetector(
         onScaleStart: (details) {
           _lastTouchPosition = details.localFocalPoint;
-          _controller.sendTouchDown(
+          _controller?.sendTouchDown(
             details.localFocalPoint.dx,
             details.localFocalPoint.dy,
           );
@@ -358,24 +370,20 @@ class _BevySceneWidgetState extends State<BevySceneWidget>
           _lastTouchPosition = pos;
 
           if (details.pointerCount > 1) {
-            // Multi-touch: treat as zoom/scroll
-            _controller.sendMouseWheel(
-              pos.dx,
-              pos.dy,
+            _controller?.sendMouseWheel(
+              pos.dx, pos.dy,
               deltaY: details.scale - 1.0,
             );
           } else {
-            // Single touch: treat as drag/pan
-            _controller.sendTouchMove(
-              pos.dx,
-              pos.dy,
+            _controller?.sendTouchMove(
+              pos.dx, pos.dy,
               deltaX: delta.dx,
               deltaY: delta.dy,
             );
           }
         },
         onScaleEnd: (details) {
-          _controller.sendTouchUp(
+          _controller?.sendTouchUp(
             _lastTouchPosition.dx,
             _lastTouchPosition.dy,
           );
@@ -388,7 +396,31 @@ class _BevySceneWidgetState extends State<BevySceneWidget>
   }
 }
 
-/// Custom painter that efficiently renders the Bevy scene's pixel output.
+/// CustomPainter for the pure-Dart 3D renderer path.
+/// Renders the scene directly to Canvas on every paint call.
+class _DartScenePainter extends CustomPainter {
+  final DartSceneRenderer renderer;
+  final Map<String, dynamic> scene;
+  final Color backgroundColor;
+
+  const _DartScenePainter({
+    required this.renderer,
+    required this.scene,
+    required this.backgroundColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // The renderer already advanced its elapsed time in _onTick,
+    // so we paint with deltaTime=0 (just draw current state).
+    renderer.renderScene(canvas, size, scene, 0);
+  }
+
+  @override
+  bool shouldRepaint(_DartScenePainter oldDelegate) => true;
+}
+
+/// CustomPainter for the FFI renderer path (renders a pixel-buffer image).
 class _BevyScenePainter extends CustomPainter {
   final ui.Image image;
   final BoxFit fit;
@@ -401,18 +433,13 @@ class _BevyScenePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final src = Rect.fromLTWH(
-      0,
-      0,
+      0, 0,
       image.width.toDouble(),
       image.height.toDouble(),
     );
-
     final dst = _applyFit(fit, src, Offset.zero & size);
-
     canvas.drawImageRect(
-      image,
-      src,
-      dst,
+      image, src, dst,
       Paint()..filterQuality = FilterQuality.medium,
     );
   }
@@ -420,51 +447,43 @@ class _BevyScenePainter extends CustomPainter {
   Rect _applyFit(BoxFit fit, Rect src, Rect dst) {
     final srcAspect = src.width / src.height;
     final dstAspect = dst.width / dst.height;
-
     switch (fit) {
-      case BoxFit.fill:
-        return dst;
+      case BoxFit.fill: return dst;
       case BoxFit.contain:
         if (srcAspect > dstAspect) {
           final h = dst.width / srcAspect;
-          return Rect.fromLTWH(
-              dst.left, dst.top + (dst.height - h) / 2, dst.width, h);
+          return Rect.fromLTWH(dst.left, dst.top + (dst.height - h) / 2, dst.width, h);
         } else {
           final w = dst.height * srcAspect;
-          return Rect.fromLTWH(
-              dst.left + (dst.width - w) / 2, dst.top, w, dst.height);
+          return Rect.fromLTWH(dst.left + (dst.width - w) / 2, dst.top, w, dst.height);
         }
       case BoxFit.cover:
         if (srcAspect < dstAspect) {
           final h = dst.width / srcAspect;
-          return Rect.fromLTWH(
-              dst.left, dst.top + (dst.height - h) / 2, dst.width, h);
+          return Rect.fromLTWH(dst.left, dst.top + (dst.height - h) / 2, dst.width, h);
         } else {
           final w = dst.height * srcAspect;
-          return Rect.fromLTWH(
-              dst.left + (dst.width - w) / 2, dst.top, w, dst.height);
+          return Rect.fromLTWH(dst.left + (dst.width - w) / 2, dst.top, w, dst.height);
         }
       case BoxFit.fitWidth:
         final h = dst.width / srcAspect;
-        return Rect.fromLTWH(
-            dst.left, dst.top + (dst.height - h) / 2, dst.width, h);
+        return Rect.fromLTWH(dst.left, dst.top + (dst.height - h) / 2, dst.width, h);
       case BoxFit.fitHeight:
         final w = dst.height * srcAspect;
-        return Rect.fromLTWH(
-            dst.left + (dst.width - w) / 2, dst.top, w, dst.height);
+        return Rect.fromLTWH(dst.left + (dst.width - w) / 2, dst.top, w, dst.height);
       case BoxFit.none:
         return Rect.fromLTWH(
-            dst.left + (dst.width - src.width) / 2,
-            dst.top + (dst.height - src.height) / 2,
-            src.width,
-            src.height);
+          dst.left + (dst.width - src.width) / 2,
+          dst.top + (dst.height - src.height) / 2,
+          src.width, src.height,
+        );
       case BoxFit.scaleDown:
         if (src.width <= dst.width && src.height <= dst.height) {
           return Rect.fromLTWH(
-              dst.left + (dst.width - src.width) / 2,
-              dst.top + (dst.height - src.height) / 2,
-              src.width,
-              src.height);
+            dst.left + (dst.width - src.width) / 2,
+            dst.top + (dst.height - src.height) / 2,
+            src.width, src.height,
+          );
         }
         return _applyFit(BoxFit.contain, src, dst);
     }
