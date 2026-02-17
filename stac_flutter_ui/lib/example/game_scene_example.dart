@@ -4,7 +4,6 @@
 /// particle systems, orbit camera, sky gradient, fog, groups, and physics.
 library;
 
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:stac_flutter_ui/src/scene3d/game_scene_widget.dart';
 
