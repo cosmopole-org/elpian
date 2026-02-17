@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:stac_flutter_ui/stac_flutter_ui.dart';
 import '../widgets/stac_canvas_widget.dart';
-import '../bevy/bevy_scene_widget.dart';
-import '../scene3d/game_scene_widget.dart';
 
 // HTML Widgets
 

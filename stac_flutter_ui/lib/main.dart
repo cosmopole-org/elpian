@@ -468,13 +468,13 @@ class GameScenePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF141420),
+    return const Scaffold(
+      backgroundColor: Color(0xFF141420),
       body: GameSceneWidget(
         sceneJson: _gameSceneJson,
         fps: 60,
         interactive: true,
-        backgroundColor: const Color(0xFF141420),
+        backgroundColor: Color(0xFF141420),
       ),
     );
   }
