@@ -492,10 +492,10 @@ class Scene3DRenderer {
         );
       case 'Torus':
         return MeshGen.torus(
-          majorRadius: _d(p['major_radius'], 1.0),
+          radius: _d(p['major_radius'], 1.0),
           tubeRadius: _d(p['tube_radius'], 0.3),
-          radialSegments: _i(p['radial_segments'], 16),
-          tubularSegments: _i(p['tubular_segments'], 24),
+          radial: _i(p['radial_segments'], 16),
+          tubular: _i(p['tubular_segments'], 24),
         );
       case 'Capsule':
         return MeshGen.capsule(
