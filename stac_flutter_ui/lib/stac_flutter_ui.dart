@@ -38,10 +38,16 @@ export 'src/canvas/canvas_widget.dart';
 // Bevy 3D Scene Renderer
 export 'src/bevy/bevy_scene_widget.dart';
 export 'src/bevy/bevy_scene_controller.dart';
-export 'src/bevy/dart_scene_renderer.dart';
+export 'src/bevy/dart_scene_renderer.dart' hide Vec3, Mat4;
 export 'src/bevy/bevy_scene_api.dart'
     if (dart.library.js_interop) 'src/bevy/bevy_scene_api_web.dart'
     show BevySceneApi, BevyFrameData;
+
+// Pure-Dart 3D Game Engine
+export 'src/scene3d/core.dart';
+export 'src/scene3d/renderer.dart';
+export 'src/scene3d/scene_parser.dart';
+export 'src/scene3d/game_scene_widget.dart';
 
 // Widgets - Core
 export 'src/widgets/stac_container.dart';
