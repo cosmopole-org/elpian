@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:stac_flutter_ui/stac_flutter_ui.dart';
 import '../widgets/stac_canvas_widget.dart';
 import '../bevy/bevy_scene_widget.dart';
+import '../scene3d/game_scene_widget.dart';
 
 // HTML Widgets
 
@@ -84,6 +85,10 @@ class StacEngine {
     _registry.register('BevyScene', BevySceneWidget.build);
     _registry.register('Bevy3D', BevySceneWidget.build);
     _registry.register('Scene3D', BevySceneWidget.build);
+
+    // Pure-Dart 3D Game Scene Renderer
+    _registry.register('GameScene', GameSceneWidget.build);
+    _registry.register('Game3D', GameSceneWidget.build);
 
     // Flutter widgets - Additional
     _registry.register('Wrap', StacWrap.build);

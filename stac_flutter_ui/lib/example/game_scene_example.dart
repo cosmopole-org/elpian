@@ -1,13 +1,15 @@
+/// Feature-rich 3D game scene example using the pure-Dart 3D engine.
+///
+/// Demonstrates: multiple mesh types, animations, materials with textures,
+/// particle systems, orbit camera, sky gradient, fog, groups, and physics.
+library;
+
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:stac_flutter_ui/src/scene3d/game_scene_widget.dart';
 
-void main() {
-  runApp(const GameSceneDemoApp());
-}
-
-/// Feature-rich 3D game scene JSON embedded inline so it works everywhere
-/// (mobile, desktop, web, GitHub Pages) without asset loading.
-const String _gameSceneJson = '''
+/// A rich 3D game scene showcasing all engine features.
+const String gameSceneJson = '''
 {
   "world": [
     {
@@ -444,37 +446,25 @@ const String _gameSceneJson = '''
 }
 ''';
 
-class GameSceneDemoApp extends StatelessWidget {
-  const GameSceneDemoApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Elpian 3D Game Scene',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.deepPurple,
-          brightness: Brightness.dark,
-        ),
-        useMaterial3: true,
-      ),
-      home: const GameScenePage(),
-    );
-  }
-}
-
-class GameScenePage extends StatelessWidget {
-  const GameScenePage({super.key});
+/// Standalone example page.
+class GameSceneExample extends StatelessWidget {
+  const GameSceneExample({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF141420),
-      body: GameSceneWidget(
-        sceneJson: _gameSceneJson,
-        fps: 60,
-        interactive: true,
-        backgroundColor: const Color(0xFF141420),
+      appBar: AppBar(
+        title: const Text('3D Game Scene'),
+        backgroundColor: const Color(0xFF1A1A2E),
+      ),
+      body: Center(
+        child: GameSceneWidget(
+          sceneJson: gameSceneJson,
+          fps: 60,
+          interactive: true,
+          backgroundColor: const Color(0xFF141420),
+        ),
       ),
     );
   }
