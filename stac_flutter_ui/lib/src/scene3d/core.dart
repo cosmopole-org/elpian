@@ -382,8 +382,8 @@ class MeshGen {
       [Vec3(h,-h,h), Vec3(h,-h,-h), Vec3(h,h,-h), Vec3(h,h,h)],      // right
       [Vec3(-h,-h,-h), Vec3(-h,-h,h), Vec3(-h,h,h), Vec3(-h,h,-h)],  // left
     ];
-    final normals = [Vec3(0,0,1), Vec3(0,0,-1), Vec3(0,1,0), Vec3(0,-1,0), Vec3(1,0,0), Vec3(-1,0,0)];
-    final uvs = [Vec2(0,1), Vec2(1,1), Vec2(1,0), Vec2(0,0)];
+    final normals = [const Vec3(0,0,1), const Vec3(0,0,-1), const Vec3(0,1,0), const Vec3(0,-1,0), const Vec3(1,0,0), const Vec3(-1,0,0)];
+    final uvs = [const Vec2(0,1), const Vec2(1,1), const Vec2(1,0), const Vec2(0,0)];
     final tris = <Triangle>[];
     for (var f = 0; f < 6; f++) {
       final v = faces[f]; final n = normals[f];
@@ -416,16 +416,20 @@ class MeshGen {
         final u1 = Vec2(j / segments, (i + 1) / segments);
         final u2 = Vec2((j + 1) / segments, (i + 1) / segments);
         final u3 = Vec2((j + 1) / segments, i / segments);
-        if (i != 0) tris.add(Triangle(
-          Vertex(position: v0, normal: n0, uv: u0),
-          Vertex(position: v1, normal: n1, uv: u1),
-          Vertex(position: v2, normal: n2, uv: u2),
-        ));
-        if (i != segments - 1) tris.add(Triangle(
-          Vertex(position: v0, normal: n0, uv: u0),
-          Vertex(position: v2, normal: n2, uv: u2),
-          Vertex(position: v3, normal: n3, uv: u3),
-        ));
+        if (i != 0) {
+          tris.add(Triangle(
+            Vertex(position: v0, normal: n0, uv: u0),
+            Vertex(position: v1, normal: n1, uv: u1),
+            Vertex(position: v2, normal: n2, uv: u2),
+          ));
+        }
+        if (i != segments - 1) {
+          tris.add(Triangle(
+            Vertex(position: v0, normal: n0, uv: u0),
+            Vertex(position: v2, normal: n2, uv: u2),
+            Vertex(position: v3, normal: n3, uv: u3),
+          ));
+        }
       }
     }
     return Mesh(tris, AABB(Vec3(-radius,-radius,-radius), Vec3(radius,radius,radius)));
@@ -511,7 +515,7 @@ class MeshGen {
         Vertex(position: apex, normal: sn),
       ));
       tris.add(Triangle(
-        Vertex(position: Vec3(0, 0, 0), normal: Vec3.down),
+        const Vertex(position: Vec3(0, 0, 0), normal: Vec3.down),
         Vertex(position: Vec3(x2, 0, z2), normal: Vec3.down),
         Vertex(position: Vec3(x1, 0, z1), normal: Vec3.down),
       ));
@@ -566,11 +570,13 @@ class MeshGen {
         final off = Vec3(0, halfH, 0);
         final v0 = _sphPt(radius, t1, p1) + off, v1 = _sphPt(radius, t2, p1) + off;
         final v2 = _sphPt(radius, t2, p2) + off, v3 = _sphPt(radius, t1, p2) + off;
-        if (i != 0) tris.add(Triangle(
-          Vertex(position: v0, normal: (v0 - off).normalized),
-          Vertex(position: v1, normal: (v1 - off).normalized),
-          Vertex(position: v2, normal: (v2 - off).normalized),
-        ));
+        if (i != 0) {
+          tris.add(Triangle(
+            Vertex(position: v0, normal: (v0 - off).normalized),
+            Vertex(position: v1, normal: (v1 - off).normalized),
+            Vertex(position: v2, normal: (v2 - off).normalized),
+          ));
+        }
         tris.add(Triangle(
           Vertex(position: v0, normal: (v0 - off).normalized),
           Vertex(position: v2, normal: (v2 - off).normalized),
@@ -591,11 +597,13 @@ class MeshGen {
           Vertex(position: v1, normal: (v1 - off).normalized),
           Vertex(position: v2, normal: (v2 - off).normalized),
         ));
-        if (i != segments - 1) tris.add(Triangle(
-          Vertex(position: v0, normal: (v0 - off).normalized),
-          Vertex(position: v2, normal: (v2 - off).normalized),
-          Vertex(position: v3, normal: (v3 - off).normalized),
-        ));
+        if (i != segments - 1) {
+          tris.add(Triangle(
+            Vertex(position: v0, normal: (v0 - off).normalized),
+            Vertex(position: v2, normal: (v2 - off).normalized),
+            Vertex(position: v3, normal: (v3 - off).normalized),
+          ));
+        }
       }
     }
     // Cylinder body between hemispheres
@@ -720,14 +728,14 @@ class MeshGen {
     final hw = width / 2, hh = height / 2;
     return Mesh([
       Triangle(
-        Vertex(position: Vec3(-hw, -hh, 0), normal: Vec3(0, 0, 1), uv: Vec2(0, 1)),
-        Vertex(position: Vec3(hw, -hh, 0), normal: Vec3(0, 0, 1), uv: Vec2(1, 1)),
-        Vertex(position: Vec3(hw, hh, 0), normal: Vec3(0, 0, 1), uv: Vec2(1, 0)),
+        Vertex(position: Vec3(-hw, -hh, 0), normal: const Vec3(0, 0, 1), uv: const Vec2(0, 1)),
+        Vertex(position: Vec3(hw, -hh, 0), normal: const Vec3(0, 0, 1), uv: const Vec2(1, 1)),
+        Vertex(position: Vec3(hw, hh, 0), normal: const Vec3(0, 0, 1), uv: const Vec2(1, 0)),
       ),
       Triangle(
-        Vertex(position: Vec3(-hw, -hh, 0), normal: Vec3(0, 0, 1), uv: Vec2(0, 1)),
-        Vertex(position: Vec3(hw, hh, 0), normal: Vec3(0, 0, 1), uv: Vec2(1, 0)),
-        Vertex(position: Vec3(-hw, hh, 0), normal: Vec3(0, 0, 1), uv: Vec2(0, 0)),
+        Vertex(position: Vec3(-hw, -hh, 0), normal: const Vec3(0, 0, 1), uv: const Vec2(0, 1)),
+        Vertex(position: Vec3(hw, hh, 0), normal: const Vec3(0, 0, 1), uv: const Vec2(1, 0)),
+        Vertex(position: Vec3(-hw, hh, 0), normal: const Vec3(0, 0, 1), uv: const Vec2(0, 0)),
       ),
     ], AABB(Vec3(-hw, -hh, 0), Vec3(hw, hh, 0)));
   }
@@ -992,7 +1000,7 @@ class AnimationDef {
         return base * Mat4.translation(Vec3(radius * math.cos(angle), height, radius * math.sin(angle)));
       case 'Swing':
         final angle = _d(params['angle'], 45);
-        final axis = _v3(params['axis'], Vec3(0, 0, 1));
+        final axis = _v3(params['axis'], const Vec3(0, 0, 1));
         final a = math.sin(t * 2 * math.pi) * angle * math.pi / 180;
         return base * Mat4.fromAxisAngle(axis, a);
       case 'Shake':
@@ -1008,7 +1016,7 @@ class AnimationDef {
         final y = math.sin(elapsed * 2 * math.pi / duration) * amplitude;
         return base * Mat4.translation(Vec3(0, y, 0));
       case 'Spin':
-        final speed = _v3(params['speed'], Vec3(0, 90, 0));
+        final speed = _v3(params['speed'], const Vec3(0, 90, 0));
         return base * Mat4.fromEulerXYZ(
           speed.x * math.pi / 180 * elapsed,
           speed.y * math.pi / 180 * elapsed,

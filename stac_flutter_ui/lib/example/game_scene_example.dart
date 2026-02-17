@@ -457,12 +457,12 @@ class GameSceneExample extends StatelessWidget {
         title: const Text('3D Game Scene'),
         backgroundColor: const Color(0xFF1A1A2E),
       ),
-      body: Center(
+      body: const Center(
         child: GameSceneWidget(
           sceneJson: gameSceneJson,
           fps: 60,
           interactive: true,
-          backgroundColor: const Color(0xFF141420),
+          backgroundColor: Color(0xFF141420),
         ),
       ),
     );

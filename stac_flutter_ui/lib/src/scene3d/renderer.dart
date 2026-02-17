@@ -121,7 +121,7 @@ class Scene3DRenderer {
   void _drawSkyGradient(ui.Canvas canvas, ui.Size size, Environment3D env) {
     final rect = ui.Rect.fromLTWH(0, 0, size.width, size.height);
     final gradient = ui.Gradient.linear(
-      ui.Offset(0, 0),
+      const ui.Offset(0, 0),
       ui.Offset(0, size.height),
       [
         _vec3ToColor(env.skyColorTop),
@@ -205,8 +205,6 @@ class Scene3DRenderer {
     if (mesh == null) return;
 
     final mat = node.material ?? const Material3D();
-    final halfW = size.width / 2;
-    final halfH = size.height / 2;
     final nearPlane = camera.near;
 
     for (final tri in mesh.triangles) {
@@ -339,17 +337,17 @@ class Scene3DRenderer {
         final toLight = light.position - worldPos;
         final dist = toLight.length;
         lightDir = toLight / (dist > 0.001 ? dist : 1.0);
-        final spotAngle = math.acos(lightDir.dot((-light.direction).normalized).clamp(-1, 1));
+        final spotAngle = math.acos(lightDir.dot((-light.direction).normalized).clamp(-1.0, 1.0));
         final outerRad = light.outerConeAngle * math.pi / 180;
         final innerRad = light.innerConeAngle * math.pi / 180;
         if (spotAngle > outerRad) continue;
-        final spotFade = ((outerRad - spotAngle) / (outerRad - innerRad)).clamp(0, 1);
+        final spotFade = ((outerRad - spotAngle) / (outerRad - innerRad)).clamp(0.0, 1.0);
         attenuation = spotFade / (1.0 + dist * dist / (light.range * light.range));
       } else {
         lightDir = Vec3.up;
       }
 
-      final nDotL = worldNormal.dot(lightDir).clamp(0, 1);
+      final nDotL = worldNormal.dot(lightDir).clamp(0.0, 1.0);
       final lightColor = light.color * light.intensity * attenuation;
 
       // Diffuse (Lambertian)
@@ -357,7 +355,7 @@ class Scene3DRenderer {
 
       // Specular (Blinn-Phong with roughness)
       final halfV = (lightDir + viewDir).normalized;
-      final nDotH = worldNormal.dot(halfV).clamp(0, 1);
+      final nDotH = worldNormal.dot(halfV).clamp(0.0, 1.0);
       final shininess = (1.0 - mat.roughness) * 128.0 + 2.0;
       final specStrength = mat.metallic * 0.8 + 0.2;
       final specular = lightColor * (math.pow(nDotH, shininess) * specStrength * nDotL);
@@ -370,9 +368,9 @@ class Scene3DRenderer {
 
     // Clamp
     return Vec3(
-      result.x.clamp(0, 1),
-      result.y.clamp(0, 1),
-      result.z.clamp(0, 1),
+      result.x.clamp(0.0, 1.0),
+      result.y.clamp(0.0, 1.0),
+      result.z.clamp(0.0, 1.0),
     );
   }
 
