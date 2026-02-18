@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import '../models/stac_node.dart';
+import '../models/elpian_node.dart';
 import '../css/css_properties.dart';
 
 class HtmlImg {
-  static Widget build(StacNode node, List<Widget> children) {
+  static Widget build(ElpianNode node, List<Widget> children) {
     final src = node.props['src'] as String? ?? '';
     final alt = node.props['alt'] as String? ?? '';
     

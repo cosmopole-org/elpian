@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import '../models/stac_node.dart';
+import '../models/elpian_node.dart';
 
 class HtmlProgress {
-  static Widget build(StacNode node, List<Widget> children) {
+  static Widget build(ElpianNode node, List<Widget> children) {
     final value = (node.props['value'] as num?)?.toDouble();
     final max = (node.props['max'] as num?)?.toDouble() ?? 1.0;
     

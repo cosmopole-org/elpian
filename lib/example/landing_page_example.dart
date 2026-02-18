@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:stac_flutter_ui/stac_flutter_ui.dart';
-import 'package:stac_flutter_ui/example/game_scene_example.dart';
+import 'package:elpian_ui/elpian_ui.dart';
+import 'package:elpian_ui/example/game_scene_example.dart';
 
 void main() {
   runApp(const LandingPageApp());
@@ -36,7 +36,7 @@ class LandingPage extends StatefulWidget {
 }
 
 class _LandingPageState extends State<LandingPage> {
-  final StacEngine _engine = StacEngine();
+  final ElpianEngine _engine = ElpianEngine();
   Widget? _renderedPage;
   String? _error;
 

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:stac_flutter_ui/stac_flutter_ui.dart';
+import 'package:elpian_ui/elpian_ui.dart';
 
 void main() {
   runApp(const MyApp());
@@ -11,25 +11,25 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'STAC Flutter UI Demo',
+      title: 'Elpian UI Demo',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: const StacDemoPage(),
+      home: const ElpianDemoPage(),
     );
   }
 }
 
-class StacDemoPage extends StatefulWidget {
-  const StacDemoPage({super.key});
+class ElpianDemoPage extends StatefulWidget {
+  const ElpianDemoPage({super.key});
 
   @override
-  State<StacDemoPage> createState() => _StacDemoPageState();
+  State<ElpianDemoPage> createState() => _ElpianDemoPageState();
 }
 
-class _StacDemoPageState extends State<StacDemoPage> {
-  final StacEngine _engine = StacEngine();
+class _ElpianDemoPageState extends State<ElpianDemoPage> {
+  final ElpianEngine _engine = ElpianEngine();
   int _selectedExample = 0;
 
   final List<Map<String, dynamic>> _examples = [
@@ -45,7 +45,7 @@ class _StacDemoPageState extends State<StacDemoPage> {
           {
             'type': 'Text',
             'props': {
-              'text': 'Flutter STAC Demo',
+              'text': 'Flutter Elpian Demo',
             },
             'style': {
               'fontSize': 24,
@@ -306,7 +306,7 @@ class _StacDemoPageState extends State<StacDemoPage> {
               {
                 'type': 'p',
                 'props': {
-                  'text': '© 2024 STAC Flutter UI',
+                  'text': '© 2024 Elpian UI',
                 },
                 'style': {
                   'textAlign': 'center',
@@ -325,7 +325,7 @@ class _StacDemoPageState extends State<StacDemoPage> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: const Text('STAC Flutter UI Demo'),
+        title: const Text('Elpian UI Demo'),
       ),
       body: Row(
         children: [

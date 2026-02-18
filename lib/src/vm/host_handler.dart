@@ -2,14 +2,14 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 /// Parses host call payloads from the Rust VM and converts them
-/// to StacNode-compatible JSON for the Flutter renderer.
+/// to ElpianNode-compatible JSON for the Flutter renderer.
 ///
 /// The VM's `render` host function receives a JSON representation
 /// of the view tree. This handler converts it into the format
-/// expected by StacEngine.renderFromJson().
+/// expected by ElpianEngine.renderFromJson().
 class HostHandler {
   /// Callback invoked when the VM calls `render(viewJson)`.
-  /// The parameter is a StacNode-compatible JSON map.
+  /// The parameter is a ElpianNode-compatible JSON map.
   final void Function(Map<String, dynamic> viewJson)? onRender;
 
   /// Callback invoked when the VM calls `updateApp(updateData)`.
@@ -29,7 +29,7 @@ class HostHandler {
   ///
   /// The payload from the VM is a stringified JSON object representing
   /// the view tree. This method parses it and converts it to the
-  /// StacNode JSON format that StacEngine can render.
+  /// ElpianNode JSON format that ElpianEngine can render.
   ///
   /// Expected VM payload format (from askHost("render", viewData)):
   /// The VM serializes the render argument as a Val.stringify() result.

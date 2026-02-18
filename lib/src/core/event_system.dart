@@ -2,7 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 /// Event types supported by the system
-enum StacEventType {
+enum ElpianEventType {
   // Mouse/Touch Events
   click,
   doubleClick,
@@ -92,9 +92,9 @@ enum EventPhase {
 }
 
 /// Base event class
-class StacEvent {
+class ElpianEvent {
   final String type;
-  final StacEventType eventType;
+  final ElpianEventType eventType;
   final dynamic target;
   final dynamic currentTarget;
   final DateTime timestamp;
@@ -105,7 +105,7 @@ class StacEvent {
   bool _immediatePropagationStopped = false;
   bool _defaultPrevented = false;
   
-  StacEvent({
+  ElpianEvent({
     required this.type,
     required this.eventType,
     this.target,
@@ -141,11 +141,11 @@ class StacEvent {
   /// Check if event can be cancelled
   bool get cancelable => true;
   
-  StacEvent copyWith({
+  ElpianEvent copyWith({
     dynamic currentTarget,
     EventPhase? phase,
   }) {
-    return StacEvent(
+    return ElpianEvent(
       type: type,
       eventType: eventType,
       target: target,
@@ -158,7 +158,7 @@ class StacEvent {
 }
 
 /// Mouse/Pointer event with position information
-class StacPointerEvent extends StacEvent {
+class ElpianPointerEvent extends ElpianEvent {
   final Offset position;
   final Offset localPosition;
   final Offset delta;
@@ -167,7 +167,7 @@ class StacPointerEvent extends StacEvent {
   final double distance;
   final int pointerId;
   
-  StacPointerEvent({
+  ElpianPointerEvent({
     required super.type,
     required super.eventType,
     super.target,
@@ -185,11 +185,11 @@ class StacPointerEvent extends StacEvent {
   });
   
   @override
-  StacPointerEvent copyWith({
+  ElpianPointerEvent copyWith({
     dynamic currentTarget,
     EventPhase? phase,
   }) {
-    return StacPointerEvent(
+    return ElpianPointerEvent(
       type: type,
       eventType: eventType,
       target: target,
@@ -209,7 +209,7 @@ class StacPointerEvent extends StacEvent {
 }
 
 /// Keyboard event
-class StacKeyboardEvent extends StacEvent {
+class ElpianKeyboardEvent extends ElpianEvent {
   final String key;
   final int keyCode;
   final bool altKey;
@@ -217,7 +217,7 @@ class StacKeyboardEvent extends StacEvent {
   final bool shiftKey;
   final bool metaKey;
   
-  StacKeyboardEvent({
+  ElpianKeyboardEvent({
     required super.type,
     required super.eventType,
     super.target,
@@ -234,11 +234,11 @@ class StacKeyboardEvent extends StacEvent {
   });
   
   @override
-  StacKeyboardEvent copyWith({
+  ElpianKeyboardEvent copyWith({
     dynamic currentTarget,
     EventPhase? phase,
   }) {
-    return StacKeyboardEvent(
+    return ElpianKeyboardEvent(
       type: type,
       eventType: eventType,
       target: target,
@@ -257,11 +257,11 @@ class StacKeyboardEvent extends StacEvent {
 }
 
 /// Input event for form controls
-class StacInputEvent extends StacEvent {
+class ElpianInputEvent extends ElpianEvent {
   final dynamic value;
   final bool isComposing;
   
-  StacInputEvent({
+  ElpianInputEvent({
     required super.type,
     required super.eventType,
     super.target,
@@ -274,11 +274,11 @@ class StacInputEvent extends StacEvent {
   });
   
   @override
-  StacInputEvent copyWith({
+  ElpianInputEvent copyWith({
     dynamic currentTarget,
     EventPhase? phase,
   }) {
-    return StacInputEvent(
+    return ElpianInputEvent(
       type: type,
       eventType: eventType,
       target: target,
@@ -293,13 +293,13 @@ class StacInputEvent extends StacEvent {
 }
 
 /// Gesture event for complex gestures
-class StacGestureEvent extends StacEvent {
+class ElpianGestureEvent extends ElpianEvent {
   final Offset velocity;
   final double scale;
   final double rotation;
   final Offset focalPoint;
   
-  StacGestureEvent({
+  ElpianGestureEvent({
     required super.type,
     required super.eventType,
     super.target,
@@ -314,11 +314,11 @@ class StacGestureEvent extends StacEvent {
   });
   
   @override
-  StacGestureEvent copyWith({
+  ElpianGestureEvent copyWith({
     dynamic currentTarget,
     EventPhase? phase,
   }) {
-    return StacGestureEvent(
+    return ElpianGestureEvent(
       type: type,
       eventType: eventType,
       target: target,
@@ -335,11 +335,11 @@ class StacGestureEvent extends StacEvent {
 }
 
 /// Event listener callback type
-typedef StacEventListener = void Function(StacEvent event);
+typedef ElpianEventListener = void Function(ElpianEvent event);
 
 /// Event listener configuration
 class EventListenerConfig {
-  final StacEventListener listener;
+  final ElpianEventListener listener;
   final bool capture;
   final bool once;
   final bool passive;
@@ -353,13 +353,13 @@ class EventListenerConfig {
 }
 
 /// Event target mixin for objects that can dispatch events
-mixin StacEventTarget {
+mixin ElpianEventTarget {
   final Map<String, List<EventListenerConfig>> _eventListeners = {};
   
   /// Add event listener
   void addEventListener(
     String type, 
-    StacEventListener listener, {
+    ElpianEventListener listener, {
     bool capture = false,
     bool once = false,
     bool passive = false,
@@ -379,7 +379,7 @@ mixin StacEventTarget {
   }
   
   /// Remove event listener
-  void removeEventListener(String type, StacEventListener listener) {
+  void removeEventListener(String type, ElpianEventListener listener) {
     if (_eventListeners.containsKey(type)) {
       _eventListeners[type]!.removeWhere((config) => config.listener == listener);
       if (_eventListeners[type]!.isEmpty) {
@@ -398,7 +398,7 @@ mixin StacEventTarget {
   }
   
   /// Dispatch event to this target
-  bool dispatchEvent(StacEvent event) {
+  bool dispatchEvent(ElpianEvent event) {
     final listeners = _eventListeners[event.type];
     if (listeners == null || listeners.isEmpty) {
       return !event.isDefaultPrevented;
@@ -450,36 +450,36 @@ mixin StacEventTarget {
 }
 
 /// Global event bus for broadcasting events
-class EventBus with StacEventTarget {
+class EventBus with ElpianEventTarget {
   static final EventBus _instance = EventBus._internal();
   factory EventBus() => _instance;
   EventBus._internal();
   
   /// Broadcast event to all subscribers
-  void broadcast(StacEvent event) {
+  void broadcast(ElpianEvent event) {
     dispatchEvent(event);
   }
   
   /// Subscribe to events
-  void subscribe(String type, StacEventListener listener) {
+  void subscribe(String type, ElpianEventListener listener) {
     addEventListener(type, listener);
   }
   
   /// Unsubscribe from events
-  void unsubscribe(String type, StacEventListener listener) {
+  void unsubscribe(String type, ElpianEventListener listener) {
     removeEventListener(type, listener);
   }
 }
 
 /// Event delegation manager
 class EventDelegation {
-  final Map<String, Map<String, List<StacEventListener>>> _delegatedListeners = {};
+  final Map<String, Map<String, List<ElpianEventListener>>> _delegatedListeners = {};
   
   /// Delegate event from child selector to handler
   void delegate(
     String eventType,
     String selector,
-    StacEventListener handler,
+    ElpianEventListener handler,
   ) {
     if (!_delegatedListeners.containsKey(eventType)) {
       _delegatedListeners[eventType] = {};
@@ -506,7 +506,7 @@ class EventDelegation {
   }
   
   /// Handle delegated event
-  void handleEvent(StacEvent event) {
+  void handleEvent(ElpianEvent event) {
     final handlers = _delegatedListeners[event.type];
     if (handlers == null) return;
     
@@ -524,12 +524,12 @@ class EventDelegation {
 /// Event utilities
 class EventUtils {
   /// Create event from Flutter tap details
-  static StacPointerEvent fromTapDownDetails(
+  static ElpianPointerEvent fromTapDownDetails(
     TapDownDetails details, {
     required String elementId,
-    required StacEventType eventType,
+    required ElpianEventType eventType,
   }) {
-    return StacPointerEvent(
+    return ElpianPointerEvent(
       type: eventType.name,
       eventType: eventType,
       target: elementId,
@@ -539,13 +539,13 @@ class EventUtils {
   }
   
   /// Create event from Flutter drag details
-  static StacPointerEvent fromDragUpdateDetails(
+  static ElpianPointerEvent fromDragUpdateDetails(
     DragUpdateDetails details, {
     required String elementId,
   }) {
-    return StacPointerEvent(
-      type: StacEventType.drag.name,
-      eventType: StacEventType.drag,
+    return ElpianPointerEvent(
+      type: ElpianEventType.drag.name,
+      eventType: ElpianEventType.drag,
       target: elementId,
       position: details.globalPosition,
       localPosition: details.localPosition,
@@ -554,13 +554,13 @@ class EventUtils {
   }
   
   /// Create event from Flutter scale details
-  static StacGestureEvent fromScaleUpdateDetails(
+  static ElpianGestureEvent fromScaleUpdateDetails(
     ScaleUpdateDetails details, {
     required String elementId,
   }) {
-    return StacGestureEvent(
-      type: StacEventType.scaleUpdate.name,
-      eventType: StacEventType.scaleUpdate,
+    return ElpianGestureEvent(
+      type: ElpianEventType.scaleUpdate.name,
+      eventType: ElpianEventType.scaleUpdate,
       target: elementId,
       scale: details.scale,
       rotation: details.rotation,
@@ -569,8 +569,8 @@ class EventUtils {
   }
   
   /// Debounce event handler
-  static StacEventListener debounce(
-    StacEventListener listener,
+  static ElpianEventListener debounce(
+    ElpianEventListener listener,
     Duration duration,
   ) {
     DateTime? lastCall;
@@ -585,8 +585,8 @@ class EventUtils {
   }
   
   /// Throttle event handler
-  static StacEventListener throttle(
-    StacEventListener listener,
+  static ElpianEventListener throttle(
+    ElpianEventListener listener,
     Duration duration,
   ) {
     bool canCall = true;

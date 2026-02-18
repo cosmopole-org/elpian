@@ -1,5 +1,5 @@
-name: stac_flutter_ui
-description: A Server-driven UI library for Flutter with HTML elements and CSS support
+name: elpian_ui
+description: High-performance Flutter UI engine that renders HTML, CSS, Flutter DSL, and 3D scene graphs from JSON and markup formats
 version: 1.0.0
 publish_to: 'none'
 

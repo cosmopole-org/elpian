@@ -1,13 +1,13 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import '../models/stac_node.dart';
+import '../models/elpian_node.dart';
 import 'event_system.dart';
 import 'event_dispatcher.dart';
 
 /// Wrapper widget that adds event handling capabilities to any widget
 class EventEnabledWidget extends StatefulWidget {
   final Widget child;
-  final StacNode node;
+  final ElpianNode node;
   final String? parentId;
   
   const EventEnabledWidget({
@@ -78,9 +78,9 @@ class _EventEnabledWidgetState extends State<EventEnabledWidget> {
             : null,
         onDoubleTap: events.containsKey('doubletap')
             ? () => _dispatcher.dispatchEvent(
-                StacEvent(
+                ElpianEvent(
                   type: 'doubletap',
-                  eventType: StacEventType.doubleClick,
+                  eventType: ElpianEventType.doubleClick,
                   target: _elementId,
                 ),
                 _elementId,
@@ -88,9 +88,9 @@ class _EventEnabledWidgetState extends State<EventEnabledWidget> {
             : null,
         onLongPress: events.containsKey('longpress')
             ? () => _dispatcher.dispatchEvent(
-                StacEvent(
+                ElpianEvent(
                   type: 'longpress',
-                  eventType: StacEventType.longPress,
+                  eventType: ElpianEventType.longPress,
                   target: _elementId,
                 ),
                 _elementId,
@@ -101,16 +101,16 @@ class _EventEnabledWidgetState extends State<EventEnabledWidget> {
                 EventUtils.fromTapDownDetails(
                   details,
                   elementId: _elementId,
-                  eventType: StacEventType.tapDown,
+                  eventType: ElpianEventType.tapDown,
                 ),
                 _elementId,
               )
             : null,
         onTapUp: events.containsKey('tapup')
             ? (details) => _dispatcher.dispatchEvent(
-                StacPointerEvent(
+                ElpianPointerEvent(
                   type: 'tapup',
-                  eventType: StacEventType.tapUp,
+                  eventType: ElpianEventType.tapUp,
                   target: _elementId,
                   position: details.globalPosition,
                   localPosition: details.localPosition,
@@ -120,9 +120,9 @@ class _EventEnabledWidgetState extends State<EventEnabledWidget> {
             : null,
         onTapCancel: events.containsKey('tapcancel')
             ? () => _dispatcher.dispatchEvent(
-                StacEvent(
+                ElpianEvent(
                   type: 'tapcancel',
-                  eventType: StacEventType.tapCancel,
+                  eventType: ElpianEventType.tapCancel,
                   target: _elementId,
                 ),
                 _elementId,
@@ -152,13 +152,13 @@ class _EventEnabledWidgetState extends State<EventEnabledWidget> {
                 if (details.primaryVelocity! < 0) {
                   _dispatcher.dispatchGesture(
                     _elementId,
-                    StacEventType.swipeLeft,
+                    ElpianEventType.swipeLeft,
                     velocity: Offset(details.primaryVelocity!, 0),
                   );
                 } else {
                   _dispatcher.dispatchGesture(
                     _elementId,
-                    StacEventType.swipeRight,
+                    ElpianEventType.swipeRight,
                     velocity: Offset(details.primaryVelocity!, 0),
                   );
                 }
@@ -169,13 +169,13 @@ class _EventEnabledWidgetState extends State<EventEnabledWidget> {
                 if (details.primaryVelocity! < 0) {
                   _dispatcher.dispatchGesture(
                     _elementId,
-                    StacEventType.swipeUp,
+                    ElpianEventType.swipeUp,
                     velocity: Offset(0, details.primaryVelocity!),
                   );
                 } else {
                   _dispatcher.dispatchGesture(
                     _elementId,
-                    StacEventType.swipeDown,
+                    ElpianEventType.swipeDown,
                     velocity: Offset(0, details.primaryVelocity!),
                   );
                 }
@@ -209,9 +209,9 @@ class _EventEnabledWidgetState extends State<EventEnabledWidget> {
       result = MouseRegion(
         onEnter: events.containsKey('pointerenter')
             ? (event) => _dispatcher.dispatchEvent(
-                StacPointerEvent(
+                ElpianPointerEvent(
                   type: 'pointerenter',
-                  eventType: StacEventType.pointerEnter,
+                  eventType: ElpianEventType.pointerEnter,
                   target: _elementId,
                   position: event.position,
                   localPosition: event.localPosition,
@@ -221,9 +221,9 @@ class _EventEnabledWidgetState extends State<EventEnabledWidget> {
             : null,
         onExit: events.containsKey('pointerexit')
             ? (event) => _dispatcher.dispatchEvent(
-                StacPointerEvent(
+                ElpianPointerEvent(
                   type: 'pointerexit',
-                  eventType: StacEventType.pointerExit,
+                  eventType: ElpianEventType.pointerExit,
                   target: _elementId,
                   position: event.position,
                   localPosition: event.localPosition,
@@ -233,9 +233,9 @@ class _EventEnabledWidgetState extends State<EventEnabledWidget> {
             : null,
         onHover: events.containsKey('pointerhover')
             ? (event) => _dispatcher.dispatchEvent(
-                StacPointerEvent(
+                ElpianPointerEvent(
                   type: 'pointerhover',
-                  eventType: StacEventType.pointerHover,
+                  eventType: ElpianEventType.pointerHover,
                   target: _elementId,
                   position: event.position,
                   localPosition: event.localPosition,
@@ -265,7 +265,7 @@ class _EventEnabledWidgetState extends State<EventEnabledWidget> {
 
 /// Extension to easily wrap widgets with event handling
 extension EventExtension on Widget {
-  Widget withEvents(StacNode node, {String? parentId}) {
+  Widget withEvents(ElpianNode node, {String? parentId}) {
     return EventEnabledWidget(
       node: node,
       parentId: parentId,

@@ -4,14 +4,14 @@ import 'package:flutter/material.dart';
 import 'canvas_api.dart';
 
 /// Canvas widget that renders drawing commands
-class StacCanvas extends StatefulWidget {
+class ElpianCanvas extends StatefulWidget {
   final List<Map<String, dynamic>> commands;
   final double? width;
   final double? height;
   final Color? backgroundColor;
   final Function(CanvasAPIExecutor)? onReady;
   
-  const StacCanvas({
+  const ElpianCanvas({
     Key? key,
     required this.commands,
     this.width,
@@ -21,10 +21,10 @@ class StacCanvas extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<StacCanvas> createState() => _StacCanvasState();
+  State<ElpianCanvas> createState() => _ElpianCanvasState();
 }
 
-class _StacCanvasState extends State<StacCanvas> {
+class _ElpianCanvasState extends State<ElpianCanvas> {
   late CanvasAPIExecutor executor;
   
   @override
@@ -34,7 +34,7 @@ class _StacCanvasState extends State<StacCanvas> {
   }
   
   @override
-  void didUpdateWidget(StacCanvas oldWidget) {
+  void didUpdateWidget(ElpianCanvas oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.commands != oldWidget.commands) {
       _initExecutor();

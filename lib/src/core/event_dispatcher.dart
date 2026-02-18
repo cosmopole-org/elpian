@@ -3,7 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import 'event_system.dart';
-import '../models/stac_node.dart';
+import '../models/elpian_node.dart';
 
 /// Event dispatcher that handles event propagation through the widget tree
 class EventDispatcher {
@@ -11,15 +11,15 @@ class EventDispatcher {
   factory EventDispatcher() => _instance;
   EventDispatcher._internal();
   
-  final Map<String, StacNode> _nodeRegistry = {};
+  final Map<String, ElpianNode> _nodeRegistry = {};
   final Map<String, String?> _parentRegistry = {};
   final EventBus _eventBus = EventBus();
   
   /// Global event callback for all events
-  StacEventListener? globalEventHandler;
+  ElpianEventListener? globalEventHandler;
   
   /// Register a node in the tree
-  void registerNode(String id, StacNode node, {String? parentId}) {
+  void registerNode(String id, ElpianNode node, {String? parentId}) {
     _nodeRegistry[id] = node;
     _parentRegistry[id] = parentId;
   }
@@ -31,7 +31,7 @@ class EventDispatcher {
   }
   
   /// Get node by ID
-  StacNode? getNode(String id) {
+  ElpianNode? getNode(String id) {
     return _nodeRegistry[id];
   }
   
@@ -49,7 +49,7 @@ class EventDispatcher {
   }
   
   /// Dispatch event with full propagation (capturing -> target -> bubbling)
-  void dispatchEvent(StacEvent event, String elementId) {
+  void dispatchEvent(ElpianEvent event, String elementId) {
     // Get the parent chain
     final chain = _getParentChain(elementId);
     
@@ -126,7 +126,7 @@ class EventDispatcher {
   }
   
   /// Dispatch event to a specific node
-  void _dispatchToNode(StacNode node, StacEvent event) {
+  void _dispatchToNode(ElpianNode node, ElpianEvent event) {
     if (node.events == null) return;
     
     final eventHandlers = node.events![event.type];
@@ -135,7 +135,7 @@ class EventDispatcher {
     // If it's a function, call it
     if (eventHandlers is Function) {
       try {
-        if (eventHandlers is Function(StacEvent)) {
+        if (eventHandlers is Function(ElpianEvent)) {
           eventHandlers(event);
         } else if (eventHandlers is Function()) {
           eventHandlers();
@@ -149,16 +149,16 @@ class EventDispatcher {
   /// Quick dispatch methods for common events
   void dispatchClick(String elementId, {Offset? position}) {
     final event = position != null
-        ? StacPointerEvent(
+        ? ElpianPointerEvent(
             type: 'click',
-            eventType: StacEventType.click,
+            eventType: ElpianEventType.click,
             target: elementId,
             position: position,
             localPosition: position,
           )
-        : StacEvent(
+        : ElpianEvent(
             type: 'click',
-            eventType: StacEventType.click,
+            eventType: ElpianEventType.click,
             target: elementId,
           );
     
@@ -166,9 +166,9 @@ class EventDispatcher {
   }
   
   void dispatchChange(String elementId, dynamic value) {
-    final event = StacInputEvent(
+    final event = ElpianInputEvent(
       type: 'change',
-      eventType: StacEventType.change,
+      eventType: ElpianEventType.change,
       target: elementId,
       value: value,
     );
@@ -177,9 +177,9 @@ class EventDispatcher {
   }
   
   void dispatchInput(String elementId, dynamic value) {
-    final event = StacInputEvent(
+    final event = ElpianInputEvent(
       type: 'input',
-      eventType: StacEventType.input,
+      eventType: ElpianEventType.input,
       target: elementId,
       value: value,
     );
@@ -188,9 +188,9 @@ class EventDispatcher {
   }
   
   void dispatchSubmit(String elementId) {
-    final event = StacEvent(
+    final event = ElpianEvent(
       type: 'submit',
-      eventType: StacEventType.submit,
+      eventType: ElpianEventType.submit,
       target: elementId,
     );
     
@@ -198,9 +198,9 @@ class EventDispatcher {
   }
   
   void dispatchFocus(String elementId) {
-    final event = StacEvent(
+    final event = ElpianEvent(
       type: 'focus',
-      eventType: StacEventType.focus,
+      eventType: ElpianEventType.focus,
       target: elementId,
     );
     
@@ -208,9 +208,9 @@ class EventDispatcher {
   }
   
   void dispatchBlur(String elementId) {
-    final event = StacEvent(
+    final event = ElpianEvent(
       type: 'blur',
-      eventType: StacEventType.blur,
+      eventType: ElpianEventType.blur,
       target: elementId,
     );
     
@@ -218,9 +218,9 @@ class EventDispatcher {
   }
   
   void dispatchKeyDown(String elementId, String key, int keyCode) {
-    final event = StacKeyboardEvent(
+    final event = ElpianKeyboardEvent(
       type: 'keydown',
-      eventType: StacEventType.keyDown,
+      eventType: ElpianEventType.keyDown,
       target: elementId,
       key: key,
       keyCode: keyCode,
@@ -230,9 +230,9 @@ class EventDispatcher {
   }
   
   void dispatchKeyUp(String elementId, String key, int keyCode) {
-    final event = StacKeyboardEvent(
+    final event = ElpianKeyboardEvent(
       type: 'keyup',
-      eventType: StacEventType.keyUp,
+      eventType: ElpianEventType.keyUp,
       target: elementId,
       key: key,
       keyCode: keyCode,
@@ -242,9 +242,9 @@ class EventDispatcher {
   }
   
   void dispatchDragStart(String elementId, Offset position) {
-    final event = StacPointerEvent(
+    final event = ElpianPointerEvent(
       type: 'dragstart',
-      eventType: StacEventType.dragStart,
+      eventType: ElpianEventType.dragStart,
       target: elementId,
       position: position,
       localPosition: position,
@@ -254,9 +254,9 @@ class EventDispatcher {
   }
   
   void dispatchDrag(String elementId, Offset position, Offset delta) {
-    final event = StacPointerEvent(
+    final event = ElpianPointerEvent(
       type: 'drag',
-      eventType: StacEventType.drag,
+      eventType: ElpianEventType.drag,
       target: elementId,
       position: position,
       localPosition: position,
@@ -267,9 +267,9 @@ class EventDispatcher {
   }
   
   void dispatchDragEnd(String elementId, Offset position) {
-    final event = StacPointerEvent(
+    final event = ElpianPointerEvent(
       type: 'dragend',
-      eventType: StacEventType.dragEnd,
+      eventType: ElpianEventType.dragEnd,
       target: elementId,
       position: position,
       localPosition: position,
@@ -279,9 +279,9 @@ class EventDispatcher {
   }
   
   void dispatchPointerDown(String elementId, PointerDownEvent details) {
-    final event = StacPointerEvent(
+    final event = ElpianPointerEvent(
       type: 'pointerdown',
-      eventType: StacEventType.pointerDown,
+      eventType: ElpianEventType.pointerDown,
       target: elementId,
       position: details.position,
       localPosition: details.localPosition,
@@ -295,9 +295,9 @@ class EventDispatcher {
   }
   
   void dispatchPointerUp(String elementId, PointerUpEvent details) {
-    final event = StacPointerEvent(
+    final event = ElpianPointerEvent(
       type: 'pointerup',
-      eventType: StacEventType.pointerUp,
+      eventType: ElpianEventType.pointerUp,
       target: elementId,
       position: details.position,
       localPosition: details.localPosition,
@@ -308,9 +308,9 @@ class EventDispatcher {
   }
   
   void dispatchPointerMove(String elementId, PointerMoveEvent details) {
-    final event = StacPointerEvent(
+    final event = ElpianPointerEvent(
       type: 'pointermove',
-      eventType: StacEventType.pointerMove,
+      eventType: ElpianEventType.pointerMove,
       target: elementId,
       position: details.position,
       localPosition: details.localPosition,
@@ -321,13 +321,13 @@ class EventDispatcher {
     dispatchEvent(event, elementId);
   }
   
-  void dispatchGesture(String elementId, StacEventType type, {
+  void dispatchGesture(String elementId, ElpianEventType type, {
     Offset? velocity,
     double? scale,
     double? rotation,
     Offset? focalPoint,
   }) {
-    final event = StacGestureEvent(
+    final event = ElpianGestureEvent(
       type: type.name,
       eventType: type,
       target: elementId,
@@ -341,12 +341,12 @@ class EventDispatcher {
   }
   
   /// Subscribe to global events
-  void onGlobalEvent(StacEventListener listener) {
+  void onGlobalEvent(ElpianEventListener listener) {
     globalEventHandler = listener;
   }
   
   /// Subscribe to specific event type globally
-  void onEventType(StacEventType type, StacEventListener listener) {
+  void onEventType(ElpianEventType type, ElpianEventListener listener) {
     _eventBus.addEventListener(type.name, listener);
   }
   

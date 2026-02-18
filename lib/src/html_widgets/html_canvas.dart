@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import '../models/stac_node.dart';
+import '../models/elpian_node.dart';
 import '../css/css_properties.dart';
 
 class HtmlCanvas {
-  static Widget build(StacNode node, List<Widget> children) {
+  static Widget build(ElpianNode node, List<Widget> children) {
     Widget result = Container(
       color: Colors.white,
       child: CustomPaint(

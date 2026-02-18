@@ -1,7 +1,7 @@
 import 'package:flutter/widgets.dart';
-import '../models/stac_node.dart';
+import '../models/elpian_node.dart';
 
-typedef WidgetBuilder = Widget Function(StacNode node, List<Widget> children);
+typedef WidgetBuilder = Widget Function(ElpianNode node, List<Widget> children);
 
 class WidgetRegistry {
   static final WidgetRegistry _instance = WidgetRegistry._internal();

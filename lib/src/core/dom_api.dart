@@ -1,32 +1,32 @@
 
-import '../models/stac_node.dart';
+import '../models/elpian_node.dart';
 import '../models/css_style.dart';
 import '../css/css_parser.dart';
 
-/// DOM-like API for manipulating STAC elements
-class StacDOM {
-  final Map<String, StacElement> _elements = {};
-  final List<StacElement> _elementsList = [];
-  final Map<String, List<StacElement>> _elementsByClass = {};
-  final Map<String, List<StacElement>> _elementsByTag = {};
+/// DOM-like API for manipulating Elpian elements
+class ElpianDOM {
+  final Map<String, ElpianElement> _elements = {};
+  final List<ElpianElement> _elementsList = [];
+  final Map<String, List<ElpianElement>> _elementsByClass = {};
+  final Map<String, List<ElpianElement>> _elementsByTag = {};
   
   /// Get element by ID
-  StacElement? getElementById(String id) {
+  ElpianElement? getElementById(String id) {
     return _elements[id];
   }
   
   /// Get elements by class name
-  List<StacElement> getElementsByClassName(String className) {
+  List<ElpianElement> getElementsByClassName(String className) {
     return _elementsByClass[className] ?? [];
   }
   
   /// Get elements by tag name
-  List<StacElement> getElementsByTagName(String tagName) {
+  List<ElpianElement> getElementsByTagName(String tagName) {
     return _elementsByTag[tagName] ?? [];
   }
   
   /// Query selector (simple implementation)
-  StacElement? querySelector(String selector) {
+  ElpianElement? querySelector(String selector) {
     if (selector.startsWith('#')) {
       return getElementById(selector.substring(1));
     } else if (selector.startsWith('.')) {
@@ -39,7 +39,7 @@ class StacDOM {
   }
   
   /// Query selector all
-  List<StacElement> querySelectorAll(String selector) {
+  List<ElpianElement> querySelectorAll(String selector) {
     if (selector.startsWith('#')) {
       final element = getElementById(selector.substring(1));
       return element != null ? [element] : [];
@@ -51,8 +51,8 @@ class StacDOM {
   }
   
   /// Create element
-  StacElement createElement(String tagName, {String? id, List<String>? classes}) {
-    final element = StacElement(
+  ElpianElement createElement(String tagName, {String? id, List<String>? classes}) {
+    final element = ElpianElement(
       tagName: tagName,
       id: id,
       classes: classes ?? [],
@@ -79,7 +79,7 @@ class StacDOM {
   }
   
   /// Remove element
-  void removeElement(StacElement element) {
+  void removeElement(ElpianElement element) {
     if (element.id != null) {
       _elements.remove(element.id);
     }
@@ -104,18 +104,18 @@ class StacDOM {
   }
   
   /// Get all elements
-  List<StacElement> get allElements => List.unmodifiable(_elementsList);
+  List<ElpianElement> get allElements => List.unmodifiable(_elementsList);
 }
 
 /// Represents a DOM-like element
-class StacElement {
+class ElpianElement {
   final String tagName;
   final String? id;
   final List<String> classes;
-  final StacDOM dom;
+  final ElpianDOM dom;
   
-  StacElement? parent;
-  final List<StacElement> _children = [];
+  ElpianElement? parent;
+  final List<ElpianElement> _children = [];
   
   final Map<String, dynamic> _attributes = {};
   final Map<String, dynamic> _style = {};
@@ -124,7 +124,7 @@ class StacElement {
   String? _textContent;
   CSSStyle? _computedStyle;
   
-  StacElement({
+  ElpianElement({
     required this.tagName,
     this.id,
     this.classes = const [],
@@ -207,13 +207,13 @@ class StacElement {
   }
   
   /// Child manipulation
-  void appendChild(StacElement child) {
+  void appendChild(ElpianElement child) {
     child.parent?.removeChild(child);
     child.parent = this;
     _children.add(child);
   }
   
-  void insertBefore(StacElement newChild, StacElement? referenceChild) {
+  void insertBefore(ElpianElement newChild, ElpianElement? referenceChild) {
     newChild.parent?.removeChild(newChild);
     newChild.parent = this;
     
@@ -227,13 +227,13 @@ class StacElement {
     }
   }
   
-  void removeChild(StacElement child) {
+  void removeChild(ElpianElement child) {
     if (_children.remove(child)) {
       child.parent = null;
     }
   }
   
-  void replaceChild(StacElement newChild, StacElement oldChild) {
+  void replaceChild(ElpianElement newChild, ElpianElement oldChild) {
     final index = _children.indexOf(oldChild);
     if (index >= 0) {
       newChild.parent?.removeChild(newChild);
@@ -243,20 +243,20 @@ class StacElement {
     }
   }
   
-  StacElement? get firstChild => _children.isNotEmpty ? _children.first : null;
-  StacElement? get lastChild => _children.isNotEmpty ? _children.last : null;
+  ElpianElement? get firstChild => _children.isNotEmpty ? _children.first : null;
+  ElpianElement? get lastChild => _children.isNotEmpty ? _children.last : null;
   
-  List<StacElement> get children => List.unmodifiable(_children);
-  List<StacElement> get childNodes => List.unmodifiable(_children);
+  List<ElpianElement> get children => List.unmodifiable(_children);
+  List<ElpianElement> get childNodes => List.unmodifiable(_children);
   
-  StacElement? get nextSibling {
+  ElpianElement? get nextSibling {
     if (parent == null) return null;
     final siblings = parent!._children;
     final index = siblings.indexOf(this);
     return index >= 0 && index < siblings.length - 1 ? siblings[index + 1] : null;
   }
   
-  StacElement? get previousSibling {
+  ElpianElement? get previousSibling {
     if (parent == null) return null;
     final siblings = parent!._children;
     final index = siblings.indexOf(this);
@@ -284,7 +284,7 @@ class StacElement {
   }
   
   /// Clone element
-  StacElement clone({bool deep = false}) {
+  ElpianElement clone({bool deep = false}) {
     final cloned = dom.createElement(
       tagName,
       id: null, // Don't clone ID
@@ -304,24 +304,24 @@ class StacElement {
     return cloned;
   }
   
-  /// Convert to StacNode
-  StacNode toStacNode() {
+  /// Convert to ElpianNode
+  ElpianNode toElpianNode() {
     final props = Map<String, dynamic>.from(_attributes);
     if (_textContent != null) {
       props['text'] = _textContent;
     }
     
-    return StacNode(
+    return ElpianNode(
       type: tagName,
       props: props,
       style: _computedStyle,
       key: id,
-      children: _children.map((child) => child.toStacNode()).toList(),
+      children: _children.map((child) => child.toElpianNode()).toList(),
     );
   }
   
-  /// Create from StacNode
-  static StacElement fromStacNode(StacNode node, StacDOM dom) {
+  /// Create from ElpianNode
+  static ElpianElement fromElpianNode(ElpianNode node, ElpianDOM dom) {
     final element = dom.createElement(
       node.type,
       id: node.key,
@@ -334,7 +334,7 @@ class StacElement {
     }
     
     for (final child in node.children) {
-      element.appendChild(fromStacNode(child, dom));
+      element.appendChild(fromElpianNode(child, dom));
     }
     
     return element;
