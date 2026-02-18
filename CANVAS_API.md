@@ -2,7 +2,7 @@
 
 ## Overview
 
-The STAC Flutter UI library includes a comprehensive Canvas API based on Flutter's Skia graphics engine. This provides full 2D drawing capabilities through a familiar, HTML5 Canvas-like API that can be defined entirely in JSON.
+The Elpian UI library includes a comprehensive Canvas API based on Flutter's Skia graphics engine. This provides full 2D drawing capabilities through a familiar, HTML5 Canvas-like API that can be defined entirely in JSON.
 
 ## Features
 
@@ -44,7 +44,7 @@ The STAC Flutter UI library includes a comprehensive Canvas API based on Flutter
 ### Builder Pattern
 
 ```dart
-import 'package:stac_flutter_ui/stac_flutter_ui.dart';
+import 'package:elpian_ui/elpian_ui.dart';
 
 final commands = CanvasBuilder()
   .fillStyle('#FF0000')
@@ -665,7 +665,7 @@ class _AnimatedCanvasState extends State<AnimatedCanvas>
           .restore()
           .build();
         
-        return StacCanvas(
+        return ElpianCanvas(
           commands: commands,
           width: 400,
           height: 200,

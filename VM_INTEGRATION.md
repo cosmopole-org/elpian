@@ -1,7 +1,7 @@
 # Elpian VM - Flutter Integration via Rust FFI
 
 This document describes how the Elpian Rust VM sandbox is integrated into
-the `stac_flutter_ui` Flutter library via direct FFI (native) and
+the `elpian_ui` Flutter library via direct FFI (native) and
 wasm-bindgen (web).
 
 ## Architecture
@@ -11,7 +11,7 @@ wasm-bindgen (web).
 │                 Flutter / Dart                       │
 │                                                      │
 │  ┌──────────────────┐    ┌──────────────────────┐   │
-│  │  ElpianVmWidget  │───▶│     StacEngine        │   │
+│  │  ElpianVmWidget  │───▶│     ElpianEngine        │   │
 │  │  (orchestrator)   │    │  (renders JSON→Widget)│   │
 │  └──────────────────┘    └──────────────────────┘   │
 │          │                         ▲                 │
@@ -47,9 +47,9 @@ wasm-bindgen (web).
    and returns the host call to Dart.
 
 3. **Host Call Routing**: The `HostHandler` on the Dart side receives
-   the `render` call, parses the view JSON, and passes it to `StacEngine`.
+   the `render` call, parses the view JSON, and passes it to `ElpianEngine`.
 
-4. **Rendering**: `StacEngine.renderFromJson()` converts the JSON view
+4. **Rendering**: `ElpianEngine.renderFromJson()` converts the JSON view
    tree into Flutter widgets using the 200+ registered widget builders.
 
 5. **Continuation**: After processing the host call, Dart sends a
@@ -76,7 +76,7 @@ wasm-bindgen (web).
 ### Build the Rust library
 
 ```bash
-cd stac_flutter_ui/rust
+cd rust
 cargo build --release
 ```
 
@@ -100,7 +100,6 @@ wasm-pack build --target web
 The `ffi` package is already listed in `pubspec.yaml`. Run:
 
 ```bash
-cd stac_flutter_ui
 flutter pub get
 ```
 
@@ -209,7 +208,7 @@ When returning values from host handlers, use the typed format:
 ## File Structure
 
 ```
-stac_flutter_ui/
+elpian/
 ├── rust/                              # Rust VM crate
 │   ├── Cargo.toml                     # Rust crate config
 │   └── src/
@@ -235,7 +234,7 @@ stac_flutter_ui/
 ├── lib/src/vm/                        # Dart VM integration
 │   ├── elpian_vm.dart                 # Dart VM wrapper
 │   ├── elpian_vm_widget.dart          # Flutter widget + controller
-│   ├── host_handler.dart              # Host call → StacEngine bridge
+│   ├── host_handler.dart              # Host call → ElpianEngine bridge
 │   └── frb_generated/
 │       ├── vm_types.dart              # Shared types (VmExecResult)
 │       ├── api.dart                   # Native FFI bindings (dart:ffi)

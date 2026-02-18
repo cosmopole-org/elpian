@@ -2,7 +2,7 @@
 
 ## Overview
 
-The STAC Flutter UI library now supports defining CSS stylesheets entirely in JSON format. This allows you to create reusable style definitions, responsive designs, and complete design systems using a declarative JSON structure.
+The Elpian UI library now supports defining CSS stylesheets entirely in JSON format. This allows you to create reusable style definitions, responsive designs, and complete design systems using a declarative JSON structure.
 
 ## Basic Structure
 
@@ -41,7 +41,7 @@ The STAC Flutter UI library now supports defining CSS stylesheets entirely in JS
 ### Loading a Stylesheet
 
 ```dart
-final engine = StacEngine();
+final engine = ElpianEngine();
 
 // Load from JSON
 engine.loadStylesheet({
@@ -468,7 +468,7 @@ engine.loadStylesheet(stylesheet);
 ### Using Built-in Presets
 
 ```dart
-import 'package:stac_flutter_ui/stac_flutter_ui.dart';
+import 'package:elpian_ui/elpian_ui.dart';
 
 final stylesheet = JsonStylesheetBuilder()
   .addRule('.flex-center', StylePresets.flexCenter)
@@ -497,14 +497,14 @@ final stylesheet = JsonStylesheetBuilder()
 
 ```dart
 import 'package:flutter/material.dart';
-import 'package:stac_flutter_ui/stac_flutter_ui.dart';
+import 'package:elpian_ui/elpian_ui.dart';
 
 void main() {
   runApp(MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  final StacEngine engine = StacEngine();
+  final ElpianEngine engine = ElpianEngine();
 
   MyApp({super.key}) {
     // Load comprehensive stylesheet
