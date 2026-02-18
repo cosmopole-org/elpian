@@ -5,7 +5,7 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:stac_flutter_ui/src/scene3d/game_scene_widget.dart';
+import 'package:elpian_ui/src/scene3d/game_scene_widget.dart';
 
 /// A rich 3D game scene showcasing all engine features.
 const String gameSceneJson = '''

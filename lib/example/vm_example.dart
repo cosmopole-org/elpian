@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:stac_flutter_ui/stac_flutter_ui.dart';
+import 'package:elpian_ui/elpian_ui.dart';
 
 /// Example demonstrating the Elpian Rust VM integration with Flutter.
 ///
 /// The VM runs sandboxed code that produces a JSON view tree,
-/// which is rendered using the StacEngine's HTML/CSS/Flutter widgets.
+/// which is rendered using the ElpianEngine's HTML/CSS/Flutter widgets.
 class VmExampleApp extends StatelessWidget {
   const VmExampleApp({super.key});
 

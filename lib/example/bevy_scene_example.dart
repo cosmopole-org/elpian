@@ -4,12 +4,12 @@
 /// 1. Embed a 3D scene in a Flutter widget tree
 /// 2. Define scenes using JSON (compatible with the Bevy renderer schema)
 /// 3. Combine 2D UI overlays with 3D scene rendering
-/// 4. Use the StacEngine to render mixed 2D/3D interfaces from JSON
+/// 4. Use the ElpianEngine to render mixed 2D/3D interfaces from JSON
 library;
 
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:stac_flutter_ui/stac_flutter_ui.dart';
+import 'package:elpian_ui/elpian_ui.dart';
 
 /// Example 3D scene JSON compatible with both the Bevy renderer and Flutter bridge.
 const String exampleSceneJson = '''
@@ -146,11 +146,11 @@ class BevySceneExample extends StatelessWidget {
   }
 }
 
-/// Example: BevySceneWidget used via JSON GUI renderer (StacEngine)
+/// Example: BevySceneWidget used via JSON GUI renderer (ElpianEngine)
 class BevySceneJsonGuiExample extends StatelessWidget {
   BevySceneJsonGuiExample({super.key});
 
-  final StacEngine engine = StacEngine();
+  final ElpianEngine engine = ElpianEngine();
 
   /// JSON GUI definition that includes a 3D scene alongside 2D UI elements.
   /// This demonstrates full compatibility with the existing JSON GUI system.

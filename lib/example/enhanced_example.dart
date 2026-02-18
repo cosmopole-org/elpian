@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:stac_flutter_ui/stac_flutter_ui.dart';
+import 'package:elpian_ui/elpian_ui.dart';
 
 void main() {
-  runApp(const EnhancedStacApp());
+  runApp(const EnhancedElpianApp());
 }
 
-class EnhancedStacApp extends StatelessWidget {
-  const EnhancedStacApp({super.key});
+class EnhancedElpianApp extends StatelessWidget {
+  const EnhancedElpianApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Enhanced STAC Flutter UI',
+      title: 'Enhanced Elpian UI',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
@@ -29,8 +29,8 @@ class EnhancedDemoPage extends StatefulWidget {
 }
 
 class _EnhancedDemoPageState extends State<EnhancedDemoPage> {
-  final StacEngine _engine = StacEngine();
-  final StacDOM _dom = StacDOM();
+  final ElpianEngine _engine = ElpianEngine();
+  final ElpianDOM _dom = ElpianDOM();
   final CSSStylesheet _stylesheet = CSSStylesheet();
   int _selectedTab = 0;
 
@@ -100,7 +100,7 @@ class _EnhancedDemoPageState extends State<EnhancedDemoPage> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: const Text('Enhanced STAC Flutter UI'),
+        title: const Text('Enhanced Elpian UI'),
       ),
       body: Row(
         children: [

@@ -13,7 +13,7 @@ import 'package:flutter/scheduler.dart';
 import 'core.dart';
 import 'renderer.dart';
 import 'scene_parser.dart';
-import '../models/stac_node.dart';
+import '../models/elpian_node.dart';
 
 /// A Flutter widget that renders a 3D scene from a JSON definition
 /// using a pure-Dart Canvas-based renderer.
@@ -54,8 +54,8 @@ class GameSceneWidget extends StatefulWidget {
   }) : assert(sceneJson != null || sceneMap != null,
             'Either sceneJson or sceneMap must be provided');
 
-  /// Build from a StacNode (for JSON GUI integration).
-  static Widget build(StacNode node, List<Widget> children) {
+  /// Build from a ElpianNode (for JSON GUI integration).
+  static Widget build(ElpianNode node, List<Widget> children) {
     final props = node.props;
     final sceneData = props['scene'] ?? props['sceneJson'];
     final fps = (props['fps'] as num?)?.toInt() ?? 60;

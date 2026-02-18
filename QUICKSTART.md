@@ -1,54 +1,47 @@
-# STAC Flutter UI - Quick Start Guide
+# Elpian UI - Quick Start Guide
 
-## Project Overview
+## Overview
 
-This is a professional, production-ready Flutter library that implements a complete Server-driven UI (STAC) solution with:
+Elpian UI is a high-performance Flutter engine that renders HTML, CSS, Flutter DSL, and 3D scene graphs from JSON and markup formats. It combines multiple rendering paradigms into a single library:
 
-- ✅ **25+ Flutter Widgets** - All standard Flutter widgets with full CSS support
-- ✅ **40+ HTML Elements** - Complete HTML element support (div, h1-h6, p, table, form, etc.)
-- ✅ **Comprehensive CSS Properties** - 50+ CSS properties including flexbox, transforms, shadows
-- ✅ **JSON DSL Rendering** - Render any UI from JSON configuration
-- ✅ **Extensible Architecture** - Easy widget registration system
-- ✅ **Production Ready** - Includes tests, examples, and documentation
-
-## File Count
-
-- **78 Dart files** total
-- **25 Flutter widget implementations**
-- **40 HTML element implementations**
-- **Full CSS parser** with 50+ property support
-- **Complete example app** with 3 demo screens
-- **Test suite** included
+- **60+ Flutter Widgets** - Full widget library with CSS styling support
+- **70+ HTML Elements** - Complete HTML5 element rendering
+- **150+ CSS Properties** - Flexbox, grid, transforms, shadows, animations
+- **Canvas 2D API** - 50+ drawing commands for custom graphics
+- **3D Scene Graphs** - JSON-defined 3D scenes via Bevy or pure-Dart renderer
+- **Elpian VM** - Sandboxed Rust VM for scripting UI logic via FFI/WASM
+- **DOM API** - Full DOM manipulation with query selectors and events
+- **JSON Stylesheets** - Reusable style definitions with media queries
 
 ## Getting Started
 
-### 1. Extract the ZIP file
-```bash
-unzip stac_flutter_ui.zip
+### 1. Add the dependency
+
+```yaml
+# pubspec.yaml
+dependencies:
+  elpian_ui:
+    path: ./path/to/elpian
 ```
 
-### 2. Navigate to the project
-```bash
-cd stac_flutter_ui
-```
+### 2. Install dependencies
 
-### 3. Get dependencies (if Flutter is installed)
 ```bash
 flutter pub get
 ```
 
-### 4. Run the example
+### 3. Run the example
+
 ```bash
-cd example
-flutter run
+flutter run -t lib/example/landing_page_example.dart
 ```
 
 ## Basic Usage
 
 ```dart
-import 'package:stac_flutter_ui/stac_flutter_ui.dart';
+import 'package:elpian_ui/elpian_ui.dart';
 
-final engine = StacEngine();
+final engine = ElpianEngine();
 
 final json = {
   'type': 'div',
@@ -72,97 +65,49 @@ final json = {
 Widget myUI = engine.renderFromJson(json);
 ```
 
-## Supported Widgets
+## Supported Features
 
-### Flutter Widgets (25)
-Container, Text, Button, Image, Column, Row, Stack, Positioned, Expanded, Flexible, Center, Padding, Align, SizedBox, ListView, GridView, TextField, Checkbox, Radio, Switch, Slider, Icon, Card, Scaffold, AppBar
+### Flutter Widgets (60+)
 
-### HTML Elements (40)
-div, span, h1-h6, p, a, button, input, img, ul, ol, li, table, tr, td, th, form, label, select, option, textarea, section, article, header, footer, nav, aside, main, video, audio, canvas, iframe, strong, em, code, pre, blockquote, hr, br
+**Layout:** Container, Column, Row, Stack, Positioned, Expanded, Flexible, Center, Padding, Align, SizedBox, Wrap, AspectRatio, FractionallySizedBox, FittedBox, ConstrainedBox, LimitedBox, OverflowBox, Baseline, Spacer, IndexedStack, RotatedBox, DecoratedBox, ClipRRect
 
-### CSS Properties (50+)
+**UI Controls:** Button, TextField, Checkbox, Radio, Switch, Slider, Chip, Badge, CircularProgressIndicator, LinearProgressIndicator
 
-**Layout:** width, height, min-width, max-width, min-height, max-height, padding, margin
+**Interaction:** InkWell, GestureDetector, Tooltip, Dismissible, Draggable, DragTarget, Hero
 
-**Positioning:** position, top, right, bottom, left, z-index, alignment
+**Visual:** Image, Icon, Card, Divider, VerticalDivider, Opacity, Transform
 
-**Flexbox:** display, flex-direction, justify-content, align-items, flex, gap, flex-wrap
+**Animation:** AnimatedContainer, AnimatedOpacity, AnimatedAlign, AnimatedPadding, AnimatedPositioned, AnimatedScale, AnimatedRotation, AnimatedSlide, AnimatedSize, AnimatedSwitcher, AnimatedCrossFade, AnimatedDefaultTextStyle, AnimatedGradient, FadeTransition, SlideTransition, ScaleTransition, RotationTransition, SizeTransition, TweenAnimationBuilder, StaggeredAnimation, Shimmer, Pulse
 
-**Background:** background-color, background-image, background-size, gradient
+**Scrolling:** ListView, GridView
 
-**Border:** border, border-radius, border-color, border-width, border-style
+**App Structure:** Scaffold, AppBar
 
-**Typography:** color, font-size, font-weight, font-style, font-family, letter-spacing, word-spacing, line-height, text-align, text-decoration, text-overflow, text-transform
+### HTML Elements (70+)
 
-**Effects:** opacity, box-shadow, text-shadow, transform, rotate, scale, translate
+div, span, h1-h6, p, a, button, input, img, ul, ol, li, table, tr, td, th, form, label, select, option, textarea, section, article, header, footer, nav, aside, main, video, audio, canvas, iframe, strong, em, code, pre, blockquote, hr, br, figure, figcaption, mark, del, ins, sub, sup, small, abbr, cite, kbd, samp, var, details, summary, dialog, progress, meter, time, data, output, fieldset, legend, datalist, optgroup, picture, source, track, embed, object, param, map, area
 
-**Display:** overflow, visible
+### CSS Properties (150+)
 
-**Animation:** transition-duration, transition-curve
+**Layout:** width, height, min/max dimensions, padding, margin, display, position, overflow
 
-## Project Structure
+**Flexbox:** flex-direction, flex-wrap, justify-content, align-items, gap, flex-grow/shrink
 
-```
-stac_flutter_ui/
-├── lib/
-│   ├── src/
-│   │   ├── core/              # Engine & registry
-│   │   ├── models/            # Data models
-│   │   ├── parser/            # JSON parser
-│   │   ├── css/               # CSS parser & properties
-│   │   ├── widgets/           # Flutter widgets
-│   │   └── html_widgets/      # HTML elements
-│   └── stac_flutter_ui.dart   # Main export
-├── example/
-│   ├── main.dart              # Demo app
-│   └── example_dsl.json       # Example JSON
-├── test/                      # Unit tests
-├── pubspec.yaml              
-├── README.md                  # Full documentation
-└── CHANGELOG.md
-```
+**Grid:** grid-template-columns/rows, grid-gap, grid-column/row
 
-## Key Features
+**Typography:** color, font-size, font-weight, font-style, font-family, letter-spacing, line-height, text-align, text-decoration, text-transform, text-overflow
 
-### 1. Full CSS Support
-Every widget supports comprehensive CSS properties that are automatically parsed and applied:
+**Background:** background-color, gradient (linear/radial), background-image/size/position
 
-```json
-{
-  "type": "div",
-  "style": {
-    "width": 300,
-    "padding": "16",
-    "backgroundColor": "#4CAF50",
-    "borderRadius": 12,
-    "boxShadow": [{
-      "color": "rgba(0,0,0,0.2)",
-      "offset": {"x": 0, "y": 4},
-      "blur": 8
-    }]
-  }
-}
-```
+**Border:** border, border-radius, border-width/style/color, outline
 
-### 2. HTML Elements
-All common HTML elements work exactly as expected:
+**Effects:** opacity, box-shadow, text-shadow, blur, brightness, contrast, grayscale, saturate
 
-```json
-{
-  "type": "div",
-  "children": [
-    {"type": "h1", "props": {"text": "Title"}},
-    {"type": "p", "props": {"text": "Paragraph"}},
-    {"type": "ul", "children": [
-      {"type": "li", "props": {"text": "Item 1"}},
-      {"type": "li", "props": {"text": "Item 2"}}
-    ]}
-  ]
-}
-```
+**Transform:** rotate, scale, translate, skew, perspective
 
-### 3. Custom Widget Registration
-Easily extend with your own widgets:
+**Animation:** transition-duration/delay/curve, animation properties
+
+## Custom Widget Registration
 
 ```dart
 engine.registerWidget('MyCustomWidget', (node, children) {
@@ -172,30 +117,41 @@ engine.registerWidget('MyCustomWidget', (node, children) {
 });
 ```
 
-## Example JSON DSL
+## Project Structure
 
-See `example/example_dsl.json` for a comprehensive example featuring:
-- Dashboard with metrics cards
-- Forms with various input types
-- Navigation and layout sections
-- Styled typography
-- Lists and tables
-- And much more!
-
-## Testing
-
-Run tests:
-```bash
-flutter test
+```
+elpian/
+├── lib/
+│   ├── elpian_ui.dart       # Main library export
+│   ├── src/
+│   │   ├── core/            # Engine, registry, event system
+│   │   ├── models/          # ElpianNode, CSSStyle
+│   │   ├── parser/          # JSON parser
+│   │   ├── css/             # CSS parser, stylesheets
+│   │   ├── canvas/          # 2D Canvas API
+│   │   ├── widgets/         # Flutter widget builders
+│   │   ├── html_widgets/    # HTML element builders
+│   │   ├── bevy/            # Bevy 3D scene (Rust FFI)
+│   │   ├── scene3d/         # Pure-Dart 3D renderer
+│   │   └── vm/              # Elpian VM integration
+│   └── example/             # Demo applications
+├── rust/                    # Rust VM + Bevy crate
+├── rust_builder/            # Flutter FFI plugin
+├── test/                    # Unit tests
+├── web/                     # Web assets
+└── pubspec.yaml
 ```
 
 ## Next Steps
 
-1. Explore the example app to see all capabilities
-2. Check `example_dsl.json` for JSON structure examples
-3. Read the full `README.md` for detailed documentation
-4. Extend with your own custom widgets as needed
+1. Explore the example apps in `lib/example/`
+2. See `lib/example/example_dsl.json` and `lib/example/landing_page.json` for JSON structure examples
+3. Read the detailed docs: [FEATURES.md](FEATURES.md), [EVENT_SYSTEM.md](EVENT_SYSTEM.md), [CANVAS_API.md](CANVAS_API.md)
+4. Check [VM_INTEGRATION.md](VM_INTEGRATION.md) for Rust VM scripting
+5. See [2d_graphics.md](2d_graphics.md) and [3d_graphics.md](3d_graphics.md) for scene graph rendering
 
-## Support
+## Testing
 
-This is a complete, professional implementation ready for production use. All 78 Dart files are fully implemented with proper error handling, type safety, and Flutter best practices.
+```bash
+flutter test
+```

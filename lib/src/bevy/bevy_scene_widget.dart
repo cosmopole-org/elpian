@@ -8,7 +8,7 @@ import 'bevy_scene_controller.dart';
 import 'bevy_scene_api.dart'
     if (dart.library.js_interop) 'bevy_scene_api_web.dart';
 import 'dart_scene_renderer.dart';
-import '../models/stac_node.dart';
+import '../models/elpian_node.dart';
 
 /// A Flutter widget that renders a Bevy 3D scene from JSON.
 ///
@@ -73,8 +73,8 @@ class BevySceneWidget extends StatefulWidget {
   }) : assert(sceneJson != null || sceneMap != null,
             'Either sceneJson or sceneMap must be provided');
 
-  /// Build a BevySceneWidget from a StacNode (for JSON GUI integration).
-  static Widget build(StacNode node, List<Widget> children) {
+  /// Build a BevySceneWidget from a ElpianNode (for JSON GUI integration).
+  static Widget build(ElpianNode node, List<Widget> children) {
     final props = node.props;
     final sceneData = props['scene'] ?? props['sceneJson'];
     final width = (props['width'] as num?)?.toDouble();

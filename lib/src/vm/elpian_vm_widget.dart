@@ -1,13 +1,13 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import '../core/stac_engine.dart';
-import '../models/stac_node.dart';
+import '../core/elpian_engine.dart';
+import '../models/elpian_node.dart';
 import 'elpian_vm.dart';
 import 'host_handler.dart';
 
 /// A Flutter widget that runs an Elpian Rust VM sandbox and renders
-/// the view tree it produces via the StacEngine.
+/// the view tree it produces via the ElpianEngine.
 ///
 /// The VM code can call `askHost("render", viewJson)` to send a JSON
 /// representation of the UI, which this widget renders using the
@@ -54,9 +54,9 @@ class ElpianVmWidget extends StatefulWidget {
   /// AST JSON to run in the VM (mutually exclusive with [code]).
   final String? astJson;
 
-  /// Optional StacEngine instance to use for rendering.
+  /// Optional ElpianEngine instance to use for rendering.
   /// If not provided, a new default engine is created.
-  final StacEngine? engine;
+  final ElpianEngine? engine;
 
   /// Optional stylesheet JSON to load into the engine.
   final Map<String, dynamic>? stylesheet;
@@ -137,7 +137,7 @@ class ElpianVmWidget extends StatefulWidget {
 }
 
 class _ElpianVmWidgetState extends State<ElpianVmWidget> {
-  late StacEngine _engine;
+  late ElpianEngine _engine;
   ElpianVm? _vm;
   Map<String, dynamic>? _currentViewJson;
   String? _error;
@@ -146,7 +146,7 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
   @override
   void initState() {
     super.initState();
-    _engine = widget.engine ?? StacEngine();
+    _engine = widget.engine ?? ElpianEngine();
     if (widget.stylesheet != null) {
       _engine.loadStylesheet(widget.stylesheet!);
     }
@@ -333,7 +333,7 @@ class ElpianVmScope extends StatefulWidget {
   final String machineId;
   final String? code;
   final String? astJson;
-  final StacEngine? engine;
+  final ElpianEngine? engine;
   final Map<String, dynamic>? stylesheet;
   final Widget? loadingWidget;
   final Widget Function(String error)? errorBuilder;

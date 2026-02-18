@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:stac_flutter_ui/stac_flutter_ui.dart';
+import 'package:elpian_ui/elpian_ui.dart';
 import 'dart:math' as math;
 
 void main() {
@@ -30,7 +30,7 @@ class CanvasDemoPage extends StatefulWidget {
 }
 
 class _CanvasDemoPageState extends State<CanvasDemoPage> {
-  final StacEngine _engine = StacEngine();
+  final ElpianEngine _engine = ElpianEngine();
   int _selectedTab = 0;
 
   @override

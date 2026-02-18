@@ -2,7 +2,7 @@
 
 ## Overview
 
-The STAC Flutter UI library includes a comprehensive event handling system inspired by JavaScript DOM events and Flutter's gesture system. It supports event bubbling, capturing, delegation, and provides a unified API for handling all types of user interactions.
+The Elpian UI library includes a comprehensive event handling system inspired by JavaScript DOM events and Flutter's gesture system. It supports event bubbling, capturing, delegation, and provides a unified API for handling all types of user interactions.
 
 ## Event Types
 
@@ -75,7 +75,7 @@ Events propagate through three phases:
 ### Setting Up Global Event Handler
 
 ```dart
-final engine = StacEngine();
+final engine = ElpianEngine();
 
 // Receive ALL events that occur in the widget tree
 engine.setGlobalEventHandler((event) {
@@ -85,7 +85,7 @@ engine.setGlobalEventHandler((event) {
   print('Phase: ${event.phase}');
   
   // Access event-specific data
-  if (event is StacPointerEvent) {
+  if (event is ElpianPointerEvent) {
     print('Position: ${event.position}');
   }
 });
@@ -95,13 +95,13 @@ engine.setGlobalEventHandler((event) {
 
 ```dart
 // Listen only to click events
-engine.onEventType(StacEventType.click, (event) {
+engine.onEventType(ElpianEventType.click, (event) {
   print('Click event from: ${event.target}');
 });
 
 // Listen only to input events
-engine.onEventType(StacEventType.input, (event) {
-  if (event is StacInputEvent) {
+engine.onEventType(ElpianEventType.input, (event) {
+  if (event is ElpianInputEvent) {
     print('Input value: ${event.value}');
   }
 });
@@ -109,14 +109,14 @@ engine.onEventType(StacEventType.input, (event) {
 
 ## Event Objects
 
-### Base StacEvent
+### Base ElpianEvent
 
-All events inherit from `StacEvent`:
+All events inherit from `ElpianEvent`:
 
 ```dart
-class StacEvent {
+class ElpianEvent {
   final String type;              // Event type name
-  final StacEventType eventType;  // Event type enum
+  final ElpianEventType eventType;  // Event type enum
   final dynamic target;           // Original target
   final dynamic currentTarget;    // Current target in propagation
   final DateTime timestamp;       // When event occurred
@@ -135,12 +135,12 @@ class StacEvent {
 }
 ```
 
-### StacPointerEvent
+### ElpianPointerEvent
 
 For mouse/touch/pointer events:
 
 ```dart
-class StacPointerEvent extends StacEvent {
+class ElpianPointerEvent extends ElpianEvent {
   final Offset position;        // Global position
   final Offset localPosition;   // Local position
   final Offset delta;           // Movement delta
@@ -151,12 +151,12 @@ class StacPointerEvent extends StacEvent {
 }
 ```
 
-### StacKeyboardEvent
+### ElpianKeyboardEvent
 
 For keyboard events:
 
 ```dart
-class StacKeyboardEvent extends StacEvent {
+class ElpianKeyboardEvent extends ElpianEvent {
   final String key;          // Key name
   final int keyCode;         // Key code
   final bool altKey;         // Alt pressed
@@ -166,23 +166,23 @@ class StacKeyboardEvent extends StacEvent {
 }
 ```
 
-### StacInputEvent
+### ElpianInputEvent
 
 For form input events:
 
 ```dart
-class StacInputEvent extends StacEvent {
+class ElpianInputEvent extends ElpianEvent {
   final dynamic value;       // Input value
   final bool isComposing;    // Composition state
 }
 ```
 
-### StacGestureEvent
+### ElpianGestureEvent
 
 For complex gestures:
 
 ```dart
-class StacGestureEvent extends StacEvent {
+class ElpianGestureEvent extends ElpianEvent {
   final Offset velocity;     // Gesture velocity
   final double scale;        // Scale factor
   final double rotation;     // Rotation angle
@@ -280,7 +280,7 @@ final debouncedHandler = EventUtils.debounce(
   const Duration(milliseconds: 300),
 );
 
-engine.onEventType(StacEventType.input, debouncedHandler);
+engine.onEventType(ElpianEventType.input, debouncedHandler);
 ```
 
 #### Throttling
@@ -291,7 +291,7 @@ final throttledHandler = EventUtils.throttle(
   const Duration(milliseconds: 100),
 );
 
-engine.onEventType(StacEventType.scroll, throttledHandler);
+engine.onEventType(ElpianEventType.scroll, throttledHandler);
 ```
 
 ### Event Bus
@@ -307,9 +307,9 @@ eventBus.subscribe('custom-event', (event) {
 });
 
 // Broadcast events
-eventBus.broadcast(StacEvent(
+eventBus.broadcast(ElpianEvent(
   type: 'custom-event',
-  eventType: StacEventType.custom,
+  eventType: ElpianEventType.custom,
   data: {'message': 'Hello World'},
 ));
 ```
@@ -318,7 +318,7 @@ eventBus.broadcast(StacEvent(
 
 ```dart
 import 'package:flutter/material.dart';
-import 'package:stac_flutter_ui/stac_flutter_ui.dart';
+import 'package:elpian_ui/elpian_ui.dart';
 
 void main() {
   runApp(MyApp());
@@ -330,7 +330,7 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  final StacEngine engine = StacEngine();
+  final ElpianEngine engine = ElpianEngine();
   final List<String> eventLog = [];
 
   @override
@@ -384,7 +384,7 @@ class _MyAppState extends State<MyApp> {
           'key': 'input-1',
           'events': {
             'input': (e) {
-              if (e is StacInputEvent) {
+              if (e is ElpianInputEvent) {
                 print('Input: ${e.value}');
               }
             },
@@ -438,7 +438,7 @@ class _MyAppState extends State<MyApp> {
 ### Programmatically with DOM API
 
 ```dart
-final dom = StacDOM();
+final dom = ElpianDOM();
 final element = dom.getElementById('my-button');
 
 element?.addEventListener('click', (event) {
@@ -502,7 +502,7 @@ print('Registered nodes: ${stats['nodes']}');
 
 If you're familiar with DOM events in JavaScript, here's a comparison:
 
-| JavaScript | STAC Flutter UI |
+| JavaScript | Elpian UI |
 |------------|-----------------|
 | `addEventListener('click', fn)` | `events: {'click': fn}` or `element.addEventListener('click', fn)` |
 | `event.stopPropagation()` | `event.stopPropagation()` |
