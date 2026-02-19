@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import '../core/elpian_engine.dart';
+import '../core/event_system.dart';
 import '../models/elpian_node.dart';
 import 'elpian_vm.dart';
 import 'host_handler.dart';
@@ -13,6 +14,14 @@ import 'host_handler.dart';
 /// `host_call` nodes (or the equivalent `askHost` function call) to
 /// communicate with Flutter — most importantly `render`, which sends
 /// a JSON view tree for the engine to display.
+///
+/// ## Automatic Event Handling
+///
+/// When the rendered view tree contains nodes with an `"events"` map whose
+/// values are **strings** (VM function names), the engine automatically
+/// calls the corresponding VM function when that event fires. The VM
+/// function receives a typed event object with `type`, `target`, and
+/// event-specific fields (`x`/`y`, `key`, `value`, `scale`, etc.).
 ///
 /// ## Usage
 ///
@@ -208,6 +217,22 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
         vm!.registerHostHandler(name, handler);
       });
 
+      // Wire up automatic VM event callback bridge.
+      // When the rendered UI contains event handlers that are strings
+      // (VM function names), the EventDispatcher routes them here so
+      // the VM function is executed automatically.
+      _engine.eventDispatcher.vmEventCallback = (funcName, event) async {
+        if (_vm == null || _vm!.isRunning) return;
+        try {
+          final eventJson = _eventToTypedJson(event);
+          await _vm!.callFunctionWithInput(funcName, eventJson);
+        } catch (e) {
+          debugPrint(
+            'ElpianVmWidget: Error calling VM function "$funcName": $e',
+          );
+        }
+      };
+
       // Execute the VM
       await vm.run();
 
@@ -257,8 +282,50 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
     return _vm!.callFunction(funcName);
   }
 
+  /// Convert an [ElpianEvent] to the VM's typed-value JSON format so
+  /// it can be passed as input to a VM function.
+  ///
+  /// The resulting JSON is an object with at least `type` and `target`
+  /// fields, plus subclass-specific fields (position, key, value, …).
+  String _eventToTypedJson(ElpianEvent event) {
+    Map<String, dynamic> str(String v) =>
+        {'type': 'string', 'data': {'value': v}};
+    Map<String, dynamic> f64(double v) =>
+        {'type': 'f64', 'data': {'value': v}};
+    Map<String, dynamic> i32(int v) =>
+        {'type': 'i32', 'data': {'value': v}};
+
+    final fields = <String, dynamic>{
+      'type': str(event.type),
+      'target': str(event.target?.toString() ?? ''),
+    };
+
+    if (event is ElpianPointerEvent) {
+      fields['x'] = f64(event.position.dx);
+      fields['y'] = f64(event.position.dy);
+      fields['localX'] = f64(event.localPosition.dx);
+      fields['localY'] = f64(event.localPosition.dy);
+    } else if (event is ElpianKeyboardEvent) {
+      fields['key'] = str(event.key);
+      fields['keyCode'] = i32(event.keyCode);
+    } else if (event is ElpianInputEvent) {
+      fields['value'] = str(event.value?.toString() ?? '');
+    } else if (event is ElpianGestureEvent) {
+      fields['scale'] = f64(event.scale);
+      fields['rotation'] = f64(event.rotation);
+    }
+
+    return jsonEncode({
+      'type': 'object',
+      'data': {'value': fields},
+    });
+  }
+
   @override
   void dispose() {
+    // Remove the VM event bridge so the singleton dispatcher
+    // doesn't hold a reference to a disposed widget.
+    _engine.eventDispatcher.vmEventCallback = null;
     _vm?.dispose();
     super.dispose();
   }

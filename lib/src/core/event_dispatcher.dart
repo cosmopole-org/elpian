@@ -5,18 +5,38 @@ import 'package:flutter/material.dart';
 import 'event_system.dart';
 import '../models/elpian_node.dart';
 
+/// Callback signature for routing string-based event handlers to a VM.
+///
+/// When a node's event handler is a [String] (a VM function name) rather
+/// than a Dart [Function], the dispatcher delegates to this callback so
+/// the VM can execute the named function.
+///
+/// [funcName] is the VM function name extracted from the node's events map.
+/// [event] is the originating [ElpianEvent] with full propagation context.
+typedef VmEventCallback = Future<void> Function(
+  String funcName,
+  ElpianEvent event,
+);
+
 /// Event dispatcher that handles event propagation through the widget tree
 class EventDispatcher {
   static final EventDispatcher _instance = EventDispatcher._internal();
   factory EventDispatcher() => _instance;
   EventDispatcher._internal();
-  
+
   final Map<String, ElpianNode> _nodeRegistry = {};
   final Map<String, String?> _parentRegistry = {};
   final EventBus _eventBus = EventBus();
-  
+
   /// Global event callback for all events
   ElpianEventListener? globalEventHandler;
+
+  /// Optional callback for routing string-based event handlers to a VM.
+  ///
+  /// When set, any event handler value that is a [String] is treated as a
+  /// VM function name and forwarded to this callback instead of being
+  /// invoked as a Dart function.
+  VmEventCallback? vmEventCallback;
   
   /// Register a node in the tree
   void registerNode(String id, ElpianNode node, {String? parentId}) {
@@ -125,14 +145,27 @@ class EventDispatcher {
     globalEventHandler?.call(event);
   }
   
-  /// Dispatch event to a specific node
+  /// Dispatch event to a specific node.
+  ///
+  /// Supports two kinds of handler values in [ElpianNode.events]:
+  /// - **Dart [Function]** — invoked directly (existing behaviour).
+  /// - **[String]** — treated as a VM function name and forwarded to
+  ///   [vmEventCallback] when one is registered.
   void _dispatchToNode(ElpianNode node, ElpianEvent event) {
     if (node.events == null) return;
-    
+
     final eventHandlers = node.events![event.type];
     if (eventHandlers == null) return;
-    
-    // If it's a function, call it
+
+    // VM function name (string handler)
+    if (eventHandlers is String) {
+      if (vmEventCallback != null) {
+        vmEventCallback!(eventHandlers, event);
+      }
+      return;
+    }
+
+    // Dart function handler
     if (eventHandlers is Function) {
       try {
         if (eventHandlers is Function(ElpianEvent)) {

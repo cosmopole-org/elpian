@@ -590,6 +590,294 @@ ElpianVmWidget.fromAst(
   onPrintln: (msg) => debugPrint('VM: $msg'),
   errorBuilder: (error) => Center(child: Text('Oops: $error')),
 )
+```
+
+**Automatic event handling — UI events call VM functions directly:**
+
+When the VM renders a view tree whose nodes contain an `"events"` map with
+**string values** (VM function names), the engine automatically calls the
+corresponding VM function when that event fires. No manual piping needed.
+
+The VM function receives a typed event object with `type`, `target`, and
+event-specific fields (`x`/`y` for pointer events, `key`/`keyCode` for
+keyboard events, `value` for input events, `scale`/`rotation` for gestures).
+
+```dart
+final toggleAst = {
+  "type": "program",
+  "body": [
+    // def isOn = false
+    {
+      "type": "definition",
+      "data": {
+        "leftSide": {"type": "identifier", "data": {"name": "isOn"}},
+        "rightSide": {"type": "bool", "data": {"value": false}}
+      }
+    },
+    // function renderUI(evt) — rebuild the view from current state
+    {
+      "type": "functionDefinition",
+      "data": {
+        "name": "renderUI",
+        "params": ["evt"],
+        "body": [
+          // Toggle: isOn = not isOn
+          {
+            "type": "assignment",
+            "data": {
+              "leftSide": {"type": "identifier", "data": {"name": "isOn"}},
+              "rightSide": {
+                "type": "not",
+                "data": {
+                  "value": {"type": "identifier", "data": {"name": "isOn"}}
+                }
+              }
+            }
+          },
+          // Choose label based on state
+          {
+            "type": "definition",
+            "data": {
+              "leftSide": {"type": "identifier", "data": {"name": "label"}},
+              "rightSide": {"type": "string", "data": {"value": "ON"}}
+            }
+          },
+          {
+            "type": "ifStmt",
+            "data": {
+              "condition": {
+                "type": "not",
+                "data": {
+                  "value": {"type": "identifier", "data": {"name": "isOn"}}
+                }
+              },
+              "body": [
+                {
+                  "type": "assignment",
+                  "data": {
+                    "leftSide": {"type": "identifier", "data": {"name": "label"}},
+                    "rightSide": {"type": "string", "data": {"value": "OFF"}}
+                  }
+                }
+              ]
+            }
+          },
+          // Render a button — "events" maps event names to VM function names
+          {
+            "type": "host_call",
+            "data": {
+              "name": "render",
+              "args": [
+                {"type": "object", "data": {"value": {
+                  "type": {"type": "string", "data": {"value": "Column"}},
+                  "props": {"type": "object", "data": {"value": {
+                    "mainAxisAlignment": {"type": "string", "data": {"value": "center"}},
+                    "children": {"type": "array", "data": {"value": [
+                      {"type": "object", "data": {"value": {
+                        "type": {"type": "string", "data": {"value": "Text"}},
+                        "props": {"type": "object", "data": {"value": {
+                          "data": {"type": "identifier", "data": {"name": "label"}},
+                          "style": {"type": "object", "data": {"value": {
+                            "fontSize": {"type": "i16", "data": {"value": 48}},
+                            "fontWeight": {"type": "string", "data": {"value": "bold"}}
+                          }}}
+                        }}}
+                      }}},
+                      {"type": "object", "data": {"value": {
+                        "type": {"type": "string", "data": {"value": "Button"}},
+                        "key": {"type": "string", "data": {"value": "toggle-btn"}},
+                        "props": {"type": "object", "data": {"value": {
+                          "text": {"type": "string", "data": {"value": "Toggle"}}
+                        }}},
+                        "style": {"type": "object", "data": {"value": {
+                          "marginTop": {"type": "string", "data": {"value": "24"}},
+                          "padding": {"type": "string", "data": {"value": "16 48"}},
+                          "backgroundColor": {"type": "string", "data": {"value": "#6C63FF"}},
+                          "borderRadius": {"type": "i16", "data": {"value": 12}}
+                        }}},
+                        "events": {"type": "object", "data": {"value": {
+                          "click": {"type": "string", "data": {"value": "renderUI"}}
+                        }}}
+                      }}}
+                    ]}}
+                  }}}
+                }}}
+              ]
+            }
+          }
+        ]
+      }
+    },
+    // Initial render (call renderUI with a dummy event)
+    {
+      "type": "functionCall",
+      "data": {
+        "callee": {"type": "identifier", "data": {"name": "renderUI"}},
+        "args": [{"type": "object", "data": {"value": {
+          "type": {"type": "string", "data": {"value": "init"}}
+        }}}]
+      }
+    }
+  ]
+};
+
+// Just drop it in — events are wired up automatically
+ElpianVmWidget.fromAst(
+  machineId: 'toggle',
+  astJson: jsonEncode(toggleAst),
+)
+```
+
+**Multi-event form — input, focus, and submit handled by the VM:**
+
+```dart
+final formAst = {
+  "type": "program",
+  "body": [
+    // def username = ""
+    {
+      "type": "definition",
+      "data": {
+        "leftSide": {"type": "identifier", "data": {"name": "username"}},
+        "rightSide": {"type": "string", "data": {"value": ""}}
+      }
+    },
+    // function onInput(evt) — store input value
+    {
+      "type": "functionDefinition",
+      "data": {
+        "name": "onInput",
+        "params": ["evt"],
+        "body": [
+          {
+            "type": "assignment",
+            "data": {
+              "leftSide": {"type": "identifier", "data": {"name": "username"}},
+              "rightSide": {
+                "type": "indexer",
+                "data": {
+                  "target": {"type": "identifier", "data": {"name": "evt"}},
+                  "index": {"type": "string", "data": {"value": "value"}}
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    // function onSubmit(evt) — greet the user
+    {
+      "type": "functionDefinition",
+      "data": {
+        "name": "onSubmit",
+        "params": ["evt"],
+        "body": [
+          {
+            "type": "definition",
+            "data": {
+              "leftSide": {"type": "identifier", "data": {"name": "greeting"}},
+              "rightSide": {
+                "type": "arithmetic",
+                "data": {
+                  "operation": "+",
+                  "operand1": {"type": "string", "data": {"value": "Hello, "}},
+                  "operand2": {"type": "identifier", "data": {"name": "username"}}
+                }
+              }
+            }
+          },
+          {
+            "type": "host_call",
+            "data": {
+              "name": "render",
+              "args": [
+                {"type": "object", "data": {"value": {
+                  "type": {"type": "string", "data": {"value": "div"}},
+                  "style": {"type": "object", "data": {"value": {
+                    "padding": {"type": "string", "data": {"value": "32"}},
+                    "backgroundColor": {"type": "string", "data": {"value": "#E8F5E9"}},
+                    "borderRadius": {"type": "i16", "data": {"value": 12}}
+                  }}},
+                  "children": {"type": "array", "data": {"value": [
+                    {"type": "object", "data": {"value": {
+                      "type": {"type": "string", "data": {"value": "h1"}},
+                      "props": {"type": "object", "data": {"value": {
+                        "text": {"type": "identifier", "data": {"name": "greeting"}}
+                      }}},
+                      "style": {"type": "object", "data": {"value": {
+                        "color": {"type": "string", "data": {"value": "#2E7D32"}}
+                      }}}
+                    }}}
+                  ]}}
+                }}}
+              ]
+            }
+          }
+        ]
+      }
+    },
+    // Initial render — a form with input + submit button
+    {
+      "type": "host_call",
+      "data": {
+        "name": "render",
+        "args": [
+          {"type": "object", "data": {"value": {
+            "type": {"type": "string", "data": {"value": "div"}},
+            "style": {"type": "object", "data": {"value": {
+              "padding": {"type": "string", "data": {"value": "32"}}
+            }}},
+            "children": {"type": "array", "data": {"value": [
+              {"type": "object", "data": {"value": {
+                "type": {"type": "string", "data": {"value": "h2"}},
+                "props": {"type": "object", "data": {"value": {
+                  "text": {"type": "string", "data": {"value": "Sign In"}}
+                }}}
+              }}},
+              {"type": "object", "data": {"value": {
+                "type": {"type": "string", "data": {"value": "input"}},
+                "key": {"type": "string", "data": {"value": "name-input"}},
+                "props": {"type": "object", "data": {"value": {
+                  "placeholder": {"type": "string", "data": {"value": "Enter your name"}}
+                }}},
+                "style": {"type": "object", "data": {"value": {
+                  "marginTop": {"type": "string", "data": {"value": "16"}},
+                  "padding": {"type": "string", "data": {"value": "12"}},
+                  "borderRadius": {"type": "i16", "data": {"value": 8}}
+                }}},
+                "events": {"type": "object", "data": {"value": {
+                  "change": {"type": "string", "data": {"value": "onInput"}}
+                }}}
+              }}},
+              {"type": "object", "data": {"value": {
+                "type": {"type": "string", "data": {"value": "Button"}},
+                "key": {"type": "string", "data": {"value": "submit-btn"}},
+                "props": {"type": "object", "data": {"value": {
+                  "text": {"type": "string", "data": {"value": "Submit"}}
+                }}},
+                "style": {"type": "object", "data": {"value": {
+                  "marginTop": {"type": "string", "data": {"value": "16"}},
+                  "backgroundColor": {"type": "string", "data": {"value": "#2196F3"}},
+                  "padding": {"type": "string", "data": {"value": "12 32"}},
+                  "borderRadius": {"type": "i16", "data": {"value": 8}}
+                }}},
+                "events": {"type": "object", "data": {"value": {
+                  "click": {"type": "string", "data": {"value": "onSubmit"}}
+                }}}
+              }}}
+            ]}}
+          }}}
+        ]
+      }
+    }
+  ]
+};
+
+ElpianVmWidget.fromAst(
+  machineId: 'form-demo',
+  astJson: jsonEncode(formAst),
+)
+```
 
 ## Custom Widget Registration
 
