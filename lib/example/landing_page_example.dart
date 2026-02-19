@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:elpian_ui/elpian_ui.dart';
 import 'package:elpian_ui/example/game_scene_example.dart';
+import 'package:elpian_ui/example/vm_event_demo.dart';
 
 void main() {
   runApp(const LandingPageApp());
@@ -14,7 +15,7 @@ class LandingPageApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Elpian 3D Game Scene',
+      title: 'Elpian UI',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
@@ -23,7 +24,49 @@ class LandingPageApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const GameSceneExample(),
+      home: const _DemoShell(),
+    );
+  }
+}
+
+/// Top-level shell that switches between the demo pages.
+class _DemoShell extends StatefulWidget {
+  const _DemoShell();
+
+  @override
+  State<_DemoShell> createState() => _DemoShellState();
+}
+
+class _DemoShellState extends State<_DemoShell> {
+  int _currentIndex = 0;
+
+  static const _pages = <Widget>[
+    VmEventDemoPage(),
+    GameSceneExample(),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: _pages[_currentIndex],
+      bottomNavigationBar: NavigationBar(
+        backgroundColor: const Color(0xFF0F172A),
+        indicatorColor: const Color(0xFF6366F1).withOpacity(0.2),
+        selectedIndex: _currentIndex,
+        onDestinationSelected: (i) => setState(() => _currentIndex = i),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.touch_app_outlined),
+            selectedIcon: Icon(Icons.touch_app, color: Color(0xFF818CF8)),
+            label: 'VM Events',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.view_in_ar_outlined),
+            selectedIcon: Icon(Icons.view_in_ar, color: Color(0xFF818CF8)),
+            label: '3D Scene',
+          ),
+        ],
+      ),
     );
   }
 }
