@@ -185,21 +185,411 @@ final node = element?.toElpianNode();
 
 ### VM-Driven UI
 
+The Elpian VM executes AST programs (JSON) in a sandboxed Rust VM and renders
+the resulting UI via `ElpianEngine`. The VM communicates with Flutter through
+typed host calls — the most important being `render`, which sends a view tree
+to Flutter for display.
+
+**Basic — render a styled heading:**
+
 ```dart
-ElpianVmWidget(
-  machineId: 'my-app',
-  code: r'''
-    def view = {
-      "type": "Column",
-      "children": [
-        {"type": "Text", "props": {"text": "Hello from VM!"}},
-        {"type": "Button", "props": {"text": "Click me"}}
-      ]
-    }
-    askHost("render", view)
-  ''',
+import 'dart:convert';
+import 'package:elpian_ui/elpian_ui.dart';
+
+ElpianVmWidget.fromAst(
+  machineId: 'hello',
+  astJson: jsonEncode({
+    "type": "program",
+    "body": [
+      // def view = { type: "Text", props: { data: "Hello …", style: { … } } }
+      {
+        "type": "definition",
+        "data": {
+          "leftSide": {"type": "identifier", "data": {"name": "view"}},
+          "rightSide": {
+            "type": "object",
+            "data": {
+              "value": {
+                "type": {"type": "string", "data": {"value": "Text"}},
+                "props": {
+                  "type": "object",
+                  "data": {
+                    "value": {
+                      "data": {"type": "string", "data": {"value": "Hello from Elpian VM!"}},
+                      "style": {
+                        "type": "object",
+                        "data": {
+                          "value": {
+                            "fontSize": {"type": "i16", "data": {"value": 24}},
+                            "fontWeight": {"type": "string", "data": {"value": "bold"}},
+                            "color": {"type": "string", "data": {"value": "#2196F3"}}
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      // askHost("render", view)
+      {
+        "type": "host_call",
+        "data": {
+          "name": "render",
+          "args": [
+            {"type": "identifier", "data": {"name": "view"}}
+          ]
+        }
+      }
+    ]
+  }),
 )
 ```
+
+**Styled card layout — Column with heading, subtitle, and button:**
+
+```dart
+// Helper to keep the AST readable
+Map<String, dynamic> str(String v) =>
+    {"type": "string", "data": {"value": v}};
+Map<String, dynamic> num16(int v) =>
+    {"type": "i16", "data": {"value": v}};
+Map<String, dynamic> obj(Map<String, dynamic> fields) =>
+    {"type": "object", "data": {"value": fields}};
+Map<String, dynamic> arr(List<dynamic> items) =>
+    {"type": "array", "data": {"value": items}};
+
+final cardAst = {
+  "type": "program",
+  "body": [
+    {
+      "type": "definition",
+      "data": {
+        "leftSide": {"type": "identifier", "data": {"name": "card"}},
+        "rightSide": obj({
+          "type": str("Container"),
+          "style": obj({
+            "padding": str("24"),
+            "backgroundColor": str("#FFFFFF"),
+            "borderRadius": num16(16),
+            "boxShadow": arr([
+              obj({
+                "color": str("rgba(0,0,0,0.12)"),
+                "offset": obj({"x": num16(0), "y": num16(4)}),
+                "blur": num16(12),
+              })
+            ]),
+          }),
+          "children": arr([
+            // Heading
+            obj({
+              "type": str("Text"),
+              "props": obj({
+                "data": str("Welcome"),
+                "style": obj({
+                  "fontSize": num16(28),
+                  "fontWeight": str("bold"),
+                  "color": str("#1A1A2E"),
+                }),
+              }),
+            }),
+            // Subtitle
+            obj({
+              "type": str("Text"),
+              "props": obj({
+                "data": str("This card is rendered by the Elpian VM."),
+                "style": obj({
+                  "fontSize": num16(14),
+                  "color": str("#666666"),
+                  "marginTop": str("8"),
+                }),
+              }),
+            }),
+            // Button
+            obj({
+              "type": str("Button"),
+              "props": obj({
+                "text": str("Get Started"),
+              }),
+              "style": obj({
+                "marginTop": str("20"),
+                "backgroundColor": str("#6C63FF"),
+                "color": str("#FFFFFF"),
+                "padding": str("12 32"),
+                "borderRadius": num16(8),
+              }),
+            }),
+          ]),
+        }),
+      }
+    },
+    {
+      "type": "host_call",
+      "data": {
+        "name": "render",
+        "args": [{"type": "identifier", "data": {"name": "card"}}]
+      }
+    }
+  ]
+};
+
+ElpianVmWidget.fromAst(
+  machineId: 'card-demo',
+  astJson: jsonEncode(cardAst),
+)
+```
+
+**Interactive counter — VM state + Dart-driven re-render:**
+
+The VM keeps a `count` variable. An `increment` function mutates it and
+re-renders. Dart calls that function via `entryFunction` or the controller.
+
+```dart
+final counterAst = {
+  "type": "program",
+  "body": [
+    // def count = 0
+    {
+      "type": "definition",
+      "data": {
+        "leftSide": {"type": "identifier", "data": {"name": "count"}},
+        "rightSide": {"type": "i16", "data": {"value": 0}}
+      }
+    },
+    // function buildView() — creates the view tree from current state
+    {
+      "type": "functionDefinition",
+      "data": {
+        "name": "buildView",
+        "params": [],
+        "body": [
+          {
+            "type": "definition",
+            "data": {
+              "leftSide": {"type": "identifier", "data": {"name": "label"}},
+              "rightSide": {
+                "type": "arithmetic",
+                "data": {
+                  "operation": "+",
+                  "operand1": {"type": "string", "data": {"value": "Count: "}},
+                  "operand2": {
+                    "type": "cast",
+                    "data": {
+                      "value": {"type": "identifier", "data": {"name": "count"}},
+                      "targetType": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "host_call",
+            "data": {
+              "name": "render",
+              "args": [
+                {"type": "object", "data": {"value": {
+                  "type": {"type": "string", "data": {"value": "Column"}},
+                  "props": {"type": "object", "data": {"value": {
+                    "mainAxisAlignment": {"type": "string", "data": {"value": "center"}},
+                    "children": {"type": "array", "data": {"value": [
+                      {"type": "object", "data": {"value": {
+                        "type": {"type": "string", "data": {"value": "Text"}},
+                        "props": {"type": "object", "data": {"value": {
+                          "data": {"type": "identifier", "data": {"name": "label"}},
+                          "style": {"type": "object", "data": {"value": {
+                            "fontSize": {"type": "i16", "data": {"value": 32}},
+                            "fontWeight": {"type": "string", "data": {"value": "bold"}}
+                          }}}
+                        }}}
+                      }}},
+                      {"type": "object", "data": {"value": {
+                        "type": {"type": "string", "data": {"value": "Button"}},
+                        "props": {"type": "object", "data": {"value": {
+                          "text": {"type": "string", "data": {"value": "+1"}}
+                        }}},
+                        "style": {"type": "object", "data": {"value": {
+                          "marginTop": {"type": "string", "data": {"value": "16"}},
+                          "padding": {"type": "string", "data": {"value": "12 40"}},
+                          "backgroundColor": {"type": "string", "data": {"value": "#4CAF50"}},
+                          "borderRadius": {"type": "i16", "data": {"value": 8}}
+                        }}}
+                      }}}
+                    ]}}
+                  }}}
+                }}}
+              ]
+            }
+          }
+        ]
+      }
+    },
+    // function increment() — mutate state and re-render
+    {
+      "type": "functionDefinition",
+      "data": {
+        "name": "increment",
+        "params": [],
+        "body": [
+          {
+            "type": "assignment",
+            "data": {
+              "leftSide": {"type": "identifier", "data": {"name": "count"}},
+              "rightSide": {
+                "type": "arithmetic",
+                "data": {
+                  "operation": "+",
+                  "operand1": {"type": "identifier", "data": {"name": "count"}},
+                  "operand2": {"type": "i16", "data": {"value": 1}}
+                }
+              }
+            }
+          },
+          {
+            "type": "functionCall",
+            "data": {
+              "callee": {"type": "identifier", "data": {"name": "buildView"}},
+              "args": []
+            }
+          }
+        ]
+      }
+    },
+    // Initial render
+    {
+      "type": "functionCall",
+      "data": {
+        "callee": {"type": "identifier", "data": {"name": "buildView"}},
+        "args": []
+      }
+    }
+  ]
+};
+
+// Use ElpianVmScope + controller so Dart can call VM functions
+final controller = ElpianVmController();
+
+ElpianVmScope(
+  controller: controller,
+  machineId: 'counter',
+  astJson: jsonEncode(counterAst),
+  onPrintln: (msg) => debugPrint('VM: $msg'),
+)
+
+// Later, from a button press in Dart:
+// await controller.callFunction('increment');
+```
+
+**Custom host handlers — bridge VM logic to native platform APIs:**
+
+```dart
+ElpianVmWidget.fromAst(
+  machineId: 'api-bridge',
+  astJson: jsonEncode({
+    "type": "program",
+    "body": [
+      // def user = askHost("fetchUser", { id: 42 })
+      {
+        "type": "definition",
+        "data": {
+          "leftSide": {"type": "identifier", "data": {"name": "user"}},
+          "rightSide": {
+            "type": "functionCall",
+            "data": {
+              "callee": {"type": "identifier", "data": {"name": "askHost"}},
+              "args": [
+                {"type": "string", "data": {"value": "fetchUser"}},
+                {"type": "array", "data": {"value": [
+                  {"type": "object", "data": {"value": {
+                    "id": {"type": "i16", "data": {"value": 42}}
+                  }}}
+                ]}}
+              ]
+            }
+          }
+        }
+      },
+      // def greeting = "Welcome, " + user.name
+      {
+        "type": "definition",
+        "data": {
+          "leftSide": {"type": "identifier", "data": {"name": "greeting"}},
+          "rightSide": {
+            "type": "arithmetic",
+            "data": {
+              "operation": "+",
+              "operand1": {"type": "string", "data": {"value": "Welcome, "}},
+              "operand2": {
+                "type": "indexer",
+                "data": {
+                  "target": {"type": "identifier", "data": {"name": "user"}},
+                  "index": {"type": "string", "data": {"value": "name"}}
+                }
+              }
+            }
+          }
+        }
+      },
+      // render a personalized card
+      {
+        "type": "host_call",
+        "data": {
+          "name": "render",
+          "args": [
+            {"type": "object", "data": {"value": {
+              "type": {"type": "string", "data": {"value": "div"}},
+              "style": {"type": "object", "data": {"value": {
+                "padding": {"type": "string", "data": {"value": "24"}},
+                "backgroundColor": {"type": "string", "data": {"value": "#F5F5F5"}},
+                "borderRadius": {"type": "i16", "data": {"value": 12}}
+              }}},
+              "children": {"type": "array", "data": {"value": [
+                {"type": "object", "data": {"value": {
+                  "type": {"type": "string", "data": {"value": "h1"}},
+                  "props": {"type": "object", "data": {"value": {
+                    "text": {"type": "identifier", "data": {"name": "greeting"}}
+                  }}},
+                  "style": {"type": "object", "data": {"value": {
+                    "color": {"type": "string", "data": {"value": "#1A1A2E"}}
+                  }}}
+                }}},
+                {"type": "object", "data": {"value": {
+                  "type": {"type": "string", "data": {"value": "p"}},
+                  "props": {"type": "object", "data": {"value": {
+                    "text": {"type": "string", "data": {"value": "Your profile was loaded by the VM."}}
+                  }}},
+                  "style": {"type": "object", "data": {"value": {
+                    "color": {"type": "string", "data": {"value": "#666"}}
+                  }}}
+                }}}
+              ]}}
+            }}}
+          ]
+        }
+      }
+    ]
+  }),
+  // Register a custom host handler the VM can call
+  hostHandlers: {
+    'fetchUser': (apiName, payload) async {
+      // In a real app, call your backend or local DB here
+      return jsonEncode({
+        "type": "object",
+        "data": {
+          "value": {
+            "name": {"type": "string", "data": {"value": "Alice"}},
+            "email": {"type": "string", "data": {"value": "alice@example.com"}}
+          }
+        }
+      });
+    },
+  },
+  onPrintln: (msg) => debugPrint('VM: $msg'),
+  errorBuilder: (error) => Center(child: Text('Oops: $error')),
+)
 
 ## Custom Widget Registration
 

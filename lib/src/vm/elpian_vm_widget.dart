@@ -9,39 +9,36 @@ import 'host_handler.dart';
 /// A Flutter widget that runs an Elpian Rust VM sandbox and renders
 /// the view tree it produces via the ElpianEngine.
 ///
-/// The VM code can call `askHost("render", viewJson)` to send a JSON
-/// representation of the UI, which this widget renders using the
-/// server-driven UI engine with all registered HTML/CSS/Flutter widgets.
+/// The VM accepts an AST program in JSON format. The AST can use
+/// `host_call` nodes (or the equivalent `askHost` function call) to
+/// communicate with Flutter — most importantly `render`, which sends
+/// a JSON view tree for the engine to display.
 ///
 /// ## Usage
 ///
 /// ```dart
-/// ElpianVmWidget(
-///   machineId: 'my-app',
-///   code: '''
-///     def view = {
-///       "type": "div",
-///       "props": {
-///         "style": { "padding": "16", "backgroundColor": "#f0f0f0" }
-///       },
-///       "children": [
-///         { "type": "h1", "props": { "text": "Hello from VM!" } },
-///         { "type": "p", "props": { "text": "This UI is controlled by sandboxed code." } }
-///       ]
-///     }
-///     askHost("render", view)
-///   ''',
-/// )
-/// ```
-///
-/// ## AST Mode
-///
-/// You can also provide a pre-compiled AST instead of source code:
-///
-/// ```dart
 /// ElpianVmWidget.fromAst(
 ///   machineId: 'my-app',
-///   astJson: '{"type":"program","body":[...]}',
+///   astJson: jsonEncode({
+///     "type": "program",
+///     "body": [
+///       {
+///         "type": "host_call",
+///         "data": {
+///           "name": "render",
+///           "args": [{
+///             "type": "object",
+///             "data": { "value": {
+///               "type": { "type": "string", "data": { "value": "Text" } },
+///               "props": { "type": "object", "data": { "value": {
+///                 "data": { "type": "string", "data": { "value": "Hello from VM!" } }
+///               }}}
+///             }}
+///           }]
+///         }
+///       }
+///     ]
+///   }),
 /// )
 /// ```
 class ElpianVmWidget extends StatefulWidget {
