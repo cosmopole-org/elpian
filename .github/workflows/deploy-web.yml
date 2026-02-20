@@ -29,6 +29,9 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
 
+      - name: Ensure wasm32 target is installed
+        run: rustup target add wasm32-unknown-unknown
+
       - name: Install wasm-pack
         run: cargo install wasm-pack --locked
 
