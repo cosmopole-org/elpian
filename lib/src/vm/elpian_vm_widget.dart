@@ -166,7 +166,8 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
 
       if (vm == null) {
         setState(() {
-          _error = 'Failed to create VM';
+          final detail = ElpianVm.lastApiError;
+          _error = detail == null ? 'Failed to create VM' : 'Failed to create VM: $detail';
           _isLoading = false;
         });
         return;

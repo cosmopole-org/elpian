@@ -70,13 +70,24 @@ ffi.DynamicLibrary _loadLibrary() {
 /// Native FFI bindings to the Elpian Rust VM.
 class ElpianVmApi {
   static ElpianVmApi? _instance;
+  static String? _lastError;
+
+  static String? get lastError => _lastError;
+
+  static void _setLastError(String error) {
+    _lastError = error;
+  }
+
+  static void clearLastError() {
+    _lastError = null;
+  }
   late final ffi.DynamicLibrary _lib;
 
   late final _InitDart _init;
   late final _FreeStringDart _freeString;
-  late final _CreateVmDart _createVmFromAst;
+  _CreateVmDart? _createVmFromAst;
   late final _CreateVmDart _createVmFromCode;
-  late final _ValidateDart _validateAst;
+  _ValidateDart? _validateAst;
   late final _ExecuteDart _execute;
   late final _ExecuteFuncDart _executeFunc;
   late final _ExecuteFuncInputDart _executeFuncWithInput;
@@ -89,12 +100,28 @@ class ElpianVmApi {
     _init = _lib.lookupFunction<_InitC, _InitDart>('elpian_init');
     _freeString = _lib
         .lookupFunction<_FreeStringC, _FreeStringDart>('elpian_free_string');
-    _createVmFromAst =
-        _lib.lookupFunction<_CreateVmC, _CreateVmDart>('elpian_create_vm_from_ast');
+    try {
+      _createVmFromAst = _lib.lookupFunction<_CreateVmC, _CreateVmDart>(
+        'elpian_create_vm_from_ast',
+      );
+    } catch (e) {
+      _createVmFromAst = null;
+      _setLastError(
+        "FFI symbol lookup failed for elpian_create_vm_from_ast: $e",
+      );
+    }
     _createVmFromCode =
         _lib.lookupFunction<_CreateVmC, _CreateVmDart>('elpian_create_vm_from_code');
-    _validateAst =
-        _lib.lookupFunction<_ValidateC, _ValidateDart>('elpian_validate_ast');
+    try {
+      _validateAst = _lib.lookupFunction<_ValidateC, _ValidateDart>(
+        'elpian_validate_ast',
+      );
+    } catch (e) {
+      _validateAst = null;
+      _setLastError(
+        "FFI symbol lookup failed for elpian_validate_ast: $e",
+      );
+    }
     _execute =
         _lib.lookupFunction<_ExecuteC, _ExecuteDart>('elpian_execute');
     _executeFunc =
@@ -133,7 +160,19 @@ class ElpianVmApi {
     final midPtr = machineId.toNativeUtf8();
     final astPtr = astJson.toNativeUtf8();
     try {
-      return api._createVmFromAst(midPtr, astPtr) == 1;
+      final fn = api._createVmFromAst;
+      if (fn == null) {
+        _setLastError(
+          "createVmFromAst unavailable: missing native symbol elpian_create_vm_from_ast",
+        );
+        return false;
+      }
+      clearLastError();
+      final ok = fn(midPtr, astPtr) == 1;
+      if (!ok) {
+        _setLastError("Native createVmFromAst returned false");
+      }
+      return ok;
     } finally {
       malloc.free(midPtr);
       malloc.free(astPtr);
@@ -159,7 +198,19 @@ class ElpianVmApi {
     final api = ElpianVmApi();
     final astPtr = astJson.toNativeUtf8();
     try {
-      return api._validateAst(astPtr) == 1;
+      final fn = api._validateAst;
+      if (fn == null) {
+        _setLastError(
+          "validateAst unavailable: missing native symbol elpian_validate_ast",
+        );
+        return false;
+      }
+      clearLastError();
+      final ok = fn(astPtr) == 1;
+      if (!ok) {
+        _setLastError("Native validateAst returned false");
+      }
+      return ok;
     } finally {
       malloc.free(astPtr);
     }
