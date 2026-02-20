@@ -1,25 +1,30 @@
-# Elpian VM — Complete AST & API Reference
+# 🖥️ Elpian VM — Complete AST & API Reference
 
 This document is the definitive reference for writing Elpian VM code. It covers the AST JSON format, all node types with their exact structures, the typed value system, the host call protocol, arithmetic/comparison operators, and the Dart/FFI API surface.
 
 ---
 
-## Table of Contents
+## 📑 Table of Contents
 
-1. [Architecture Overview](#architecture-overview)
-2. [Typed Value Format](#typed-value-format)
-3. [AST Program Structure](#ast-program-structure)
-4. [Expression Nodes](#expression-nodes)
-5. [Statement Nodes](#statement-nodes)
-6. [Operators & Arithmetic](#operators--arithmetic)
-7. [Host Call Protocol](#host-call-protocol)
-8. [Built-in Functions](#built-in-functions)
-9. [FFI / Dart API](#ffi--dart-api)
-10. [Complete Examples](#complete-examples)
+1. [🏗️ Architecture Overview](#architecture-overview)
+2. [🔢 Typed Value Format](#typed-value-format)
+3. [📜 AST Program Structure](#ast-program-structure)
+4. [🧮 Expression Nodes](#expression-nodes)
+5. [📋 Statement Nodes](#statement-nodes)
+6. [➕ Operators & Arithmetic](#operators--arithmetic)
+7. [📡 Host Call Protocol](#host-call-protocol)
+8. [⚙️ Built-in Functions](#built-in-functions)
+9. [🔌 FFI / Dart API](#ffi--dart-api)
+10. [📦 Complete Examples](#complete-examples)
+11. [🧩 ElpianVmWidget](#elpianvmwidget)
+12. [🔗 Event Bridging: VM ↔ Flutter](#event-bridging-vm--flutter)
+13. [🎮 ElpianVmController](#elpianvmcontroller)
+14. [📨 Typed JSON Input Format for Events](#typed-json-input-format-for-events)
+15. [🚀 Complete Interactive App Example](#complete-interactive-app-example)
 
 ---
 
-## Architecture Overview
+## 🏗️ Architecture Overview
 
 ```
 Source Code / AST JSON
@@ -49,7 +54,7 @@ The VM compiles AST JSON into bytecode, then executes it. When the VM needs to c
 
 ---
 
-## Typed Value Format
+## 🔢 Typed Value Format
 
 All values crossing the FFI boundary use a typed JSON envelope:
 
@@ -105,7 +110,7 @@ All values crossing the FFI boundary use a typed JSON envelope:
 
 ---
 
-## AST Program Structure
+## 📜 AST Program Structure
 
 Every AST is a JSON object with a `"type": "program"` root and a `"body"` array of statement nodes.
 
@@ -123,7 +128,7 @@ The `"body"` array is also used recursively inside `functionDefinition`, `ifStmt
 
 ---
 
-## Expression Nodes
+## 🧮 Expression Nodes
 
 Expression nodes are used as values inside statements (right-hand side of definitions, function arguments, conditions, etc.).
 
@@ -322,7 +327,7 @@ Calls a function and uses its return value as an expression. Same structure as t
 
 ---
 
-## Statement Nodes
+## 📋 Statement Nodes
 
 Statement nodes are the entries in a `"body"` array. They are executed sequentially.
 
@@ -684,7 +689,7 @@ Conditional jump. If the condition is true, jump to `trueBranch`; otherwise jump
 
 ---
 
-## Operators & Arithmetic
+## ➕ Operators & Arithmetic
 
 All binary operations use the `"arithmetic"` node type.
 
@@ -734,7 +739,7 @@ The `+` operator works on strings too:
 
 ---
 
-## Host Call Protocol
+## 📡 Host Call Protocol
 
 ### How It Works
 
@@ -837,7 +842,7 @@ When calling `askHost` directly, the first argument is the API name (string), an
 
 ---
 
-## Built-in Functions
+## ⚙️ Built-in Functions
 
 The VM has no built-in functions in the traditional sense. All external capabilities come through the host call mechanism. The `func_group` list (`println`, `stringify`, `render`, `updateApp`) defines which API names the VM is allowed to call. These are handled on the Dart side by the `HostHandler`.
 
@@ -845,7 +850,7 @@ User-defined functions (via `functionDefinition`) are fully supported and live i
 
 ---
 
-## FFI / Dart API
+## 🔌 FFI / Dart API
 
 ### Rust FFI Functions (extern "C")
 
@@ -918,7 +923,7 @@ final result = await vm.run();
 
 ---
 
-## Complete Examples
+## 📦 Complete Examples
 
 ### Example 1: Hello World
 
@@ -1566,9 +1571,9 @@ The Dart side can call `vm.callFunction("increment")` to trigger `increment`, wh
 
 ---
 
-## Quick Reference: All AST Node Types
+## 📖 Quick Reference: All AST Node Types
 
-### Expression Nodes (used as values)
+### 🧮 Expression Nodes (used as values)
 
 | Type | Key Properties | Notes |
 |------|---------------|-------|
@@ -1589,7 +1594,7 @@ The Dart side can call `vm.callFunction("increment")` to trigger `increment`, wh
 | `callback` | `data.value.funcId` | Function reference |
 | `functionCall` | `data.callee`, `data.args` | Function call (returns value) |
 
-### Statement Nodes (used in body arrays)
+### 📋 Statement Nodes (used in body arrays)
 
 | Type | Key Properties | Notes |
 |------|---------------|-------|
@@ -1607,7 +1612,7 @@ The Dart side can call `vm.callFunction("increment")` to trigger `increment`, wh
 
 ---
 
-## ElpianVmWidget
+## 🧩 ElpianVmWidget
 
 `ElpianVmWidget` is a Flutter widget that runs a VM sandbox and renders the view tree it produces. It handles the full lifecycle: VM creation, host call routing, rendering, and disposal.
 
@@ -1674,7 +1679,7 @@ ElpianVmWidget(
 
 ---
 
-## Event Bridging: VM ↔ Flutter
+## 🔗 Event Bridging: VM ↔ Flutter
 
 The VM and Flutter communicate events through two mechanisms:
 
@@ -1790,7 +1795,7 @@ ElpianVmWidget(
 
 ---
 
-## ElpianVmController
+## 🎮 ElpianVmController
 
 `ElpianVmController` provides programmatic access to a running VM from ancestor widgets. Use it with `ElpianVmScope` to call VM functions from outside the widget.
 
@@ -1838,7 +1843,7 @@ class _MyPageState extends State<MyPage> {
 
 ---
 
-## Typed JSON Input Format for Events
+## 📨 Typed JSON Input Format for Events
 
 When passing event data to VM functions via `callFunctionWithInput`, use the typed value format:
 
@@ -1893,7 +1898,7 @@ When passing event data to VM functions via `callFunctionWithInput`, use the typ
 
 ---
 
-## Complete Interactive App Example
+## 🚀 Complete Interactive App Example
 
 A counter app with VM state management and Dart-side event wiring:
 
