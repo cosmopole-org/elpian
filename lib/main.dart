@@ -34,98 +34,99 @@ class ExamplesHomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Elpian Examples Hub')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _ExampleGroup(
-            title: 'Landing & 3D Scenes',
-            children: [
-              _ExampleEntry(
-                title: 'Landing Page (JSON)',
-                subtitle: 'Renders lib/example/landing_page.json',
-                pageBuilder: () => const LandingPage(),
-              ),
-              _ExampleEntry(
-                title: '3D Game Scene',
-                subtitle: 'Large animated fantasy-style scene',
-                pageBuilder: () => const GameSceneExample(),
-              ),
-              _ExampleEntry(
-                title: 'Bevy Scene Widget',
-                subtitle: 'Standalone Bevy 3D scene widget',
-                pageBuilder: () => const BevySceneExample(),
-              ),
-              _ExampleEntry(
-                title: 'Bevy + JSON GUI',
-                subtitle: 'Mixed 2D overlay + 3D scene',
-                pageBuilder: () => BevySceneJsonGuiExample(),
-              ),
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Elpian Examples Hub'),
+          bottom: const TabBar(
+            tabs: [
+              Tab(text: 'Scenes'),
+              Tab(text: 'UI'),
+              Tab(text: 'VM'),
             ],
           ),
-          const SizedBox(height: 12),
-          _ExampleGroup(
-            title: 'Other Existing Examples',
-            children: [
-              _ExampleEntry(
-                title: 'Ordinary Example',
-                subtitle: 'Core JSON/HTML rendering examples',
-                pageBuilder: () => const ElpianDemoPage(),
-              ),
-              _ExampleEntry(
-                title: 'Enhanced Example',
-                subtitle: 'Extended component and animation showcase',
-                pageBuilder: () => const EnhancedDemoPage(),
-              ),
-              _ExampleEntry(
-                title: 'JSON Stylesheet Demo',
-                subtitle: 'Demonstrates stylesheet parser and usage',
-                pageBuilder: () => const StylesheetDemoPage(),
-              ),
-              _ExampleEntry(
-                title: 'Canvas API Demo',
-                subtitle: 'Canvas shapes, paths, gradients, transforms',
-                pageBuilder: () => const CanvasDemoPage(),
-              ),
-              _ExampleEntry(
-                title: 'VM Example',
-                subtitle: 'Sandboxed Rust VM rendering Flutter UI',
-                pageBuilder: () => const VmExamplePage(),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ExampleGroup extends StatelessWidget {
-  const _ExampleGroup({required this.title, required this.children});
-
-  final String title;
-  final List<_ExampleEntry> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        ),
+        body: TabBarView(
           children: [
-            Text(
-              title,
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 8),
-            ...children,
+            _buildTabList(context, _sceneExamples()),
+            _buildTabList(context, _uiExamples()),
+            _buildTabList(context, _vmExamples()),
           ],
         ),
       ),
     );
   }
+
+  Widget _buildTabList(BuildContext context, List<_ExampleEntry> entries) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              children: entries,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  List<_ExampleEntry> _sceneExamples() => [
+        _ExampleEntry(
+          title: 'Landing Page (JSON)',
+          subtitle: 'Renders lib/example/landing_page.json',
+          pageBuilder: () => const LandingPage(),
+        ),
+        _ExampleEntry(
+          title: '3D Game Scene',
+          subtitle: 'Large animated fantasy-style scene',
+          pageBuilder: () => const GameSceneExample(),
+        ),
+        _ExampleEntry(
+          title: 'Bevy Scene Widget',
+          subtitle: 'Standalone Bevy 3D scene widget',
+          pageBuilder: () => const BevySceneExample(),
+        ),
+        _ExampleEntry(
+          title: 'Bevy + JSON GUI',
+          subtitle: 'Mixed 2D overlay + 3D scene',
+          pageBuilder: () => BevySceneJsonGuiExample(),
+        ),
+      ];
+
+  List<_ExampleEntry> _uiExamples() => [
+        _ExampleEntry(
+          title: 'Ordinary Example',
+          subtitle: 'Core JSON/HTML rendering examples',
+          pageBuilder: () => const ElpianDemoPage(),
+        ),
+        _ExampleEntry(
+          title: 'Enhanced Example',
+          subtitle: 'Extended component and animation showcase',
+          pageBuilder: () => const EnhancedDemoPage(),
+        ),
+        _ExampleEntry(
+          title: 'JSON Stylesheet Demo',
+          subtitle: 'Demonstrates stylesheet parser and usage',
+          pageBuilder: () => const StylesheetDemoPage(),
+        ),
+        _ExampleEntry(
+          title: 'Canvas API Demo',
+          subtitle: 'Canvas shapes, paths, gradients, transforms',
+          pageBuilder: () => const CanvasDemoPage(),
+        ),
+      ];
+
+  List<_ExampleEntry> _vmExamples() => [
+        _ExampleEntry(
+          title: 'AST VM Sandboxes',
+          subtitle: 'Interactive VM demos built from AST JSON programs',
+          pageBuilder: () => const VmExamplePage(),
+        ),
+      ];
 }
 
 class _ExampleEntry extends StatelessWidget {

@@ -53,6 +53,14 @@ external JSBoolean _wasmVmExists(JSString machineId);
 /// Web (WASM) implementation of the Elpian VM API.
 /// Same class name as native [ElpianVmApi] so conditional exports work.
 class ElpianVmApi {
+  static String? _lastError;
+
+  static String? get lastError => _lastError;
+
+  static void clearLastError() {
+    _lastError = null;
+  }
+
   static Future<void> initVmSystem() async {
     _wasmInit();
   }
@@ -61,7 +69,12 @@ class ElpianVmApi {
     required String machineId,
     required String astJson,
   }) async {
-    return _wasmCreateVmFromAst(machineId.toJS, astJson.toJS).toDart;
+    clearLastError();
+    final ok = _wasmCreateVmFromAst(machineId.toJS, astJson.toJS).toDart;
+    if (!ok) {
+      _lastError = "WASM createVmFromAst returned false";
+    }
+    return ok;
   }
 
   static Future<bool> createVmFromCode({
@@ -72,7 +85,12 @@ class ElpianVmApi {
   }
 
   static Future<bool> validateAst({required String astJson}) async {
-    return _wasmValidateAst(astJson.toJS).toDart;
+    clearLastError();
+    final ok = _wasmValidateAst(astJson.toJS).toDart;
+    if (!ok) {
+      _lastError = "WASM validateAst returned false";
+    }
+    return ok;
   }
 
   static Future<VmExecResult> executeVm({

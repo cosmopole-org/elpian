@@ -32,6 +32,9 @@ class ElpianVm {
   /// Whether the VM is currently executing.
   bool get isRunning => _isRunning;
 
+  /// Last low-level FRB/FFI error (if any).
+  static String? get lastApiError => ElpianVmApi.lastError;
+
   /// Initialize the VM subsystem. Call once at app startup before
   /// creating any VM instances.
   static Future<void> initialize() async {
