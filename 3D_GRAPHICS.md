@@ -1,28 +1,28 @@
-# Elpian 3D Graphics Reference
+# 🌍 Elpian 3D Graphics Reference
 
 Complete reference for Elpian's 3D scene system. Scenes are defined in JSON and rendered via **Bevy** (Rust/GPU with native FFI or WASM) or the **pure-Dart Canvas renderer** (software fallback). The Dart renderer automatically activates when the Rust library is unavailable.
 
 ---
 
-## Table of Contents
+## 📑 Table of Contents
 
-1. [Scene Structure](#scene-structure)
-2. [Scene Nodes](#scene-nodes)
-3. [Mesh Generators](#mesh-generators)
-4. [Material System](#material-system)
-5. [Lighting](#lighting)
-6. [Camera System](#camera-system)
-7. [Animations](#animations)
-8. [Particle System](#particle-system)
-9. [Physics](#physics)
-10. [Environment](#environment)
-11. [Rendering Pipeline](#rendering-pipeline)
-12. [Widget Integration](#widget-integration)
-13. [Complete Examples](#complete-examples)
+1. [🏗️ Scene Structure](#scene-structure)
+2. [🧱 Scene Nodes](#scene-nodes)
+3. [🔷 Mesh Generators](#mesh-generators)
+4. [🎨 Material System](#material-system)
+5. [💡 Lighting](#lighting)
+6. [📷 Camera System](#camera-system)
+7. [🎬 Animations](#animations)
+8. [🔥 Particle System](#particle-system)
+9. [⚡ Physics](#physics)
+10. [🌅 Environment](#environment)
+11. [🖥️ Rendering Pipeline](#rendering-pipeline)
+12. [🧩 Widget Integration](#widget-integration)
+13. [📦 Complete Examples](#complete-examples)
 
 ---
 
-## Scene Structure
+## 🏗️ Scene Structure
 
 A 3D scene is a JSON object with a `"world"` array containing scene nodes:
 
@@ -48,7 +48,7 @@ Scenes can also include a `"ui"` array for 2D overlay elements (see [2D_GRAPHICS
 
 ---
 
-## Scene Nodes
+## 🧱 Scene Nodes
 
 ### mesh3d
 
@@ -304,7 +304,7 @@ Container node for organizing scene hierarchy.
 
 ---
 
-## Mesh Generators
+## 🔷 Mesh Generators
 
 Built-in geometry primitives available for `mesh3d` nodes.
 
@@ -349,7 +349,7 @@ Built-in geometry primitives available for `mesh3d` nodes.
 
 ---
 
-## Material System
+## 🎨 Material System
 
 PBR (Physically Based Rendering) material properties for mesh3d nodes.
 
@@ -402,7 +402,7 @@ The Dart renderer supports procedural texture generation:
 
 ---
 
-## Lighting
+## 💡 Lighting
 
 The Dart renderer implements Blinn-Phong shading with PBR-inspired material interaction.
 
@@ -430,7 +430,7 @@ The Bevy (Rust/GPU) renderer supports real-time shadows. The Dart renderer does 
 
 ---
 
-## Camera System
+## 📷 Camera System
 
 ### Camera Types
 
@@ -468,7 +468,7 @@ The Bevy (Rust/GPU) renderer supports real-time shadows. The Dart renderer does 
 
 ---
 
-## Animations
+## 🎬 Animations
 
 ### Animation Types
 
@@ -551,7 +551,7 @@ The Dart renderer supports keyframe animation tracks for position, rotation, and
 
 ---
 
-## Particle System
+## 🔥 Particle System
 
 ### Emitter Shapes
 
@@ -604,7 +604,7 @@ Each particle has:
 
 ---
 
-## Physics
+## ⚡ Physics
 
 Basic rigid-body physics simulation in the Dart renderer.
 
@@ -630,9 +630,9 @@ Basic rigid-body physics simulation in the Dart renderer.
 
 ---
 
-## Environment
+## 🌅 Environment
 
-### Sky Rendering
+### 🌤️ Sky Rendering
 
 The Dart renderer supports a two-color gradient sky:
 
@@ -644,7 +644,7 @@ The Dart renderer supports a two-color gradient sky:
 }
 ```
 
-### Fog
+### 🌫️ Fog
 
 | Fog Type | Parameters | Description |
 |----------|-----------|-------------|
@@ -656,7 +656,7 @@ Fog blends fragment colors toward the fog color based on distance from the camer
 
 ---
 
-## Rendering Pipeline
+## 🖥️ Rendering Pipeline
 
 ### Bevy (Rust/GPU)
 
@@ -697,7 +697,7 @@ The Dart renderer includes a complete 3D math library:
 
 ---
 
-## Widget Integration
+## 🧩 Widget Integration
 
 ### BevyScene / Bevy3D / Scene3D
 
@@ -751,7 +751,7 @@ Always uses the pure-Dart Canvas-based renderer.
 
 ---
 
-## Shared Type Definitions
+## 📐 Shared Type Definitions
 
 ### TransformDef
 
@@ -793,7 +793,7 @@ Default: `{ "r": 1.0, "g": 1.0, "b": 1.0, "a": 1.0 }` (white).
 
 ---
 
-## Complete Examples
+## 📦 Complete Examples
 
 ### Outdoor Scene
 
@@ -985,7 +985,7 @@ Default: `{ "r": 1.0, "g": 1.0, "b": 1.0, "a": 1.0 }` (white).
 
 ---
 
-## Element Summary Table
+## 📊 Element Summary Table
 
 | Element | Type Tag | Rendering |
 |---------|----------|-----------|
