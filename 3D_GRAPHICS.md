@@ -50,7 +50,7 @@ Scenes can also include a `"ui"` array for 2D overlay elements (see [2D_GRAPHICS
 
 ## 🧱 Scene Nodes
 
-### mesh3d
+## `mesh3d`
 
 Renderable 3D geometry with materials, transforms, and optional animation.
 
@@ -65,7 +65,8 @@ Renderable 3D geometry with materials, transforms, and optional animation.
 ```json
 {
   "type": "mesh3d",
-  "mesh": "Cube",
+  "id": "hero",
+  "mesh": {"shape": "File", "path": "models/robot.gltf"},
   "material": {
     "base_color": { "r": 0.8, "g": 0.2, "b": 0.1, "a": 1.0 },
     "metallic": 0.5,
@@ -86,9 +87,23 @@ Renderable 3D geometry with materials, transforms, and optional animation.
 
 ---
 
-### light
+## `light`
 
-Illumination source for the scene.
+Light source node.
+
+| Prop | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `type` | `"light"` | Yes | - | Node tag. |
+| `id` | `String?` | No | `null` | Optional id. |
+| `light_type` | `LightType` | Yes | - | `Point`, `Directional`, `Spot` (and parser supports area in core runtime). |
+| `color` | `ColorDef?` | No | renderer default | Light tint. |
+| `intensity` | `f32?` | No | renderer default | Light power/illuminance. |
+| `transform` | `TransformDef` | No | `{}` | Position and direction basis via rotation. |
+| `animation` | `AnimationDef?` | No | `null` | Optional animated light motion. |
+| `range` | `f32?` (parser path) | No | parser default | Distance falloff range. |
+| `inner_cone_angle` | `f32?` (spot/parser) | No | parser default | Spot inner cone. |
+| `outer_cone_angle` | `f32?` (spot/parser) | No | parser default | Spot outer cone. |
+| `cast_shadow` | `bool?` (parser path) | No | `false` | Enable shadow casting. |
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
@@ -115,6 +130,7 @@ Illumination source for the scene.
 ```json
 {
   "type": "light",
+  "id": "sun",
   "light_type": "Directional",
   "color": { "r": 1.0, "g": 0.95, "b": 0.8, "a": 1.0 },
   "intensity": 1.5,
@@ -140,9 +156,24 @@ Illumination source for the scene.
 
 ---
 
-### camera
+## `camera`
 
-Scene viewpoint.
+View/projection node.
+
+| Prop | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `type` | `"camera"` | Yes | - | Node tag. |
+| `id` | `String?` | No | `null` | Optional id. |
+| `camera_type` | `CameraType` | No | `Perspective` | Projection mode. |
+| `transform` | `TransformDef` | No | `{}` | Camera placement/orientation. |
+| `fov` | `f32?` | No | runtime default | Vertical field-of-view (perspective). |
+| `near` | `f32?` | No | runtime default | Near clipping plane. |
+| `far` | `f32?` | No | runtime default | Far clipping plane. |
+| `animation` | `AnimationDef?` | No | `null` | Optional camera animation. |
+| `ortho_size` | `f32?` (parser path) | No | parser default | Orthographic half-size. |
+| `mode` | `String?` (parser path) | No | `fixed` | `fixed`, `orbit`, `first_person`, `follow`, `flythrough`. |
+| `orbit_speed` | `f32?` (parser) | No | parser default | Orbit speed. |
+| `orbit_radius` | `f32?` (parser) | No | parser default | Orbit radius. |
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
@@ -428,7 +459,14 @@ color = ambient + diffuse + specular
 
 The Bevy (Rust/GPU) renderer supports real-time shadows. The Dart renderer does not include shadow mapping.
 
----
+| Prop | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `r` | `f32` | No | `1.0` | Red channel (0..1) |
+| `g` | `f32` | No | `1.0` | Green channel (0..1) |
+| `b` | `f32` | No | `1.0` | Blue channel (0..1) |
+| `a` | `f32` | No | `1.0` | Alpha channel (0..1) |
+
+Example: `{"r": 0.2, "g": 0.6, "b": 1.0, "a": 1.0}`
 
 ## 📷 Camera System
 
@@ -628,7 +666,16 @@ Basic rigid-body physics simulation in the Dart renderer.
 - Ground collision with velocity reflection
 - Basic sphere/box/plane colliders
 
----
+### Example C: Physics puzzle arena (rigid bodies + static geometry)
+
+```json
+{
+  "world": [
+    {"type": "environment", "ambient_intensity": 0.24},
+    {"type": "camera", "camera_type": "Perspective", "transform": {"position": {"x": 0, "y": 14, "z": 28}, "rotation": {"x": -18, "y": 0, "z": 0}}},
+    {"type": "light", "light_type": "Directional", "intensity": 1.1, "transform": {"rotation": {"x": -42, "y": -15, "z": 0}}},
+
+    {"type": "mesh3d", "id": "ground", "mesh": {"shape": "Plane", "size": 80}, "material": {"base_color": {"r": 0.2, "g": 0.2, "b": 0.22, "a": 1}, "roughness": 0.95}},
 
 ## 🌅 Environment
 
@@ -654,7 +701,18 @@ The Dart renderer supports a two-color gradient sky:
 
 Fog blends fragment colors toward the fog color based on distance from the camera.
 
----
+Base schema material keys are supported, plus additional parser/runtime material controls:
+
+| Prop | Type | Description |
+|---|---|---|
+| `emissive_strength` | `double` | Strength multiplier for emissive output |
+| `alpha` | `double` | Explicit alpha fallback when not using `base_color.a` |
+| `alpha_cutoff` | `double` | Alpha threshold for cutoff mode |
+| `wireframe` | `bool` | Draw in wireframe style |
+| `unlit` | `bool` | Skip lighting and render flat/unlit |
+| `texture` | `String` | Procedural texture mode: `none`, `checkerboard`, `gradient`, `noise`, `stripes` |
+| `texture_color2` | `ColorDef` | Secondary color for procedural texture modes |
+| `texture_scale` | `double` | UV texture repetition/scale |
 
 ## 🖥️ Rendering Pipeline
 
@@ -791,7 +849,13 @@ RGBA color with channels from 0.0 to 1.0:
 
 Default: `{ "r": 1.0, "g": 1.0, "b": 1.0, "a": 1.0 }` (white).
 
----
+    {"type": "group", "id": "checkpoints", "children": [
+      {"type": "mesh3d", "id": "cp1", "mesh": {"shape": "Torus", "radius": 4.2, "tube_radius": 0.2}, "transform": {"position": {"x": 90, "y": 10, "z": 40}}, "material": {"base_color": {"r": 0.1, "g": 0.8, "b": 1.0, "a": 1}, "emissive": {"r": 0.05, "g": 0.4, "b": 0.6, "a": 1}}, "animation": {"animation_type": {"type": "Spin", "speed": {"x": 0, "y": 40, "z": 0}}, "duration": 1.0, "looping": true}},
+      {"type": "mesh3d", "id": "cp2", "mesh": {"shape": "Torus", "radius": 4.2, "tube_radius": 0.2}, "transform": {"position": {"x": 210, "y": 14, "z": -35}}, "material": {"base_color": {"r": 1.0, "g": 0.75, "b": 0.2, "a": 1}, "emissive": {"r": 0.5, "g": 0.2, "b": 0.0, "a": 1}}}
+    ]}
+  ]
+}
+```
 
 ## 📦 Complete Examples
 
@@ -983,7 +1047,7 @@ Default: `{ "r": 1.0, "g": 1.0, "b": 1.0, "a": 1.0 }` (white).
 }
 ```
 
----
+### Example G: Action boss arena (projectiles, hazards, debris physics)
 
 ## 📊 Element Summary Table
 

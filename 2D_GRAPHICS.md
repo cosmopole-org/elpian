@@ -54,7 +54,7 @@ Every JSON node follows this format:
 | `class` | String? | CSS class names (space-separated) |
 | `events` | Map? | Event handler mappings |
 
----
+`click`, `doubleClick`, `longPress`, `tap`, `tapDown`, `tapUp`, `tapCancel`, `pointerDown`, `pointerUp`, `pointerMove`, `pointerEnter`, `pointerExit`, `pointerHover`, `pointerCancel`, `dragStart`, `drag`, `dragEnd`, `dragEnter`, `dragLeave`, `dragOver`, `drop`, `focus`, `blur`, `focusIn`, `focusOut`, `input`, `change`, `submit`, `keyDown`, `keyUp`, `keyPress`, `scroll`, `reset`, `select`, `resize`, `load`, `unload`, `touchStart`, `touchMove`, `touchEnd`, `touchCancel`, `swipeLeft`, `swipeRight`, `swipeUp`, `swipeDown`, `pinchStart`, `pinchUpdate`, `pinchEnd`, `scaleStart`, `scaleUpdate`, `scaleEnd`, `rotateStart`, `rotateUpdate`, `rotateEnd`, `custom`
 
 ## 🧩 Flutter DSL Widgets
 
@@ -517,7 +517,10 @@ Elevated content container.
 | `ClipRRect` | CSS `borderRadius` (default: 8.0) | Clips child with rounded corners |
 | `DecoratedBox` | CSS `backgroundColor`, `gradient`, `border`, `boxShadow` | Decorative wrapper |
 
----
+- Builder: `ElpianCard.build`
+- Source: `lib/src/widgets/elpian_card.dart`
+- Widget-specific props used in implementation: `elevation`
+- Standard fields: `type`, `key`, `props`, `props.style`, `events`, `children`.
 
 ### ✏️ Canvas Widget
 
@@ -799,7 +802,7 @@ All headings default to **bold** weight and accept `text`, `color`, `fontSize`, 
 | `br` | Line break (16px vertical space) |
 | `hr` | Horizontal rule (Divider) |
 
----
+### `GestureDetector`
 
 ### Remaining HTML Elements
 
@@ -1110,7 +1113,19 @@ easeInCirc, easeOutCirc, easeInOutCirc,
 easeInBack, easeOutBack, easeInOutBack
 ```
 
----
+- Builder: `ElpianClipRRect.build`
+- Source: `lib/src/widgets/elpian_clip_rrect.dart`
+- Widget-specific props used in implementation: none (uses generic children/style behavior).
+- Standard fields: `type`, `key`, `props`, `props.style`, `events`, `children`.
+
+| Prop | Type | Required | Notes |
+|---|---|---|---|
+| `type` | `String` | Yes | Must be exactly `ClipRRect`. |
+| `key` | `String?` | No | Strongly recommended for event targeting. |
+| `props` | `Map<String,dynamic>?` | No | Optional; may include style. |
+| `props.style` | `Map<String,dynamic>?` | No | Any CSS properties from section 4. |
+| `events` | `Map<String,String>?` | No | Event key -> VM function name. |
+| `children` | `List<Node>?` | No | Child nodes, if the widget accepts children. |
 
 ## 📦 Complete Examples
 
@@ -1130,6 +1145,10 @@ easeInBack, easeOutBack, easeInOutBack
       "type": "Row",
       "style": { "gap": "16", "flexWrap": "wrap", "justifyContent": "center" },
       "children": [
+        {"type": "Text", "props": {"text": "Create your account", "style": {"fontSize": 28, "fontWeight": "700"}}},
+        {"type": "Text", "props": {"text": "Step 2 of 3 · Profile details", "style": {"color": "#667085"}}},
+        {"type": "LinearProgressIndicator", "props": {"value": 0.66}},
+
         {
           "type": "Card",
           "props": { "elevation": 2 },
@@ -1140,6 +1159,33 @@ easeInBack, easeOutBack, easeInOutBack
             { "type": "Text", "props": { "data": "1,234" }, "style": { "fontSize": "24", "fontWeight": "bold" } }
           ]
         },
+
+        {
+          "type": "Row",
+          "props": {"style": {"justifyContent": "spaceBetween", "margin": "8 0 0 0"}},
+          "children": [
+            {"type": "Button", "props": {"text": "Back"}, "events": {"click": "onBackStep"}},
+            {"type": "Button", "props": {"text": "Continue", "style": {"backgroundColor": "#2563EB", "color": "#FFFFFF"}}, "events": {"click": "onContinueStep"}}
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Example B: Analytics dashboard (cards + list + filter chips + chart host)
+
+```json
+{
+  "type": "Scaffold",
+  "key": "analytics-dashboard",
+  "props": {"style": {"backgroundColor": "#0B1020", "padding": "16", "color": "#E6EAF2"}},
+  "children": [
+    {
+      "type": "Column",
+      "props": {"style": {"gap": 12}},
+      "children": [
         {
           "type": "Card",
           "props": { "elevation": 2 },
@@ -1237,6 +1283,86 @@ easeInBack, easeOutBack, easeInOutBack
             "width": "1000"
           }
         }
+      ]
+    },
+
+    {
+      "type": "Column",
+      "props": {"style": {"flex": 3, "gap": 10, "padding": "4 8"}},
+      "children": [
+        {"type": "Text", "props": {"text": "Velocity X Running Shoes", "style": {"fontSize": 26, "fontWeight": "700"}}},
+        {"type": "Row", "children": [{"type": "Rating", "props": {"value": 4.7}}, {"type": "Text", "props": {"text": "(1,284 reviews)"}}]},
+        {"type": "Text", "props": {"text": "$129.00", "style": {"fontSize": 22, "fontWeight": "700", "color": "#0F766E"}}},
+
+        {"type": "Text", "props": {"text": "Color"}},
+        {"type": "Row", "props": {"style": {"gap": 6}}, "children": [
+          {"type": "Chip", "props": {"label": "Black"}, "events": {"click": "onColorBlack"}},
+          {"type": "Chip", "props": {"label": "Blue"}, "events": {"click": "onColorBlue"}},
+          {"type": "Chip", "props": {"label": "White"}, "events": {"click": "onColorWhite"}}
+        ]},
+
+        {"type": "Text", "props": {"text": "Size"}},
+        {"type": "Wrap", "props": {"style": {"gap": 6}}, "children": [
+          {"type": "Button", "props": {"text": "7"}, "events": {"click": "onSize7"}},
+          {"type": "Button", "props": {"text": "8"}, "events": {"click": "onSize8"}},
+          {"type": "Button", "props": {"text": "9"}, "events": {"click": "onSize9"}},
+          {"type": "Button", "props": {"text": "10"}, "events": {"click": "onSize10"}}
+        ]},
+
+        {"type": "Row", "props": {"style": {"gap": 8, "margin": "10 0 0 0"}}, "children": [
+          {"type": "Button", "props": {"text": "Add to Cart", "style": {"backgroundColor": "#2563EB", "color": "#FFFFFF"}}, "events": {"click": "onAddToCart"}},
+          {"type": "Button", "props": {"text": "Buy Now"}, "events": {"click": "onBuyNow"}},
+          {"type": "Icon", "props": {"icon": "favorite_border"}, "events": {"click": "onWishlistToggle"}}
+        ]}
+      ]
+    }
+  ]
+}
+```
+
+### Example D: Team chat workspace (sidebar, channel list, messages, composer)
+
+```json
+{
+  "type": "Row",
+  "key": "chat-workspace",
+  "props": {"style": {"height": "100%", "backgroundColor": "#0F172A"}},
+  "children": [
+    {
+      "type": "Column",
+      "props": {"style": {"width": 260, "backgroundColor": "#111827", "padding": "12", "gap": 8}},
+      "children": [
+        {"type": "Text", "props": {"text": "Acme Team", "style": {"fontSize": 20, "fontWeight": "700", "color": "#F8FAFC"}}},
+        {"type": "TextField", "props": {"hintText": "Search channels"}, "events": {"input": "onSearchChannels"}},
+        {"type": "ListView", "props": {"style": {"gap": 4}}, "children": [
+          {"type": "Button", "props": {"text": "# general"}, "events": {"click": "onOpenGeneral"}},
+          {"type": "Button", "props": {"text": "# product"}, "events": {"click": "onOpenProduct"}},
+          {"type": "Button", "props": {"text": "# design"}, "events": {"click": "onOpenDesign"}}
+        ]}
+      ]
+    },
+
+    {
+      "type": "Column",
+      "props": {"style": {"flex": 1, "padding": "14", "gap": 10, "backgroundColor": "#0B1220"}},
+      "children": [
+        {"type": "Row", "props": {"style": {"justifyContent": "spaceBetween"}}, "children": [
+          {"type": "Text", "props": {"text": "# general", "style": {"fontSize": 20, "fontWeight": "600", "color": "#F8FAFC"}}},
+          {"type": "Row", "children": [
+            {"type": "Icon", "props": {"icon": "call"}, "events": {"click": "onStartCall"}},
+            {"type": "Icon", "props": {"icon": "more_vert"}, "events": {"click": "onChannelMenu"}}
+          ]}
+        ]},
+
+        {"type": "ListView", "key": "message-list", "props": {"style": {"flex": 1, "gap": 8}}, "children": [
+          {"type": "Card", "props": {"style": {"padding": "8", "backgroundColor": "#1E293B"}}, "children": [{"type": "Text", "props": {"text": "@maria: Shipping the hotfix now.", "style": {"color": "#E2E8F0"}}}]},
+          {"type": "Card", "props": {"style": {"padding": "8", "backgroundColor": "#1E293B"}}, "children": [{"type": "Text", "props": {"text": "@liam: QA report uploaded.", "style": {"color": "#E2E8F0"}}}]}
+        ]},
+
+        {"type": "Row", "props": {"style": {"gap": 8}}, "children": [
+          {"type": "TextField", "key": "composer", "props": {"hintText": "Message #general", "style": {"flex": 1, "backgroundColor": "#1E293B", "padding": "8"}}, "events": {"input": "onComposerInput", "keyDown": "onComposerKeyDown"}},
+          {"type": "Button", "props": {"text": "Send"}, "events": {"click": "onSendMessage"}}
+        ]}
       ]
     }
   ]
