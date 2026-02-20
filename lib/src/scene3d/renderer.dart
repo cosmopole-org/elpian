@@ -3,6 +3,7 @@
 /// Takes a parsed scene (list of SceneNode, Camera3D, Environment3D, lights)
 /// and renders it to a Flutter Canvas using the painter's algorithm with
 /// per-vertex PBR-inspired lighting.
+library;
 
 import 'dart:math' as math;
 import 'dart:ui' as ui;

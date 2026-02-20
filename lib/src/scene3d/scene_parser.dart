@@ -2,6 +2,7 @@
 ///
 /// Supports the same JSON format used by the Bevy renderer, plus extended
 /// features (particles, physics, multiple animations, procedural textures).
+library;
 
 import 'dart:math' as math;
 import 'core.dart';

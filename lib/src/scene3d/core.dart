@@ -1,5 +1,6 @@
 /// Core 3D engine: math, meshes, materials, lights, camera, animation,
 /// particles, physics, GLTF, scene graph nodes.
+library;
 
 import 'dart:math' as math;
 import 'dart:typed_data';

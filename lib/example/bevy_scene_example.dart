@@ -5,6 +5,7 @@
 /// 2. Define scenes using JSON (compatible with the Bevy renderer schema)
 /// 3. Combine 2D UI overlays with 3D scene rendering
 /// 4. Use the ElpianEngine to render mixed 2D/3D interfaces from JSON
+library;
 
 import 'dart:convert';
 import 'package:flutter/material.dart';

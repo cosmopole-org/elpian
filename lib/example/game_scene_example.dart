@@ -2,6 +2,7 @@
 ///
 /// Demonstrates: multiple mesh types, animations, materials with textures,
 /// particle systems, orbit camera, sky gradient, fog, groups, and physics.
+library;
 
 import 'package:flutter/material.dart';
 import 'package:elpian_ui/src/scene3d/game_scene_widget.dart';
