@@ -1,42 +1,66 @@
-# Elpian 3D Graphics Reference (Complete Schema + Examples)
+# 🌍 Elpian 3D Graphics Reference
 
-This file is a full 3D DSL reference with:
-
-- full prop schema for each 3D world element,
-- shared type schemas (`mesh`, `material`, `transform`, `animation`, `physics`, vectors/colors),
-- per-element practical examples,
-- feature-rich real-world scene examples at the end.
-
-> Scene contract:
-
-```json
-{
-  "ui": [],
-  "world": []
-}
-```
-
-`world` is a list of 3D nodes.
+Complete reference for Elpian's 3D scene system. Scenes are defined in JSON and rendered via **Bevy** (Rust/GPU with native FFI or WASM) or the **pure-Dart Canvas renderer** (software fallback). The Dart renderer automatically activates when the Rust library is unavailable.
 
 ---
 
-## 1) 3D world elements (full props schema)
+## 📑 Table of Contents
+
+1. [🏗️ Scene Structure](#scene-structure)
+2. [🧱 Scene Nodes](#scene-nodes)
+3. [🔷 Mesh Generators](#mesh-generators)
+4. [🎨 Material System](#material-system)
+5. [💡 Lighting](#lighting)
+6. [📷 Camera System](#camera-system)
+7. [🎬 Animations](#animations)
+8. [🔥 Particle System](#particle-system)
+9. [⚡ Physics](#physics)
+10. [🌅 Environment](#environment)
+11. [🖥️ Rendering Pipeline](#rendering-pipeline)
+12. [🧩 Widget Integration](#widget-integration)
+13. [📦 Complete Examples](#complete-examples)
+
+---
+
+## 🏗️ Scene Structure
+
+A 3D scene is a JSON object with a `"world"` array containing scene nodes:
+
+```json
+{
+  "world": [
+    { "type": "environment", ... },
+    { "type": "camera", ... },
+    { "type": "light", ... },
+    { "type": "mesh3d", ... }
+  ]
+}
+```
+
+Scenes can also include a `"ui"` array for 2D overlay elements (see [2D_GRAPHICS.md](2D_GRAPHICS.md)):
+
+```json
+{
+  "ui": [ /* 2D elements */ ],
+  "world": [ /* 3D elements */ ]
+}
+```
+
+---
+
+## 🧱 Scene Nodes
 
 ## `mesh3d`
 
-Renderable geometry node. Can include children for hierarchical transforms.
+Renderable 3D geometry with materials, transforms, and optional animation.
 
-| Prop | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `type` | `"mesh3d"` | Yes | - | Node tag. |
-| `id` | `String?` | No | `null` | Optional id for selection/debugging. |
-| `mesh` | `MeshType` | Yes | - | Primitive or file mesh. |
-| `material` | `MaterialDef` | No | `{}` | Surface/PBR settings. |
-| `transform` | `TransformDef` | No | `{}` | Position/rotation/scale. |
-| `animation` | `AnimationDef?` or list (parser path) | No | `null` | Runtime animation. |
-| `children` | `List<Node>` | No | `[]` | Child nodes inheriting parent transform. |
-
-Example:
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `id` | String? | null | Node identifier |
+| `mesh` | MeshType | *required* | Geometry primitive |
+| `material` | MaterialDef | {} | PBR material properties |
+| `transform` | TransformDef | {} | Position, rotation, scale |
+| `animation` | AnimationDef? | null | Animation definition |
 
 ```json
 {
@@ -44,18 +68,17 @@ Example:
   "id": "hero",
   "mesh": {"shape": "File", "path": "models/robot.gltf"},
   "material": {
-    "base_color": {"r": 0.95, "g": 0.95, "b": 1.0, "a": 1.0},
-    "metallic": 0.6,
-    "roughness": 0.25
+    "base_color": { "r": 0.8, "g": 0.2, "b": 0.1, "a": 1.0 },
+    "metallic": 0.5,
+    "roughness": 0.3
   },
   "transform": {
-    "position": {"x": 0, "y": 0.8, "z": 0},
-    "rotation": {"x": 0, "y": 180, "z": 0},
-    "scale": {"x": 1, "y": 1, "z": 1}
+    "position": { "x": 0, "y": 2, "z": 0 },
+    "scale": { "x": 2, "y": 2, "z": 2 }
   },
   "animation": {
-    "animation_type": {"type": "Rotate", "axis": {"x": 0, "y": 1, "z": 0}, "degrees": 360},
-    "duration": 8.0,
+    "animation_type": { "type": "Rotate", "axis": { "x": 0, "y": 1, "z": 0 }, "degrees": 360 },
+    "duration": 4.0,
     "looping": true,
     "easing": "Linear"
   }
@@ -82,17 +105,51 @@ Light source node.
 | `outer_cone_angle` | `f32?` (spot/parser) | No | parser default | Spot outer cone. |
 | `cast_shadow` | `bool?` (parser path) | No | `false` | Enable shadow casting. |
 
-Example:
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `id` | String? | null | Node identifier |
+| `light_type` | String | *required* | `Point`, `Directional`, `Spot`, or `Area` |
+| `color` | ColorDef | white | Light color |
+| `intensity` | float | 1.0 | Brightness multiplier |
+| `range` | float | null | Attenuation distance (Point/Spot) |
+| `inner_cone_angle` | float | null | Inner spotlight angle |
+| `outer_cone_angle` | float | null | Outer spotlight angle |
+| `cast_shadow` | bool | false | Enable shadow casting |
+| `transform` | TransformDef | {} | Position and direction |
+| `animation` | AnimationDef? | null | Animation definition |
+
+**Light Types:**
+
+| Type | Behavior | Key Parameters |
+|------|----------|---------------|
+| `Directional` | Parallel rays (sun/moon) | `intensity`, `direction` (rotation) |
+| `Point` | Omnidirectional from a point | `intensity`, `range`, position |
+| `Spot` | Cone-shaped beam | `intensity`, `range`, `inner_cone_angle`, `outer_cone_angle` |
+| `Area` | Area light source | `intensity`, position |
 
 ```json
 {
   "type": "light",
   "id": "sun",
   "light_type": "Directional",
-  "color": {"r": 1.0, "g": 0.97, "b": 0.92, "a": 1.0},
-  "intensity": 1.2,
+  "color": { "r": 1.0, "g": 0.95, "b": 0.8, "a": 1.0 },
+  "intensity": 1.5,
+  "cast_shadow": true,
   "transform": {
-    "rotation": {"x": -40, "y": 25, "z": 0}
+    "rotation": { "x": -45, "y": 30, "z": 0 }
+  }
+}
+```
+
+```json
+{
+  "type": "light",
+  "light_type": "Point",
+  "color": { "r": 1.0, "g": 0.6, "b": 0.2, "a": 1.0 },
+  "intensity": 500.0,
+  "range": 20.0,
+  "transform": {
+    "position": { "x": -3, "y": 4, "z": 0 }
   }
 }
 ```
@@ -118,300 +175,289 @@ View/projection node.
 | `orbit_speed` | `f32?` (parser) | No | parser default | Orbit speed. |
 | `orbit_radius` | `f32?` (parser) | No | parser default | Orbit radius. |
 
-Example:
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `id` | String? | null | Node identifier |
+| `camera_type` | String | 'Perspective' | `Perspective` or `Orthographic` |
+| `mode` | String | 'Fixed' | Camera behavior mode |
+| `fov` | float | null | Field of view (degrees) |
+| `near` | float | null | Near clipping plane |
+| `far` | float | null | Far clipping plane |
+| `ortho_size` | float | null | Orthographic view size |
+| `orbit_speed` | float | null | Orbit rotation speed |
+| `follow_offset` | Vec3Def? | null | Follow mode offset |
+| `shake_amount` | float | null | Camera shake intensity |
+| `shake_decay` | float | null | Camera shake decay rate |
+| `transform` | TransformDef | {} | Camera position and orientation |
+| `animation` | AnimationDef? | null | Animation definition |
+
+**Camera Modes:**
+
+| Mode | Description |
+|------|-------------|
+| `Fixed` | Stationary camera |
+| `Orbit` | Orbits around target with adjustable speed/radius |
+| `FirstPerson` | First-person view |
+| `Follow` | Follows target with offset |
+| `Flythrough` | Flying camera |
 
 ```json
 {
   "type": "camera",
   "camera_type": "Perspective",
-  "transform": {
-    "position": {"x": 0, "y": 6, "z": 14},
-    "rotation": {"x": -18, "y": 0, "z": 0}
-  },
+  "mode": "Orbit",
   "fov": 60,
-  "near": 0.1,
-  "far": 1500
+  "orbit_speed": 0.5,
+  "transform": {
+    "position": { "x": 0, "y": 5, "z": 10 },
+    "rotation": { "x": -20, "y": 0, "z": 0 }
+  }
 }
 ```
 
 ---
 
-## `particles`
+### particles
 
-Particle emitter node.
+Particle system emitter with configurable shapes and behaviors.
 
-| Prop | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `type` | `"particles"` | Yes | - | Node tag. |
-| `id` | `String?` | No | `null` | Optional id. |
-| `transform` | `TransformDef` | No | `{}` | Emitter transform. |
-| `emission_rate` | `f32` | No | `10.0` | Particles per second. |
-| `lifetime` | `f32` | No | `1.0` | Particle lifetime. |
-| `color` | `ColorDef` | No | white | Particle color. |
-| `size` | `f32` | No | `0.1` | Particle size scalar. |
-| `velocity` | `Vec3Def` | No | `{x:0,y:0,z:0}` | Initial velocity. |
-| `gravity` | `Vec3Def` | No | `{x:0,y:-9.8,z:0}` | Gravity acceleration. |
-| `emitter` | parser-specific object | No | parser default | Optional advanced emitter config in parser path. |
-
-Example:
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `id` | String? | null | Node identifier |
+| `emitter_shape` | String | 'Point' | `Point`, `Sphere`, `Cone`, `Box`, `Ring` |
+| `emission_rate` | float | 10.0 | Particles per second |
+| `lifetime` | float | 1.0 | Particle lifespan (seconds) |
+| `start_color` | ColorDef | white | Initial particle color |
+| `end_color` | ColorDef? | null | Final particle color |
+| `start_size` | float | 0.1 | Initial particle size |
+| `end_size` | float? | null | Final particle size |
+| `start_alpha` | float | 1.0 | Initial opacity |
+| `end_alpha` | float? | null | Final opacity |
+| `speed` | float | 1.0 | Initial particle speed |
+| `speed_variance` | float | 0.0 | Speed randomization |
+| `spread` | float | 0.0 | Emission angle spread |
+| `gravity` | Vec3Def | {0, -9.8, 0} | Gravity vector |
+| `wind` | Vec3Def? | null | Wind force |
+| `max_particles` | int | 100 | Maximum particle count |
+| `world_space` | bool | false | Emit in world space |
+| `blend_mode` | String | 'normal' | `normal` or `additive` |
+| `burst_count` | int | 0 | Particles per burst |
+| `prewarm` | bool | false | Initialize with aged particles |
+| `transform` | TransformDef | {} | Emitter position |
 
 ```json
 {
   "type": "particles",
-  "id": "smoke",
-  "transform": {"position": {"x": 2, "y": 0.2, "z": -1}},
-  "emission_rate": 35,
-  "lifetime": 2.4,
-  "size": 0.16,
-  "color": {"r": 0.8, "g": 0.82, "b": 0.86, "a": 0.9},
-  "velocity": {"x": 0.0, "y": 1.7, "z": 0.1},
-  "gravity": {"x": 0.0, "y": -0.5, "z": 0.0}
+  "emitter_shape": "Cone",
+  "emission_rate": 50.0,
+  "lifetime": 3.0,
+  "start_color": { "r": 1.0, "g": 0.8, "b": 0.0, "a": 1.0 },
+  "end_color": { "r": 1.0, "g": 0.0, "b": 0.0, "a": 0.0 },
+  "start_size": 0.15,
+  "end_size": 0.05,
+  "speed": 4.0,
+  "spread": 0.5,
+  "gravity": { "x": 0, "y": -2, "z": 0 },
+  "max_particles": 200,
+  "transform": { "position": { "x": 0, "y": 0, "z": 0 } }
 }
 ```
 
 ---
 
-## `environment`
+### environment
 
-Global environment settings.
+Global scene environment settings.
 
-| Prop | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `type` | `"environment"` | Yes | - | Node tag. |
-| `id` | `String?` | No | `null` | Optional id. |
-| `ambient_light` | `ColorDef?` | No | runtime default | Ambient color. |
-| `ambient_intensity` | `f32` | No | `0.8` (schema) / parser default varies | Ambient strength. |
-| `fog_enabled` | `bool` | No | `false` | Enable fog. |
-| `fog_color` | `ColorDef?` | No | runtime default | Fog color. |
-| `fog_distance` | `f32` | No | `100.0` | Fog far distance / fog end. |
-| `fog_type` | parser enum | No | `none` | Parser path fog model (`none`, `linear`, `exponential`). |
-| `fog_near` | `f32?` parser | No | parser default | Fog start distance. |
-| `fog_density` | `f32?` parser | No | parser default | Exponential fog density. |
-| `gravity` | `Vec3Def?` parser | No | parser default | Global gravity vector. |
-| `sky_color_top` | `Vec3Def?/ColorDef?` parser | No | parser default | Sky gradient top. |
-| `sky_color_bottom` | `Vec3Def?/ColorDef?` parser | No | parser default | Sky gradient bottom. |
-
-Example:
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `ambient_color` | ColorDef | white | Ambient light color |
+| `ambient_intensity` | float | 0.3 | Ambient light strength |
+| `sky_color_top` | ColorDef? | null | Zenith sky color |
+| `sky_color_bottom` | ColorDef? | null | Horizon sky color |
+| `fog_type` | String | 'none' | `none`, `linear`, `exponential` |
+| `fog_color` | ColorDef? | null | Fog color |
+| `fog_near` | float | null | Linear fog start distance |
+| `fog_far` | float | null | Linear fog end distance |
+| `fog_density` | float | null | Exponential fog density |
+| `gravity` | Vec3Def | {0, -9.8, 0} | World gravity vector |
 
 ```json
 {
   "type": "environment",
-  "ambient_light": {"r": 0.42, "g": 0.44, "b": 0.5, "a": 1.0},
-  "ambient_intensity": 0.28,
-  "fog_enabled": true,
-  "fog_color": {"r": 0.74, "g": 0.78, "b": 0.86, "a": 1.0},
-  "fog_distance": 180,
+  "ambient_color": { "r": 0.3, "g": 0.3, "b": 0.4, "a": 1.0 },
+  "ambient_intensity": 0.4,
+  "sky_color_top": { "r": 0.1, "g": 0.15, "b": 0.4, "a": 1.0 },
+  "sky_color_bottom": { "r": 0.5, "g": 0.6, "b": 0.8, "a": 1.0 },
   "fog_type": "linear",
-  "fog_near": 25,
-  "fog_density": 0.015
+  "fog_color": { "r": 0.7, "g": 0.7, "b": 0.8, "a": 1.0 },
+  "fog_near": 50.0,
+  "fog_far": 200.0
 }
 ```
 
 ---
 
-## `group`
+### group
 
-Grouping node for transform hierarchy.
+Container node for organizing scene hierarchy.
 
-| Prop | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `type` | `"group"` | Yes | - | Node tag. |
-| `id` | `String?` | No | `null` | Optional id. |
-| `transform` | `TransformDef` | No | `{}` | Parent transform. |
-| `children` | `List<Node>` | No | `[]` | Child world nodes. |
-
-Example:
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `id` | String? | null | Node identifier |
+| `children` | SceneNode[] | [] | Child nodes |
+| `transform` | TransformDef | {} | Group transform (applied to children) |
+| `visible` | bool | true | Group visibility |
 
 ```json
 {
   "type": "group",
-  "id": "windmill",
-  "transform": {"position": {"x": 0, "y": 0, "z": 0}},
+  "transform": { "position": { "x": 5, "y": 0, "z": 0 } },
   "children": [
-    {"type": "mesh3d", "id": "tower", "mesh": {"shape": "Cylinder", "radius": 0.6, "height": 6}},
-    {"type": "mesh3d", "id": "blades", "mesh": "Cube", "transform": {"position": {"x": 0, "y": 3, "z": 0}}, "animation": {"animation_type": {"type": "Rotate", "axis": {"x": 0, "y": 0, "z": 1}, "degrees": 360}, "duration": 2.2, "looping": true}}
+    { "type": "mesh3d", "mesh": "Cube", ... },
+    { "type": "mesh3d", "mesh": { "Sphere": { "radius": 0.5, "subdivisions": 16 } }, ... }
   ]
 }
 ```
 
 ---
 
-## `terrain` (schema path)
+### text3d
 
-Height-based terrain mesh.
+3D text rendering.
 
-| Prop | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `type` | `"terrain"` | Yes | - | Node tag. |
-| `id` | `String?` | No | `null` | Optional id. |
-| `size` | `f32` | No | `100.0` | Terrain width/length. |
-| `height` | `f32` | No | `0.0` | Height amplitude. |
-| `subdivisions` | `u32` | No | `0` | Resolution. |
-| `heightmap` | `String?` | No | `null` | Heightmap texture path. |
-| `material` | `MaterialDef` | No | `{}` | Terrain material. |
-| `transform` | `TransformDef` | No | `{}` | Placement transform. |
-| `physics` | `PhysicsDef?` (portable extension) | No | `null` | Optional collision/physics. |
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `id` | String? | null | Node identifier |
+| `text` | String | *required* | Text content |
+| `transform` | TransformDef | {} | Text position |
+| `material` | MaterialDef | {} | Text material |
 
-Example:
+---
+
+## 🔷 Mesh Generators
+
+Built-in geometry primitives available for `mesh3d` nodes.
+
+### Primitive Meshes
+
+| Mesh | JSON | Parameters | Description |
+|------|------|-----------|-------------|
+| Cube | `"Cube"` | none | Unit cube |
+| Sphere | `{"Sphere": {...}}` | `radius`, `subdivisions` | UV sphere |
+| IcoSphere | `{"IcoSphere": {...}}` | `radius`, `subdivisions` | Icosphere |
+| Plane | `{"Plane": {...}}` | `size`, `subdivisions` | Flat plane |
+| Cylinder | `{"Cylinder": {...}}` | `radius`, `height`, `segments` | Cylinder |
+| Cone | `{"Cone": {...}}` | `radius`, `height`, `segments` | Cone |
+| Torus | `{"Torus": {...}}` | `radius`, `tube_radius`, `segments` | Donut shape |
+| Capsule | `{"Capsule": {...}}` | `radius`, `depth` | Spherocylinder |
+| Pyramid | `{"Pyramid": {...}}` | `base`, `height` | 4-sided pyramid |
+| Wedge | `{"Wedge": {...}}` | parameters | Wedge/ramp shape |
+| Heightmap | `{"Heightmap": {...}}` | `heights` (array), `width`, `depth` | Height field mesh |
+| Billboard | `{"Billboard": {...}}` | `width`, `height` | Camera-facing quad |
+
+### Examples
 
 ```json
-{
-  "type": "terrain",
-  "id": "island",
-  "size": 240,
-  "height": 38,
-  "subdivisions": 128,
-  "heightmap": "textures/island_height.png",
-  "material": {
-    "base_color_texture": "textures/terrain_albedo.png",
-    "normal_map_texture": "textures/terrain_normal.png",
-    "roughness": 0.9
-  }
-}
+"Cube"
+```
+
+```json
+{ "Sphere": { "radius": 2.0, "subdivisions": 32 } }
+```
+
+```json
+{ "Torus": { "radius": 3.0, "tube_radius": 0.5 } }
+```
+
+```json
+{ "Capsule": { "radius": 0.5, "depth": 2.0 } }
+```
+
+```json
+{ "Cylinder": { "radius": 1.0, "height": 3.0, "segments": 24 } }
 ```
 
 ---
 
-## `skybox` (schema path)
+## 🎨 Material System
 
-Background/cubemap sky.
+PBR (Physically Based Rendering) material properties for mesh3d nodes.
 
-| Prop | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `type` | `"skybox"` | Yes | - | Node tag. |
-| `id` | `String?` | No | `null` | Optional id. |
-| `texture_path` | `String?` | No | `null` | Cubemap/sky texture. |
-| `color` | `ColorDef?` | No | `null` | Color fallback/tint. |
-| `rotation` | `Vec3Def?` | No | `null` | Sky rotation in degrees. |
-| `brightness` | `f32` | No | `1.0` | Intensity multiplier. |
+### Properties
 
-Example:
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `base_color` | ColorDef | white | Albedo/diffuse color |
+| `metallic` | float | 0.0 | Metallic factor (0.0–1.0) |
+| `roughness` | float | 0.5 | Surface roughness (0.0–1.0) |
+| `emissive` | ColorDef? | null | Self-illumination color |
+| `emissive_strength` | float | 1.0 | Emissive intensity multiplier |
+| `alpha` | float | 1.0 | Transparency (0.0–1.0) |
+| `alpha_mode` | String | 'opaque' | `opaque`, `blend`, `cutoff` |
+| `alpha_cutoff` | float | 0.5 | Cutoff threshold |
+| `double_sided` | bool | false | Render both faces |
+| `wireframe` | bool | false | Wireframe rendering |
+| `unlit` | bool | false | Ignore lighting |
 
-```json
-{
-  "type": "skybox",
-  "texture_path": "textures/sunset_sky.hdr",
-  "rotation": {"x": 0, "y": 35, "z": 0},
-  "brightness": 1.15
-}
-```
+### Procedural Textures
 
----
+The Dart renderer supports procedural texture generation:
 
-## `water` (schema path)
-
-Water plane with wave controls.
-
-| Prop | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `type` | `"water"` | Yes | - | Node tag. |
-| `id` | `String?` | No | `null` | Optional id. |
-| `size` | `Vec3Def` | No | `{0,0,0}` | Plane dimensions. |
-| `transform` | `TransformDef` | No | `{}` | Placement transform. |
-| `wave_amplitude` | `f32` | No | `0.5` | Wave height. |
-| `wave_frequency` | `f32` | No | `1.0` | Wave speed/frequency. |
-| `water_color` | `ColorDef?` | No | renderer default | Water tint. |
-| `transparency` | `f32` | No | `0.7` | Alpha/transparency. |
-
-Example:
+| Texture Type | Parameters | Description |
+|-------------|-----------|-------------|
+| `checkerboard` | `texture_color2`, `texture_scale` | Alternating color grid |
+| `gradient` | `texture_color2` | UV-based color gradient |
+| `noise` | `texture_color2`, `texture_scale` | Perlin-like noise pattern |
+| `stripes` | `texture_color2`, `texture_scale` | Horizontal stripe pattern |
+| `none` | — | Solid color (default) |
 
 ```json
 {
-  "type": "water",
-  "id": "lake",
-  "size": {"x": 180, "y": 0, "z": 120},
-  "transform": {"position": {"x": 0, "y": -2, "z": 0}},
-  "wave_amplitude": 0.22,
-  "wave_frequency": 1.8,
-  "water_color": {"r": 0.1, "g": 0.42, "b": 0.72, "a": 1.0},
-  "transparency": 0.58
+  "base_color": { "r": 0.8, "g": 0.2, "b": 0.1, "a": 1.0 },
+  "metallic": 0.7,
+  "roughness": 0.3,
+  "emissive": { "r": 0.1, "g": 0.0, "b": 0.0, "a": 1.0 },
+  "alpha_mode": "opaque",
+  "double_sided": false
 }
 ```
 
+### Alpha Modes
+
+| Mode | Description | Use Case |
+|------|-------------|----------|
+| `opaque` | Fully opaque | Solid objects |
+| `cutoff` | Binary transparency (opaque or invisible) | Leaves, fences, cutouts |
+| `blend` | Per-pixel alpha blending | Glass, smoke, water |
+
 ---
 
-## `rigidbody` (schema path)
+## 💡 Lighting
 
-Physics-enabled body with mesh.
+The Dart renderer implements Blinn-Phong shading with PBR-inspired material interaction.
 
-| Prop | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `type` | `"rigidbody"` | Yes | - | Node tag. |
-| `id` | `String?` | No | `null` | Optional id. |
-| `mesh` | `MeshType` | Yes | - | Collision/render mesh source. |
-| `material` | `MaterialDef` | No | `{}` | Surface material. |
-| `transform` | `TransformDef` | No | `{}` | Initial transform. |
-| `physics` | `PhysicsDef` | No | defaults | Physics parameters. |
+### Lighting Model
 
-Example:
+For each vertex, lighting is computed as:
 
-```json
-{
-  "type": "rigidbody",
-  "id": "crate-01",
-  "mesh": {"shape": "Cube"},
-  "material": {
-    "base_color_texture": "textures/metal_crate_albedo.png",
-    "normal_map_texture": "textures/metal_crate_normal.png",
-    "roughness": 0.65
-  },
-  "transform": {"position": {"x": 0, "y": 8, "z": -2}},
-  "physics": {
-    "mass": 4.0,
-    "friction": 0.45,
-    "restitution": 0.15,
-    "gravity_scale": 1.0,
-    "use_gravity": true,
-    "collider_type": "Box"
-  }
-}
+```
+color = ambient + diffuse + specular
 ```
 
----
+- **Ambient**: `ambient_color * ambient_intensity * base_color`
+- **Diffuse**: `light_color * intensity * max(0, N·L) * base_color`
+  - Lambert diffuse model
+  - Point/Spot lights use inverse-square distance attenuation
+- **Specular**: `light_color * intensity * pow(max(0, N·H), shininess)`
+  - Blinn-Phong specular with half-vector
+  - `shininess` derived from roughness: `pow(2, (1 - roughness) * 10)`
+  - Specular strength scaled by metallic factor
+- **Spot lights**: Additional cone falloff between inner and outer angle
 
-## `text3d` (parser path)
+### Shadow Support
 
-Text node type accepted by pure-Dart scene parser.
-
-| Prop | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `type` | `"text3d"` | Yes | - | Node tag. |
-| `id` | `String?` | No | `null` | Optional id. |
-| `name` | `String?` | No | `null` | Text content/name depending renderer usage. |
-| `transform` | `TransformDef` | No | `{}` | Position/rotation/scale. |
-| `material` | `MaterialDef?` | No | `null` | Optional color/material styling. |
-| `animation` | `AnimationDef?` | No | `null` | Optional animation. |
-
-Example:
-
-```json
-{
-  "type": "text3d",
-  "id": "welcome-sign",
-  "name": "Welcome to Elpian World",
-  "transform": {
-    "position": {"x": 0, "y": 3.5, "z": -8},
-    "rotation": {"x": 0, "y": 0, "z": 0},
-    "scale": {"x": 1.4, "y": 1.4, "z": 1.4}
-  }
-}
-```
-
----
-
-## 2) Shared type schemas
-
-## `Vec3Def`
-
-| Prop | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `x` | `f32` | No | `0.0` | X component |
-| `y` | `f32` | No | `0.0` | Y component |
-| `z` | `f32` | No | `0.0` | Z component |
-
-Example: `{"x": 1.0, "y": 2.0, "z": 3.0}`
-
-## `ColorDef`
+The Bevy (Rust/GPU) renderer supports real-time shadows. The Dart renderer does not include shadow mapping.
 
 | Prop | Type | Required | Default | Description |
 |---|---|---|---|---|
@@ -422,186 +468,203 @@ Example: `{"x": 1.0, "y": 2.0, "z": 3.0}`
 
 Example: `{"r": 0.2, "g": 0.6, "b": 1.0, "a": 1.0}`
 
-## `TransformDef`
+## 📷 Camera System
 
-| Prop | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `position` | `Vec3Def?` | No | `null` | World position |
-| `rotation` | `Vec3Def?` | No | `null` | Euler degrees |
-| `scale` | `Vec3Def?` | No | `null` | Non-uniform scale |
+### Camera Types
 
-Example:
+| Type | Projection | Description |
+|------|-----------|-------------|
+| `Perspective` | Perspective with FOV | Standard 3D perspective |
+| `Orthographic` | Parallel projection | No perspective distortion |
 
-```json
-{
-  "position": {"x": 3, "y": 2, "z": -7},
-  "rotation": {"x": 0, "y": 35, "z": 0},
-  "scale": {"x": 1, "y": 1, "z": 1}
-}
-```
+### Camera Modes
 
-## `MeshType`
+| Mode | Description | Key Properties |
+|------|-------------|---------------|
+| `Fixed` | Stationary camera | `position`, `target` |
+| `Orbit` | Auto-orbits around target | `orbit_speed`, `position` |
+| `FirstPerson` | First-person view | `position`, direction |
+| `Follow` | Tracks a target with offset | `follow_offset`, `target` |
+| `Flythrough` | Free-flying camera | `position`, direction |
 
-Supported forms:
-
-- named: `"Cube"`
-- parameterized object with `shape`:
-  - `Sphere`: `radius`, `subdivisions`
-  - `Plane`: `size`
-  - `Capsule`: `radius`, `depth`
-  - `Cylinder`: `radius`, `height`
-  - `Cone`: `radius`, `height`
-  - `Torus`: `radius`, `tube_radius`
-  - `Icosphere`: `radius`, `subdivisions` (parser/runtime depending)
-  - `UvSphere`: `radius`, `sectors`, `stacks` (parser/runtime depending)
-  - `Grid`: `width`, `height`, `spacing` (parser/runtime depending)
-  - `File`: `path`
-
-Examples:
-
-```json
-"Cube"
-```
-
-```json
-{"shape": "Sphere", "radius": 1.4, "subdivisions": 24}
-```
-
-```json
-{"shape": "File", "path": "models/ship.gltf"}
-```
-
-## `MaterialDef`
-
-| Prop | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `base_color` | `ColorDef?` | No | `null` | Albedo/tint color |
-| `base_color_texture` | `String?` | No | `null` | Base color texture path |
-| `emissive` | `ColorDef?` | No | `null` | Emissive color |
-| `emissive_texture` | `String?` | No | `null` | Emissive map path |
-| `metallic` | `f32?` | No | `null` | Metallic value |
-| `roughness` | `f32?` | No | `null` | Roughness value |
-| `metallic_roughness_texture` | `String?` | No | `null` | MR texture |
-| `normal_map_texture` | `String?` | No | `null` | Normal map path |
-| `ambient_occlusion_texture` | `String?` | No | `null` | AO texture |
-| `height_map_texture` | `String?` | No | `null` | Height/parallax map |
-| `parallax_depth` | `f32?` | No | `null` | Parallax depth |
-| `alpha_mode` | `AlphaMode?` | No | `null` | `Opaque` / `Mask` / `Blend` |
-| `double_sided` | `bool` | No | `false` | Render both faces |
-| `ior` | `f32?` | No | `null` | Index of refraction |
-
-Example:
+### Orbit Camera Example
 
 ```json
 {
-  "base_color": {"r": 0.9, "g": 0.92, "b": 1.0, "a": 1.0},
-  "base_color_texture": "textures/panel_albedo.png",
-  "normal_map_texture": "textures/panel_normal.png",
-  "metallic": 0.75,
-  "roughness": 0.22,
-  "alpha_mode": "Opaque",
-  "double_sided": false
-}
-```
-
-## `AnimationDef`
-
-| Prop | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `animation_type` | `AnimationType` | Yes | - | Animation mode |
-| `duration` | `f32` | No | `1.0` | Seconds |
-| `looping` | `bool` | No | `false` | Loop toggle |
-| `easing` | `EasingType` | No | `Linear` | Timing curve |
-
-`AnimationType` schemas:
-
-- `Rotate`: `{ "type": "Rotate", "axis": Vec3Def, "degrees": f32 }`
-- `Translate`: `{ "type": "Translate", "from": Vec3Def, "to": Vec3Def }`
-- `Scale`: `{ "type": "Scale", "from": Vec3Def, "to": Vec3Def }`
-- `Bounce`: `{ "type": "Bounce", "height": f32 }`
-- `Pulse`: `{ "type": "Pulse", "min_scale": f32, "max_scale": f32 }`
-
-Examples:
-
-```json
-{"animation_type": {"type": "Rotate", "axis": {"x": 0, "y": 1, "z": 0}, "degrees": 360}, "duration": 5.0, "looping": true, "easing": "Linear"}
-```
-
-```json
-{"animation_type": {"type": "Translate", "from": {"x": -4, "y": 0, "z": 0}, "to": {"x": 4, "y": 0, "z": 0}}, "duration": 2.2, "looping": true, "easing": "EaseInOut"}
-```
-
-## `PhysicsDef`
-
-| Prop | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `mass` | `f32` | No | `1.0` | Body mass |
-| `friction` | `f32` | No | `0.3` | Contact friction |
-| `restitution` | `f32` | No | `0.0` | Bounciness |
-| `gravity_scale` | `f32` | No | `1.0` | Gravity multiplier |
-| `use_gravity` | `bool` | No | `true` | Enable gravity |
-| `collider_type` | `ColliderType` | No | `Box` | `Box`, `Sphere`, `Capsule`, `Mesh` |
-
-Example:
-
-```json
-{
-  "mass": 2.5,
-  "friction": 0.42,
-  "restitution": 0.2,
-  "gravity_scale": 1.0,
-  "use_gravity": true,
-  "collider_type": "Box"
+  "type": "camera",
+  "camera_type": "Perspective",
+  "mode": "Orbit",
+  "fov": 60,
+  "near": 0.1,
+  "far": 1000,
+  "orbit_speed": 0.3,
+  "transform": {
+    "position": { "x": 0, "y": 8, "z": 15 }
+  }
 }
 ```
 
 ---
 
-## 3) Feature-rich real-world 3D DSL examples
+## 🎬 Animations
 
-These are large, practical scene snippets you can directly adapt.
+### Animation Types
 
-### Example A: Sci-fi hangar with dynamic lights, particles, and rotating ship
+| Type | Parameters | Description |
+|------|-----------|-------------|
+| `Rotate` | `axis` (Vec3), `degrees` (float) | Rotate around an axis |
+| `Translate` | `from` (Vec3), `to` (Vec3) | Move between two points |
+| `Scale` | `from` (Vec3), `to` (Vec3) | Scale between two sizes |
+| `Bounce` | `height` (float) | Bounce up and down |
+| `Pulse` | `min_scale` (float), `max_scale` (float) | Scale pulsing |
+| `Orbit` | parameters | Orbital movement |
+| `Swing` | parameters | Swinging rotation |
+| `Shake` | parameters | Random vibration |
+| `Float` | parameters | Floating vertical motion |
+| `Spin` | parameters | Continuous spinning |
 
+### Animation Properties
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `animation_type` | AnimationType | *required* | Animation kind |
+| `duration` | float | 1.0 | Duration in seconds |
+| `looping` | bool | false | Repeat the animation |
+| `easing` | String | 'Linear' | Timing function |
+| `delay` | float | 0.0 | Delay before start |
+
+### Easing Types
+
+`Linear`, `EaseIn`, `EaseOut`, `EaseInOut`, `Bounce`, `Elastic`, `Back`, `Sine`
+
+### Examples
+
+**Continuous Y-axis rotation:**
 ```json
 {
-  "world": [
-    {"type": "environment", "ambient_intensity": 0.2, "fog_enabled": true, "fog_color": {"r": 0.06, "g": 0.08, "b": 0.12, "a": 1}, "fog_distance": 180},
-    {"type": "camera", "camera_type": "Perspective", "transform": {"position": {"x": 0, "y": 8, "z": 24}, "rotation": {"x": -10, "y": 0, "z": 0}}},
-    {"type": "light", "id": "key-light", "light_type": "Directional", "intensity": 1.4, "transform": {"rotation": {"x": -38, "y": 22, "z": 0}}},
-    {"type": "light", "id": "rim-light", "light_type": "Point", "color": {"r": 0.3, "g": 0.6, "b": 1.0, "a": 1}, "intensity": 0.8, "transform": {"position": {"x": -8, "y": 6, "z": -3}}},
-
-    {"type": "mesh3d", "id": "hangar-floor", "mesh": {"shape": "Plane", "size": 120}, "material": {"base_color": {"r": 0.1, "g": 0.11, "b": 0.14, "a": 1}, "roughness": 0.9}},
-
-    {"type": "group", "id": "ship-rig", "transform": {"position": {"x": 0, "y": 3, "z": 0}}, "children": [
-      {"type": "mesh3d", "id": "ship-body", "mesh": {"shape": "File", "path": "models/starfighter.gltf"}, "material": {"metallic": 0.85, "roughness": 0.25}, "animation": {"animation_type": {"type": "Rotate", "axis": {"x": 0, "y": 1, "z": 0}, "degrees": 360}, "duration": 18, "looping": true}},
-      {"type": "particles", "id": "engine-smoke", "transform": {"position": {"x": 0, "y": -1, "z": -4}}, "emission_rate": 45, "lifetime": 1.8, "size": 0.12, "color": {"r": 0.85, "g": 0.9, "b": 1.0, "a": 0.8}, "velocity": {"x": 0, "y": 0.5, "z": -1.8}, "gravity": {"x": 0, "y": -0.15, "z": 0}}
-    ]}
-  ]
+  "animation_type": { "type": "Rotate", "axis": { "x": 0, "y": 1, "z": 0 }, "degrees": 360 },
+  "duration": 4.0,
+  "looping": true,
+  "easing": "Linear"
 }
 ```
 
-### Example B: Outdoor world (terrain + water + skybox + foliage-like instancing pattern)
+**Bouncing:**
+```json
+{
+  "animation_type": { "type": "Bounce", "height": 2.0 },
+  "duration": 2.0,
+  "looping": true,
+  "easing": "EaseInOut"
+}
+```
+
+**Translate back and forth:**
+```json
+{
+  "animation_type": {
+    "type": "Translate",
+    "from": { "x": -5, "y": 0, "z": 0 },
+    "to": { "x": 5, "y": 0, "z": 0 }
+  },
+  "duration": 3.0,
+  "looping": true,
+  "easing": "EaseInOut"
+}
+```
+
+**Pulsing:**
+```json
+{
+  "animation_type": { "type": "Pulse", "min_scale": 0.8, "max_scale": 1.2 },
+  "duration": 1.5,
+  "looping": true,
+  "easing": "EaseInOut"
+}
+```
+
+### Keyframe Channels
+
+The Dart renderer supports keyframe animation tracks for position, rotation, and scale with linear interpolation between keyframes.
+
+---
+
+## 🔥 Particle System
+
+### Emitter Shapes
+
+| Shape | Description |
+|-------|-------------|
+| `Point` | Emit from a single point |
+| `Sphere` | Emit from a spherical volume |
+| `Cone` | Emit in a conical direction |
+| `Box` | Emit from a cubic volume |
+| `Ring` | Emit from a ring shape |
+
+### Particle Properties
+
+Each particle has:
+- Position, velocity (affected by gravity/wind)
+- Color (interpolated from `start_color` to `end_color`)
+- Size (interpolated from `start_size` to `end_size`)
+- Alpha (interpolated from `start_alpha` to `end_alpha`)
+- Life/lifetime tracking
+- Rotation and rotation speed
+
+### Blend Modes
+
+| Mode | Description |
+|------|-------------|
+| `normal` | Standard alpha blending |
+| `additive` | Additive blending (fire, sparks, glows) |
+
+### Fire Effect Example
 
 ```json
 {
-  "world": [
-    {"type": "environment", "ambient_light": {"r": 0.55, "g": 0.58, "b": 0.62, "a": 1}, "ambient_intensity": 0.35, "fog_enabled": true, "fog_color": {"r": 0.78, "g": 0.82, "b": 0.9, "a": 1}, "fog_distance": 320},
-    {"type": "skybox", "texture_path": "textures/sky_morning.hdr", "brightness": 1.05},
-    {"type": "camera", "camera_type": "Perspective", "transform": {"position": {"x": 0, "y": 22, "z": 38}, "rotation": {"x": -22, "y": 0, "z": 0}}},
-    {"type": "light", "light_type": "Directional", "intensity": 1.3, "transform": {"rotation": {"x": -45, "y": 30, "z": 0}}},
-
-    {"type": "terrain", "id": "main-terrain", "size": 600, "height": 80, "subdivisions": 256, "heightmap": "textures/mountain_height.png", "material": {"base_color_texture": "textures/grass_rock_albedo.png", "normal_map_texture": "textures/grass_rock_normal.png", "roughness": 0.95}},
-    {"type": "water", "id": "river", "size": {"x": 500, "y": 0, "z": 60}, "transform": {"position": {"x": 0, "y": 3, "z": 40}}, "wave_amplitude": 0.18, "wave_frequency": 1.3, "water_color": {"r": 0.12, "g": 0.45, "b": 0.7, "a": 1}, "transparency": 0.62},
-
-    {"type": "group", "id": "rocks", "children": [
-      {"type": "mesh3d", "mesh": {"shape": "File", "path": "models/rock_01.gltf"}, "transform": {"position": {"x": -24, "y": 9, "z": 12}, "scale": {"x": 2.2, "y": 2.2, "z": 2.2}}},
-      {"type": "mesh3d", "mesh": {"shape": "File", "path": "models/rock_02.gltf"}, "transform": {"position": {"x": -16, "y": 7, "z": 6}, "scale": {"x": 1.8, "y": 1.8, "z": 1.8}}},
-      {"type": "mesh3d", "mesh": {"shape": "File", "path": "models/rock_03.gltf"}, "transform": {"position": {"x": -8, "y": 6, "z": 1}, "scale": {"x": 1.6, "y": 1.6, "z": 1.6}}}
-    ]}
-  ]
+  "type": "particles",
+  "emitter_shape": "Cone",
+  "emission_rate": 80.0,
+  "lifetime": 1.5,
+  "start_color": { "r": 1.0, "g": 0.8, "b": 0.0, "a": 1.0 },
+  "end_color": { "r": 1.0, "g": 0.0, "b": 0.0, "a": 0.0 },
+  "start_size": 0.3,
+  "end_size": 0.05,
+  "speed": 3.0,
+  "speed_variance": 1.0,
+  "spread": 0.3,
+  "gravity": { "x": 0, "y": 1, "z": 0 },
+  "blend_mode": "additive",
+  "max_particles": 300,
+  "transform": { "position": { "x": 0, "y": 0, "z": 0 } }
 }
 ```
+
+---
+
+## ⚡ Physics
+
+Basic rigid-body physics simulation in the Dart renderer.
+
+### RigidBody Properties
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `velocity` | Vec3Def | {0,0,0} | Linear velocity |
+| `angular_velocity` | Vec3Def | {0,0,0} | Rotational velocity |
+| `mass` | float | 1.0 | Object mass |
+| `restitution` | float | 0.0 | Bounciness (0.0–1.0) |
+| `friction` | float | 0.3 | Surface friction |
+| `is_static` | bool | false | Immovable object |
+| `use_gravity` | bool | true | Apply gravity |
+| `collider_type` | String | 'Box' | `Sphere`, `Box`, `Plane` |
+
+### Physics Features
+
+- Gravity application
+- Friction damping
+- Ground collision with velocity reflection
+- Basic sphere/box/plane colliders
 
 ### Example C: Physics puzzle arena (rigid bodies + static geometry)
 
@@ -614,89 +677,29 @@ These are large, practical scene snippets you can directly adapt.
 
     {"type": "mesh3d", "id": "ground", "mesh": {"shape": "Plane", "size": 80}, "material": {"base_color": {"r": 0.2, "g": 0.2, "b": 0.22, "a": 1}, "roughness": 0.95}},
 
-    {"type": "rigidbody", "id": "ball", "mesh": {"shape": "Sphere", "radius": 1.0, "subdivisions": 24}, "transform": {"position": {"x": -4, "y": 12, "z": 0}}, "physics": {"mass": 1.0, "friction": 0.3, "restitution": 0.75, "use_gravity": true, "collider_type": "Sphere"}},
-    {"type": "rigidbody", "id": "crate-a", "mesh": "Cube", "transform": {"position": {"x": 0, "y": 16, "z": 0}}, "physics": {"mass": 3.0, "friction": 0.5, "restitution": 0.1, "use_gravity": true, "collider_type": "Box"}},
-    {"type": "rigidbody", "id": "crate-b", "mesh": "Cube", "transform": {"position": {"x": 3, "y": 19, "z": 0}}, "physics": {"mass": 3.0, "friction": 0.5, "restitution": 0.1, "use_gravity": true, "collider_type": "Box"}},
+## 🌅 Environment
 
-    {"type": "mesh3d", "id": "goal-ring", "mesh": {"shape": "Torus", "radius": 2.2, "tube_radius": 0.2}, "transform": {"position": {"x": 14, "y": 3, "z": 0}}, "material": {"base_color": {"r": 1, "g": 0.8, "b": 0.1, "a": 1}, "emissive": {"r": 0.3, "g": 0.2, "b": 0.0, "a": 1}}}
-  ]
-}
-```
+### 🌤️ Sky Rendering
 
-### Example D: Data-center digital twin (grouped machines + alarms + text3d labels)
+The Dart renderer supports a two-color gradient sky:
 
 ```json
 {
-  "world": [
-    {"type": "environment", "ambient_intensity": 0.22, "fog_enabled": true, "fog_color": {"r": 0.2, "g": 0.24, "b": 0.3, "a": 1}, "fog_distance": 220},
-    {"type": "camera", "camera_type": "Perspective", "mode": "orbit", "orbit_radius": 36, "orbit_speed": 8, "transform": {"position": {"x": 0, "y": 16, "z": 36}}},
-    {"type": "light", "light_type": "Directional", "intensity": 1.0, "transform": {"rotation": {"x": -50, "y": 20, "z": 0}}},
-
-    {"type": "mesh3d", "id": "floor", "mesh": {"shape": "Plane", "size": 140}, "material": {"base_color": {"r": 0.08, "g": 0.09, "b": 0.11, "a": 1}, "roughness": 0.98}},
-
-    {"type": "group", "id": "rack-row-a", "children": [
-      {"type": "mesh3d", "id": "rack-a1", "mesh": {"shape": "File", "path": "models/server_rack.gltf"}, "transform": {"position": {"x": -16, "y": 0, "z": -8}}},
-      {"type": "mesh3d", "id": "rack-a2", "mesh": {"shape": "File", "path": "models/server_rack.gltf"}, "transform": {"position": {"x": -8, "y": 0, "z": -8}}},
-      {"type": "mesh3d", "id": "rack-a3", "mesh": {"shape": "File", "path": "models/server_rack.gltf"}, "transform": {"position": {"x": 0, "y": 0, "z": -8}}}
-    ]},
-
-    {"type": "mesh3d", "id": "alarm-beacon", "mesh": {"shape": "Sphere", "radius": 0.4, "subdivisions": 20}, "transform": {"position": {"x": -8, "y": 4.5, "z": -8}}, "material": {"base_color": {"r": 1, "g": 0.15, "b": 0.15, "a": 1}, "emissive": {"r": 1, "g": 0.1, "b": 0.1, "a": 1}}, "animation": {"animation_type": {"type": "Pulse", "min_scale": 0.8, "max_scale": 1.3}, "duration": 0.9, "looping": true, "easing": "EaseInOut"}},
-
-    {"type": "text3d", "id": "label-a", "name": "Rack A2 · Overheat", "transform": {"position": {"x": -8, "y": 6.2, "z": -8}}},
-
-    {"type": "particles", "id": "heat-smoke", "transform": {"position": {"x": -8, "y": 4.8, "z": -8}}, "emission_rate": 22, "lifetime": 1.6, "size": 0.1, "color": {"r": 1, "g": 0.7, "b": 0.5, "a": 0.7}, "velocity": {"x": 0, "y": 1.1, "z": 0}, "gravity": {"x": 0, "y": -0.1, "z": 0}}
-  ]
+  "type": "environment",
+  "sky_color_top": { "r": 0.1, "g": 0.15, "b": 0.4, "a": 1.0 },
+  "sky_color_bottom": { "r": 0.5, "g": 0.6, "b": 0.8, "a": 1.0 }
 }
 ```
 
----
+### 🌫️ Fog
 
-## 4) Portability and authoring notes
+| Fog Type | Parameters | Description |
+|----------|-----------|-------------|
+| `none` | — | No fog |
+| `linear` | `fog_near`, `fog_far`, `fog_color` | Linear distance fog |
+| `exponential` | `fog_density`, `fog_color` | Exponential density fog |
 
-1. For best cross-renderer compatibility, start with `environment`, `camera`, `light`, `mesh3d`, `group`, and `particles`.
-2. Add `terrain`, `skybox`, `water`, `rigidbody`, and `text3d` when your target runtime path supports them.
-3. Keep asset paths relative and consistent (`models/...`, `textures/...`).
-4. For large scenes, split authoring logically into reusable groups (`group` nodes for props/sets/rigs).
-5. Keep simulation tuning data (physics, animation durations, fog, lighting) in JSON so VM logic can swap presets at runtime.
-
----
-
-## 5) Extended coverage for engine-specific 3D features (beyond base schema)
-
-This section documents additional runtime features exposed by the pure-Dart `scene3d` core/parser and by software renderer mesh generation paths. Use these when your target runtime supports them.
-
-### 5.1 Parser-level `SceneNode` extended fields
-
-In parser/runtime, each node can additionally carry:
-
-| Prop | Type | Description |
-|---|---|---|
-| `name` | `String?` | Optional display/debug name |
-| `visible` | `bool` | Node visibility toggle |
-| `text` | `String?` | Text payload (not only `text3d`) |
-| `text_size` | `double?` | Text size hint |
-| `extra` | `Map<String,dynamic>?` | Arbitrary metadata/extensions |
-
-Example:
-
-```json
-{
-  "type": "mesh3d",
-  "id": "crate-42",
-  "name": "Objective Crate",
-  "visible": true,
-  "text": "Loot",
-  "text_size": 14,
-  "extra": {
-    "team": "blue",
-    "interactable": true,
-    "questId": "Q-17"
-  },
-  "mesh": "Cube"
-}
-```
-
-### 5.2 Extended `Material3D` (parser/runtime)
+Fog blends fragment colors toward the fog color based on distance from the camera.
 
 Base schema material keys are supported, plus additional parser/runtime material controls:
 
@@ -711,193 +714,140 @@ Base schema material keys are supported, plus additional parser/runtime material
 | `texture_color2` | `ColorDef` | Secondary color for procedural texture modes |
 | `texture_scale` | `double` | UV texture repetition/scale |
 
-Example:
+## 🖥️ Rendering Pipeline
 
-```json
-{
-  "material": {
-    "base_color": {"r": 0.16, "g": 0.76, "b": 0.91, "a": 1.0},
-    "emissive": {"r": 0.10, "g": 0.45, "b": 0.60, "a": 1.0},
-    "emissive_strength": 2.2,
-    "alpha_mode": "blend",
-    "alpha": 0.85,
-    "alpha_cutoff": 0.5,
-    "wireframe": false,
-    "unlit": false,
-    "texture": "stripes",
-    "texture_color2": {"r": 0.03, "g": 0.05, "b": 0.08, "a": 1.0},
-    "texture_scale": 4.0,
-    "metallic": 0.4,
-    "roughness": 0.25
-  }
-}
-```
+### Bevy (Rust/GPU)
 
-### 5.3 Extended animation capabilities (parser/runtime)
+1. Scene JSON parsed into Bevy ECS entities
+2. GPU-accelerated rendering with PBR materials
+3. Real-time shadow mapping
+4. Native FFI (Android/iOS/Desktop) or WASM (Web)
+5. Frame buffer sent to Flutter via texture
 
-Besides shared animation modes (`Rotate`, `Translate`, `Scale`, `Bounce`, `Pulse`), runtime supports additional modes:
+### Dart (Pure-Dart Canvas Renderer)
 
-- `Orbit` (radius/height circular motion)
-- `Swing` (oscillating axis rotation)
-- `Shake` (randomized jitter)
-- `Float` (sinusoidal Y translation)
-- `Spin` (continuous XYZ angular speed)
+The software renderer processes each frame:
 
-Extended easing values also include: `Elastic`, `Back`, `Sine`.
+1. **Scene Update**: Update camera (orbit, follow, animation), evaluate node animations, step particle system, step physics
+2. **Vertex Processing**: Transform vertices to world space, compute per-vertex normals
+3. **Lighting**: Per-vertex Blinn-Phong with PBR material parameters
+4. **Texture Sampling**: Procedural texture evaluation (checkerboard, gradient, noise, stripes)
+5. **Projection**: Perspective divide and screen-space mapping
+6. **Clipping**: Near-plane polygon clipping (Sutherland-Hodgman)
+7. **Culling**: Back-face culling (unless `double_sided`)
+8. **Fog**: Distance-based fog blending
+9. **Sorting**: Painter's algorithm (back-to-front depth sorting)
+10. **Rasterization**: Canvas path drawing with filled polygons
 
-Examples:
+### Math Library
 
-```json
-{
-  "animation": {
-    "animation_type": {
-      "type": "Orbit",
-      "radius": 5.0,
-      "height": 2.0
-    },
-    "duration": 6.0,
-    "looping": true,
-    "easing": "Sine",
-    "delay": 0.2
-  }
-}
-```
+The Dart renderer includes a complete 3D math library:
 
-```json
-{
-  "animation": [
-    {
-      "animation_type": {"type": "Float", "amplitude": 0.35},
-      "duration": 2.4,
-      "looping": true,
-      "easing": "EaseInOut"
-    },
-    {
-      "animation_type": {
-        "type": "Spin",
-        "speed": {"x": 0.0, "y": 65.0, "z": 0.0}
-      },
-      "duration": 1.0,
-      "looping": true,
-      "easing": "Linear"
-    }
-  ]
-}
-```
-
-### 5.4 Advanced particle emitter object (parser/runtime)
-
-When using `type: "particles"`, parser/runtime can consume an advanced `emitter` object:
-
-| Prop | Type | Description |
-|---|---|---|
-| `shape` | `point|sphere|cone|box|ring` | Spawn shape |
-| `emit_rate` | `double` | Per-second emission |
-| `lifetime` | `double` | Particle life |
-| `start_color` / `end_color` | `ColorDef` | Lifetime color interpolation |
-| `start_size` / `end_size` | `double` | Lifetime size interpolation |
-| `start_alpha` / `end_alpha` | `double` | Lifetime alpha interpolation |
-| `gravity` | `Vec3Def` | Particle gravity |
-| `wind` | `Vec3Def` | Constant wind force |
-| `spread` | `double` | Emission cone spread degrees |
-| `speed` | `double` | Base initial speed |
-| `speed_variance` | `double` | Randomized speed variation |
-| `max_particles` | `int` | Upper particle pool cap |
-| `world_space` | `bool` | Simulate in world vs local space |
-| `blend_mode` | `String` | Blend model hint |
-| `burst_count` | `double` | Burst particles |
-| `prewarm` | `bool` | Pre-spawn on start |
-
-Example:
-
-```json
-{
-  "type": "particles",
-  "id": "fireworks",
-  "transform": {"position": {"x": 0, "y": 8, "z": 0}},
-  "emitter": {
-    "shape": "sphere",
-    "emit_rate": 120,
-    "lifetime": 2.0,
-    "start_color": {"r": 1.0, "g": 0.45, "b": 0.12, "a": 1.0},
-    "end_color": {"r": 0.15, "g": 0.1, "b": 0.3, "a": 0.0},
-    "start_size": 0.12,
-    "end_size": 0.0,
-    "start_alpha": 1.0,
-    "end_alpha": 0.0,
-    "gravity": {"x": 0, "y": -2.0, "z": 0},
-    "wind": {"x": 0.8, "y": 0, "z": 0.2},
-    "spread": 170,
-    "speed": 4.5,
-    "speed_variance": 1.6,
-    "max_particles": 900,
-    "world_space": true,
-    "blend_mode": "additive",
-    "burst_count": 30,
-    "prewarm": true
-  }
-}
-```
-
-### 5.5 Extended rigidbody/physics fields (parser/runtime)
-
-Parser/runtime rigidbody parser accepts additional keys beyond base schema:
-
-| Prop | Type | Description |
-|---|---|---|
-| `velocity` | `Vec3Def` | Initial linear velocity |
-| `is_static` | `bool` | Static body toggle |
-| `collider` | `sphere|box|plane` | Collider family |
-| `collider_radius` | `double` | Sphere radius |
-| `collider_size` | `Vec3Def` | Box collider size |
-
-Example:
-
-```json
-{
-  "physics": {
-    "velocity": {"x": 1.5, "y": 0.0, "z": 0.0},
-    "mass": 10.0,
-    "restitution": 0.05,
-    "friction": 0.8,
-    "is_static": false,
-    "use_gravity": true,
-    "collider": "box",
-    "collider_size": {"x": 1.2, "y": 0.8, "z": 1.2}
-  }
-}
-```
-
-### 5.6 Mesh support notes by runtime path
-
-Portable/shared documented meshes remain preferred (`Cube`, `Sphere`, `Plane`, `Capsule`, `Cylinder`, `Cone`, `Torus`, `File`).
-
-Additional software-renderer/runtime mesh generators may include shapes such as:
-
-- `Pyramid`
-- `Wedge`
-- `IcoSphere`
-- `Billboard`
-
-Use these selectively and feature-detect if you need strict cross-runtime parity.
+| Class | Features |
+|-------|----------|
+| `Vec2` | 2D vectors with dot product, length, operations |
+| `Vec3` | 3D vectors with cross product, normalize, lerp, reflect |
+| `Vec4` | 4D homogeneous vectors with perspective divide |
+| `Quaternion` | Quaternion rotations, slerp, Euler conversion, axis-angle |
+| `Mat4` | 4x4 matrices: identity, translate, scale, rotate, perspective, ortho, lookAt |
+| `AABB` | Axis-aligned bounding boxes with intersection tests |
+| `Ray` | Ray casting with sphere and plane intersection |
 
 ---
 
-## 6) More feature-rich real-world game scene examples
+## 🧩 Widget Integration
 
-### Example E: Open-world driving checkpoint race
+### BevyScene / Bevy3D / Scene3D
+
+Renders 3D scenes using Bevy FFI when available, falls back to pure-Dart renderer.
 
 ```json
 {
-  "world": [
-    {"type": "environment", "ambient_intensity": 0.34, "fog_enabled": true, "fog_color": {"r": 0.76, "g": 0.8, "b": 0.86, "a": 1}, "fog_distance": 420},
-    {"type": "skybox", "texture_path": "textures/cloudy_day.hdr", "brightness": 1.0},
-    {"type": "camera", "camera_type": "Perspective", "mode": "follow", "transform": {"position": {"x": 0, "y": 10, "z": 18}}, "near": 0.1, "far": 3000},
-    {"type": "light", "light_type": "Directional", "intensity": 1.25, "transform": {"rotation": {"x": -44, "y": 28, "z": 0}}},
+  "type": "BevyScene",
+  "props": {
+    "width": 800,
+    "height": 600,
+    "fps": 60,
+    "interactive": true,
+    "fit": "contain",
+    "scene": {
+      "world": [...]
+    }
+  }
+}
+```
 
-    {"type": "terrain", "size": 1500, "height": 110, "subdivisions": 320, "heightmap": "textures/race_height.png", "material": {"base_color_texture": "textures/race_ground_albedo.png", "normal_map_texture": "textures/race_ground_normal.png", "roughness": 0.9}},
+### GameScene / Game3D
 
-    {"type": "mesh3d", "id": "player-car", "mesh": {"shape": "File", "path": "models/sports_car.gltf"}, "transform": {"position": {"x": 0, "y": 5, "z": 0}, "scale": {"x": 1, "y": 1, "z": 1}}, "animation": [{"animation_type": {"type": "Float", "amplitude": 0.06}, "duration": 1.8, "looping": true, "easing": "Sine"}]},
+Always uses the pure-Dart Canvas-based renderer.
+
+```json
+{
+  "type": "GameScene",
+  "props": {
+    "fps": 30,
+    "interactive": true,
+    "autoStart": true,
+    "scene": {
+      "world": [...]
+    }
+  }
+}
+```
+
+### Widget Properties
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `scene` / `sceneJson` | Map / String | null | Scene definition |
+| `width` | double | null | Render width |
+| `height` | double | null | Render height |
+| `fps` | int | 60 | Target frames per second |
+| `interactive` | bool | true | Enable touch/pointer input |
+| `fit` | String | 'contain' | `fill`, `cover`, `contain`, `fitWidth`, `fitHeight`, `none`, `scaleDown` |
+| `autoStart` | bool | true | Auto-start render loop |
+
+---
+
+## 📐 Shared Type Definitions
+
+### TransformDef
+
+Position, rotation, and scale in 3D space.
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `position` | Vec3Def? | null | World position (x, y, z) |
+| `rotation` | Vec3Def? | null | Euler angles in degrees (x, y, z) |
+| `scale` | Vec3Def? | null | Scale multipliers (x, y, z) |
+
+Transform composition order: **Scale → Rotate → Translate (TRS)**.
+
+```json
+{
+  "position": { "x": 5.0, "y": 2.0, "z": 0.0 },
+  "rotation": { "x": 0, "y": 45, "z": 0 },
+  "scale": { "x": 2.0, "y": 1.0, "z": 1.5 }
+}
+```
+
+### Vec3Def
+
+3D vector with x, y, z components (all default to 0.0):
+
+```json
+{ "x": 1.0, "y": 2.0, "z": 3.0 }
+```
+
+### ColorDef
+
+RGBA color with channels from 0.0 to 1.0:
+
+```json
+{ "r": 0.2, "g": 0.6, "b": 1.0, "a": 1.0 }
+```
+
+Default: `{ "r": 1.0, "g": 1.0, "b": 1.0, "a": 1.0 }` (white).
 
     {"type": "group", "id": "checkpoints", "children": [
       {"type": "mesh3d", "id": "cp1", "mesh": {"shape": "Torus", "radius": 4.2, "tube_radius": 0.2}, "transform": {"position": {"x": 90, "y": 10, "z": 40}}, "material": {"base_color": {"r": 0.1, "g": 0.8, "b": 1.0, "a": 1}, "emissive": {"r": 0.05, "g": 0.4, "b": 0.6, "a": 1}}, "animation": {"animation_type": {"type": "Spin", "speed": {"x": 0, "y": 40, "z": 0}}, "duration": 1.0, "looping": true}},
@@ -907,49 +857,222 @@ Use these selectively and feature-detect if you need strict cross-runtime parity
 }
 ```
 
-### Example F: Stealth mission level (volumetric mood + patrol paths)
+## 📦 Complete Examples
+
+### Outdoor Scene
 
 ```json
 {
   "world": [
-    {"type": "environment", "ambient_intensity": 0.12, "fog_enabled": true, "fog_type": "exponential", "fog_density": 0.03, "fog_color": {"r": 0.05, "g": 0.07, "b": 0.09, "a": 1}},
-    {"type": "camera", "camera_type": "Perspective", "transform": {"position": {"x": 0, "y": 9, "z": 22}, "rotation": {"x": -14, "y": 0, "z": 0}}},
-    {"type": "light", "id": "moon", "light_type": "Directional", "color": {"r": 0.6, "g": 0.7, "b": 1.0, "a": 1}, "intensity": 0.45, "transform": {"rotation": {"x": -55, "y": -10, "z": 0}}},
+    {
+      "type": "environment",
+      "ambient_color": { "r": 0.3, "g": 0.3, "b": 0.4, "a": 1.0 },
+      "ambient_intensity": 0.4,
+      "sky_color_top": { "r": 0.1, "g": 0.2, "b": 0.6, "a": 1.0 },
+      "sky_color_bottom": { "r": 0.6, "g": 0.7, "b": 0.9, "a": 1.0 },
+      "fog_type": "linear",
+      "fog_color": { "r": 0.7, "g": 0.7, "b": 0.8, "a": 1.0 },
+      "fog_near": 50.0,
+      "fog_far": 200.0
+    },
+    {
+      "type": "camera",
+      "camera_type": "Perspective",
+      "mode": "Orbit",
+      "fov": 60,
+      "orbit_speed": 0.2,
+      "transform": {
+        "position": { "x": 0, "y": 8, "z": 15 },
+        "rotation": { "x": -25, "y": 0, "z": 0 }
+      }
+    },
+    {
+      "type": "light",
+      "light_type": "Directional",
+      "color": { "r": 1.0, "g": 0.95, "b": 0.8, "a": 1.0 },
+      "intensity": 1.5,
+      "cast_shadow": true,
+      "transform": {
+        "rotation": { "x": -50, "y": 30, "z": 0 }
+      }
+    },
+    {
+      "type": "light",
+      "light_type": "Point",
+      "color": { "r": 1.0, "g": 0.6, "b": 0.2, "a": 1.0 },
+      "intensity": 500.0,
+      "range": 15.0,
+      "transform": {
+        "position": { "x": -3, "y": 4, "z": 0 }
+      }
+    },
+    {
+      "type": "mesh3d",
+      "mesh": { "Plane": { "size": 80.0, "subdivisions": 4 } },
+      "material": {
+        "base_color": { "r": 0.35, "g": 0.55, "b": 0.2, "a": 1.0 },
+        "roughness": 0.95,
+        "texture_type": "noise",
+        "texture_color2": { "r": 0.25, "g": 0.45, "b": 0.15, "a": 1.0 },
+        "texture_scale": 5.0
+      },
+      "transform": {
+        "position": { "x": 0, "y": 0, "z": 0 }
+      }
+    },
+    {
+      "type": "mesh3d",
+      "mesh": "Cube",
+      "material": {
+        "base_color": { "r": 0.7, "g": 0.7, "b": 0.75, "a": 1.0 },
+        "metallic": 0.1,
+        "roughness": 0.6
+      },
+      "transform": {
+        "position": { "x": 0, "y": 1, "z": 0 },
+        "scale": { "x": 2, "y": 2, "z": 2 }
+      }
+    },
+    {
+      "type": "mesh3d",
+      "mesh": { "Sphere": { "radius": 1.0, "subdivisions": 24 } },
+      "material": {
+        "base_color": { "r": 0.9, "g": 0.2, "b": 0.2, "a": 1.0 },
+        "metallic": 0.8,
+        "roughness": 0.15
+      },
+      "transform": {
+        "position": { "x": 0, "y": 5, "z": 0 }
+      },
+      "animation": {
+        "animation_type": { "type": "Bounce", "height": 2.0 },
+        "duration": 2.0,
+        "looping": true,
+        "easing": "EaseInOut"
+      }
+    },
+    {
+      "type": "mesh3d",
+      "mesh": { "Torus": { "radius": 3.0, "tube_radius": 0.4 } },
+      "material": {
+        "base_color": { "r": 1.0, "g": 0.84, "b": 0.0, "a": 1.0 },
+        "metallic": 0.9,
+        "roughness": 0.1
+      },
+      "transform": {
+        "position": { "x": 0, "y": 3, "z": 0 }
+      },
+      "animation": {
+        "animation_type": { "type": "Rotate", "axis": { "x": 1, "y": 0, "z": 0 }, "degrees": 360 },
+        "duration": 6.0,
+        "looping": true,
+        "easing": "Linear"
+      }
+    },
+    {
+      "type": "particles",
+      "emitter_shape": "Point",
+      "emission_rate": 30.0,
+      "lifetime": 3.0,
+      "start_color": { "r": 1.0, "g": 0.5, "b": 0.0, "a": 1.0 },
+      "end_color": { "r": 1.0, "g": 0.0, "b": 0.0, "a": 0.0 },
+      "start_size": 0.15,
+      "end_size": 0.02,
+      "speed": 4.0,
+      "gravity": { "x": 0, "y": -2, "z": 0 },
+      "blend_mode": "additive",
+      "transform": { "position": { "x": 5, "y": 0, "z": -3 } }
+    }
+  ]
+}
+```
 
-    {"type": "mesh3d", "id": "yard", "mesh": {"shape": "Plane", "size": 220}, "material": {"base_color": {"r": 0.08, "g": 0.1, "b": 0.1, "a": 1}, "roughness": 1.0}},
+### Product Showcase (Orbiting Camera)
 
-    {"type": "group", "id": "guards", "children": [
-      {"type": "mesh3d", "id": "guard-1", "mesh": {"shape": "File", "path": "models/guard.gltf"}, "transform": {"position": {"x": -20, "y": 0, "z": -12}}, "animation": {"animation_type": {"type": "Translate", "from": {"x": -20, "y": 0, "z": -12}, "to": {"x": 20, "y": 0, "z": -12}}, "duration": 7.0, "looping": true, "easing": "EaseInOut"}},
-      {"type": "light", "id": "guard-spot", "light_type": "Spot", "intensity": 0.8, "transform": {"position": {"x": -20, "y": 3, "z": -12}, "rotation": {"x": -40, "y": 0, "z": 0}}}
-    ]},
-
-    {"type": "particles", "id": "mist", "transform": {"position": {"x": 0, "y": 0.5, "z": 0}}, "emitter": {"shape": "box", "emit_rate": 80, "lifetime": 5.0, "start_color": {"r": 0.7, "g": 0.8, "b": 0.9, "a": 0.28}, "end_color": {"r": 0.4, "g": 0.5, "b": 0.6, "a": 0.0}, "start_size": 0.4, "end_size": 0.9, "spread": 15, "speed": 0.35, "speed_variance": 0.2, "wind": {"x": 0.12, "y": 0, "z": 0.04}, "max_particles": 600, "blend_mode": "alpha"}}
+```json
+{
+  "world": [
+    {
+      "type": "environment",
+      "ambient_color": { "r": 0.9, "g": 0.9, "b": 1.0, "a": 1.0 },
+      "ambient_intensity": 0.6
+    },
+    {
+      "type": "camera",
+      "camera_type": "Perspective",
+      "mode": "Orbit",
+      "fov": 45,
+      "orbit_speed": 0.15,
+      "transform": {
+        "position": { "x": 0, "y": 3, "z": 6 }
+      }
+    },
+    {
+      "type": "light",
+      "light_type": "Directional",
+      "color": { "r": 1.0, "g": 1.0, "b": 1.0, "a": 1.0 },
+      "intensity": 2.0,
+      "transform": { "rotation": { "x": -40, "y": 45, "z": 0 } }
+    },
+    {
+      "type": "mesh3d",
+      "mesh": { "Sphere": { "radius": 1.5, "subdivisions": 32 } },
+      "material": {
+        "base_color": { "r": 0.95, "g": 0.95, "b": 0.97, "a": 1.0 },
+        "metallic": 1.0,
+        "roughness": 0.05,
+        "texture_type": "checkerboard",
+        "texture_color2": { "r": 0.85, "g": 0.85, "b": 0.87, "a": 1.0 },
+        "texture_scale": 8.0
+      },
+      "transform": { "position": { "x": 0, "y": 1.5, "z": 0 } },
+      "animation": {
+        "animation_type": { "type": "Rotate", "axis": { "x": 0, "y": 1, "z": 0 }, "degrees": 360 },
+        "duration": 10.0,
+        "looping": true,
+        "easing": "Linear"
+      }
+    },
+    {
+      "type": "mesh3d",
+      "mesh": { "Plane": { "size": 10.0 } },
+      "material": {
+        "base_color": { "r": 0.2, "g": 0.2, "b": 0.22, "a": 1.0 },
+        "metallic": 0.3,
+        "roughness": 0.8
+      },
+      "transform": { "position": { "x": 0, "y": 0, "z": 0 } }
+    }
   ]
 }
 ```
 
 ### Example G: Action boss arena (projectiles, hazards, debris physics)
 
-```json
-{
-  "world": [
-    {"type": "environment", "ambient_intensity": 0.18, "fog_enabled": true, "fog_color": {"r": 0.18, "g": 0.12, "b": 0.12, "a": 1}, "fog_distance": 150},
-    {"type": "camera", "camera_type": "Perspective", "mode": "orbit", "orbit_radius": 26, "orbit_speed": 6, "transform": {"position": {"x": 0, "y": 14, "z": 26}}},
-    {"type": "light", "light_type": "Directional", "intensity": 1.15, "transform": {"rotation": {"x": -47, "y": 18, "z": 0}}},
+## 📊 Element Summary Table
 
-    {"type": "mesh3d", "id": "arena-floor", "mesh": {"shape": "Cylinder", "radius": 24, "height": 1}, "transform": {"position": {"x": 0, "y": -0.5, "z": 0}}, "material": {"base_color": {"r": 0.22, "g": 0.18, "b": 0.16, "a": 1}, "roughness": 0.95}},
+| Element | Type Tag | Rendering |
+|---------|----------|-----------|
+| Mesh | `mesh3d` | 12 primitive generators + PBR material |
+| Light | `light` | Directional, Point, Spot, Area |
+| Camera | `camera` | Perspective/Orthographic with 5 modes |
+| Particles | `particles` | 5 emitter shapes, color/size interpolation |
+| Environment | `environment` | Ambient, sky gradient, fog |
+| Group | `group` | Hierarchical transform container |
+| Text3D | `text3d` | 3D text rendering |
 
-    {"type": "mesh3d", "id": "boss-core", "mesh": {"shape": "Sphere", "radius": 2.2, "subdivisions": 32}, "transform": {"position": {"x": 0, "y": 4, "z": 0}}, "material": {"base_color": {"r": 0.7, "g": 0.12, "b": 0.16, "a": 1}, "emissive": {"r": 0.8, "g": 0.15, "b": 0.2, "a": 1}, "emissive_strength": 2.8}, "animation": [{"animation_type": {"type": "Pulse", "min_scale": 0.92, "max_scale": 1.14}, "duration": 0.9, "looping": true, "easing": "Back"}]},
+### Feature Comparison
 
-    {"type": "group", "id": "projectile-ring", "children": [
-      {"type": "mesh3d", "id": "orb-1", "mesh": {"shape": "Sphere", "radius": 0.35, "subdivisions": 16}, "animation": {"animation_type": {"type": "Orbit", "radius": 6.5, "height": 3.0}, "duration": 2.8, "looping": true, "easing": "Linear"}},
-      {"type": "mesh3d", "id": "orb-2", "mesh": {"shape": "Sphere", "radius": 0.35, "subdivisions": 16}, "animation": {"animation_type": {"type": "Orbit", "radius": 6.5, "height": 3.0}, "duration": 2.8, "looping": true, "easing": "Linear", "delay": 0.9}}
-    ]},
-
-    {"type": "rigidbody", "id": "debris-a", "mesh": "Cube", "transform": {"position": {"x": -5, "y": 12, "z": 2}}, "physics": {"mass": 1.2, "friction": 0.5, "restitution": 0.25, "use_gravity": true, "collider_type": "Box"}},
-    {"type": "rigidbody", "id": "debris-b", "mesh": "Cube", "transform": {"position": {"x": 3, "y": 14, "z": -4}}, "physics": {"mass": 1.4, "friction": 0.45, "restitution": 0.3, "use_gravity": true, "collider_type": "Box"}},
-
-    {"type": "particles", "id": "lava-sparks", "transform": {"position": {"x": 0, "y": 0.1, "z": 0}}, "emitter": {"shape": "ring", "emit_rate": 95, "lifetime": 1.4, "start_color": {"r": 1.0, "g": 0.55, "b": 0.1, "a": 1}, "end_color": {"r": 0.3, "g": 0.1, "b": 0.05, "a": 0}, "start_size": 0.1, "end_size": 0.0, "spread": 70, "speed": 3.2, "speed_variance": 1.0, "max_particles": 700}}
-  ]
-}
-```
+| Feature | Bevy (Rust/GPU) | Dart (Canvas) |
+|---------|----------------|---------------|
+| Mesh primitives | All 12 | All 12 |
+| PBR materials | Full GPU PBR | Blinn-Phong approximation |
+| Procedural textures | — | 4 types (checkerboard, gradient, noise, stripes) |
+| Lighting | All types + shadows | All types, no shadows |
+| Camera modes | All 5 | All 5 |
+| Animations | All 10 types | All 10 types |
+| Particles | Full GPU | Software particles |
+| Physics | — | Basic rigid bodies |
+| Fog | Full | Linear + exponential |
+| GLTF loading | Full | Simplified (nodes + materials) |
+| Performance | GPU-accelerated | Software rasterization |

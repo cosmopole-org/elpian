@@ -1,25 +1,30 @@
-# Elpian VM — Complete AST & API Reference
+# 🖥️ Elpian VM — Complete AST & API Reference
 
 This document is the definitive reference for writing Elpian VM code. It covers the AST JSON format, all node types with their exact structures, the typed value system, the host call protocol, arithmetic/comparison operators, and the Dart/FFI API surface.
 
 ---
 
-## Table of Contents
+## 📑 Table of Contents
 
-1. [Architecture Overview](#architecture-overview)
-2. [Typed Value Format](#typed-value-format)
-3. [AST Program Structure](#ast-program-structure)
-4. [Expression Nodes](#expression-nodes)
-5. [Statement Nodes](#statement-nodes)
-6. [Operators & Arithmetic](#operators--arithmetic)
-7. [Host Call Protocol](#host-call-protocol)
-8. [Built-in Functions](#built-in-functions)
-9. [FFI / Dart API](#ffi--dart-api)
-10. [Complete Examples](#complete-examples)
+1. [🏗️ Architecture Overview](#architecture-overview)
+2. [🔢 Typed Value Format](#typed-value-format)
+3. [📜 AST Program Structure](#ast-program-structure)
+4. [🧮 Expression Nodes](#expression-nodes)
+5. [📋 Statement Nodes](#statement-nodes)
+6. [➕ Operators & Arithmetic](#operators--arithmetic)
+7. [📡 Host Call Protocol](#host-call-protocol)
+8. [⚙️ Built-in Functions](#built-in-functions)
+9. [🔌 FFI / Dart API](#ffi--dart-api)
+10. [📦 Complete Examples](#complete-examples)
+11. [🧩 ElpianVmWidget](#elpianvmwidget)
+12. [🔗 Event Bridging: VM ↔ Flutter](#event-bridging-vm--flutter)
+13. [🎮 ElpianVmController](#elpianvmcontroller)
+14. [📨 Typed JSON Input Format for Events](#typed-json-input-format-for-events)
+15. [🚀 Complete Interactive App Example](#complete-interactive-app-example)
 
 ---
 
-## Architecture Overview
+## 🏗️ Architecture Overview
 
 ```
 Source Code / AST JSON
@@ -49,7 +54,7 @@ The VM compiles AST JSON into bytecode, then executes it. When the VM needs to c
 
 ---
 
-## Typed Value Format
+## 🔢 Typed Value Format
 
 All values crossing the FFI boundary use a typed JSON envelope:
 
@@ -105,7 +110,7 @@ All values crossing the FFI boundary use a typed JSON envelope:
 
 ---
 
-## AST Program Structure
+## 📜 AST Program Structure
 
 Every AST is a JSON object with a `"type": "program"` root and a `"body"` array of statement nodes.
 
@@ -123,7 +128,7 @@ The `"body"` array is also used recursively inside `functionDefinition`, `ifStmt
 
 ---
 
-## Expression Nodes
+## 🧮 Expression Nodes
 
 Expression nodes are used as values inside statements (right-hand side of definitions, function arguments, conditions, etc.).
 
@@ -322,7 +327,7 @@ Calls a function and uses its return value as an expression. Same structure as t
 
 ---
 
-## Statement Nodes
+## 📋 Statement Nodes
 
 Statement nodes are the entries in a `"body"` array. They are executed sequentially.
 
@@ -684,7 +689,7 @@ Conditional jump. If the condition is true, jump to `trueBranch`; otherwise jump
 
 ---
 
-## Operators & Arithmetic
+## ➕ Operators & Arithmetic
 
 All binary operations use the `"arithmetic"` node type.
 
@@ -734,7 +739,7 @@ The `+` operator works on strings too:
 
 ---
 
-## Host Call Protocol
+## 📡 Host Call Protocol
 
 ### How It Works
 
@@ -837,7 +842,7 @@ When calling `askHost` directly, the first argument is the API name (string), an
 
 ---
 
-## Built-in Functions
+## ⚙️ Built-in Functions
 
 The VM has no built-in functions in the traditional sense. All external capabilities come through the host call mechanism. The `func_group` list (`println`, `stringify`, `render`, `updateApp`) defines which API names the VM is allowed to call. These are handled on the Dart side by the `HostHandler`.
 
@@ -845,7 +850,7 @@ User-defined functions (via `functionDefinition`) are fully supported and live i
 
 ---
 
-## FFI / Dart API
+## 🔌 FFI / Dart API
 
 ### Rust FFI Functions (extern "C")
 
@@ -918,7 +923,7 @@ final result = await vm.run();
 
 ---
 
-## Complete Examples
+## 📦 Complete Examples
 
 ### Example 1: Hello World
 
@@ -1566,9 +1571,9 @@ The Dart side can call `vm.callFunction("increment")` to trigger `increment`, wh
 
 ---
 
-## Quick Reference: All AST Node Types
+## 📖 Quick Reference: All AST Node Types
 
-### Expression Nodes (used as values)
+### 🧮 Expression Nodes (used as values)
 
 | Type | Key Properties | Notes |
 |------|---------------|-------|
@@ -1589,7 +1594,7 @@ The Dart side can call `vm.callFunction("increment")` to trigger `increment`, wh
 | `callback` | `data.value.funcId` | Function reference |
 | `functionCall` | `data.callee`, `data.args` | Function call (returns value) |
 
-### Statement Nodes (used in body arrays)
+### 📋 Statement Nodes (used in body arrays)
 
 | Type | Key Properties | Notes |
 |------|---------------|-------|
@@ -1604,3 +1609,383 @@ The Dart side can call `vm.callFunction("increment")` to trigger `increment`, wh
 | `host_call` | `data.name`, `data.args` | Host API call |
 | `jumpOperation` | `data.stepNumber` | Unconditional jump (low-level) |
 | `conditionalBranch` | `data.condition`, `data.trueBranch`, `data.falseBranch` | Conditional jump (low-level) |
+
+---
+
+## 🧩 ElpianVmWidget
+
+`ElpianVmWidget` is a Flutter widget that runs a VM sandbox and renders the view tree it produces. It handles the full lifecycle: VM creation, host call routing, rendering, and disposal.
+
+### Properties
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `machineId` | String | *required* | Unique VM instance identifier |
+| `code` | String? | null | Source code to run |
+| `astJson` | String? | null | Pre-compiled AST JSON to run |
+| `engine` | ElpianEngine? | null | Custom engine instance (creates default if null) |
+| `stylesheet` | Map? | null | JSON stylesheet to load |
+| `loadingWidget` | Widget? | null | Widget shown during initialization |
+| `errorBuilder` | Function? | null | Custom error display |
+| `onPrintln` | Function? | null | Callback for VM `println` calls |
+| `onUpdateApp` | Function? | null | Callback for VM `updateApp` calls |
+| `hostHandlers` | Map? | null | Additional host call handlers |
+| `entryFunction` | String? | null | Function to call after initial execution |
+| `entryInput` | String? | null | Typed JSON input for the entry function |
+
+### Usage
+
+```dart
+// From source code
+ElpianVmWidget(
+  machineId: 'my-app',
+  code: r'''
+    def title = "Hello from VM!"
+    def view = {
+      "type": "Column",
+      "children": [
+        { "type": "h1", "props": { "text": title } },
+        { "type": "p", "props": { "text": "Rendered by the VM sandbox." } }
+      ]
+    }
+    askHost("render", view)
+  ''',
+)
+
+// From AST JSON
+ElpianVmWidget.fromAst(
+  machineId: 'my-app',
+  astJson: '{"type":"program","body":[...]}',
+)
+
+// With stylesheet and custom handlers
+ElpianVmWidget(
+  machineId: 'themed-app',
+  code: vmCode,
+  stylesheet: {
+    'rules': [
+      {'selector': '.card', 'styles': {'padding': '16', 'borderRadius': '8'}}
+    ]
+  },
+  hostHandlers: {
+    'fetchData': (apiName, payload) async {
+      final data = await myApi.fetch(payload);
+      return '{"type": "string", "data": {"value": "$data"}}';
+    },
+  },
+  onPrintln: (msg) => print('VM: $msg'),
+)
+```
+
+---
+
+## 🔗 Event Bridging: VM ↔ Flutter
+
+The VM and Flutter communicate events through two mechanisms:
+
+### 1. Dart → VM: `callFunction` / `callFunctionWithInput`
+
+Flutter code can invoke named functions inside the running VM. This is how UI events (button clicks, input changes, etc.) trigger VM-side logic.
+
+```dart
+// Simple call (no arguments)
+await vm.callFunction('increment');
+
+// Call with typed JSON input
+await vm.callFunctionWithInput('handleClick', '''
+  {"type": "object", "data": {"value": {
+    "x": {"type": "f32", "data": {"value": 100.5}},
+    "y": {"type": "f32", "data": {"value": 200.3}}
+  }}}
+''');
+```
+
+The VM function receives the input as its first parameter and can use `askHost("render", ...)` to update the UI:
+
+```
+// VM source code
+def count = 0
+
+func increment() {
+  count = count + 1
+  askHost("render", buildView())
+}
+
+func buildView() {
+  return {
+    "type": "Column",
+    "children": [
+      { "type": "Text", "props": { "data": count } },
+      { "type": "Button", "props": { "text": "Add" } }
+    ]
+  }
+}
+
+askHost("render", buildView())
+```
+
+### 2. VM → Dart: Host Calls
+
+The VM sends data to Dart through `askHost`. The four built-in host APIs are:
+
+| Host API | Direction | Purpose |
+|----------|-----------|---------|
+| `render` | VM → Dart | Send JSON view tree for rendering |
+| `updateApp` | VM → Dart | Send state updates to the Dart side |
+| `println` | VM → Dart | Print debug messages |
+| `stringify` | VM → Dart | Convert a value to string |
+
+Custom host APIs can be registered:
+
+```dart
+ElpianVmWidget(
+  machineId: 'my-app',
+  code: vmCode,
+  hostHandlers: {
+    'saveData': (apiName, payload) async {
+      await database.save(jsonDecode(payload));
+      return '{"type": "bool", "data": {"value": true}}';
+    },
+    'navigate': (apiName, payload) async {
+      Navigator.of(context).pushNamed(payload);
+      return '{"type": "i16", "data": {"value": 0}}';
+    },
+  },
+)
+```
+
+### Event Flow Diagram
+
+```
+┌──────────────────────────────────────────────────────────┐
+│ Flutter Side                                             │
+│                                                          │
+│  User taps button                                        │
+│       │                                                  │
+│       ▼                                                  │
+│  ElpianVmWidget.callVmFunction("increment")              │
+│       │                                                  │
+│       ▼                                                  │
+│  ElpianVm.callFunction("increment")                      │
+│       │                                                  │
+└───────┼──────────────────────────────────────────────────┘
+        │  FFI / WASM
+┌───────┼──────────────────────────────────────────────────┐
+│       ▼                                                  │
+│  Rust VM: Execute "increment" function                   │
+│       │                                                  │
+│       ▼                                                  │
+│  VM: askHost("render", updatedView)                      │
+│       │  (VM pauses)                                     │
+│       │                                                  │
+└───────┼──────────────────────────────────────────────────┘
+        │
+┌───────┼──────────────────────────────────────────────────┐
+│       ▼                                                  │
+│  Dart: HostHandler.handleRender(viewJson)                │
+│       │                                                  │
+│       ▼                                                  │
+│  setState() → ElpianEngine.renderFromJson(viewJson)      │
+│       │                                                  │
+│       ▼                                                  │
+│  Flutter rebuilds widget tree with new view               │
+│                                                          │
+└──────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🎮 ElpianVmController
+
+`ElpianVmController` provides programmatic access to a running VM from ancestor widgets. Use it with `ElpianVmScope` to call VM functions from outside the widget.
+
+### Usage
+
+```dart
+class MyPage extends StatefulWidget {
+  @override
+  State<MyPage> createState() => _MyPageState();
+}
+
+class _MyPageState extends State<MyPage> {
+  final _vmController = ElpianVmController();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        // Button outside the VM widget tree
+        ElevatedButton(
+          onPressed: () {
+            _vmController.callFunction('increment');
+          },
+          child: Text('Increment from Dart'),
+        ),
+        // The VM widget
+        Expanded(
+          child: ElpianVmScope(
+            controller: _vmController,
+            machineId: 'counter-app',
+            code: counterVmCode,
+          ),
+        ),
+      ],
+    );
+  }
+}
+```
+
+### Controller API
+
+| Method | Parameters | Description |
+|--------|-----------|-------------|
+| `callFunction` | `funcName`, `input?` | Call a VM function with optional typed JSON input |
+
+---
+
+## 📨 Typed JSON Input Format for Events
+
+When passing event data to VM functions via `callFunctionWithInput`, use the typed value format:
+
+### Passing a Click Position
+
+```json
+{
+  "type": "object",
+  "data": {
+    "value": {
+      "x": { "type": "f64", "data": { "value": 150.0 } },
+      "y": { "type": "f64", "data": { "value": 230.5 } },
+      "button": { "type": "i16", "data": { "value": 0 } }
+    }
+  }
+}
+```
+
+### Passing a Text Input Value
+
+```json
+{
+  "type": "string",
+  "data": { "value": "user typed this" }
+}
+```
+
+### Passing a Keyboard Event
+
+```json
+{
+  "type": "object",
+  "data": {
+    "value": {
+      "key": { "type": "string", "data": { "value": "Enter" } },
+      "keyCode": { "type": "i32", "data": { "value": 13 } },
+      "ctrl": { "type": "bool", "data": { "value": false } },
+      "shift": { "type": "bool", "data": { "value": false } }
+    }
+  }
+}
+```
+
+### Passing a Selection Index
+
+```json
+{
+  "type": "i16",
+  "data": { "value": 2 }
+}
+```
+
+---
+
+## 🚀 Complete Interactive App Example
+
+A counter app with VM state management and Dart-side event wiring:
+
+### VM Code
+
+```
+def count = 0
+
+func getView() {
+  return {
+    "type": "Column",
+    "style": { "padding": "24", "gap": "16", "alignItems": "center" },
+    "children": [
+      {
+        "type": "Text",
+        "props": { "data": "Count: " + stringify(count) },
+        "style": { "fontSize": "32", "fontWeight": "bold" }
+      },
+      {
+        "type": "Row",
+        "style": { "gap": "12" },
+        "children": [
+          {
+            "type": "Button",
+            "props": { "text": "- Decrease" },
+            "style": { "backgroundColor": "#F44336", "color": "white" }
+          },
+          {
+            "type": "Button",
+            "props": { "text": "+ Increase" },
+            "style": { "backgroundColor": "#4CAF50", "color": "white" }
+          }
+        ]
+      }
+    ]
+  }
+}
+
+func increment() {
+  count = count + 1
+  askHost("render", getView())
+}
+
+func decrement() {
+  count = count - 1
+  askHost("render", getView())
+}
+
+func handleInput(data) {
+  def action = data["action"]
+  if (action == "increment") {
+    increment()
+  }
+  if (action == "decrement") {
+    decrement()
+  }
+}
+
+askHost("render", getView())
+```
+
+### Dart Integration
+
+```dart
+ElpianVmWidget(
+  machineId: 'counter',
+  code: counterCode,
+  onUpdateApp: (data) {
+    // Handle app-level state changes from VM
+    print('App update: $data');
+  },
+)
+```
+
+To trigger actions from Dart, use the controller:
+
+```dart
+final controller = ElpianVmController();
+
+// Wire up event handlers
+controller.callFunction('increment');
+controller.callFunction('decrement');
+
+// Pass structured data
+controller.callFunction('handleInput', input: '''
+  {"type": "object", "data": {"value": {
+    "action": {"type": "string", "data": {"value": "increment"}}
+  }}}
+''');
+```
