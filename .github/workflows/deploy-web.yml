@@ -27,7 +27,10 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.0'
+          # The web bindings in this repo use modern Dart JS interop APIs
+          # (e.g. `dart:js_interop` typed conversions) that are not reliably
+          # available on older Flutter toolchains.
+          flutter-version: '3.27.4'
           channel: 'stable'
           cache: true
 
@@ -42,7 +45,12 @@ jobs:
             -t lib/example/landing_page_example.dart
 
       - name: Copy Bevy 3D Demo to build output
-        run: cp -r web/bevy_demo build/web/bevy_demo
+        run: |
+          if [ -d web/bevy_demo ]; then
+            cp -r web/bevy_demo build/web/bevy_demo
+          else
+            echo "web/bevy_demo not found; skipping optional demo copy"
+          fi
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
