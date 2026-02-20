@@ -27,10 +27,8 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          # The web bindings in this repo use modern Dart JS interop APIs
-          # (e.g. `dart:js_interop` typed conversions) that are not reliably
-          # available on older Flutter toolchains.
-          flutter-version: '3.27.4'
+          # Use the current stable channel to avoid pin drift/bad version pins
+          # and keep web CI aligned with the actively supported toolchain.
           channel: 'stable'
           cache: true
 

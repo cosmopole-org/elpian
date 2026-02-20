@@ -7,7 +7,6 @@
 /// ```bash
 /// cd rust && wasm-pack build --target web
 /// ```
-library;
 
 import 'dart:js_interop';
 

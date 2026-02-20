@@ -4,7 +4,6 @@
 /// Parses the same JSON scene format as the Rust renderer and draws
 /// projected 3D geometry using Flutter's Canvas API (GPU-accelerated
 /// via Skia/Impeller).
-library;
 
 import 'dart:math' as math;
 import 'package:flutter/material.dart';

@@ -2,7 +2,6 @@
 ///
 /// On web platforms, this uses dart:js_interop to call into the WASM-compiled
 /// Rust library via wasm-bindgen. Pixel data is transferred as Uint8List.
-library;
 
 import 'dart:convert';
 import 'dart:js_interop';
