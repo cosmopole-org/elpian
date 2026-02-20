@@ -2,7 +2,6 @@
 ///
 /// Replaces [BevySceneWidget] for platform-independent 3D rendering.
 /// Uses [Scene3DRenderer] + [SceneParser] to parse JSON and render via Canvas.
-library;
 
 import 'dart:convert';
 import 'dart:math' as math;
