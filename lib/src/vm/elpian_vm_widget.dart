@@ -295,7 +295,7 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
     } else if (event is ElpianInputEvent) {
       base.addAll({
         'value': event.value,
-        'isComposing': event.isComposing,
+        'inputType': event.inputType,
       });
     }
 
