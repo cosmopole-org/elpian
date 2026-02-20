@@ -65,12 +65,21 @@ ffi.DynamicLibrary _loadLibrary() {
   throw UnsupportedError('Unsupported platform for native FFI');
 }
 
+// ── Error result helper ─────────────────────────────────────────────
+
+VmExecResult _errorResult(String message) => VmExecResult(
+      hasHostCall: false,
+      hostCallData: '',
+      resultValue: '"$message"',
+    );
+
 // ── API class ───────────────────────────────────────────────────────
 
 /// Native FFI bindings to the Elpian Rust VM.
 class ElpianVmApi {
   static ElpianVmApi? _instance;
   static String? _lastError;
+  static bool _nativeAvailable = false;
 
   static String? get lastError => _lastError;
 
@@ -81,19 +90,20 @@ class ElpianVmApi {
   static void clearLastError() {
     _lastError = null;
   }
+
   late final ffi.DynamicLibrary _lib;
 
-  late final _InitDart _init;
-  late final _FreeStringDart _freeString;
+  _InitDart? _init;
+  _FreeStringDart? _freeString;
   _CreateVmDart? _createVmFromAst;
-  late final _CreateVmDart _createVmFromCode;
+  _CreateVmDart? _createVmFromCode;
   _ValidateDart? _validateAst;
-  late final _ExecuteDart _execute;
-  late final _ExecuteFuncDart _executeFunc;
-  late final _ExecuteFuncInputDart _executeFuncWithInput;
-  late final _ContinueDart _continueExecution;
-  late final _DestroyDart _destroyVm;
-  late final _DestroyDart _vmExists;
+  _ExecuteDart? _execute;
+  _ExecuteFuncDart? _executeFunc;
+  _ExecuteFuncInputDart? _executeFuncWithInput;
+  _ContinueDart? _continueExecution;
+  _DestroyDart? _destroyVm;
+  _DestroyDart? _vmExists;
 
   ElpianVmApi._() {
     _lib = _loadLibrary();
@@ -110,8 +120,15 @@ class ElpianVmApi {
         "FFI symbol lookup failed for elpian_create_vm_from_ast: $e",
       );
     }
-    _createVmFromCode =
-        _lib.lookupFunction<_CreateVmC, _CreateVmDart>('elpian_create_vm_from_code');
+    try {
+      _createVmFromCode =
+          _lib.lookupFunction<_CreateVmC, _CreateVmDart>('elpian_create_vm_from_code');
+    } catch (e) {
+      _createVmFromCode = null;
+      _setLastError(
+        "FFI symbol lookup failed for elpian_create_vm_from_code: $e",
+      );
+    }
     try {
       _validateAst = _lib.lookupFunction<_ValidateC, _ValidateDart>(
         'elpian_validate_ast',
@@ -122,51 +139,97 @@ class ElpianVmApi {
         "FFI symbol lookup failed for elpian_validate_ast: $e",
       );
     }
-    _execute =
-        _lib.lookupFunction<_ExecuteC, _ExecuteDart>('elpian_execute');
-    _executeFunc =
-        _lib.lookupFunction<_ExecuteFuncC, _ExecuteFuncDart>('elpian_execute_func');
-    _executeFuncWithInput = _lib.lookupFunction<_ExecuteFuncInputC,
-        _ExecuteFuncInputDart>('elpian_execute_func_with_input');
-    _continueExecution =
-        _lib.lookupFunction<_ContinueC, _ContinueDart>('elpian_continue_execution');
-    _destroyVm =
-        _lib.lookupFunction<_DestroyC, _DestroyDart>('elpian_destroy_vm');
-    _vmExists =
-        _lib.lookupFunction<_DestroyC, _DestroyDart>('elpian_vm_exists');
+    try {
+      _execute =
+          _lib.lookupFunction<_ExecuteC, _ExecuteDart>('elpian_execute');
+    } catch (e) {
+      _execute = null;
+      _setLastError("FFI symbol lookup failed for elpian_execute: $e");
+    }
+    try {
+      _executeFunc =
+          _lib.lookupFunction<_ExecuteFuncC, _ExecuteFuncDart>('elpian_execute_func');
+    } catch (e) {
+      _executeFunc = null;
+      _setLastError("FFI symbol lookup failed for elpian_execute_func: $e");
+    }
+    try {
+      _executeFuncWithInput = _lib.lookupFunction<_ExecuteFuncInputC,
+          _ExecuteFuncInputDart>('elpian_execute_func_with_input');
+    } catch (e) {
+      _executeFuncWithInput = null;
+      _setLastError(
+        "FFI symbol lookup failed for elpian_execute_func_with_input: $e",
+      );
+    }
+    try {
+      _continueExecution =
+          _lib.lookupFunction<_ContinueC, _ContinueDart>('elpian_continue_execution');
+    } catch (e) {
+      _continueExecution = null;
+      _setLastError(
+        "FFI symbol lookup failed for elpian_continue_execution: $e",
+      );
+    }
+    try {
+      _destroyVm =
+          _lib.lookupFunction<_DestroyC, _DestroyDart>('elpian_destroy_vm');
+    } catch (e) {
+      _destroyVm = null;
+      _setLastError("FFI symbol lookup failed for elpian_destroy_vm: $e");
+    }
+    try {
+      _vmExists =
+          _lib.lookupFunction<_DestroyC, _DestroyDart>('elpian_vm_exists');
+    } catch (e) {
+      _vmExists = null;
+      _setLastError("FFI symbol lookup failed for elpian_vm_exists: $e");
+    }
   }
 
-  factory ElpianVmApi() {
-    _instance ??= ElpianVmApi._();
-    return _instance!;
+  /// Try to get the singleton API instance. Returns null if the native
+  /// library could not be loaded (sets [lastError] with the reason).
+  static ElpianVmApi? _tryGetApi() {
+    if (_instance != null) return _instance;
+    try {
+      _instance = ElpianVmApi._();
+      _nativeAvailable = true;
+      return _instance;
+    } catch (e) {
+      _nativeAvailable = false;
+      _setLastError('Failed to load native VM library: $e');
+      return null;
+    }
   }
 
   VmExecResult _callAndParse(ffi.Pointer<Utf8> ptr) {
     final jsonStr = ptr.toDartString();
-    _freeString(ptr);
+    _freeString?.call(ptr);
     final json = jsonDecode(jsonStr) as Map<String, dynamic>;
     return VmExecResult.fromJson(json);
   }
 
   static Future<void> initVmSystem() async {
-    ElpianVmApi()._init();
+    final api = _tryGetApi();
+    api?._init?.call();
   }
 
   static Future<bool> createVmFromAst({
     required String machineId,
     required String astJson,
   }) async {
-    final api = ElpianVmApi();
+    final api = _tryGetApi();
+    if (api == null) return false;
+    final fn = api._createVmFromAst;
+    if (fn == null) {
+      _setLastError(
+        "createVmFromAst unavailable: missing native symbol elpian_create_vm_from_ast",
+      );
+      return false;
+    }
     final midPtr = machineId.toNativeUtf8();
     final astPtr = astJson.toNativeUtf8();
     try {
-      final fn = api._createVmFromAst;
-      if (fn == null) {
-        _setLastError(
-          "createVmFromAst unavailable: missing native symbol elpian_create_vm_from_ast",
-        );
-        return false;
-      }
       clearLastError();
       final ok = fn(midPtr, astPtr) == 1;
       if (!ok) {
@@ -183,11 +246,24 @@ class ElpianVmApi {
     required String machineId,
     required String code,
   }) async {
-    final api = ElpianVmApi();
+    final api = _tryGetApi();
+    if (api == null) return false;
+    final fn = api._createVmFromCode;
+    if (fn == null) {
+      _setLastError(
+        "createVmFromCode unavailable: missing native symbol elpian_create_vm_from_code",
+      );
+      return false;
+    }
     final midPtr = machineId.toNativeUtf8();
     final codePtr = code.toNativeUtf8();
     try {
-      return api._createVmFromCode(midPtr, codePtr) == 1;
+      clearLastError();
+      final ok = fn(midPtr, codePtr) == 1;
+      if (!ok) {
+        _setLastError("Native createVmFromCode returned false");
+      }
+      return ok;
     } finally {
       malloc.free(midPtr);
       malloc.free(codePtr);
@@ -195,16 +271,17 @@ class ElpianVmApi {
   }
 
   static Future<bool> validateAst({required String astJson}) async {
-    final api = ElpianVmApi();
+    final api = _tryGetApi();
+    if (api == null) return false;
+    final fn = api._validateAst;
+    if (fn == null) {
+      _setLastError(
+        "validateAst unavailable: missing native symbol elpian_validate_ast",
+      );
+      return false;
+    }
     final astPtr = astJson.toNativeUtf8();
     try {
-      final fn = api._validateAst;
-      if (fn == null) {
-        _setLastError(
-          "validateAst unavailable: missing native symbol elpian_validate_ast",
-        );
-        return false;
-      }
       clearLastError();
       final ok = fn(astPtr) == 1;
       if (!ok) {
@@ -219,10 +296,16 @@ class ElpianVmApi {
   static Future<VmExecResult> executeVm({
     required String machineId,
   }) async {
-    final api = ElpianVmApi();
+    final api = _tryGetApi();
+    if (api == null) return _errorResult('native_lib_not_loaded');
+    final fn = api._execute;
+    if (fn == null) {
+      _setLastError("executeVm unavailable: missing native symbol elpian_execute");
+      return _errorResult('symbol_not_found');
+    }
     final midPtr = machineId.toNativeUtf8();
     try {
-      return api._callAndParse(api._execute(midPtr));
+      return api._callAndParse(fn(midPtr));
     } finally {
       malloc.free(midPtr);
     }
@@ -233,11 +316,17 @@ class ElpianVmApi {
     required String funcName,
     required int cbId,
   }) async {
-    final api = ElpianVmApi();
+    final api = _tryGetApi();
+    if (api == null) return _errorResult('native_lib_not_loaded');
+    final fn = api._executeFunc;
+    if (fn == null) {
+      _setLastError("executeVmFunc unavailable: missing native symbol elpian_execute_func");
+      return _errorResult('symbol_not_found');
+    }
     final midPtr = machineId.toNativeUtf8();
     final fnPtr = funcName.toNativeUtf8();
     try {
-      return api._callAndParse(api._executeFunc(midPtr, fnPtr, cbId));
+      return api._callAndParse(fn(midPtr, fnPtr, cbId));
     } finally {
       malloc.free(midPtr);
       malloc.free(fnPtr);
@@ -250,13 +339,20 @@ class ElpianVmApi {
     required String inputJson,
     required int cbId,
   }) async {
-    final api = ElpianVmApi();
+    final api = _tryGetApi();
+    if (api == null) return _errorResult('native_lib_not_loaded');
+    final fn = api._executeFuncWithInput;
+    if (fn == null) {
+      _setLastError(
+        "executeVmFuncWithInput unavailable: missing native symbol elpian_execute_func_with_input",
+      );
+      return _errorResult('symbol_not_found');
+    }
     final midPtr = machineId.toNativeUtf8();
     final fnPtr = funcName.toNativeUtf8();
     final inputPtr = inputJson.toNativeUtf8();
     try {
-      return api._callAndParse(
-          api._executeFuncWithInput(midPtr, fnPtr, inputPtr, cbId));
+      return api._callAndParse(fn(midPtr, fnPtr, inputPtr, cbId));
     } finally {
       malloc.free(midPtr);
       malloc.free(fnPtr);
@@ -268,11 +364,19 @@ class ElpianVmApi {
     required String machineId,
     required String inputJson,
   }) async {
-    final api = ElpianVmApi();
+    final api = _tryGetApi();
+    if (api == null) return _errorResult('native_lib_not_loaded');
+    final fn = api._continueExecution;
+    if (fn == null) {
+      _setLastError(
+        "continueExecution unavailable: missing native symbol elpian_continue_execution",
+      );
+      return _errorResult('symbol_not_found');
+    }
     final midPtr = machineId.toNativeUtf8();
     final inputPtr = inputJson.toNativeUtf8();
     try {
-      return api._callAndParse(api._continueExecution(midPtr, inputPtr));
+      return api._callAndParse(fn(midPtr, inputPtr));
     } finally {
       malloc.free(midPtr);
       malloc.free(inputPtr);
@@ -280,20 +384,26 @@ class ElpianVmApi {
   }
 
   static Future<bool> destroyVm({required String machineId}) async {
-    final api = ElpianVmApi();
+    final api = _tryGetApi();
+    if (api == null) return false;
+    final fn = api._destroyVm;
+    if (fn == null) return false;
     final midPtr = machineId.toNativeUtf8();
     try {
-      return api._destroyVm(midPtr) == 1;
+      return fn(midPtr) == 1;
     } finally {
       malloc.free(midPtr);
     }
   }
 
   static Future<bool> vmExists({required String machineId}) async {
-    final api = ElpianVmApi();
+    final api = _tryGetApi();
+    if (api == null) return false;
+    final fn = api._vmExists;
+    if (fn == null) return false;
     final midPtr = machineId.toNativeUtf8();
     try {
-      return api._vmExists(midPtr) == 1;
+      return fn(midPtr) == 1;
     } finally {
       malloc.free(midPtr);
     }
