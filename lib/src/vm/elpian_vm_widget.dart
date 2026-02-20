@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import '../core/elpian_engine.dart';
+import '../core/event_system.dart';
 import '../models/elpian_node.dart';
 import 'elpian_vm.dart';
 import 'host_handler.dart';
@@ -173,6 +174,12 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
 
       _vm = vm;
 
+      // Wire all UI events to VM function names declared in node.events.
+      // This keeps event routing fully engine-driven (no extra app-layer glue).
+      _engine.setGlobalEventHandler((event) {
+        _routeEventToVm(event);
+      });
+
       // Set up host handlers
       final hostHandler = HostHandler(
         onRender: (viewJson) {
@@ -232,6 +239,67 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
         });
       }
     }
+  }
+
+  Future<void> _routeEventToVm(ElpianEvent event) async {
+    if (_vm == null) return;
+    final nodeId = event.currentTarget?.toString();
+    if (nodeId == null || nodeId.isEmpty) return;
+
+    final node = _engine.eventDispatcher.getNode(nodeId);
+    final handler = node?.events?[event.type];
+
+    if (handler is! String || handler.isEmpty) return;
+
+    final payload = jsonEncode(_eventToJson(event));
+    try {
+      await _vm!.callFunctionWithInput(handler, payload);
+    } catch (e) {
+      debugPrint('ElpianVmWidget: Error calling event handler "$handler": $e');
+    }
+  }
+
+  Map<String, dynamic> _eventToJson(ElpianEvent event) {
+    final base = <String, dynamic>{
+      'type': event.type,
+      'eventType': event.eventType.name,
+      'target': event.target?.toString(),
+      'currentTarget': event.currentTarget?.toString(),
+      'timestamp': event.timestamp.toIso8601String(),
+      'phase': event.phase.name,
+      'data': event.data,
+    };
+
+    if (event is ElpianPointerEvent) {
+      base.addAll({
+        'position': {'x': event.position.dx, 'y': event.position.dy},
+        'localPosition': {
+          'x': event.localPosition.dx,
+          'y': event.localPosition.dy,
+        },
+        'delta': {'x': event.delta.dx, 'y': event.delta.dy},
+        'buttons': event.buttons,
+        'pressure': event.pressure,
+        'distance': event.distance,
+        'pointerId': event.pointerId,
+      });
+    } else if (event is ElpianKeyboardEvent) {
+      base.addAll({
+        'key': event.key,
+        'keyCode': event.keyCode,
+        'altKey': event.altKey,
+        'ctrlKey': event.ctrlKey,
+        'shiftKey': event.shiftKey,
+        'metaKey': event.metaKey,
+      });
+    } else if (event is ElpianInputEvent) {
+      base.addAll({
+        'value': event.value,
+        'isComposing': event.isComposing,
+      });
+    }
+
+    return base;
   }
 
   Future<void> _callEntryFunction() async {
