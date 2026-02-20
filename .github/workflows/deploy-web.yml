@@ -41,9 +41,9 @@ jobs:
           # (e.g. Flutter web build environments) do not fail with
           # "Bulk memory operations require bulk memory".
           RUSTFLAGS: -C target-feature=-bulk-memory
-          CARGO_BUILD_TARGET: wasm32-unknown-unknown
         run: |
           wasm-pack build rust \
+            --enable-bulk-memory \
             --target web \
             --release \
             --out-dir pkg \
