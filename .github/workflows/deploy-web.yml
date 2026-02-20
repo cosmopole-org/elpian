@@ -33,6 +33,11 @@ jobs:
         run: cargo install wasm-pack --locked
 
       - name: Build Elpian WASM module
+        env:
+          # Avoid bulk-memory opcodes so wasm validators in downstream toolchains
+          # (e.g. Flutter web build environments) do not fail with
+          # "Bulk memory operations require bulk memory".
+          RUSTFLAGS: -C target-feature=-bulk-memory
         run: |
           wasm-pack build rust \
             --target web \
