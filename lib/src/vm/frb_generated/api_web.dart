@@ -48,12 +48,21 @@ external JSBoolean _wasmDestroyVm(JSString machineId);
 @JS('elpian_wasm_vm_exists')
 external JSBoolean _wasmVmExists(JSString machineId);
 
+// ── Error result helper ─────────────────────────────────────────────
+
+VmExecResult _errorResult(String message) => VmExecResult(
+      hasHostCall: false,
+      hostCallData: '',
+      resultValue: '"$message"',
+    );
+
 // ── API class for web (same name as native for conditional export) ───
 
 /// Web (WASM) implementation of the Elpian VM API.
 /// Same class name as native [ElpianVmApi] so conditional exports work.
 class ElpianVmApi {
   static String? _lastError;
+  static bool _wasmAvailable = false;
 
   static String? get lastError => _lastError;
 
@@ -61,8 +70,18 @@ class ElpianVmApi {
     _lastError = null;
   }
 
+  static const _wasmMissing =
+      'Elpian WASM module is not loaded. '
+      'Build it with: cd rust && wasm-pack build --target web';
+
   static Future<void> initVmSystem() async {
-    _wasmInit();
+    try {
+      _wasmInit();
+      _wasmAvailable = true;
+    } catch (e) {
+      _wasmAvailable = false;
+      _lastError = '$_wasmMissing ($e)';
+    }
   }
 
   static Future<bool> createVmFromAst({
@@ -70,34 +89,75 @@ class ElpianVmApi {
     required String astJson,
   }) async {
     clearLastError();
-    final ok = _wasmCreateVmFromAst(machineId.toJS, astJson.toJS).toDart;
-    if (!ok) {
-      _lastError = "WASM createVmFromAst returned false";
+    if (!_wasmAvailable) {
+      _lastError = _wasmMissing;
+      return false;
     }
-    return ok;
+    try {
+      final ok = _wasmCreateVmFromAst(machineId.toJS, astJson.toJS).toDart;
+      if (!ok) {
+        _lastError = "WASM createVmFromAst returned false";
+      }
+      return ok;
+    } catch (e) {
+      _lastError = 'WASM createVmFromAst failed: $e';
+      return false;
+    }
   }
 
   static Future<bool> createVmFromCode({
     required String machineId,
     required String code,
   }) async {
-    return _wasmCreateVmFromCode(machineId.toJS, code.toJS).toDart;
+    clearLastError();
+    if (!_wasmAvailable) {
+      _lastError = _wasmMissing;
+      return false;
+    }
+    try {
+      final ok = _wasmCreateVmFromCode(machineId.toJS, code.toJS).toDart;
+      if (!ok) {
+        _lastError = "WASM createVmFromCode returned false";
+      }
+      return ok;
+    } catch (e) {
+      _lastError = 'WASM createVmFromCode failed: $e';
+      return false;
+    }
   }
 
   static Future<bool> validateAst({required String astJson}) async {
     clearLastError();
-    final ok = _wasmValidateAst(astJson.toJS).toDart;
-    if (!ok) {
-      _lastError = "WASM validateAst returned false";
+    if (!_wasmAvailable) {
+      _lastError = _wasmMissing;
+      return false;
     }
-    return ok;
+    try {
+      final ok = _wasmValidateAst(astJson.toJS).toDart;
+      if (!ok) {
+        _lastError = "WASM validateAst returned false";
+      }
+      return ok;
+    } catch (e) {
+      _lastError = 'WASM validateAst failed: $e';
+      return false;
+    }
   }
 
   static Future<VmExecResult> executeVm({
     required String machineId,
   }) async {
-    final result = _wasmExecute(machineId.toJS).toDart;
-    return VmExecResult.fromJsonString(result);
+    if (!_wasmAvailable) {
+      _lastError = _wasmMissing;
+      return _errorResult('wasm_not_available');
+    }
+    try {
+      final result = _wasmExecute(machineId.toJS).toDart;
+      return VmExecResult.fromJsonString(result);
+    } catch (e) {
+      _lastError = 'WASM executeVm failed: $e';
+      return _errorResult('wasm_error');
+    }
   }
 
   static Future<VmExecResult> executeVmFunc({
@@ -105,9 +165,18 @@ class ElpianVmApi {
     required String funcName,
     required int cbId,
   }) async {
-    final result =
-        _wasmExecuteFunc(machineId.toJS, funcName.toJS, cbId.toJS).toDart;
-    return VmExecResult.fromJsonString(result);
+    if (!_wasmAvailable) {
+      _lastError = _wasmMissing;
+      return _errorResult('wasm_not_available');
+    }
+    try {
+      final result =
+          _wasmExecuteFunc(machineId.toJS, funcName.toJS, cbId.toJS).toDart;
+      return VmExecResult.fromJsonString(result);
+    } catch (e) {
+      _lastError = 'WASM executeVmFunc failed: $e';
+      return _errorResult('wasm_error');
+    }
   }
 
   static Future<VmExecResult> executeVmFuncWithInput({
@@ -116,26 +185,56 @@ class ElpianVmApi {
     required String inputJson,
     required int cbId,
   }) async {
-    final result = _wasmExecuteFuncWithInput(
-            machineId.toJS, funcName.toJS, inputJson.toJS, cbId.toJS)
-        .toDart;
-    return VmExecResult.fromJsonString(result);
+    if (!_wasmAvailable) {
+      _lastError = _wasmMissing;
+      return _errorResult('wasm_not_available');
+    }
+    try {
+      final result = _wasmExecuteFuncWithInput(
+              machineId.toJS, funcName.toJS, inputJson.toJS, cbId.toJS)
+          .toDart;
+      return VmExecResult.fromJsonString(result);
+    } catch (e) {
+      _lastError = 'WASM executeVmFuncWithInput failed: $e';
+      return _errorResult('wasm_error');
+    }
   }
 
   static Future<VmExecResult> continueExecution({
     required String machineId,
     required String inputJson,
   }) async {
-    final result =
-        _wasmContinueExecution(machineId.toJS, inputJson.toJS).toDart;
-    return VmExecResult.fromJsonString(result);
+    if (!_wasmAvailable) {
+      _lastError = _wasmMissing;
+      return _errorResult('wasm_not_available');
+    }
+    try {
+      final result =
+          _wasmContinueExecution(machineId.toJS, inputJson.toJS).toDart;
+      return VmExecResult.fromJsonString(result);
+    } catch (e) {
+      _lastError = 'WASM continueExecution failed: $e';
+      return _errorResult('wasm_error');
+    }
   }
 
   static Future<bool> destroyVm({required String machineId}) async {
-    return _wasmDestroyVm(machineId.toJS).toDart;
+    if (!_wasmAvailable) return false;
+    try {
+      return _wasmDestroyVm(machineId.toJS).toDart;
+    } catch (e) {
+      _lastError = 'WASM destroyVm failed: $e';
+      return false;
+    }
   }
 
   static Future<bool> vmExists({required String machineId}) async {
-    return _wasmVmExists(machineId.toJS).toDart;
+    if (!_wasmAvailable) return false;
+    try {
+      return _wasmVmExists(machineId.toJS).toDart;
+    } catch (e) {
+      _lastError = 'WASM vmExists failed: $e';
+      return false;
+    }
   }
 }

@@ -156,6 +156,9 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
 
   Future<void> _initVm() async {
     try {
+      // Initialize the VM subsystem (loads native lib / WASM module)
+      await ElpianVm.initialize();
+
       // Create the VM
       ElpianVm? vm;
       if (widget.code != null) {

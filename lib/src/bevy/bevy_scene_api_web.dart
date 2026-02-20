@@ -71,8 +71,15 @@ external int _wasmGetFrameCount(String sceneId);
 
 /// Web FFI bindings to the Elpian Bevy 3D scene renderer.
 class BevySceneApi {
+  static bool _wasmAvailable = false;
+
   static void initSceneSystem() {
-    _wasmInit();
+    try {
+      _wasmInit();
+      _wasmAvailable = true;
+    } catch (_) {
+      _wasmAvailable = false;
+    }
   }
 
   static bool createScene({
@@ -81,21 +88,36 @@ class BevySceneApi {
     required int width,
     required int height,
   }) {
-    return _wasmCreateScene(sceneId, json, width, height);
+    if (!_wasmAvailable) return false;
+    try {
+      return _wasmCreateScene(sceneId, json, width, height);
+    } catch (_) {
+      return false;
+    }
   }
 
   static bool updateScene({
     required String sceneId,
     required String json,
   }) {
-    return _wasmUpdateScene(sceneId, json);
+    if (!_wasmAvailable) return false;
+    try {
+      return _wasmUpdateScene(sceneId, json);
+    } catch (_) {
+      return false;
+    }
   }
 
   static bool renderFrame({
     required String sceneId,
     required double deltaTime,
   }) {
-    return _wasmRenderFrame(sceneId, deltaTime);
+    if (!_wasmAvailable) return false;
+    try {
+      return _wasmRenderFrame(sceneId, deltaTime);
+    } catch (_) {
+      return false;
+    }
   }
 
   static bool resizeScene({
@@ -103,29 +125,39 @@ class BevySceneApi {
     required int width,
     required int height,
   }) {
-    return _wasmResizeScene(sceneId, width, height);
+    if (!_wasmAvailable) return false;
+    try {
+      return _wasmResizeScene(sceneId, width, height);
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Get the rendered frame as raw RGBA pixel data.
   static BevyFrameData? getFrameDirect({required String sceneId}) {
-    final frameJson = _wasmGetFrame(sceneId);
-    final json = jsonDecode(frameJson) as Map<String, dynamic>;
-    if (!json.containsKey('width')) return null;
+    if (!_wasmAvailable) return null;
+    try {
+      final frameJson = _wasmGetFrame(sceneId);
+      final json = jsonDecode(frameJson) as Map<String, dynamic>;
+      if (!json.containsKey('width')) return null;
 
-    final width = json['width'] as int;
-    final height = json['height'] as int;
-    final frameCount = json['frameCount'] as int;
+      final width = json['width'] as int;
+      final height = json['height'] as int;
+      final frameCount = json['frameCount'] as int;
 
-    // Get raw pixel bytes from WASM
-    final jsBytes = _wasmGetFrameBytes(sceneId);
-    final pixels = jsBytes.toDart;
+      // Get raw pixel bytes from WASM
+      final jsBytes = _wasmGetFrameBytes(sceneId);
+      final pixels = jsBytes.toDart;
 
-    return BevyFrameData(
-      width: width,
-      height: height,
-      pixels: pixels,
-      frameCount: frameCount,
-    );
+      return BevyFrameData(
+        width: width,
+        height: height,
+        pixels: pixels,
+        frameCount: frameCount,
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Alias for getFrameDirect on web.
@@ -137,18 +169,38 @@ class BevySceneApi {
     required String sceneId,
     required String inputJson,
   }) {
-    return _wasmSendInput(sceneId, inputJson);
+    if (!_wasmAvailable) return false;
+    try {
+      return _wasmSendInput(sceneId, inputJson);
+    } catch (_) {
+      return false;
+    }
   }
 
   static bool destroyScene({required String sceneId}) {
-    return _wasmDestroyScene(sceneId);
+    if (!_wasmAvailable) return false;
+    try {
+      return _wasmDestroyScene(sceneId);
+    } catch (_) {
+      return false;
+    }
   }
 
   static bool sceneExists({required String sceneId}) {
-    return _wasmSceneExists(sceneId);
+    if (!_wasmAvailable) return false;
+    try {
+      return _wasmSceneExists(sceneId);
+    } catch (_) {
+      return false;
+    }
   }
 
   static double getElapsedTime({required String sceneId}) {
-    return _wasmGetElapsedTime(sceneId);
+    if (!_wasmAvailable) return 0.0;
+    try {
+      return _wasmGetElapsedTime(sceneId);
+    } catch (_) {
+      return 0.0;
+    }
   }
 }
