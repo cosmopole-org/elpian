@@ -259,6 +259,7 @@ class ElpianKeyboardEvent extends ElpianEvent {
 /// Input event for form controls
 class ElpianInputEvent extends ElpianEvent {
   final dynamic value;
+  final String? inputType;
   final bool isComposing;
   
   ElpianInputEvent({
@@ -270,6 +271,7 @@ class ElpianInputEvent extends ElpianEvent {
     super.phase,
     super.data,
     this.value,
+    this.inputType,
     this.isComposing = false,
   });
   
@@ -287,6 +289,7 @@ class ElpianInputEvent extends ElpianEvent {
       phase: phase ?? this.phase,
       data: data,
       value: value,
+      inputType: inputType,
       isComposing: isComposing,
     );
   }
