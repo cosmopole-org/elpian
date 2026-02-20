@@ -1,4 +1,5 @@
 /// Shared types for the VM FFI layer (used by both native and web).
+library;
 
 import 'dart:convert';
 

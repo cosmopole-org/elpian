@@ -2,6 +2,7 @@
 ///
 /// On native platforms (Android, iOS, macOS, Linux, Windows), this uses
 /// dart:ffi to call into the compiled Rust cdylib/staticlib.
+library;
 
 import 'dart:convert';
 import 'dart:ffi' as ffi;
