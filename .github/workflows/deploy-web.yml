@@ -42,7 +42,8 @@ jobs:
           flutter build web \
             --release \
             --base-href /elpian/ \
-            -t lib/example/landing_page_example.dart
+            --pwa-strategy=none \
+            -t lib/main.dart
 
       - name: Copy Bevy 3D Demo to build output
         run: |
