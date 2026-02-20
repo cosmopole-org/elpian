@@ -1,22 +1,22 @@
-# Elpian 2D Graphics & UI Reference
+# 🎨 Elpian 2D Graphics & UI Reference
 
 Complete reference for Elpian's 2D rendering engine. All UI is defined in JSON and rendered as native Flutter widgets. Elpian supports three rendering modes: **Flutter DSL widgets**, **HTML5 semantic elements**, and a **Canvas 2D drawing API**.
 
 ---
 
-## Table of Contents
+## 📑 Table of Contents
 
-1. [How It Works](#how-it-works)
-2. [Flutter DSL Widgets](#flutter-dsl-widgets)
-3. [HTML5 Elements](#html5-elements)
-4. [CSS Properties Reference](#css-properties-reference)
-5. [Canvas 2D API](#canvas-2d-api)
-6. [Animation Widgets](#animation-widgets)
-7. [Complete Examples](#complete-examples)
+1. [⚙️ How It Works](#how-it-works)
+2. [🧩 Flutter DSL Widgets](#flutter-dsl-widgets)
+3. [🌐 HTML5 Elements](#html5-elements)
+4. [🎛️ CSS Properties Reference](#css-properties-reference)
+5. [✏️ Canvas 2D API](#canvas-2d-api)
+6. [🎬 Animation Widgets](#animation-widgets)
+7. [📦 Complete Examples](#complete-examples)
 
 ---
 
-## How It Works
+## ⚙️ How It Works
 
 Elpian renders UI from JSON definitions. Each node has a `type` field that maps to a registered widget builder:
 
@@ -56,9 +56,9 @@ Every JSON node follows this format:
 
 ---
 
-## Flutter DSL Widgets
+## 🧩 Flutter DSL Widgets
 
-### Layout Widgets
+### 📐 Layout Widgets
 
 #### Container
 
@@ -295,7 +295,7 @@ Grid layout with configurable column count.
 
 ---
 
-### Content Widgets
+### 📝 Content Widgets
 
 #### Text
 
@@ -353,7 +353,7 @@ Supports 170+ Material icons: `arrow_back`, `search`, `home`, `settings`, `favor
 
 ---
 
-### Input Widgets
+### 🔘 Input Widgets
 
 #### Button
 
@@ -434,7 +434,7 @@ Range input.
 
 ---
 
-### Structure Widgets
+### 🏗️ Structure Widgets
 
 #### Scaffold
 
@@ -481,7 +481,7 @@ Elevated content container.
 
 ---
 
-### Feedback Widgets
+### 💬 Feedback Widgets
 
 | Widget | Key Properties | Description |
 |--------|---------------|-------------|
@@ -495,7 +495,7 @@ Elevated content container.
 
 ---
 
-### Interaction Widgets
+### 👆 Interaction Widgets
 
 | Widget | Key Properties | Description |
 |--------|---------------|-------------|
@@ -508,7 +508,7 @@ Elevated content container.
 
 ---
 
-### Visual Effect Widgets
+### ✨ Visual Effect Widgets
 
 | Widget | Key Properties | Description |
 |--------|---------------|-------------|
@@ -519,7 +519,7 @@ Elevated content container.
 
 ---
 
-### Canvas Widget
+### ✏️ Canvas Widget
 
 Draws 2D graphics using a command-based API. See [Canvas 2D API](#canvas-2d-api).
 
@@ -547,7 +547,7 @@ Draws 2D graphics using a command-based API. See [Canvas 2D API](#canvas-2d-api)
 
 ---
 
-### 3D Scene Widgets
+### 🌍 3D Scene Widgets
 
 | Widget | Aliases | Description |
 |--------|---------|-------------|
@@ -568,11 +568,11 @@ See [3D_GRAPHICS.md](3D_GRAPHICS.md) for the complete 3D scene format.
 
 ---
 
-## HTML5 Elements
+## 🌐 HTML5 Elements
 
 Elpian supports 76 HTML5 elements rendered as native Flutter widgets. All elements accept CSS styling.
 
-### Structural Elements
+### 🏛️ Structural Elements
 
 | Element | Default Layout | Description |
 |---------|---------------|-------------|
@@ -607,7 +607,7 @@ All structural elements support flex layout properties: `display`, `flexDirectio
 
 ---
 
-### Text Elements
+### 🔤 Text Elements
 
 #### Headings (h1–h6)
 
@@ -676,7 +676,7 @@ All headings default to **bold** weight and accept `text`, `color`, `fontSize`, 
 
 ---
 
-### List Elements
+### 📋 List Elements
 
 | Element | Description |
 |---------|-------------|
@@ -697,7 +697,7 @@ All headings default to **bold** weight and accept `text`, `color`, `fontSize`, 
 
 ---
 
-### Table Elements
+### 📊 Table Elements
 
 | Element | Description |
 |---------|-------------|
@@ -724,7 +724,7 @@ All headings default to **bold** weight and accept `text`, `color`, `fontSize`, 
 
 ---
 
-### Form Elements
+### 📝 Form Elements
 
 | Element | Key Properties | Description |
 |---------|---------------|-------------|
@@ -755,7 +755,7 @@ All headings default to **bold** weight and accept `text`, `color`, `fontSize`, 
 
 ---
 
-### Media Elements
+### 🖼️ Media Elements
 
 | Element | Key Properties | Description |
 |---------|---------------|-------------|
@@ -773,7 +773,7 @@ All headings default to **bold** weight and accept `text`, `color`, `fontSize`, 
 
 ---
 
-### Interactive Elements
+### 🔽 Interactive Elements
 
 | Element | Description |
 |---------|-------------|
@@ -783,7 +783,7 @@ All headings default to **bold** weight and accept `text`, `color`, `fontSize`, 
 
 ---
 
-### Progress Elements
+### 📈 Progress Elements
 
 | Element | Key Properties | Description |
 |---------|---------------|-------------|
@@ -792,7 +792,7 @@ All headings default to **bold** weight and accept `text`, `color`, `fontSize`, 
 
 ---
 
-### Break Elements
+### ➖ Break Elements
 
 | Element | Description |
 |---------|-------------|
@@ -811,11 +811,11 @@ All headings default to **bold** weight and accept `text`, `color`, `fontSize`, 
 
 ---
 
-## CSS Properties Reference
+## 🎛️ CSS Properties Reference
 
 Elpian's CSS engine supports 150+ properties. Properties can be written in `camelCase` or `kebab-case`.
 
-### Layout & Sizing
+### 📏 Layout & Sizing
 
 | Property | Values | Description |
 |----------|--------|-------------|
@@ -834,7 +834,7 @@ Elpian's CSS engine supports 150+ properties. Properties can be written in `came
 | `overflow` | 'hidden', 'visible', 'scroll' | Content overflow |
 | `alignment` | 'center', 'topLeft', 'bottomRight', etc. | Widget alignment |
 
-### Flexbox
+### 📐 Flexbox
 
 | Property | Values | Description |
 |----------|--------|-------------|
@@ -845,7 +845,7 @@ Elpian's CSS engine supports 150+ properties. Properties can be written in `came
 | `gap` | number | Space between items |
 | `flex` | number | Flex grow factor |
 
-### Typography
+### 🔠 Typography
 
 | Property | Values | Description |
 |----------|--------|-------------|
@@ -863,7 +863,7 @@ Elpian's CSS engine supports 150+ properties. Properties can be written in `came
 | `text-transform` / `textTransform` | string | Text transformation |
 | `text-shadow` / `textShadow` | shadow value | Text shadow |
 
-### Background & Borders
+### 🖌️ Background & Borders
 
 | Property | Values | Description |
 |----------|--------|-------------|
@@ -879,7 +879,7 @@ Elpian's CSS engine supports 150+ properties. Properties can be written in `came
 | `border-radius` / `borderRadius` | number | Corner rounding |
 | `box-shadow` / `boxShadow` | shadow values | Box shadow |
 
-### Visual Effects
+### ✨ Visual Effects
 
 | Property | Values | Description |
 |----------|--------|-------------|
@@ -888,7 +888,7 @@ Elpian's CSS engine supports 150+ properties. Properties can be written in `came
 | `cursor` | string | Cursor style |
 | `pointer-events` / `pointerEvents` | string | Pointer event behavior |
 
-### Transforms
+### 🔄 Transforms
 
 | Property | Values | Description |
 |----------|--------|-------------|
@@ -897,7 +897,7 @@ Elpian's CSS engine supports 150+ properties. Properties can be written in `came
 | `translate` | `{x, y}` | 2D translation |
 | `transform` | 16-element array | Full Matrix4 transform |
 
-### Color Formats
+### 🎨 Color Formats
 
 Elpian supports multiple color formats:
 
@@ -915,7 +915,7 @@ named              → "red", "blue", "transparent", "deepPurple", etc.
 
 ---
 
-## Canvas 2D API
+## ✏️ Canvas 2D API
 
 The Canvas widget accepts drawing commands as a JSON array. Each command has a `command` field and command-specific parameters.
 
@@ -1040,11 +1040,11 @@ The Canvas widget accepts drawing commands as a JSON array. Each command has a `
 
 ---
 
-## Animation Widgets
+## 🎬 Animation Widgets
 
 Elpian includes 22 animation widgets grouped into three categories.
 
-### Implicit Animations
+### 🔀 Implicit Animations
 
 These animate automatically when their style properties change.
 
@@ -1067,7 +1067,7 @@ These animate automatically when their style properties change.
 - `transition-duration` / `transitionDuration` — Duration in ms or s
 - `transition-curve` / `transitionCurve` — Easing function
 
-### Explicit Transitions
+### 🎯 Explicit Transitions
 
 Controller-based animations that play on build.
 
@@ -1085,7 +1085,7 @@ Controller-based animations that play on build.
 - `animation-repeat` / `animationRepeat` — Loop (boolean)
 - `animation-auto-reverse` / `animationAutoReverse` — Reverse on complete
 
-### Custom Animations
+### 🌊 Custom Animations
 
 | Widget | Key CSS Properties | Default Duration | Description |
 |--------|-------------------|-----------------|-------------|
@@ -1095,7 +1095,7 @@ Controller-based animations that play on build.
 | `Pulse` | `scaleBegin`, `scaleEnd` | 1000ms | Repeating pulse (1.0 → 1.05) |
 | `AnimatedGradient` | `gradientColors` | 2000ms | Animated gradient background |
 
-### Supported Easing Curves
+### 📉 Supported Easing Curves
 
 ```
 linear, ease, easeIn, easeOut, easeInOut,
@@ -1112,7 +1112,7 @@ easeInBack, easeOutBack, easeInOutBack
 
 ---
 
-## Complete Examples
+## 📦 Complete Examples
 
 ### Responsive Card Layout
 
@@ -1245,7 +1245,7 @@ easeInBack, easeOutBack, easeInOutBack
 
 ---
 
-## Widget Summary Table
+## 📊 Widget Summary Table
 
 ### Flutter DSL Widgets (81 types)
 
