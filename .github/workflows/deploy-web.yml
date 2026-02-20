@@ -24,6 +24,32 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup Rust toolchain for WASM build
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --locked
+
+      - name: Build Elpian WASM module
+        env:
+          # Avoid bulk-memory opcodes so wasm validators in downstream toolchains
+          # (e.g. Flutter web build environments) do not fail with
+          # "Bulk memory operations require bulk memory".
+          RUSTFLAGS: -C target-feature=-bulk-memory
+        run: |
+          wasm-pack build rust \
+            --target web \
+            --release \
+            --out-dir pkg \
+            --out-name elpian_vm
+
+      - name: Copy WASM artifacts to web assets
+        run: |
+          mkdir -p web/wasm/elpian_vm
+          cp -r rust/pkg/. web/wasm/elpian_vm/
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -44,6 +70,15 @@ jobs:
             --base-href /elpian/ \
             --pwa-strategy=none \
             -t lib/main.dart
+
+      - name: Copy WASM artifacts to build output
+        run: |
+          if [ -d web/wasm/elpian_vm ]; then
+            mkdir -p build/web/wasm/elpian_vm
+            cp -r web/wasm/elpian_vm/. build/web/wasm/elpian_vm/
+          else
+            echo "web/wasm/elpian_vm not found; WASM symbols may be unavailable"
+          fi
 
       - name: Copy Bevy 3D Demo to build output
         run: |
