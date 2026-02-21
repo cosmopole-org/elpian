@@ -18,6 +18,18 @@ fn collect_host_calls(mut vm: VM) -> (Vec<Value>, Val) {
     (host_calls, result)
 }
 
+fn host_call_from_paused_vm(vm: &VM) -> Value {
+    let raw = vm
+        .sending_host_call_data
+        .clone()
+        .expect("host call payload should exist when vm is paused");
+    serde_json::from_str(&raw).expect("host call payload should be valid JSON")
+}
+
+fn continue_past_host_call(vm: &mut VM) -> Val {
+    vm.continue_run("{\"type\":\"bool\",\"data\":{\"value\":true}}".to_string())
+}
+
 #[test]
 fn arithmetic_indexer_and_cast_ast_executes_correctly() {
     let program = json!({
@@ -287,6 +299,234 @@ fn switch_statement_ast_matches_case() {
 
     assert_eq!(calls.len(), 1);
     assert_eq!(calls[0]["payload"], "[\"weekday-start\"]");
+}
+
+#[test]
+fn vm_counter_example_boot_and_increment_render_without_errors() {
+    let program = json!({
+        "type": "program",
+        "body": [
+            {
+                "type": "definition",
+                "data": {
+                    "leftSide": { "type": "identifier", "data": { "name": "count" } },
+                    "rightSide": { "type": "i16", "data": { "value": 0 } }
+                }
+            },
+            {
+                "type": "functionDefinition",
+                "data": {
+                    "name": "renderNow",
+                    "params": [],
+                    "body": [
+                        {
+                            "type": "host_call",
+                            "data": {
+                                "name": "render",
+                                "args": [{ "type": "identifier", "data": { "name": "count" } }]
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                "type": "functionDefinition",
+                "data": {
+                    "name": "increment",
+                    "params": [],
+                    "body": [
+                        {
+                            "type": "assignment",
+                            "data": {
+                                "leftSide": { "type": "identifier", "data": { "name": "count" } },
+                                "rightSide": {
+                                    "type": "arithmetic",
+                                    "data": {
+                                        "operation": "+",
+                                        "operand1": { "type": "identifier", "data": { "name": "count" } },
+                                        "operand2": { "type": "i16", "data": { "value": 1 } }
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "type": "functionCall",
+                            "data": {
+                                "callee": { "type": "identifier", "data": { "name": "renderNow" } },
+                                "args": []
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                "type": "functionCall",
+                "data": {
+                    "callee": { "type": "identifier", "data": { "name": "renderNow" } },
+                    "args": []
+                }
+            }
+        ]
+    });
+
+    let mut vm = VM::compile_and_create_of_ast("vm-counter".to_string(), program, 0, vec![]);
+
+    let boot = vm.run();
+    assert_eq!(boot.typ, 253);
+    assert_eq!(host_call_from_paused_vm(&vm)["payload"], "[0]");
+    let _ = continue_past_host_call(&mut vm);
+
+    let increment = vm.run_func_with_input("increment", None, 0);
+    assert_eq!(increment.typ, 253);
+    assert_eq!(host_call_from_paused_vm(&vm)["payload"], "[1]");
+}
+
+#[test]
+fn vm_theme_example_toggle_switches_background_value() {
+    let program = json!({
+        "type": "program",
+        "body": [
+            {
+                "type": "definition",
+                "data": {
+                    "leftSide": { "type": "identifier", "data": { "name": "isDark" } },
+                    "rightSide": { "type": "bool", "data": { "value": false } }
+                }
+            },
+            {
+                "type": "functionDefinition",
+                "data": {
+                    "name": "renderNow",
+                    "params": [],
+                    "body": [
+                        {
+                            "type": "host_call",
+                            "data": {
+                                "name": "render",
+                                "args": [{ "type": "identifier", "data": { "name": "isDark" } }]
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                "type": "functionDefinition",
+                "data": {
+                    "name": "toggleTheme",
+                    "params": [],
+                    "body": [
+                        {
+                            "type": "assignment",
+                            "data": {
+                                "leftSide": { "type": "identifier", "data": { "name": "isDark" } },
+                                "rightSide": { "type": "bool", "data": { "value": true } }
+                            }
+                        },
+                        {
+                            "type": "functionCall",
+                            "data": {
+                                "callee": { "type": "identifier", "data": { "name": "renderNow" } },
+                                "args": []
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                "type": "functionCall",
+                "data": {
+                    "callee": { "type": "identifier", "data": { "name": "renderNow" } },
+                    "args": []
+                }
+            }
+        ]
+    });
+
+    let mut vm = VM::compile_and_create_of_ast("vm-theme".to_string(), program, 0, vec![]);
+    let boot = vm.run();
+    assert_eq!(boot.typ, 253);
+    assert_eq!(host_call_from_paused_vm(&vm)["payload"], "[false]");
+    let _ = continue_past_host_call(&mut vm);
+
+    let toggled = vm.run_func_with_input("toggleTheme", None, 0);
+    assert_eq!(toggled.typ, 253);
+    assert_eq!(host_call_from_paused_vm(&vm)["payload"], "[true]");
+}
+
+#[test]
+fn vm_message_example_updates_text_from_function_input() {
+    let program = json!({
+        "type": "program",
+        "body": [
+            {
+                "type": "definition",
+                "data": {
+                    "leftSide": { "type": "identifier", "data": { "name": "message" } },
+                    "rightSide": { "type": "string", "data": { "value": "Waiting for Flutter input..." } }
+                }
+            },
+            {
+                "type": "functionDefinition",
+                "data": {
+                    "name": "renderNow",
+                    "params": [],
+                    "body": [
+                        {
+                            "type": "host_call",
+                            "data": {
+                                "name": "render",
+                                "args": [{ "type": "identifier", "data": { "name": "message" } }]
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                "type": "functionDefinition",
+                "data": {
+                    "name": "setMessage",
+                    "params": ["nextMessage"],
+                    "body": [
+                        {
+                            "type": "assignment",
+                            "data": {
+                                "leftSide": { "type": "identifier", "data": { "name": "message" } },
+                                "rightSide": { "type": "identifier", "data": { "name": "nextMessage" } }
+                            }
+                        },
+                        {
+                            "type": "functionCall",
+                            "data": {
+                                "callee": { "type": "identifier", "data": { "name": "renderNow" } },
+                                "args": []
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                "type": "functionCall",
+                "data": {
+                    "callee": { "type": "identifier", "data": { "name": "renderNow" } },
+                    "args": []
+                }
+            }
+        ]
+    });
+
+    let mut vm = VM::compile_and_create_of_ast("vm-message".to_string(), program, 0, vec![]);
+    let boot = vm.run();
+    assert_eq!(boot.typ, 253);
+    assert_eq!(host_call_from_paused_vm(&vm)["payload"], "[\"Waiting for Flutter input...\"]");
+    let _ = continue_past_host_call(&mut vm);
+
+    let updated = vm.run_func_with_input(
+        "setMessage",
+        Some(r#"{"type":"string","data":{"value":"Hello from Flutter"}}"#),
+        0,
+    );
+    assert_eq!(updated.typ, 253);
+    assert_eq!(host_call_from_paused_vm(&vm)["payload"], "[\"Hello from Flutter\"]");
 }
 
 #[test]
