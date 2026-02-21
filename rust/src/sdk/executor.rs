@@ -561,8 +561,8 @@ struct SwitchStmt {
 impl SwitchStmt {
     pub fn new() -> Self {
         SwitchStmt {
-            typ: OperationTypes::LoopStmt,
-            state: ExecStates::LoopStmtStarted,
+            typ: OperationTypes::SwitchStmt,
+            state: ExecStates::SwitchStmtStarted,
             compairng_value: None,
             branch_after_start: 0,
             case_count: 0,
@@ -598,24 +598,35 @@ impl Operation for SwitchStmt {
     }
 
     fn get_data(&self) -> Vec<Val> {
-        let case_info_packaged: Box<Vec<Val>> = Box::new(
-            self.cases
-                .iter()
-                .map(|item| {
-                    let mut case_info = HashMap::new();
-                    case_info.insert("val".to_string(), item.0.clone());
-                    case_info.insert("start".to_string(), item.0.clone());
-                    case_info.insert("end".to_string(), item.0.clone());
-                    return Val {
-                        typ: 8,
-                        data: Rc::new(RefCell::new(Box::new(Object::new(
-                            -1,
-                            ValGroup::new(case_info),
-                        )))),
-                    };
-                })
-                .collect(),
-        );
+        let case_items: Vec<Val> = self
+            .cases
+            .iter()
+            .map(|item| {
+                let mut case_info = HashMap::new();
+                case_info.insert("val".to_string(), item.0.clone());
+                case_info.insert(
+                    "start".to_string(),
+                    Val {
+                        typ: 3,
+                        data: Rc::new(RefCell::new(Box::new(item.1 as i64))),
+                    },
+                );
+                case_info.insert(
+                    "end".to_string(),
+                    Val {
+                        typ: 3,
+                        data: Rc::new(RefCell::new(Box::new(item.2 as i64))),
+                    },
+                );
+                Val {
+                    typ: 8,
+                    data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(Object::new(
+                        -1,
+                        ValGroup::new(case_info),
+                    )))))),
+                }
+            })
+            .collect();
         vec![
             self.compairng_value.clone().unwrap(),
             Val {
@@ -628,7 +639,9 @@ impl Operation for SwitchStmt {
             },
             Val {
                 typ: 9,
-                data: Rc::new(RefCell::new(case_info_packaged)),
+                data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(Array::new(
+                    case_items,
+                )))))),
             },
         ]
     }
