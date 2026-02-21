@@ -33,8 +33,7 @@ jobs:
         run: |
           cd rust && \
           wasm-pack build \
-            --target web \
-            --enable-bulk-memory
+            --target web
 
       - name: Copy WASM artifacts to web assets
         run: |
