@@ -46,10 +46,9 @@ class QuickJsVm implements VmRuntimeClient {
   void _bootstrapHostBridge() {
     _runtime.onMessage('elpianHost', (dynamic args) {
       try {
-        final requestText = args?.toString() ?? '{}';
-        final request = jsonDecode(requestText) as Map<String, dynamic>;
-        final apiName = request['apiName']?.toString() ?? '';
-        final payload = request['payload']?.toString() ?? '';
+        final request = _normalizeHostRequest(args);
+        final apiName = request['apiName']!;
+        final payload = request['payload']!;
 
         _dispatchHostCall(apiName, payload);
 
@@ -71,6 +70,31 @@ class QuickJsVm implements VmRuntimeClient {
         }));
       };
     ''');
+  }
+
+
+  Map<String, String> _normalizeHostRequest(dynamic raw) {
+    dynamic request = raw;
+
+    if (request is List && request.isNotEmpty) {
+      request = request.first;
+    }
+
+    if (request is String) {
+      final decoded = jsonDecode(request);
+      if (decoded is Map<String, dynamic>) {
+        request = decoded;
+      }
+    }
+
+    if (request is Map) {
+      final apiName = request['apiName']?.toString() ?? '';
+      final payloadRaw = request['payload'];
+      final payload = payloadRaw is String ? payloadRaw : jsonEncode(payloadRaw);
+      return {'apiName': apiName, 'payload': payload};
+    }
+
+    throw StateError('Unsupported host message format: ${request.runtimeType}');
   }
 
   void registerHostHandler(String apiName, HostCallHandler handler) {

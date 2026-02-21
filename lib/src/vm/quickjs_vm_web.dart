@@ -34,19 +34,32 @@ class QuickJsVm implements VmRuntimeClient {
     final global = globalContext;
     global.setProperty(
       'askHost'.toJS,
-      ((String apiName, String payload) => _syncHostCall(apiName, payload))
+      ((dynamic apiName, dynamic payload) =>
+              _syncHostCallDynamic(apiName, payload))
           .toJS,
     );
   }
 
-  String _syncHostCall(String apiName, String payload) {
-    // Trigger host handlers; JS interop callback itself must return synchronously.
-    _dispatchHostCall(apiName, payload);
+  String _syncHostCallDynamic(dynamic apiName, dynamic payload) {
+    final name = apiName?.toString() ?? '';
+    final normalizedPayload = _normalizePayload(payload);
 
-    if (apiName == 'stringify') {
-      return '{"type":"string","data":{"value":${jsonEncode(payload)}}}';
+    // Trigger host handlers; JS interop callback itself must return synchronously.
+    _dispatchHostCall(name, normalizedPayload);
+
+    if (name == 'stringify') {
+      return '{"type":"string","data":{"value":${jsonEncode(normalizedPayload)}}}';
     }
     return '{"type":"i16","data":{"value":0}}';
+  }
+
+  String _normalizePayload(dynamic payload) {
+    if (payload is String) return payload;
+
+    final dartValue = payload is JSAny ? payload.dartify() : payload;
+    if (dartValue is String) return dartValue;
+
+    return jsonEncode(dartValue);
   }
 
   void registerHostHandler(String apiName, HostCallHandler handler) {
