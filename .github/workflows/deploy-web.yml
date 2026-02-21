@@ -33,7 +33,8 @@ jobs:
         run: |
           cd rust && \
           wasm-pack build \
-            --target web
+            --target web \
+            --dev
 
       - name: Copy WASM artifacts to web assets
         run: |
