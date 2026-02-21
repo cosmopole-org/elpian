@@ -521,8 +521,8 @@ struct LoopStmt {
 impl LoopStmt {
     pub fn new() -> Self {
         LoopStmt {
-            typ: OperationTypes::SwitchStmt,
-            state: ExecStates::SwitchStmtStarted,
+            typ: OperationTypes::LoopStmt,
+            state: ExecStates::LoopStmtStarted,
             condition: None,
         }
     }
