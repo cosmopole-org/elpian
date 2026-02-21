@@ -5,8 +5,9 @@ import 'dart:js_interop_unsafe';
 import 'package:flutter/foundation.dart';
 
 import 'elpian_vm.dart';
+import 'vm_runtime_client.dart';
 
-class QuickJsVm {
+class QuickJsVm implements VmRuntimeClient {
   final String machineId;
   final Map<String, HostCallHandler> _hostHandlers = {};
   HostCallHandler? _defaultHostHandler;

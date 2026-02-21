@@ -7,6 +7,7 @@ import '../models/elpian_node.dart';
 import 'elpian_vm.dart';
 import 'quickjs_vm.dart';
 import 'runtime_kind.dart';
+import 'vm_runtime_client.dart';
 import 'host_handler.dart';
 
 /// A Flutter widget that runs an Elpian Rust VM sandbox and renders
@@ -227,9 +228,9 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
       );
 
       // Register built-in host handlers
-      final runtimeVm = _vm ?? _quickJsVm;
+      final VmRuntimeClient runtimeVm = _vm ?? _quickJsVm!;
 
-      runtimeVm!.registerHostHandler('render', (apiName, payload) {
+      runtimeVm.registerHostHandler('render', (apiName, payload) {
         return hostHandler.handleRender(payload);
       });
       runtimeVm.registerHostHandler('updateApp', (apiName, payload) {
@@ -271,7 +272,7 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
   }
 
   Future<void> _routeEventToVm(ElpianEvent event) async {
-    final runtimeVm = _vm ?? _quickJsVm;
+    final VmRuntimeClient? runtimeVm = _vm ?? _quickJsVm;
     if (runtimeVm == null) return;
     final nodeId = event.currentTarget?.toString();
     if (nodeId == null || nodeId.isEmpty) return;
@@ -333,7 +334,7 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
   }
 
   Future<void> _callEntryFunction() async {
-    final runtimeVm = _vm ?? _quickJsVm;
+    final VmRuntimeClient? runtimeVm = _vm ?? _quickJsVm;
     if (runtimeVm == null) return;
     try {
       if (widget.entryInput != null) {
@@ -352,7 +353,7 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
   /// Call a function in the running VM from Dart.
   /// Useful for sending events back to the VM.
   Future<String> callVmFunction(String funcName, {String? input}) async {
-    final runtimeVm = _vm ?? _quickJsVm;
+    final VmRuntimeClient? runtimeVm = _vm ?? _quickJsVm;
     if (runtimeVm == null) return '';
     if (input != null) {
       return runtimeVm.callFunctionWithInput(funcName, input);

@@ -4,9 +4,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_js/flutter_js.dart';
 
 import 'elpian_vm.dart';
+import 'vm_runtime_client.dart';
 
 /// A QuickJS-backed runtime that mirrors [ElpianVm]'s host API lifecycle.
-class QuickJsVm {
+class QuickJsVm implements VmRuntimeClient {
   final String machineId;
   final Map<String, HostCallHandler> _hostHandlers = {};
   HostCallHandler? _defaultHostHandler;

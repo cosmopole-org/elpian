@@ -1,6 +1,7 @@
 import 'elpian_vm.dart';
+import 'vm_runtime_client.dart';
 
-class QuickJsVm {
+class QuickJsVm implements VmRuntimeClient {
   QuickJsVm({required this.machineId});
 
   final String machineId;
