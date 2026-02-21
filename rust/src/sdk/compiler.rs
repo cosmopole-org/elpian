@@ -372,7 +372,7 @@ pub fn compile_ast(program: serde_json::Value, start_point: usize) -> Vec<u8> {
                 let mut inner: Vec<u8> = vec![];
                 for case_val in operation["data"]["cases"].as_array().unwrap().iter() {
                     inner.append(&mut serialize_expr(case_val["value"].clone()));
-                    let body_start = start_point + result.len() + 8 + 8;
+                    let body_start = start_point + result.len() + 8 + 8 + inner.len() + 8 + 8;
                     let mut body: Vec<u8> = compile_ast(case_val["body"].clone(), body_start);
                     let body_end = body_start + body.len();
                     inner.append(&mut i64::to_be_bytes(body_start as i64).to_vec());
