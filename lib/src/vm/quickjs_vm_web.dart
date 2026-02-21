@@ -81,6 +81,12 @@ class QuickJsVm implements VmRuntimeClient {
 
     final result = (quickJs as JSObject).callMethodVarArgs(method.toJS, args);
 
+    final jsValue = result.dartify();
+
+    if (jsValue == null || jsValue is String || jsValue is num || jsValue is bool) {
+      return jsValue?.toString() ?? '';
+    }
+
     final jsResultObject = result as Object;
     final isThenable = js_util.hasProperty(jsResultObject, 'then');
     if (isThenable) {
@@ -88,7 +94,7 @@ class QuickJsVm implements VmRuntimeClient {
       return value?.toString() ?? '';
     }
 
-    return result.dartify()?.toString() ?? '';
+    return jsValue.toString();
   }
 
   Future<String> runCode(String code) {
