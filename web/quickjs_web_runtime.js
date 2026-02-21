@@ -1,24 +1,23 @@
 const quickJsMachines = new Map();
 let quickJsModulePromise = null;
+let quickJsInstancePromise = null;
 
 async function getQuickJsModule() {
   if (!quickJsModulePromise) {
     quickJsModulePromise = (async () => {
       const candidates = [
-        // Preferred: bundled browser ESM build.
+        // Browser-ready ESM entry.
         'https://esm.sh/quickjs-emscripten@0.31.0?bundle&target=es2022&browser',
-        // Fallback CDN ESM transform.
-        'https://cdn.jsdelivr.net/npm/quickjs-emscripten@0.31.0/+esm',
       ];
 
       let lastError = null;
       for (const url of candidates) {
         try {
           const mod = await import(url);
-          if (mod && typeof mod.getQuickJS === 'function') {
+          if (mod && typeof mod.newQuickJSWASMModule === 'function') {
             return mod;
           }
-          throw new Error(`Module loaded but getQuickJS is missing: ${url}`);
+          throw new Error(`Module loaded but newQuickJSWASMModule is missing: ${url}`);
         } catch (error) {
           lastError = error;
           console.warn(`QuickJS module import failed from ${url}`, error);
@@ -29,6 +28,41 @@ async function getQuickJsModule() {
     })();
   }
   return quickJsModulePromise;
+}
+
+async function getWasmBinary() {
+  const wasmCandidates = [
+    'https://cdn.jsdelivr.net/npm/@jitl/quickjs-wasmfile-release-sync@0.31.0/dist/emscripten-module.wasm',
+    'https://unpkg.com/@jitl/quickjs-wasmfile-release-sync@0.31.0/dist/emscripten-module.wasm',
+  ];
+
+  let lastError = null;
+  for (const url of wasmCandidates) {
+    try {
+      const response = await fetch(url, { mode: 'cors' });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      return await response.arrayBuffer();
+    } catch (error) {
+      lastError = error;
+      console.warn(`QuickJS wasm fetch failed from ${url}`, error);
+    }
+  }
+
+  throw lastError ?? new Error('Unable to fetch QuickJS wasm binary from configured CDNs');
+}
+
+async function getQuickJsInstance() {
+  if (!quickJsInstancePromise) {
+    quickJsInstancePromise = (async () => {
+      const mod = await getQuickJsModule();
+      const wasmBinary = await getWasmBinary();
+      const variant = mod.newVariant(mod.RELEASE_SYNC, { wasmBinary });
+      return mod.newQuickJSWASMModule(variant);
+    })();
+  }
+  return quickJsInstancePromise;
 }
 
 function ensureHostBridge() {
@@ -50,8 +84,7 @@ async function initMachine(machineId) {
   if (quickJsMachines.has(machineId)) return;
 
   ensureHostBridge();
-  const mod = await getQuickJsModule();
-  const qjs = await mod.getQuickJS();
+  const qjs = await getQuickJsInstance();
   const ctx = qjs.newContext();
 
   const askHost = ctx.newFunction('askHost', (...args) => {
