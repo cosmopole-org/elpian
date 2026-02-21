@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
+import 'dart:js_util' as js_util;
 
 import 'package:flutter/foundation.dart';
 
@@ -20,6 +22,7 @@ class QuickJsVm implements VmRuntimeClient {
   static Future<QuickJsVm> fromCode(String machineId, String code) async {
     final vm = QuickJsVm(machineId: machineId);
     vm._bootstrapHostBridge();
+    await vm._initMachine();
     vm._bootCode = code;
     return vm;
   }
@@ -31,28 +34,21 @@ class QuickJsVm implements VmRuntimeClient {
   }
 
   void _bootstrapHostBridge() {
-    final global = globalContext;
-    global.setProperty(
-      'askHost'.toJS,
-      ((String apiName, String payload) => _syncHostCall(apiName, payload)).toJS,
+    globalContext.setProperty(
+      '__elpianQuickJsHostCall'.toJS,
+      ((String machineId, String apiName, String payload) {
+        if (machineId != this.machineId) {
+          return '{"type":"i16","data":{"value":0}}';
+        }
+        return _syncHostCall(apiName, payload);
+      }).toJS,
     );
+  }
 
-    // Normalize payloads to string on the JS side so Dart bridge types stay stable.
-    global.callMethod(
-      'eval'.toJS,
-      [
-        '''
-          (function() {
-            const _askHostRaw = globalThis.askHost;
-            globalThis.askHost = function(apiName, payload) {
-              const normalized = typeof payload === 'string'
-                ? payload
-                : JSON.stringify(payload);
-              return _askHostRaw(apiName, normalized);
-            };
-          })();
-        '''.toJS,
-      ].toJS,
+  Future<void> _initMachine() async {
+    await _callAsync(
+      method: 'initMachine',
+      args: [machineId.toJS],
     );
   }
 
@@ -65,48 +61,68 @@ class QuickJsVm implements VmRuntimeClient {
     return '{"type":"i16","data":{"value":0}}';
   }
 
+  @override
   void registerHostHandler(String apiName, HostCallHandler handler) {
     _hostHandlers[apiName] = handler;
   }
 
+  @override
   void setDefaultHostHandler(HostCallHandler handler) {
     _defaultHostHandler = handler;
   }
 
-  Future<String> runCode(String code) async {
-    final result = globalContext.callMethod('eval'.toJS, [code.toJS].toJS);
-    return result.dartify()?.toString() ?? '';
+  Future<String> _callAsync({required String method, required List<JSAny?> args}) async {
+    final quickJs = globalContext['elpianQuickJs'];
+    if (quickJs == null) {
+      throw StateError(
+        'QuickJS web runtime not loaded. Ensure web/quickjs_web_runtime.js is included in index.html.',
+      );
+    }
+
+    final result = (quickJs as JSObject).callMethod(method.toJS, args.toJS);
+    final value = await js_util.promiseToFuture<Object?>(result as Object);
+    return value?.toString() ?? '';
   }
 
+  Future<String> runCode(String code) {
+    return _callAsync(
+      method: 'evalCode',
+      args: [machineId.toJS, code.toJS],
+    );
+  }
+
+  @override
   Future<String> run() async {
     final code = _bootCode;
     if (code == null || code.isEmpty) return '';
     return runCode(code);
   }
 
-  Future<String> callFunction(String funcName) async {
-    final result = globalContext.callMethod('eval'.toJS, ['$funcName();'.toJS].toJS);
-    return result.dartify()?.toString() ?? '';
+  @override
+  Future<String> callFunction(String funcName) {
+    return _callAsync(
+      method: 'callFunction',
+      args: [machineId.toJS, funcName.toJS],
+    );
   }
 
-  Future<String> callFunctionWithInput(String funcName, String inputJson) async {
-    final escaped = jsonEncode(inputJson);
-    final result = globalContext.callMethod(
-      'eval'.toJS,
-      ['$funcName(JSON.parse($escaped));'.toJS].toJS,
+  @override
+  Future<String> callFunctionWithInput(String funcName, String inputJson) {
+    return _callAsync(
+      method: 'callFunctionWithInput',
+      args: [machineId.toJS, funcName.toJS, inputJson.toJS],
     );
-    return result.dartify()?.toString() ?? '';
   }
 
   void _dispatchHostCall(String apiName, String payload) {
     final handler = _hostHandlers[apiName];
     if (handler != null) {
-      handler(apiName, payload);
+      unawaited(handler(apiName, payload));
       return;
     }
 
     if (_defaultHostHandler != null) {
-      _defaultHostHandler!(apiName, payload);
+      unawaited(_defaultHostHandler!(apiName, payload));
       return;
     }
 
@@ -115,5 +131,15 @@ class QuickJsVm implements VmRuntimeClient {
     }
   }
 
-  Future<void> dispose() async {}
+  @override
+  Future<void> dispose() async {
+    try {
+      await _callAsync(
+        method: 'disposeMachine',
+        args: [machineId.toJS],
+      );
+    } catch (_) {
+      // no-op for teardown safety.
+    }
+  }
 }
