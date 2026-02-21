@@ -34,32 +34,35 @@ class QuickJsVm implements VmRuntimeClient {
     final global = globalContext;
     global.setProperty(
       'askHost'.toJS,
-      ((dynamic apiName, dynamic payload) =>
-              _syncHostCallDynamic(apiName, payload))
-          .toJS,
+      ((String apiName, String payload) => _syncHostCall(apiName, payload)).toJS,
+    );
+
+    // Normalize payloads to string on the JS side so Dart bridge types stay stable.
+    global.callMethod(
+      'eval'.toJS,
+      [
+        '''
+          (function() {
+            const _askHostRaw = globalThis.askHost;
+            globalThis.askHost = function(apiName, payload) {
+              const normalized = typeof payload === 'string'
+                ? payload
+                : JSON.stringify(payload);
+              return _askHostRaw(apiName, normalized);
+            };
+          })();
+        '''.toJS,
+      ].toJS,
     );
   }
 
-  String _syncHostCallDynamic(dynamic apiName, dynamic payload) {
-    final name = apiName?.toString() ?? '';
-    final normalizedPayload = _normalizePayload(payload);
+  String _syncHostCall(String apiName, String payload) {
+    _dispatchHostCall(apiName, payload);
 
-    // Trigger host handlers; JS interop callback itself must return synchronously.
-    _dispatchHostCall(name, normalizedPayload);
-
-    if (name == 'stringify') {
-      return '{"type":"string","data":{"value":${jsonEncode(normalizedPayload)}}}';
+    if (apiName == 'stringify') {
+      return '{"type":"string","data":{"value":${jsonEncode(payload)}}}';
     }
     return '{"type":"i16","data":{"value":0}}';
-  }
-
-  String _normalizePayload(dynamic payload) {
-    if (payload is String) return payload;
-
-    final dartValue = payload is JSAny ? payload.dartify() : payload;
-    if (dartValue is String) return dartValue;
-
-    return jsonEncode(dartValue);
   }
 
   void registerHostHandler(String apiName, HostCallHandler handler) {
@@ -94,7 +97,6 @@ class QuickJsVm implements VmRuntimeClient {
     );
     return result.dartify()?.toString() ?? '';
   }
-
 
   void _dispatchHostCall(String apiName, String payload) {
     final handler = _hostHandlers[apiName];
