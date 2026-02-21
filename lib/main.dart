@@ -4,6 +4,7 @@ import 'package:elpian_ui/example/enhanced_example.dart';
 import 'package:elpian_ui/example/game_scene_example.dart';
 import 'package:elpian_ui/example/json_stylesheet_demo.dart';
 import 'package:elpian_ui/example/landing_page_example.dart';
+import 'package:elpian_ui/example/quickjs_example.dart';
 import 'package:elpian_ui/example/ordinary_example.dart';
 import 'package:elpian_ui/example/vm_example.dart';
 import 'package:flutter/material.dart';
@@ -125,6 +126,11 @@ class ExamplesHomePage extends StatelessWidget {
           title: 'AST VM Sandboxes',
           subtitle: 'Interactive VM demos built from AST JSON programs',
           pageBuilder: () => const VmExamplePage(),
+        ),
+        _ExampleEntry(
+          title: 'QuickJS Runtime Sandboxes',
+          subtitle: 'JavaScript-driven demos rendered via JSON DSL host APIs',
+          pageBuilder: () => const QuickJsExamplePage(),
         ),
       ];
 }
