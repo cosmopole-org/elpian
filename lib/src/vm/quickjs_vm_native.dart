@@ -44,13 +44,19 @@ class QuickJsVm implements VmRuntimeClient {
   }
 
   void _bootstrapHostBridge() {
-    _runtime.onMessage('elpianHost', (dynamic args) async {
+    _runtime.onMessage('elpianHost', (dynamic args) {
       try {
         final requestText = args?.toString() ?? '{}';
         final request = jsonDecode(requestText) as Map<String, dynamic>;
         final apiName = request['apiName']?.toString() ?? '';
         final payload = request['payload']?.toString() ?? '';
-        return await _handleHostCall(apiName, payload);
+
+        _dispatchHostCall(apiName, payload);
+
+        if (apiName == 'stringify') {
+          return '{"type":"string","data":{"value":${jsonEncode(payload)}}}';
+        }
+        return '{"type":"i16","data":{"value":0}}';
       } catch (e) {
         debugPrint('QuickJsVm[$machineId]: host bridge error: $e');
         return '{"type":"i16","data":{"value":0}}';
@@ -97,25 +103,21 @@ class QuickJsVm implements VmRuntimeClient {
     return result.stringResult;
   }
 
-  Future<String> _handleHostCall(String apiName, String payload) async {
+
+  void _dispatchHostCall(String apiName, String payload) {
     final handler = _hostHandlers[apiName];
     if (handler != null) {
-      return await handler(apiName, payload);
+      handler(apiName, payload);
+      return;
     }
 
     if (_defaultHostHandler != null) {
-      return await _defaultHostHandler!(apiName, payload);
+      _defaultHostHandler!(apiName, payload);
+      return;
     }
 
-    switch (apiName) {
-      case 'println':
-        debugPrint('QuickJsVm[$machineId]: $payload');
-        return '{"type":"i16","data":{"value":0}}';
-      case 'stringify':
-        return '{"type":"string","data":{"value":${jsonEncode(payload)}}}';
-      default:
-        debugPrint('QuickJsVm[$machineId]: Unhandled host call: $apiName');
-        return '{"type":"i16","data":{"value":0}}';
+    if (apiName == 'println') {
+      debugPrint('QuickJsVm[$machineId]: $payload');
     }
   }
 

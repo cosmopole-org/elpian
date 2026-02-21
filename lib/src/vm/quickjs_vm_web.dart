@@ -41,7 +41,7 @@ class QuickJsVm implements VmRuntimeClient {
 
   String _syncHostCall(String apiName, String payload) {
     // Trigger host handlers; JS interop callback itself must return synchronously.
-    _handleHostCall(apiName, payload);
+    _dispatchHostCall(apiName, payload);
 
     if (apiName == 'stringify') {
       return '{"type":"string","data":{"value":${jsonEncode(payload)}}}';
@@ -82,25 +82,21 @@ class QuickJsVm implements VmRuntimeClient {
     return result.dartify()?.toString() ?? '';
   }
 
-  Future<String> _handleHostCall(String apiName, String payload) async {
+
+  void _dispatchHostCall(String apiName, String payload) {
     final handler = _hostHandlers[apiName];
     if (handler != null) {
-      return handler(apiName, payload);
+      handler(apiName, payload);
+      return;
     }
 
     if (_defaultHostHandler != null) {
-      return _defaultHostHandler!(apiName, payload);
+      _defaultHostHandler!(apiName, payload);
+      return;
     }
 
-    switch (apiName) {
-      case 'println':
-        debugPrint('QuickJsVm[$machineId]: $payload');
-        return '{"type":"i16","data":{"value":0}}';
-      case 'stringify':
-        return '{"type":"string","data":{"value":${jsonEncode(payload)}}}';
-      default:
-        debugPrint('QuickJsVm[$machineId]: Unhandled host call: $apiName');
-        return '{"type":"i16","data":{"value":0}}';
+    if (apiName == 'println') {
+      debugPrint('QuickJsVm[$machineId]: $payload');
     }
   }
 
