@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'frb_generated/api.dart'
     if (dart.library.js_interop) 'frb_generated/api_web.dart';
+import 'vm_runtime_client.dart';
 
 /// Callback for handling host function calls from the Rust VM.
 ///
@@ -20,7 +21,7 @@ typedef HostCallHandler = Future<String> Function(
 /// interface for creating, running, and interacting with the sandboxed
 /// JS-like VM. It handles the host call loop automatically, routing
 /// calls like `render` and `updateApp` to registered handlers.
-class ElpianVm {
+class ElpianVm implements VmRuntimeClient {
   final String machineId;
   final Map<String, HostCallHandler> _hostHandlers = {};
   HostCallHandler? _defaultHostHandler;
