@@ -283,6 +283,27 @@ class _EventEnabledWidgetState extends State<EventEnabledWidget> {
     if (_hasAnyEvent(events, ['focus', 'blur', 'keydown', 'keyup'])) {
       result = Focus(
         focusNode: _focusNode,
+        onKeyEvent: _hasAnyEvent(events, ['keydown', 'keyup'])
+            ? (node, event) {
+                if (event is KeyDownEvent && events.containsKey('keydown')) {
+                  _dispatcher.dispatchKeyDown(
+                    _elementId,
+                    event.logicalKey.keyLabel,
+                    event.logicalKey.keyId,
+                  );
+                  return KeyEventResult.handled;
+                }
+                if (event is KeyUpEvent && events.containsKey('keyup')) {
+                  _dispatcher.dispatchKeyUp(
+                    _elementId,
+                    event.logicalKey.keyLabel,
+                    event.logicalKey.keyId,
+                  );
+                  return KeyEventResult.handled;
+                }
+                return KeyEventResult.ignored;
+              }
+            : null,
         child: result,
       );
     }
