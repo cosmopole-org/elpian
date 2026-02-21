@@ -80,8 +80,15 @@ class QuickJsVm implements VmRuntimeClient {
     }
 
     final result = (quickJs as JSObject).callMethodVarArgs(method.toJS, args);
-    final value = await js_util.promiseToFuture<Object?>(result as Object);
-    return value?.toString() ?? '';
+
+    final jsResultObject = result as Object;
+    final isThenable = js_util.hasProperty(jsResultObject, 'then');
+    if (isThenable) {
+      final value = await js_util.promiseToFuture<Object?>(jsResultObject);
+      return value?.toString() ?? '';
+    }
+
+    return result.dartify()?.toString() ?? '';
   }
 
   Future<String> runCode(String code) {
