@@ -35,15 +35,40 @@ class QuickJsExamplePage extends StatelessWidget {
   }
 }
 
-class _QuickJsCounterDemo extends StatelessWidget {
+class _QuickJsCounterDemo extends StatefulWidget {
   const _QuickJsCounterDemo();
 
   @override
+  State<_QuickJsCounterDemo> createState() => _QuickJsCounterDemoState();
+}
+
+class _QuickJsCounterDemoState extends State<_QuickJsCounterDemo> {
+  final _controller = ElpianVmController();
+
+  @override
   Widget build(BuildContext context) {
-    return ElpianVmWidget.fromCode(
-      machineId: 'quickjs-counter-demo',
-      runtime: ElpianRuntime.quickJs,
-      code: _counterProgram,
+    return Column(
+      children: [
+        Expanded(
+          child: ElpianVmScope(
+            controller: _controller,
+            machineId: 'quickjs-counter-demo',
+            runtime: ElpianRuntime.quickJs,
+            code: _counterProgram,
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => _controller.callFunction('increment'),
+              icon: const Icon(Icons.add),
+              label: const Text('Increment from Flutter Controller'),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -134,36 +159,62 @@ function buildView() {
     },
     children: [
       {
-        type: 'Text',
+        type: 'Container',
         props: {
-          text: 'QuickJS Counter',
-          style: { fontSize: '22', fontWeight: 'bold' }
-        }
-      },
-      {
-        type: 'Text',
-        props: {
-          text: `Current value: ${count}`,
-          style: { fontSize: '18', color: '#3247D6' }
-        }
-      },
-      {
-        type: 'Text',
-        props: {
-          text: 'Tap card to increment from JS event handler',
-          style: { fontSize: '14', color: '#666666' }
-        }
+          style: {
+            padding: '16',
+            backgroundColor: '#ffffff',
+            borderRadius: '12'
+          }
+        },
+        events: {
+          tap: 'increment'
+        },
+        children: [
+          {
+            type: 'Text',
+            props: {
+              text: 'QuickJS Counter',
+              style: { fontSize: '22', fontWeight: 'bold' }
+            }
+          },
+          {
+            type: 'Text',
+            props: {
+              text: `Current value: ${count}`,
+              style: { fontSize: '18', color: '#3247D6' }
+            }
+          },
+          {
+            type: 'Text',
+            props: {
+              text: 'Tap this card or the button below to increment and trigger callbacks',
+              style: { fontSize: '14', color: '#666666' }
+            }
+          },
+          {
+            type: 'Button',
+            props: {
+              text: 'Increment in-card'
+            },
+            events: {
+              tap: 'increment'
+            }
+          }
+        ]
       }
-    ],
-    events: {
-      tap: 'increment'
-    }
+    ]
   }));
 }
 
 function increment() {
   count += 1;
   askHost('println', `Count changed to ${count}`);
+  askHost('updateApp', JSON.stringify({
+    source: 'quickjs',
+    action: 'counterIncremented',
+    value: count
+  }));
   buildView();
 }
 
@@ -211,11 +262,13 @@ tick();
 const String _hostDataProgram = r'''
 function loadProfile() {
   const profileTyped = askHost('getProfile', '{}');
-  let profile = { name: 'Unknown', role: 'Unknown', project: 'Unknown' };
+  let profile = { name: 'Elpian User', role: 'Runtime Tester', project: 'QuickJS + UI bridge' };
   try {
     const parsedTyped = JSON.parse(profileTyped);
-    if (parsedTyped && parsedTyped.data && parsedTyped.data.value) {
+    if (parsedTyped && parsedTyped.type === 'string' && parsedTyped.data && parsedTyped.data.value) {
       profile = JSON.parse(parsedTyped.data.value);
+    } else {
+      askHost('println', 'getProfile returned non-string response, using fallback profile');
     }
   } catch (e) {
     askHost('println', `Profile parse failed: ${String(e)}`);
