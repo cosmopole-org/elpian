@@ -35,13 +35,12 @@ jobs:
 
       - name: Build Elpian WASM module
         env:
-          # Avoid bulk-memory opcodes so wasm validators in downstream toolchains
-          # (e.g. Flutter web build environments) do not fail with
-          # "Bulk memory operations require bulk memory".
+          # Disable bulk-memory opcodes so downstream wasm validators
+          # (e.g. Flutter web build environments) do not reject the
+          # binary with "Bulk memory operations require bulk memory".
           RUSTFLAGS: -C target-feature=-bulk-memory
         run: |
           wasm-pack build rust \
-            --enable-bulk-memory \
             --target web \
             --release \
             --out-dir pkg \
