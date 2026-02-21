@@ -3,8 +3,30 @@ let quickJsModulePromise = null;
 
 async function getQuickJsModule() {
   if (!quickJsModulePromise) {
-    // ESM build of quickjs-emscripten runtime for browser/web usage.
-    quickJsModulePromise = import('https://esm.sh/@jitl/quickjs-emscripten@0.31.0');
+    quickJsModulePromise = (async () => {
+      const candidates = [
+        // Preferred: bundled browser ESM build.
+        'https://esm.sh/@jitl/quickjs-emscripten@0.31.0?bundle&target=es2022&browser',
+        // Fallback CDN ESM transform.
+        'https://cdn.jsdelivr.net/npm/@jitl/quickjs-emscripten@0.31.0/+esm',
+      ];
+
+      let lastError = null;
+      for (const url of candidates) {
+        try {
+          const mod = await import(url);
+          if (mod && typeof mod.getQuickJS === 'function') {
+            return mod;
+          }
+          throw new Error(`Module loaded but getQuickJS is missing: ${url}`);
+        } catch (error) {
+          lastError = error;
+          console.warn(`QuickJS module import failed from ${url}`, error);
+        }
+      }
+
+      throw lastError ?? new Error('Unable to load quickjs-emscripten module');
+    })();
   }
   return quickJsModulePromise;
 }
