@@ -31,10 +31,9 @@ jobs:
 
       - name: Build Elpian WASM module
         run: |
+          cd rust && \
           wasm-pack build \
             --target web \
-            --out-dir rust/pkg \
-            --out-name elpian_vm \
             --enable-bulk-memory
 
       - name: Copy WASM artifacts to web assets
