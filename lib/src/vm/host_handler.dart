@@ -37,9 +37,7 @@ class HostHandler {
   /// VM code passes to the render function.
   Future<String> handleRender(String payload) async {
     try {
-      // The payload comes as a stringified value from the VM's Val.stringify()
-      // Parse it back to a JSON structure
-      final dynamic parsed = _parseVmPayload(payload);
+      final dynamic parsed = _unwrapHostArgs(_parseVmPayload(payload));
 
       if (parsed is Map<String, dynamic>) {
         onRender?.call(parsed);
@@ -69,7 +67,7 @@ class HostHandler {
   /// Handle an `updateApp` host call from the VM.
   Future<String> handleUpdateApp(String payload) async {
     try {
-      final dynamic parsed = _parseVmPayload(payload);
+      final dynamic parsed = _unwrapHostArgs(_parseVmPayload(payload));
 
       if (parsed is Map<String, dynamic>) {
         onUpdateApp?.call(parsed);
@@ -84,7 +82,7 @@ class HostHandler {
 
   /// Handle a `println` host call from the VM.
   Future<String> handlePrintln(String payload) async {
-    final dynamic parsed = _parseVmPayload(payload);
+    final dynamic parsed = _unwrapHostArgs(_parseVmPayload(payload));
     final message = parsed is String ? parsed : payload;
     onPrintln?.call(message);
     return _makeResponse('i16', 0);
@@ -111,6 +109,17 @@ class HostHandler {
       }
       return payload;
     }
+  }
+
+  /// Host calls encode arguments as an array payload.
+  /// For common single-argument APIs (render/updateApp/println), unwrap
+  /// the first argument so downstream handling receives the value itself.
+  dynamic _unwrapHostArgs(dynamic parsed) {
+    if (parsed is List<dynamic>) {
+      if (parsed.isEmpty) return null;
+      return parsed.first;
+    }
+    return parsed;
   }
 
   /// Create a typed response JSON for the VM.
