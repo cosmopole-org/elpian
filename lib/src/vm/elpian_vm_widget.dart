@@ -5,6 +5,9 @@ import '../core/elpian_engine.dart';
 import '../core/event_system.dart';
 import '../models/elpian_node.dart';
 import 'elpian_vm.dart';
+import 'quickjs_vm.dart';
+import 'runtime_kind.dart';
+import 'vm_runtime_client.dart';
 import 'host_handler.dart';
 
 /// A Flutter widget that runs an Elpian Rust VM sandbox and renders
@@ -55,6 +58,12 @@ class ElpianVmWidget extends StatefulWidget {
   /// AST JSON to run in the VM (mutually exclusive with [code]).
   final String? astJson;
 
+  /// Runtime backend used to execute [code]/[astJson].
+  ///
+  /// - [ElpianRuntime.elpian]: Rust VM sandbox (default), expects AST for [astJson].
+  /// - [ElpianRuntime.quickJs]: QuickJS runtime, expects JavaScript in [code].
+  final ElpianRuntime runtime;
+
   /// Optional ElpianEngine instance to use for rendering.
   /// If not provided, a new default engine is created.
   final ElpianEngine? engine;
@@ -98,6 +107,7 @@ class ElpianVmWidget extends StatefulWidget {
     this.hostHandlers,
     this.entryFunction,
     this.entryInput,
+    this.runtime = ElpianRuntime.elpian,
   }) : assert(code != null || astJson != null,
             'Either code or astJson must be provided');
 
@@ -115,6 +125,7 @@ class ElpianVmWidget extends StatefulWidget {
     this.hostHandlers,
     this.entryFunction,
     this.entryInput,
+    this.runtime = ElpianRuntime.elpian,
   }) : code = null;
 
   /// Create a widget from source code.
@@ -131,6 +142,7 @@ class ElpianVmWidget extends StatefulWidget {
     this.hostHandlers,
     this.entryFunction,
     this.entryInput,
+    this.runtime = ElpianRuntime.elpian,
   }) : astJson = null;
 
   @override
@@ -140,6 +152,7 @@ class ElpianVmWidget extends StatefulWidget {
 class _ElpianVmWidgetState extends State<ElpianVmWidget> {
   late ElpianEngine _engine;
   ElpianVm? _vm;
+  QuickJsVm? _quickJsVm;
   Map<String, dynamic>? _currentViewJson;
   String? _error;
   bool _isLoading = true;
@@ -156,27 +169,38 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
 
   Future<void> _initVm() async {
     try {
-      // Initialize the VM subsystem (loads native lib / WASM module)
+      // Initialize selected runtime subsystem.
       await ElpianVm.initialize();
+      await QuickJsVm.initialize();
 
-      // Create the VM
-      ElpianVm? vm;
-      if (widget.code != null) {
-        vm = await ElpianVm.fromCode(widget.machineId, widget.code!);
-      } else if (widget.astJson != null) {
-        vm = await ElpianVm.fromAst(widget.machineId, widget.astJson!);
+      if (widget.runtime == ElpianRuntime.elpian) {
+        ElpianVm? vm;
+        if (widget.code != null) {
+          vm = await ElpianVm.fromCode(widget.machineId, widget.code!);
+        } else if (widget.astJson != null) {
+          vm = await ElpianVm.fromAst(widget.machineId, widget.astJson!);
+        }
+
+        if (vm == null) {
+          setState(() {
+            final detail = ElpianVm.lastApiError;
+            _error = detail == null ? 'Failed to create VM' : 'Failed to create VM: $detail';
+            _isLoading = false;
+          });
+          return;
+        }
+
+        _vm = vm;
+      } else {
+        if (widget.code == null) {
+          setState(() {
+            _error = 'QuickJS runtime requires `code` (JavaScript source).';
+            _isLoading = false;
+          });
+          return;
+        }
+        _quickJsVm = await QuickJsVm.fromCode(widget.machineId, widget.code!);
       }
-
-      if (vm == null) {
-        setState(() {
-          final detail = ElpianVm.lastApiError;
-          _error = detail == null ? 'Failed to create VM' : 'Failed to create VM: $detail';
-          _isLoading = false;
-        });
-        return;
-      }
-
-      _vm = vm;
 
       // Wire all UI events to VM function names declared in node.events.
       // This keeps event routing fully engine-driven (no extra app-layer glue).
@@ -204,26 +228,28 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
       );
 
       // Register built-in host handlers
-      vm.registerHostHandler('render', (apiName, payload) {
+      final VmRuntimeClient runtimeVm = _vm ?? _quickJsVm!;
+
+      runtimeVm.registerHostHandler('render', (apiName, payload) {
         return hostHandler.handleRender(payload);
       });
-      vm.registerHostHandler('updateApp', (apiName, payload) {
+      runtimeVm.registerHostHandler('updateApp', (apiName, payload) {
         return hostHandler.handleUpdateApp(payload);
       });
-      vm.registerHostHandler('println', (apiName, payload) {
+      runtimeVm.registerHostHandler('println', (apiName, payload) {
         return hostHandler.handlePrintln(payload);
       });
-      vm.registerHostHandler('stringify', (apiName, payload) {
+      runtimeVm.registerHostHandler('stringify', (apiName, payload) {
         return hostHandler.handleStringify(payload);
       });
 
       // Register additional host handlers
       widget.hostHandlers?.forEach((name, handler) {
-        vm!.registerHostHandler(name, handler);
+        runtimeVm.registerHostHandler(name, handler);
       });
 
       // Execute the VM
-      await vm.run();
+      await runtimeVm.run();
 
       // Call entry function if specified
       if (widget.entryFunction != null) {
@@ -246,7 +272,8 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
   }
 
   Future<void> _routeEventToVm(ElpianEvent event) async {
-    if (_vm == null) return;
+    final VmRuntimeClient? runtimeVm = _vm ?? _quickJsVm;
+    if (runtimeVm == null) return;
     final nodeId = event.currentTarget?.toString();
     if (nodeId == null || nodeId.isEmpty) return;
 
@@ -257,7 +284,7 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
 
     final payload = jsonEncode(_eventToJson(event));
     try {
-      await _vm!.callFunctionWithInput(handler, payload);
+      await runtimeVm.callFunctionWithInput(handler, payload);
     } catch (e) {
       debugPrint('ElpianVmWidget: Error calling event handler "$handler": $e');
     }
@@ -307,15 +334,16 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
   }
 
   Future<void> _callEntryFunction() async {
-    if (_vm == null) return;
+    final VmRuntimeClient? runtimeVm = _vm ?? _quickJsVm;
+    if (runtimeVm == null) return;
     try {
       if (widget.entryInput != null) {
-        await _vm!.callFunctionWithInput(
+        await runtimeVm.callFunctionWithInput(
           widget.entryFunction!,
           widget.entryInput!,
         );
       } else {
-        await _vm!.callFunction(widget.entryFunction!);
+        await runtimeVm.callFunction(widget.entryFunction!);
       }
     } catch (e) {
       debugPrint('ElpianVmWidget: Error calling ${widget.entryFunction}: $e');
@@ -325,16 +353,18 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
   /// Call a function in the running VM from Dart.
   /// Useful for sending events back to the VM.
   Future<String> callVmFunction(String funcName, {String? input}) async {
-    if (_vm == null) return '';
+    final VmRuntimeClient? runtimeVm = _vm ?? _quickJsVm;
+    if (runtimeVm == null) return '';
     if (input != null) {
-      return _vm!.callFunctionWithInput(funcName, input);
+      return runtimeVm.callFunctionWithInput(funcName, input);
     }
-    return _vm!.callFunction(funcName);
+    return runtimeVm.callFunction(funcName);
   }
 
   @override
   void dispose() {
     _vm?.dispose();
+    _quickJsVm?.dispose();
     super.dispose();
   }
 
@@ -414,6 +444,7 @@ class ElpianVmScope extends StatefulWidget {
   final Map<String, HostCallHandler>? hostHandlers;
   final String? entryFunction;
   final String? entryInput;
+  final ElpianRuntime runtime;
 
   const ElpianVmScope({
     super.key,
@@ -430,6 +461,7 @@ class ElpianVmScope extends StatefulWidget {
     this.hostHandlers,
     this.entryFunction,
     this.entryInput,
+    this.runtime = ElpianRuntime.elpian,
   });
 
   @override
@@ -469,6 +501,7 @@ class _ElpianVmScopeState extends State<ElpianVmScope> {
       hostHandlers: widget.hostHandlers,
       entryFunction: widget.entryFunction,
       entryInput: widget.entryInput,
+      runtime: widget.runtime,
     );
   }
 }
