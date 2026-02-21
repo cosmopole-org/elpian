@@ -14,6 +14,7 @@ class QuickJsVm implements VmRuntimeClient {
 
   late final JavascriptRuntime _runtime;
   bool _initialized = false;
+  String? _bootCode;
 
   QuickJsVm({required this.machineId});
 
@@ -25,7 +26,7 @@ class QuickJsVm implements VmRuntimeClient {
     final vm = QuickJsVm(machineId: machineId);
     await vm._init();
     vm._bootstrapHostBridge();
-    await vm.runCode(code);
+    vm._bootCode = code;
     return vm;
   }
 
@@ -80,7 +81,9 @@ class QuickJsVm implements VmRuntimeClient {
   }
 
   Future<String> run() async {
-    return '';
+    final code = _bootCode;
+    if (code == null || code.isEmpty) return '';
+    return runCode(code);
   }
 
   Future<String> callFunction(String funcName) async {

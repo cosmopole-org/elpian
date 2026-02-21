@@ -11,6 +11,7 @@ class QuickJsVm implements VmRuntimeClient {
   final String machineId;
   final Map<String, HostCallHandler> _hostHandlers = {};
   HostCallHandler? _defaultHostHandler;
+  String? _bootCode;
 
   QuickJsVm({required this.machineId});
 
@@ -19,7 +20,7 @@ class QuickJsVm implements VmRuntimeClient {
   static Future<QuickJsVm> fromCode(String machineId, String code) async {
     final vm = QuickJsVm(machineId: machineId);
     vm._bootstrapHostBridge();
-    await vm.runCode(code);
+    vm._bootCode = code;
     return vm;
   }
 
@@ -39,10 +40,13 @@ class QuickJsVm implements VmRuntimeClient {
   }
 
   String _syncHostCall(String apiName, String payload) {
-    // Web bridge keeps host-call lifecycle identical for render/updateApp/println.
-    String response = '{"type":"i16","data":{"value":0}}';
-    _handleHostCall(apiName, payload).then((value) => response = value);
-    return response;
+    // Trigger host handlers; JS interop callback itself must return synchronously.
+    _handleHostCall(apiName, payload);
+
+    if (apiName == 'stringify') {
+      return '{"type":"string","data":{"value":${jsonEncode(payload)}}}';
+    }
+    return '{"type":"i16","data":{"value":0}}';
   }
 
   void registerHostHandler(String apiName, HostCallHandler handler) {
@@ -58,7 +62,11 @@ class QuickJsVm implements VmRuntimeClient {
     return result.dartify()?.toString() ?? '';
   }
 
-  Future<String> run() async => '';
+  Future<String> run() async {
+    final code = _bootCode;
+    if (code == null || code.isEmpty) return '';
+    return runCode(code);
+  }
 
   Future<String> callFunction(String funcName) async {
     final result = globalContext.callMethod('eval'.toJS, ['$funcName();'.toJS].toJS);
