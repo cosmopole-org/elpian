@@ -74,7 +74,21 @@ class _EventEnabledWidgetState extends State<EventEnabledWidget> {
     ])) {
       result = GestureDetector(
         onTap: events.containsKey('click') || events.containsKey('tap')
-            ? () => _dispatcher.dispatchClick(_elementId)
+            ? () {
+                if (events.containsKey('tap')) {
+                  _dispatcher.dispatchEvent(
+                    ElpianEvent(
+                      type: 'tap',
+                      eventType: ElpianEventType.tap,
+                      target: _elementId,
+                    ),
+                    _elementId,
+                  );
+                }
+                if (events.containsKey('click')) {
+                  _dispatcher.dispatchClick(_elementId);
+                }
+              }
             : null,
         onDoubleTap: events.containsKey('doubletap')
             ? () => _dispatcher.dispatchEvent(
@@ -98,10 +112,12 @@ class _EventEnabledWidgetState extends State<EventEnabledWidget> {
             : null,
         onTapDown: events.containsKey('tapdown')
             ? (details) => _dispatcher.dispatchEvent(
-                EventUtils.fromTapDownDetails(
-                  details,
-                  elementId: _elementId,
+                ElpianPointerEvent(
+                  type: 'tapdown',
                   eventType: ElpianEventType.tapDown,
+                  target: _elementId,
+                  position: details.globalPosition,
+                  localPosition: details.localPosition,
                 ),
                 _elementId,
               )
@@ -150,16 +166,24 @@ class _EventEnabledWidgetState extends State<EventEnabledWidget> {
         onHorizontalDragEnd: _hasAnyEvent(events, ['swipeleft', 'swiperight'])
             ? (details) {
                 if (details.primaryVelocity! < 0) {
-                  _dispatcher.dispatchGesture(
+                  _dispatcher.dispatchEvent(
+                    ElpianGestureEvent(
+                      type: 'swipeleft',
+                      eventType: ElpianEventType.swipeLeft,
+                      target: _elementId,
+                      velocity: Offset(details.primaryVelocity!, 0),
+                    ),
                     _elementId,
-                    ElpianEventType.swipeLeft,
-                    velocity: Offset(details.primaryVelocity!, 0),
                   );
                 } else {
-                  _dispatcher.dispatchGesture(
+                  _dispatcher.dispatchEvent(
+                    ElpianGestureEvent(
+                      type: 'swiperight',
+                      eventType: ElpianEventType.swipeRight,
+                      target: _elementId,
+                      velocity: Offset(details.primaryVelocity!, 0),
+                    ),
                     _elementId,
-                    ElpianEventType.swipeRight,
-                    velocity: Offset(details.primaryVelocity!, 0),
                   );
                 }
               }
@@ -167,16 +191,24 @@ class _EventEnabledWidgetState extends State<EventEnabledWidget> {
         onVerticalDragEnd: _hasAnyEvent(events, ['swipeup', 'swipedown'])
             ? (details) {
                 if (details.primaryVelocity! < 0) {
-                  _dispatcher.dispatchGesture(
+                  _dispatcher.dispatchEvent(
+                    ElpianGestureEvent(
+                      type: 'swipeup',
+                      eventType: ElpianEventType.swipeUp,
+                      target: _elementId,
+                      velocity: Offset(0, details.primaryVelocity!),
+                    ),
                     _elementId,
-                    ElpianEventType.swipeUp,
-                    velocity: Offset(0, details.primaryVelocity!),
                   );
                 } else {
-                  _dispatcher.dispatchGesture(
+                  _dispatcher.dispatchEvent(
+                    ElpianGestureEvent(
+                      type: 'swipedown',
+                      eventType: ElpianEventType.swipeDown,
+                      target: _elementId,
+                      velocity: Offset(0, details.primaryVelocity!),
+                    ),
                     _elementId,
-                    ElpianEventType.swipeDown,
-                    velocity: Offset(0, details.primaryVelocity!),
                   );
                 }
               }
@@ -251,6 +283,27 @@ class _EventEnabledWidgetState extends State<EventEnabledWidget> {
     if (_hasAnyEvent(events, ['focus', 'blur', 'keydown', 'keyup'])) {
       result = Focus(
         focusNode: _focusNode,
+        onKeyEvent: _hasAnyEvent(events, ['keydown', 'keyup'])
+            ? (node, event) {
+                if (event is KeyDownEvent && events.containsKey('keydown')) {
+                  _dispatcher.dispatchKeyDown(
+                    _elementId,
+                    event.logicalKey.keyLabel,
+                    event.logicalKey.keyId,
+                  );
+                  return KeyEventResult.handled;
+                }
+                if (event is KeyUpEvent && events.containsKey('keyup')) {
+                  _dispatcher.dispatchKeyUp(
+                    _elementId,
+                    event.logicalKey.keyLabel,
+                    event.logicalKey.keyId,
+                  );
+                  return KeyEventResult.handled;
+                }
+                return KeyEventResult.ignored;
+              }
+            : null,
         child: result,
       );
     }

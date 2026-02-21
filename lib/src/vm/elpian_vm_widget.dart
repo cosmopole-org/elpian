@@ -327,6 +327,13 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
         'value': event.value,
         'inputType': event.inputType,
       });
+    } else if (event is ElpianGestureEvent) {
+      base.addAll({
+        'velocity': {'x': event.velocity.dx, 'y': event.velocity.dy},
+        'scale': event.scale,
+        'rotation': event.rotation,
+        'focalPoint': {'x': event.focalPoint.dx, 'y': event.focalPoint.dy},
+      });
     }
 
     return base;
