@@ -1,0 +1,98 @@
+import 'dart:convert';
+
+import 'package:elpian_ui/elpian_ui.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  group('QuickJS host/UI integration contracts', () {
+    test('HostHandler render payload from JS can be rendered by ElpianEngine',
+        () async {
+      final engine = ElpianEngine();
+      Map<String, dynamic>? lastView;
+
+      final hostHandler = HostHandler(
+        onRender: (viewJson) {
+          lastView = viewJson;
+        },
+      );
+
+      final payload = jsonEncode({
+        'type': 'Column',
+        'children': [
+          {
+            'type': 'Text',
+            'props': {'text': 'Hello from QuickJS'},
+          },
+        ],
+      });
+
+      final response = await hostHandler.handleRender(payload);
+
+      expect(lastView, isNotNull);
+      expect(lastView!['type'], equals('Column'));
+      expect(response, contains('"type":"i16"'));
+
+      final renderedWidget = engine.renderFromJson(lastView!);
+      expect(renderedWidget, isA<Widget>());
+    });
+
+    test('HostHandler supports array-wrapped host args format', () async {
+      Map<String, dynamic>? lastView;
+      final hostHandler = HostHandler(onRender: (viewJson) => lastView = viewJson);
+
+      await hostHandler.handleRender(jsonEncode([
+        {
+          'type': 'Text',
+          'props': {'text': 'wrapped payload'},
+        }
+      ]));
+
+      expect(lastView, isNotNull);
+      expect(lastView!['type'], equals('Text'));
+    });
+
+    test('HostHandler updateApp + println callbacks receive JS-side payloads',
+        () async {
+      Map<String, dynamic>? update;
+      String? println;
+
+      final hostHandler = HostHandler(
+        onUpdateApp: (data) => update = data,
+        onPrintln: (msg) => println = msg,
+      );
+
+      await hostHandler.handleUpdateApp(
+        jsonEncode([
+          {
+            'source': 'quickjs',
+            'event': 'loaded',
+          }
+        ]),
+      );
+      await hostHandler.handlePrintln(jsonEncode(['quickjs says hi']));
+
+      expect(update, isNotNull);
+      expect(update!['source'], equals('quickjs'));
+      expect(println, equals('quickjs says hi'));
+    });
+
+    test('VM widgets expose runtime selection for QuickJS', () {
+      const widget = ElpianVmWidget.fromCode(
+        machineId: 'quickjs-widget-contract',
+        runtime: ElpianRuntime.quickJs,
+        code: 'askHost("println", "hello")',
+      );
+
+      final scope = ElpianVmScope(
+        controller: ElpianVmController(),
+        machineId: 'quickjs-scope-contract',
+        runtime: ElpianRuntime.quickJs,
+        code: 'askHost("println", "scope")',
+      );
+
+      expect(widget.runtime, equals(ElpianRuntime.quickJs));
+      expect(scope.runtime, equals(ElpianRuntime.quickJs));
+    });
+  });
+}

@@ -19,9 +19,9 @@ void main() {
         return const SizedBox();
       });
       
-      final json = {
+      final json = <String, dynamic>{
         'type': 'CustomTest',
-        'props': {},
+        'props': <String, dynamic>{},
       };
       
       final widget = engine.renderFromJson(json);
