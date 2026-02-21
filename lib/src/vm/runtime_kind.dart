@@ -1,0 +1,4 @@
+enum ElpianRuntime {
+  elpian,
+  quickJs,
+}
