@@ -169,11 +169,9 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
 
   Future<void> _initVm() async {
     try {
-      // Initialize selected runtime subsystem.
-      await ElpianVm.initialize();
-      await QuickJsVm.initialize();
-
+      // Initialize only the selected runtime subsystem.
       if (widget.runtime == ElpianRuntime.elpian) {
+        await ElpianVm.initialize();
         ElpianVm? vm;
         if (widget.code != null) {
           vm = await ElpianVm.fromCode(widget.machineId, widget.code!);
@@ -192,6 +190,7 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
 
         _vm = vm;
       } else {
+        await QuickJsVm.initialize();
         if (widget.code == null) {
           setState(() {
             _error = 'QuickJS runtime requires `code` (JavaScript source).';
