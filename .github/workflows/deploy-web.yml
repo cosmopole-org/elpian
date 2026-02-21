@@ -30,21 +30,44 @@ jobs:
           rustup default stable
           rustup target add wasm32-unknown-unknown
 
-      - name: Install wasm-pack
-        run: cargo install wasm-pack --locked
+      - name: Install wasm-bindgen-cli
+        run: |
+          # Must exactly match the wasm-bindgen version in rust/Cargo.lock
+          WB_VERSION=$(grep -A1 '^name = "wasm-bindgen"$' rust/Cargo.lock \
+            | grep version | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          cargo install wasm-bindgen-cli --version "$WB_VERSION" --locked
+
+      - name: Install binaryen
+        run: sudo apt-get update -q && sudo apt-get install -y binaryen
 
       - name: Build Elpian WASM module
         env:
-          # Disable bulk-memory opcodes so downstream wasm validators
-          # (e.g. Flutter web build environments) do not reject the
-          # binary with "Bulk memory operations require bulk memory".
+          # Minimise bulk-memory ops emitted by LLVM codegen.  Some
+          # intrinsics (memcpy / memset) may still emit them, so
+          # wasm-bindgen is told to accept them below.
           RUSTFLAGS: -C target-feature=-bulk-memory
         run: |
-          wasm-pack build rust \
+          # 1. Compile Rust → WASM
+          cargo build --manifest-path rust/Cargo.toml \
+            --target wasm32-unknown-unknown \
+            --release
+
+          # 2. Generate JS bindings.
+          #    --enable-bulk-memory tells wasm-bindgen not to reject
+          #    residual bulk-memory ops that LLVM intrinsics still emit
+          #    despite the RUSTFLAGS setting.  All modern browsers
+          #    support the bulk-memory proposal.
+          wasm-bindgen \
             --target web \
-            --release \
-            --out-dir pkg \
-            --out-name elpian_vm
+            --out-dir rust/pkg \
+            --out-name elpian_vm \
+            --enable-bulk-memory \
+            rust/target/wasm32-unknown-unknown/release/elpian_vm.wasm
+
+          # 3. Optimise the final binary (size-optimised like Cargo profile)
+          wasm-opt -Oz \
+            rust/pkg/elpian_vm_bg.wasm \
+            -o rust/pkg/elpian_vm_bg.wasm
 
       - name: Copy WASM artifacts to web assets
         run: |
