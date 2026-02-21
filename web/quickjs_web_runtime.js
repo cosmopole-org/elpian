@@ -6,9 +6,9 @@ async function getQuickJsModule() {
     quickJsModulePromise = (async () => {
       const candidates = [
         // Preferred: bundled browser ESM build.
-        'https://esm.sh/@jitl/quickjs-emscripten@0.31.0?bundle&target=es2022&browser',
+        'https://esm.sh/quickjs-emscripten@0.31.0?bundle&target=es2022&browser',
         // Fallback CDN ESM transform.
-        'https://cdn.jsdelivr.net/npm/@jitl/quickjs-emscripten@0.31.0/+esm',
+        'https://cdn.jsdelivr.net/npm/quickjs-emscripten@0.31.0/+esm',
       ];
 
       let lastError = null;
@@ -25,7 +25,7 @@ async function getQuickJsModule() {
         }
       }
 
-      throw lastError ?? new Error('Unable to load quickjs-emscripten module');
+      throw lastError ?? new Error('Unable to load quickjs-emscripten module from configured CDNs');
     })();
   }
   return quickJsModulePromise;
