@@ -3,6 +3,7 @@ library elpian_ui;
 // VM - Elpian Rust VM integration
 export 'src/vm/elpian_vm.dart';
 export 'src/vm/elpian_vm_widget.dart';
+export 'src/vm/runtime_kind.dart';
 export 'src/vm/host_handler.dart';
 export 'src/vm/frb_generated/vm_types.dart';
 export 'src/vm/frb_generated/api.dart'
