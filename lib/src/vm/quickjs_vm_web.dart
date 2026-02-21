@@ -79,7 +79,7 @@ class QuickJsVm implements VmRuntimeClient {
       );
     }
 
-    final result = (quickJs as JSObject).callMethod(method.toJS, args.toJS);
+    final result = (quickJs as JSObject).callMethodVarArgs(method.toJS, args);
     final value = await js_util.promiseToFuture<Object?>(result as Object);
     return value?.toString() ?? '';
   }
