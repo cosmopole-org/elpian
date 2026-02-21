@@ -24,50 +24,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Ensure stable Rust + wasm32 target are installed
-        run: |
-          rustup toolchain install stable --profile minimal
-          rustup default stable
-          rustup target add wasm32-unknown-unknown
-
-      - name: Install wasm-bindgen-cli
-        run: |
-          # Must exactly match the wasm-bindgen version in rust/Cargo.lock
-          WB_VERSION=$(grep -A1 '^name = "wasm-bindgen"$' rust/Cargo.lock \
-            | grep version | head -1 | sed 's/.*"\(.*\)".*/\1/')
-          cargo install wasm-bindgen-cli --version "$WB_VERSION" --locked
-
-      - name: Install binaryen
-        run: sudo apt-get update -q && sudo apt-get install -y binaryen
+      - uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          # Optional version of wasm-pack to install(eg. 'v0.9.1', 'latest')
+          version: 'latest'
 
       - name: Build Elpian WASM module
-        env:
-          # Minimise bulk-memory ops emitted by LLVM codegen.  Some
-          # intrinsics (memcpy / memset) may still emit them, so
-          # wasm-bindgen is told to accept them below.
-          RUSTFLAGS: -C target-feature=-bulk-memory
         run: |
-          # 1. Compile Rust → WASM
-          cargo build --manifest-path rust/Cargo.toml \
-            --target wasm32-unknown-unknown \
-            --release
-
-          # 2. Generate JS bindings.
-          #    --enable-bulk-memory tells wasm-bindgen not to reject
-          #    residual bulk-memory ops that LLVM intrinsics still emit
-          #    despite the RUSTFLAGS setting.  All modern browsers
-          #    support the bulk-memory proposal.
-          wasm-bindgen \
+          wasm-pack \
             --target web \
             --out-dir rust/pkg \
             --out-name elpian_vm \
-            --enable-bulk-memory \
-            rust/target/wasm32-unknown-unknown/release/elpian_vm.wasm
-
-          # 3. Optimise the final binary (size-optimised like Cargo profile)
-          wasm-opt -Oz \
-            rust/pkg/elpian_vm_bg.wasm \
-            -o rust/pkg/elpian_vm_bg.wasm
+            --enable-bulk-memory
 
       - name: Copy WASM artifacts to web assets
         run: |
