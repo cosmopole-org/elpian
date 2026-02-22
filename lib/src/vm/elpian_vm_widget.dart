@@ -8,6 +8,7 @@ import 'elpian_vm.dart';
 import 'quickjs_vm.dart';
 import 'runtime_kind.dart';
 import 'vm_runtime_client.dart';
+import 'host_api_catalog.dart';
 import 'host_handler.dart';
 
 /// A Flutter widget that runs an Elpian Rust VM sandbox and renders
@@ -226,26 +227,14 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
         onPrintln: widget.onPrintln,
       );
 
-      // Register built-in host handlers
+      // Register built-in host handlers (core + DOM + Canvas APIs).
       final VmRuntimeClient runtimeVm = _vm ?? _quickJsVm!;
-
-      runtimeVm.registerHostHandler('render', (apiName, payload) {
-        return hostHandler.handleRender(payload);
-      });
-      runtimeVm.registerHostHandler('updateApp', (apiName, payload) {
-        return hostHandler.handleUpdateApp(payload);
-      });
-      runtimeVm.registerHostHandler('println', (apiName, payload) {
-        return hostHandler.handlePrintln(payload);
-      });
-      runtimeVm.registerHostHandler('stringify', (apiName, payload) {
-        return hostHandler.handleStringify(payload);
-      });
-
-      // Register additional host handlers
-      widget.hostHandlers?.forEach((name, handler) {
-        runtimeVm.registerHostHandler(name, handler);
-      });
+      final hostHandlers = <String, HostCallHandler>{
+        for (final apiName in VmHostApiCatalog.allHostApiNames)
+          apiName: (name, payload) => hostHandler.handleHostCall(name, payload),
+        ...?widget.hostHandlers,
+      };
+      runtimeVm.registerHostHandlers(hostHandlers);
 
       // Execute the VM
       await runtimeVm.run();

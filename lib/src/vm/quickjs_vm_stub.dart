@@ -16,8 +16,13 @@ class QuickJsVm implements VmRuntimeClient {
     throw UnsupportedError('QuickJS runtime expects JavaScript source code.');
   }
 
+  @override
   void registerHostHandler(String apiName, HostCallHandler handler) {}
 
+  @override
+  void registerHostHandlers(Map<String, HostCallHandler> handlers) {}
+
+  @override
   void setDefaultHostHandler(HostCallHandler handler) {}
 
   Future<String> run() async => '';

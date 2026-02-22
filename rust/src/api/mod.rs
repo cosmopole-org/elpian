@@ -1,19 +1,120 @@
-pub mod ffi;
-pub mod wasm_ffi;
 pub mod bevy_ffi;
 pub mod bevy_wasm_ffi;
+pub mod ffi;
+pub mod wasm_ffi;
 
 use std::collections::HashMap;
 use std::sync::Mutex;
 
 use once_cell::sync::Lazy;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::sdk::compiler;
 use crate::sdk::vm::VM;
 
 // Thread-safe VM storage for FRB
 static VMS: Lazy<Mutex<HashMap<String, VM>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+
+fn all_host_apis() -> Vec<String> {
+    vec![
+        "println".to_string(),
+        "stringify".to_string(),
+        "render".to_string(),
+        "updateApp".to_string(),
+        "dom.getElementById".to_string(),
+        "dom.getElementsByClassName".to_string(),
+        "dom.getElementsByTagName".to_string(),
+        "dom.querySelector".to_string(),
+        "dom.querySelectorAll".to_string(),
+        "dom.createElement".to_string(),
+        "dom.removeElement".to_string(),
+        "dom.clear".to_string(),
+        "dom.setTextContent".to_string(),
+        "dom.setInnerHtml".to_string(),
+        "dom.setAttribute".to_string(),
+        "dom.getAttribute".to_string(),
+        "dom.removeAttribute".to_string(),
+        "dom.hasAttribute".to_string(),
+        "dom.setStyle".to_string(),
+        "dom.getStyle".to_string(),
+        "dom.setStyleObject".to_string(),
+        "dom.addClass".to_string(),
+        "dom.removeClass".to_string(),
+        "dom.hasClass".to_string(),
+        "dom.toggleClass".to_string(),
+        "dom.appendChild".to_string(),
+        "dom.insertBefore".to_string(),
+        "dom.removeChild".to_string(),
+        "dom.replaceChild".to_string(),
+        "dom.addEventListener".to_string(),
+        "dom.removeEventListener".to_string(),
+        "dom.dispatchEvent".to_string(),
+        "dom.toJson".to_string(),
+        "dom.getAllElements".to_string(),
+        "canvas.addCommand".to_string(),
+        "canvas.addCommands".to_string(),
+        "canvas.clear".to_string(),
+        "canvas.getCommands".to_string(),
+        "canvas.beginPath".to_string(),
+        "canvas.closePath".to_string(),
+        "canvas.moveTo".to_string(),
+        "canvas.lineTo".to_string(),
+        "canvas.quadraticCurveTo".to_string(),
+        "canvas.bezierCurveTo".to_string(),
+        "canvas.arc".to_string(),
+        "canvas.arcTo".to_string(),
+        "canvas.ellipse".to_string(),
+        "canvas.rect".to_string(),
+        "canvas.roundRect".to_string(),
+        "canvas.circle".to_string(),
+        "canvas.fillRect".to_string(),
+        "canvas.strokeRect".to_string(),
+        "canvas.clearRect".to_string(),
+        "canvas.fillCircle".to_string(),
+        "canvas.strokeCircle".to_string(),
+        "canvas.fillPolygon".to_string(),
+        "canvas.strokePolygon".to_string(),
+        "canvas.fillText".to_string(),
+        "canvas.strokeText".to_string(),
+        "canvas.drawImage".to_string(),
+        "canvas.drawImageRect".to_string(),
+        "canvas.fill".to_string(),
+        "canvas.stroke".to_string(),
+        "canvas.clip".to_string(),
+        "canvas.save".to_string(),
+        "canvas.restore".to_string(),
+        "canvas.translate".to_string(),
+        "canvas.rotate".to_string(),
+        "canvas.scale".to_string(),
+        "canvas.transform".to_string(),
+        "canvas.setTransform".to_string(),
+        "canvas.resetTransform".to_string(),
+        "canvas.setFillStyle".to_string(),
+        "canvas.setStrokeStyle".to_string(),
+        "canvas.setLineWidth".to_string(),
+        "canvas.setLineCap".to_string(),
+        "canvas.setLineJoin".to_string(),
+        "canvas.setMiterLimit".to_string(),
+        "canvas.setLineDash".to_string(),
+        "canvas.setLineDashOffset".to_string(),
+        "canvas.setShadowBlur".to_string(),
+        "canvas.setShadowColor".to_string(),
+        "canvas.setShadowOffsetX".to_string(),
+        "canvas.setShadowOffsetY".to_string(),
+        "canvas.setGlobalAlpha".to_string(),
+        "canvas.setGlobalCompositeOperation".to_string(),
+        "canvas.setFont".to_string(),
+        "canvas.setTextAlign".to_string(),
+        "canvas.setTextBaseline".to_string(),
+        "canvas.createLinearGradient".to_string(),
+        "canvas.createRadialGradient".to_string(),
+        "canvas.addColorStop".to_string(),
+        "canvas.createPattern".to_string(),
+        "canvas.putImageData".to_string(),
+        "canvas.getImageData".to_string(),
+        "canvas.createImageData".to_string(),
+    ]
+}
 
 /// Result of a VM execution step.
 /// When the VM needs to call a host function, it pauses and returns
@@ -44,17 +145,7 @@ pub fn create_vm_from_ast(machine_id: String, ast_json: String) -> bool {
         Ok(v) => v,
         Err(_) => return false,
     };
-    let vm = VM::compile_and_create_of_ast(
-        machine_id.clone(),
-        ast_obj,
-        1,
-        vec![
-            "println".to_string(),
-            "stringify".to_string(),
-            "render".to_string(),
-            "updateApp".to_string(),
-        ],
-    );
+    let vm = VM::compile_and_create_of_ast(machine_id.clone(), ast_obj, 1, all_host_apis());
     let mut vms = VMS.lock().unwrap();
     vms.insert(machine_id, vm);
     true
@@ -62,17 +153,7 @@ pub fn create_vm_from_ast(machine_id: String, ast_json: String) -> bool {
 
 /// Create a new VM instance from source code string.
 pub fn create_vm_from_code(machine_id: String, code: String) -> bool {
-    let vm = VM::compile_and_create_of_code(
-        machine_id.clone(),
-        code,
-        1,
-        vec![
-            "println".to_string(),
-            "stringify".to_string(),
-            "render".to_string(),
-            "updateApp".to_string(),
-        ],
-    );
+    let vm = VM::compile_and_create_of_code(machine_id.clone(), code, 1, all_host_apis());
     let mut vms = VMS.lock().unwrap();
     vms.insert(machine_id, vm);
     true

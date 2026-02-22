@@ -50,12 +50,7 @@ class QuickJsVm implements VmRuntimeClient {
         final apiName = request['apiName']!;
         final payload = request['payload']!;
 
-        _dispatchHostCall(apiName, payload);
-
-        if (apiName == 'stringify') {
-          return '{"type":"string","data":{"value":${jsonEncode(payload)}}}';
-        }
-        return '{"type":"i16","data":{"value":0}}';
+        return _dispatchHostCall(apiName, payload);
       } catch (e) {
         debugPrint('QuickJsVm[$machineId]: host bridge error: $e');
         return '{"type":"i16","data":{"value":0}}';
@@ -97,10 +92,17 @@ class QuickJsVm implements VmRuntimeClient {
     throw StateError('Unsupported host message format: ${request.runtimeType}');
   }
 
+  @override
   void registerHostHandler(String apiName, HostCallHandler handler) {
     _hostHandlers[apiName] = handler;
   }
 
+  @override
+  void registerHostHandlers(Map<String, HostCallHandler> handlers) {
+    _hostHandlers.addAll(handlers);
+  }
+
+  @override
   void setDefaultHostHandler(HostCallHandler handler) {
     _defaultHostHandler = handler;
   }
@@ -128,21 +130,27 @@ class QuickJsVm implements VmRuntimeClient {
   }
 
 
-  void _dispatchHostCall(String apiName, String payload) {
+  String _dispatchHostCall(String apiName, String payload) {
     final handler = _hostHandlers[apiName];
     if (handler != null) {
-      handler(apiName, payload);
-      return;
+      final result = handler(apiName, payload);
+      if (result is String) return result;
+      return '{\"type\":\"i16\",\"data\":{\"value\":0}}';
     }
 
     if (_defaultHostHandler != null) {
-      _defaultHostHandler!(apiName, payload);
-      return;
+      final result = _defaultHostHandler!(apiName, payload);
+      if (result is String) return result;
+      return '{\"type\":\"i16\",\"data\":{\"value\":0}}';
     }
 
     if (apiName == 'println') {
       debugPrint('QuickJsVm[$machineId]: $payload');
     }
+    if (apiName == 'stringify') {
+      return '{\"type\":\"string\",\"data\":{\"value\":${jsonEncode(payload)}}}';
+    }
+    return '{\"type\":\"i16\",\"data\":{\"value\":0}}';
   }
 
   Future<void> dispose() async {
