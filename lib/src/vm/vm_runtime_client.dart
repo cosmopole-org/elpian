@@ -4,6 +4,8 @@ import 'elpian_vm.dart';
 abstract class VmRuntimeClient {
   void registerHostHandler(String apiName, HostCallHandler handler);
 
+  void registerHostHandlers(Map<String, HostCallHandler> handlers);
+
   void setDefaultHostHandler(HostCallHandler handler);
 
   Future<String> run();

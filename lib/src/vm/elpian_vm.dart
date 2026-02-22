@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'frb_generated/api.dart'
@@ -10,7 +11,7 @@ import 'vm_runtime_client.dart';
 /// This callback receives the API name and JSON payload, and should
 /// return a JSON response in the typed value format:
 /// `{"type": "string", "data": {"value": "hello"}}`
-typedef HostCallHandler = Future<String> Function(
+typedef HostCallHandler = FutureOr<String> Function(
   String apiName,
   String payload,
 );
@@ -74,10 +75,15 @@ class ElpianVm implements VmRuntimeClient {
 
   /// Register a handler for a specific host API function.
   ///
-  /// The VM's allowed host APIs are: `println`, `stringify`, `render`, `updateApp`.
-  /// Register handlers for the ones you want to intercept.
+  /// Register a handler for any host API name used by the VM runtime.
+  /// Includes core APIs plus DOM/Canvas host APIs exposed by ElpianVmWidget.
   void registerHostHandler(String apiName, HostCallHandler handler) {
     _hostHandlers[apiName] = handler;
+  }
+
+  @override
+  void registerHostHandlers(Map<String, HostCallHandler> handlers) {
+    _hostHandlers.addAll(handlers);
   }
 
   /// Set a default handler for any unregistered host API calls.

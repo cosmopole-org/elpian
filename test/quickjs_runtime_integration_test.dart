@@ -27,7 +27,7 @@ void main() {
         ],
       });
 
-      final response = await hostHandler.handleRender(payload);
+      final response = hostHandler.handleRender(payload);
 
       expect(lastView, isNotNull);
       expect(lastView!['type'], equals('Column'));
@@ -41,7 +41,7 @@ void main() {
       Map<String, dynamic>? lastView;
       final hostHandler = HostHandler(onRender: (viewJson) => lastView = viewJson);
 
-      await hostHandler.handleRender(jsonEncode([
+      hostHandler.handleRender(jsonEncode([
         {
           'type': 'Text',
           'props': {'text': 'wrapped payload'},
@@ -62,7 +62,7 @@ void main() {
         onPrintln: (msg) => println = msg,
       );
 
-      await hostHandler.handleUpdateApp(
+      hostHandler.handleUpdateApp(
         jsonEncode([
           {
             'source': 'quickjs',
@@ -70,11 +70,40 @@ void main() {
           }
         ]),
       );
-      await hostHandler.handlePrintln(jsonEncode(['quickjs says hi']));
+      hostHandler.handlePrintln(jsonEncode(['quickjs says hi']));
 
       expect(update, isNotNull);
       expect(update!['source'], equals('quickjs'));
       expect(println, equals('quickjs says hi'));
+    });
+
+
+
+    test('HostHandler supports DOM + Canvas host API catalog', () {
+      final hostHandler = HostHandler();
+
+      final created = jsonDecode(hostHandler.handleHostCall(
+        'dom.createElement',
+        jsonEncode([
+          {
+            'tagName': 'div',
+            'id': 'root',
+            'classes': ['page']
+          }
+        ]),
+      )) as Map<String, dynamic>;
+      expect(created['type'], equals('object'));
+
+      hostHandler.handleHostCall(
+        'canvas.fillRect',
+        jsonEncode([
+          {'x': 0, 'y': 0, 'width': 100, 'height': 50}
+        ]),
+      );
+      final commands = jsonDecode(hostHandler.handleHostCall('canvas.getCommands', '[]'))
+          as Map<String, dynamic>;
+      expect(commands['type'], equals('array'));
+      expect((commands['data']['value'] as List).isNotEmpty, isTrue);
     });
 
     test('VM widgets expose runtime selection for QuickJS', () {

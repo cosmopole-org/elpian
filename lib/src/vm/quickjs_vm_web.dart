@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
@@ -53,17 +52,17 @@ class QuickJsVm implements VmRuntimeClient {
   }
 
   String _syncHostCall(String apiName, String payload) {
-    _dispatchHostCall(apiName, payload);
-
-    if (apiName == 'stringify') {
-      return '{"type":"string","data":{"value":${jsonEncode(payload)}}}';
-    }
-    return '{"type":"i16","data":{"value":0}}';
+    return _dispatchHostCall(apiName, payload);
   }
 
   @override
   void registerHostHandler(String apiName, HostCallHandler handler) {
     _hostHandlers[apiName] = handler;
+  }
+
+  @override
+  void registerHostHandlers(Map<String, HostCallHandler> handlers) {
+    _hostHandlers.addAll(handlers);
   }
 
   @override
@@ -127,21 +126,27 @@ class QuickJsVm implements VmRuntimeClient {
     );
   }
 
-  void _dispatchHostCall(String apiName, String payload) {
+  String _dispatchHostCall(String apiName, String payload) {
     final handler = _hostHandlers[apiName];
     if (handler != null) {
-      unawaited(handler(apiName, payload));
-      return;
+      final result = handler(apiName, payload);
+      if (result is String) return result;
+      return '{\"type\":\"i16\",\"data\":{\"value\":0}}';
     }
 
     if (_defaultHostHandler != null) {
-      unawaited(_defaultHostHandler!(apiName, payload));
-      return;
+      final result = _defaultHostHandler!(apiName, payload);
+      if (result is String) return result;
+      return '{\"type\":\"i16\",\"data\":{\"value\":0}}';
     }
 
     if (apiName == 'println') {
       debugPrint('QuickJsVm[$machineId]: $payload');
     }
+    if (apiName == 'stringify') {
+      return '{\"type\":\"string\",\"data\":{\"value\":${jsonEncode(payload)}}}';
+    }
+    return '{\"type\":\"i16\",\"data\":{\"value\":0}}';
   }
 
   @override
