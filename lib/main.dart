@@ -1,5 +1,6 @@
 import 'package:elpian_ui/example/bevy_scene_example.dart';
 import 'package:elpian_ui/example/canvas_example.dart';
+import 'package:elpian_ui/example/dom_canvas_logic_example.dart';
 import 'package:elpian_ui/example/enhanced_example.dart';
 import 'package:elpian_ui/example/game_scene_example.dart';
 import 'package:elpian_ui/example/json_stylesheet_demo.dart';
@@ -131,6 +132,11 @@ class ExamplesHomePage extends StatelessWidget {
           title: 'QuickJS Runtime Sandboxes',
           subtitle: 'JavaScript-driven demos rendered via JSON DSL host APIs',
           pageBuilder: () => const QuickJsExamplePage(),
+        ),
+        _ExampleEntry(
+          title: 'DOM + Canvas Logic (QuickJS + VM)',
+          subtitle: 'Host API examples for dom.* and canvas.* controlled by runtime logic',
+          pageBuilder: () => const DomCanvasLogicExamplePage(),
         ),
       ];
 }
