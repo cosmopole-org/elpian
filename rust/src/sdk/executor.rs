@@ -5,11 +5,11 @@ use crate::sdk::{
     data::{Array, Function, Object, Val, ValGroup},
 };
 use core::panic;
-use std::{any::Any, cell::RefCell, collections::HashMap, fmt::Display, i16, rc::Rc};
+use std::{any::Any, cell::RefCell, collections::HashMap, fmt, i16, rc::Rc};
 
-use std::{fmt::Debug, vec};
+use std::vec;
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum OperationTypes {
     DefineVar,
     AssignVar,
@@ -28,35 +28,13 @@ pub enum OperationTypes {
     Dummy,
 }
 
-impl Debug for OperationTypes {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            OperationTypes::DefineVar => write!(f, "DefineVar"),
-            OperationTypes::AssignVar => write!(f, "AssignVar"),
-            OperationTypes::CallFunc => write!(f, "CallFunc"),
-            OperationTypes::ReturnVal => write!(f, "ReturnVal"),
-            OperationTypes::IfStmt => write!(f, "IfStmt"),
-            OperationTypes::LoopStmt => write!(f, "LoopStmt"),
-            OperationTypes::SwitchStmt => write!(f, "SwitchStmt"),
-            OperationTypes::Arithmetic => write!(f, "Arithmetic"),
-            OperationTypes::Indexer => write!(f, "Indexer"),
-            OperationTypes::NotVal => write!(f, "NotVal"),
-            OperationTypes::ObjExpr => write!(f, "ObjExpr"),
-            OperationTypes::ArrExpr => write!(f, "ArrExpr"),
-            OperationTypes::CondBrch => write!(f, "CondBrch"),
-            OperationTypes::CastOprt => write!(f, "CastOprt"),
-            OperationTypes::Dummy => write!(f, "Dummy"),
-        }
-    }
-}
-
-impl Display for OperationTypes {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for OperationTypes {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ExecStates {
     AssignVarExtractName,
     AssignVarExtractIndex,
@@ -102,57 +80,8 @@ pub enum ExecStates {
     Dummy,
 }
 
-impl Debug for ExecStates {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ExecStates::AssignVarExtractName => write!(f, "AssignVarExtractName"),
-            ExecStates::AssignVarExtractIndex => write!(f, "AssignVarExtractIndex"),
-            ExecStates::AssignVarExtractValue => write!(f, "AssignVarExtractValue"),
-            ExecStates::DefineVarExtractName => write!(f, "DefineVarExtractName"),
-            ExecStates::DefineVarExtractValue => write!(f, "DefineVarExtractValue"),
-            ExecStates::CallFuncStarted => write!(f, "CallFuncStarted"),
-            ExecStates::CallFuncExtractFunc => write!(f, "CallFuncExtractFunc"),
-            ExecStates::CallFuncExtractParam => write!(f, "CallFuncExtractParam"),
-            ExecStates::CallFuncFinished => write!(f, "CallFuncFinished"),
-            ExecStates::ReturnValStarted => write!(f, "ReturnValStarted"),
-            ExecStates::ReturnValFinished => write!(f, "ReturnValFinished"),
-            ExecStates::IfStmtStarted => write!(f, "IfStmtStarted"),
-            ExecStates::IfStmtIsConditioned => write!(f, "IfStmtIsConditioned"),
-            ExecStates::IfStmtFinished => write!(f, "IfStmtFinished"),
-            ExecStates::LoopStmtStarted => write!(f, "LoopStmtStarted"),
-            ExecStates::LoopStmtFinished => write!(f, "LoopStmtFinished"),
-            ExecStates::SwitchStmtStarted => write!(f, "SwitchStmtStarted"),
-            ExecStates::SwitchStmtExtractVal => write!(f, "SwitchStmtExtractVal"),
-            ExecStates::SwitchStmtExtractCase => write!(f, "SwitchStmtExtractCase"),
-            ExecStates::SwitchStmtFinished => write!(f, "SwitchStmtFinished"),
-            ExecStates::ArithmeticStarted => write!(f, "ArithmeticStarted"),
-            ExecStates::ArithmeticExtractOp => write!(f, "ArithmeticExtractOp"),
-            ExecStates::ArithmeticExtractArg1 => write!(f, "ArithmeticExtractArg1"),
-            ExecStates::ArithmeticExtractArg2 => write!(f, "ArithmeticExtractArg2"),
-            ExecStates::IndexerStarted => write!(f, "IndexerStarted"),
-            ExecStates::IndexerExtractVarName => write!(f, "IndexerExtractVarName"),
-            ExecStates::IndexerExtractIndex => write!(f, "IndexerExtractIndex"),
-            ExecStates::NotValStarted => write!(f, "NotValStarted"),
-            ExecStates::NotValFinished => write!(f, "NotValFinished"),
-            ExecStates::ObjExprStarted => write!(f, "ObjExprStarted"),
-            ExecStates::ObjExprExtractInfo => write!(f, "ObjExprExtractInfo"),
-            ExecStates::ObjExprExtractProp => write!(f, "ObjExprExtractProp"),
-            ExecStates::ObjExprFinished => write!(f, "ObjExprFinished"),
-            ExecStates::ArrExprStarted => write!(f, "ArrExprStarted"),
-            ExecStates::ArrExprExtractInfo => write!(f, "ArrExprExtractInfo"),
-            ExecStates::ArrExprExtractItem => write!(f, "ArrExprExtractItem"),
-            ExecStates::ArrExprFinished => write!(f, "ArrExprFinished"),
-            ExecStates::CondBranchStarted => write!(f, "CondBranchStarted"),
-            ExecStates::CondBranchFinished => write!(f, "CondBranchFinished"),
-            ExecStates::CastOprtStarted => write!(f, "CastOprtStarted"),
-            ExecStates::CastOprtFinished => write!(f, "CastOprtFinished"),
-            ExecStates::Dummy => write!(f, "Dummy"),
-        }
-    }
-}
-
-impl Display for ExecStates {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for ExecStates {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
     }
 }
@@ -164,8 +93,8 @@ pub trait Operation {
     fn get_data(&self) -> Vec<Val>;
 }
 
-impl Debug for dyn Operation {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+impl fmt::Debug for dyn Operation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Operation{{{} {}}}", self.get_type(), self.get_state())
     }
 }
@@ -552,7 +481,7 @@ impl Operation for LoopStmt {
 struct SwitchStmt {
     typ: OperationTypes,
     state: ExecStates,
-    pub compairng_value: Option<Val>,
+    pub comparing_value: Option<Val>,
     pub branch_after_start: usize,
     pub case_count: usize,
     pub cases: Vec<(Val, usize, usize)>,
@@ -563,7 +492,7 @@ impl SwitchStmt {
         SwitchStmt {
             typ: OperationTypes::SwitchStmt,
             state: ExecStates::SwitchStmtStarted,
-            compairng_value: None,
+            comparing_value: None,
             branch_after_start: 0,
             case_count: 0,
             cases: vec![],
@@ -585,7 +514,7 @@ impl Operation for SwitchStmt {
         if state == ExecStates::SwitchStmtExtractVal {
             let (comparing_val, branch_after_start, case_count) =
                 *data.downcast::<(Val, usize, usize)>().unwrap();
-            self.compairng_value = Some(comparing_val.clone());
+            self.comparing_value = Some(comparing_val.clone());
             self.branch_after_start = branch_after_start;
             self.case_count = case_count;
         } else if state == ExecStates::SwitchStmtExtractCase {
@@ -628,7 +557,7 @@ impl Operation for SwitchStmt {
             })
             .collect();
         vec![
-            self.compairng_value.clone().unwrap(),
+            self.comparing_value.clone().unwrap(),
             Val {
                 typ: 3,
                 data: Rc::new(RefCell::new(Box::new(self.branch_after_start as i64))),
@@ -749,8 +678,8 @@ struct NotValue {
 impl NotValue {
     pub fn new() -> Self {
         NotValue {
-            typ: OperationTypes::ReturnVal,
-            state: ExecStates::ReturnValStarted,
+            typ: OperationTypes::NotVal,
+            state: ExecStates::NotValStarted,
             value: None,
         }
     }
@@ -767,7 +696,7 @@ impl Operation for NotValue {
 
     fn set_state(&mut self, state: ExecStates, data: Box<dyn Any>) {
         self.state = state.clone();
-        if state == ExecStates::ReturnValFinished {
+        if state == ExecStates::NotValFinished {
             self.value = Some(*data.downcast::<Val>().unwrap());
         }
     }
@@ -1062,7 +991,7 @@ impl Executor {
             pointer: 0,
             end_at: program.len(),
             ctx: Context::new(),
-            program: program,
+            program,
             cb_counter: 0,
             pending_func_result_value: Val::new(254, Rc::new(RefCell::new(Box::new(0)))),
             registers: vec![],
@@ -1095,7 +1024,7 @@ impl Executor {
                         },
                         false,
                     );
-                    if !self.reserved_host_call.is_none() {
+                    if self.reserved_host_call.is_some() {
                         let host_call_data = self.reserved_host_call.clone().unwrap();
                         self.reserved_host_call = None;
                         return host_call_data;
@@ -1123,7 +1052,7 @@ impl Executor {
                     if !val.is_empty() {
                         let func = val.as_func();
                         let mut m = HashMap::new();
-                        if func.borrow().params.len() > 0 {
+                        if !func.borrow().params.is_empty() {
                             m.insert(func.borrow().params[0].clone(), input);
                         }
                         self.ctx.push_scope_with_args(
@@ -1143,7 +1072,7 @@ impl Executor {
                             },
                             true,
                         );
-                        if !self.reserved_host_call.is_none() {
+                        if self.reserved_host_call.is_some() {
                             let host_call_data = self.reserved_host_call.clone().unwrap();
                             self.reserved_host_call = None;
                             return host_call_data;
@@ -1196,9 +1125,9 @@ impl Executor {
                     payload,
                     !self.exec_globally,
                 );
-                if self.ctx.memory.len() > 0 {
+                if !self.ctx.memory.is_empty() {
                     if self.exec_globally {
-                        if !self.reserved_host_call.is_none() {
+                        if self.reserved_host_call.is_some() {
                             let host_call_data = self.reserved_host_call.clone().unwrap();
                             self.reserved_host_call = None;
                             return host_call_data;
@@ -1219,7 +1148,7 @@ impl Executor {
                             );
                         }
                     } else {
-                        if !self.reserved_host_call.is_none() {
+                        if self.reserved_host_call.is_some() {
                             let host_call_data = self.reserved_host_call.clone().unwrap();
                             self.reserved_host_call = None;
                             return host_call_data;
@@ -3358,15 +3287,15 @@ impl Executor {
                     typ: 254,
                     data: Rc::new(RefCell::new(Box::new(0))),
                 };
-                if self.registers.len() > 0 {
+                if !self.registers.is_empty() {
                     main_reg = Some(returned_val);
                     is_reg_state_final = false;
                 }
             }
         }
         loop {
-            if !main_reg.is_none() {
-                if self.registers.len() > 0 {
+            if main_reg.is_some() {
+                if !self.registers.is_empty() {
                     if self.registers.last().unwrap().borrow().get_type() == OperationTypes::ArrExpr
                     {
                         if self.registers.last().unwrap().borrow().get_state()
@@ -3693,7 +3622,7 @@ impl Executor {
                     main_reg = None;
                 }
             } else if is_reg_state_final {
-                if self.registers.len() > 0 {
+                if !self.registers.is_empty() {
                     if self.registers.last().unwrap().borrow().get_state()
                         == ExecStates::ArrExprFinished
                     {
@@ -4602,13 +4531,13 @@ impl Executor {
                     if is_partial_exec && (self.ctx.memory.len() == 1) {
                         return self.pending_func_result_value.clone();
                     }
-                    if self.registers.len() > 0
+                    if !self.registers.is_empty()
                         && self.registers.last().unwrap().borrow().get_type()
                             == OperationTypes::Dummy
                     {
                         self.registers.pop();
                     }
-                    if self.ctx.memory.len() > 0 {
+                    if !self.ctx.memory.is_empty() {
                         self.pointer = self.ctx.memory.last().unwrap().borrow().frozen_pointer;
                         self.end_at = self.ctx.memory.last().unwrap().borrow().frozen_end;
                         if self.pending_func_result_value.typ != 254 {
@@ -4620,7 +4549,7 @@ impl Executor {
                             while self.ctx.memory.last().unwrap().borrow().tag != "funcBody" {
                                 self.ctx.pop_scope();
                             }
-                            if self.registers.len() > 0 {
+                            if !self.registers.is_empty() {
                                 main_reg = Some(returned_val);
                                 is_reg_state_final = false;
                                 break;

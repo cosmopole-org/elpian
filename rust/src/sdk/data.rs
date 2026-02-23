@@ -13,10 +13,10 @@ unsafe impl Send for Val {}
 
 impl Val {
     pub fn new(typ: i64, data: Rc<RefCell<Box<dyn Any>>>) -> Self {
-        Val { typ, data: data }
+        Val { typ, data }
     }
     pub fn stringify(&self) -> String {
-        return match self.typ {
+        match self.typ {
             1 => self.as_i16().to_string(),
             2 => self.as_i32().to_string(),
             3 => self.as_i64().to_string(),
@@ -28,10 +28,10 @@ impl Val {
             9 => self.as_array().borrow().stringify(),
             10 => format!("\"{}\"", self.as_func().borrow().name.clone()),
             _ => "\"[undefined]\"".to_string(),
-        };
+        }
     }
     fn clone_data(&self) -> Self {
-        return match self.typ {
+        match self.typ {
             1 => Val {
                 typ: self.typ,
                 data: Rc::new(RefCell::new(Box::new(self.as_i16().clone()))),
@@ -78,60 +78,37 @@ impl Val {
                 typ: self.typ,
                 data: Rc::new(RefCell::new(Box::new(0))),
             },
-        };
+        }
     }
     pub fn as_i16(&self) -> i16 {
-        let a = self.data.clone();
-        let x = a.borrow().downcast_ref::<i16>().unwrap().clone();
-        x
+        *self.data.borrow().downcast_ref::<i16>().unwrap()
     }
     pub fn as_i32(&self) -> i32 {
-        let a = self.data.clone();
-        let x = a.borrow().downcast_ref::<i32>().unwrap().clone();
-        x
+        *self.data.borrow().downcast_ref::<i32>().unwrap()
     }
     pub fn as_i64(&self) -> i64 {
-        let a = self.data.clone();
-        let x = a.borrow().downcast_ref::<i64>().unwrap().clone();
-        x
+        *self.data.borrow().downcast_ref::<i64>().unwrap()
     }
     pub fn as_f32(&self) -> f32 {
-        let a = self.data.clone();
-        let x = a.borrow().downcast_ref::<f32>().unwrap().clone();
-        x
+        *self.data.borrow().downcast_ref::<f32>().unwrap()
     }
     pub fn as_f64(&self) -> f64 {
-        let a = self.data.clone();
-        let x = a.borrow().downcast_ref::<f64>().unwrap().clone();
-        x
+        *self.data.borrow().downcast_ref::<f64>().unwrap()
     }
     pub fn as_bool(&self) -> bool {
-        let a = self.data.clone();
-        let x = a.borrow().downcast_ref::<bool>().unwrap().clone();
-        x
+        *self.data.borrow().downcast_ref::<bool>().unwrap()
     }
     pub fn as_string(&self) -> String {
-        let a = self.data.clone();
-        let x = a.borrow().downcast_ref::<String>().unwrap().clone();
-        x
+        self.data.borrow().downcast_ref::<String>().unwrap().clone()
     }
     pub fn as_object(&self) -> Rc<RefCell<Object>> {
-        let a = self.data.clone();
-        let b = a.borrow();
-        let c = b.downcast_ref::<Rc<RefCell<Object>>>().unwrap();
-        c.clone()
+        self.data.borrow().downcast_ref::<Rc<RefCell<Object>>>().unwrap().clone()
     }
     pub fn as_array(&self) -> Rc<RefCell<Array>> {
-        let a = self.data.clone();
-        let b: std::cell::Ref<'_, Box<dyn Any>> = a.borrow();
-        let c = b.downcast_ref::<Rc<RefCell<Array>>>().unwrap();
-        c.clone()
+        self.data.borrow().downcast_ref::<Rc<RefCell<Array>>>().unwrap().clone()
     }
     pub fn as_func(&self) -> Rc<RefCell<Function>> {
-        let a = self.data.clone();
-        let b = a.borrow();
-        let c = b.downcast_ref::<Rc<RefCell<Function>>>().unwrap();
-        c.clone()
+        self.data.borrow().downcast_ref::<Rc<RefCell<Function>>>().unwrap().clone()
     }
     pub fn is_empty(&self) -> bool {
         self.typ == 0
@@ -198,7 +175,7 @@ impl Object {
         Object { typ, data }
     }
     pub fn clone_object(&self) -> Self {
-        return Object::new(self.typ, self.data.clone_data());
+        Object::new(self.typ, self.data.clone_data())
     }
     pub fn stringify(&self) -> String {
         self.data.stringify()
@@ -214,10 +191,10 @@ impl Array {
         Array { data: vec![] }
     }
     pub fn new(data: Vec<Val>) -> Self {
-        Array { data: data }
+        Array { data }
     }
     pub fn clone_arr(&self) -> Self {
-        return Array::new(self.data.iter().map(|item| item.clone_data()).collect());
+        Array::new(self.data.iter().map(|item| item.clone_data()).collect())
     }
     pub fn stringify(&self) -> String {
         let mut result = "[".to_string();
@@ -248,6 +225,6 @@ impl Function {
         Function { name, start, end, params }
     }
     pub fn clone_func(&self) -> Self {
-        return Function::new(self.name.clone(), self.start, self.end, self.params.clone());
+        Function::new(self.name.clone(), self.start, self.end, self.params.clone())
     }
 }

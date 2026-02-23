@@ -130,6 +130,33 @@ pub struct VmExecResult {
     pub result_value: String,
 }
 
+impl VmExecResult {
+    fn host_call(data: String) -> Self {
+        VmExecResult {
+            has_host_call: true,
+            host_call_data: data,
+            result_value: String::new(),
+        }
+    }
+
+    fn done(result_value: &str) -> Self {
+        VmExecResult {
+            has_host_call: false,
+            host_call_data: String::new(),
+            result_value: result_value.to_string(),
+        }
+    }
+}
+
+/// Check a VM for a pending host call after execution, returning an appropriate result.
+fn check_host_call(vm: &mut VM, fallback_result: &str) -> VmExecResult {
+    if let Some(data) = vm.sending_host_call_data.take() {
+        VmExecResult::host_call(data)
+    } else {
+        VmExecResult::done(fallback_result)
+    }
+}
+
 /// Initialize the VM subsystem. Call once at app startup.
 pub fn init_vm_system() {
     // Force initialization of the lazy static
@@ -181,33 +208,12 @@ pub fn execute_vm(machine_id: String) -> VmExecResult {
     let mut vms = VMS.lock().unwrap();
     if let Some(vm) = vms.get_mut(&machine_id) {
         if vm.is_exec_processing() {
-            return VmExecResult {
-                has_host_call: false,
-                host_call_data: String::new(),
-                result_value: "\"vm_busy\"".to_string(),
-            };
+            return VmExecResult::done("\"vm_busy\"");
         }
         vm.run();
-        if let Some(ref hcd) = vm.sending_host_call_data {
-            let data = hcd.clone();
-            vm.sending_host_call_data = None;
-            return VmExecResult {
-                has_host_call: true,
-                host_call_data: data,
-                result_value: String::new(),
-            };
-        }
-        VmExecResult {
-            has_host_call: false,
-            host_call_data: String::new(),
-            result_value: "\"done\"".to_string(),
-        }
+        check_host_call(vm, "\"done\"")
     } else {
-        VmExecResult {
-            has_host_call: false,
-            host_call_data: String::new(),
-            result_value: "\"vm_not_found\"".to_string(),
-        }
+        VmExecResult::done("\"vm_not_found\"")
     }
 }
 
@@ -216,33 +222,12 @@ pub fn execute_vm_func(machine_id: String, func_name: String, cb_id: i64) -> VmE
     let mut vms = VMS.lock().unwrap();
     if let Some(vm) = vms.get_mut(&machine_id) {
         if vm.is_exec_processing() {
-            return VmExecResult {
-                has_host_call: false,
-                host_call_data: String::new(),
-                result_value: "\"vm_busy\"".to_string(),
-            };
+            return VmExecResult::done("\"vm_busy\"");
         }
         let res = vm.run_func_with_input(&func_name, None, cb_id);
-        if let Some(ref hcd) = vm.sending_host_call_data {
-            let data = hcd.clone();
-            vm.sending_host_call_data = None;
-            return VmExecResult {
-                has_host_call: true,
-                host_call_data: data,
-                result_value: String::new(),
-            };
-        }
-        VmExecResult {
-            has_host_call: false,
-            host_call_data: String::new(),
-            result_value: res.stringify(),
-        }
+        check_host_call(vm, &res.stringify())
     } else {
-        VmExecResult {
-            has_host_call: false,
-            host_call_data: String::new(),
-            result_value: "\"vm_not_found\"".to_string(),
-        }
+        VmExecResult::done("\"vm_not_found\"")
     }
 }
 
@@ -256,33 +241,12 @@ pub fn execute_vm_func_with_input(
     let mut vms = VMS.lock().unwrap();
     if let Some(vm) = vms.get_mut(&machine_id) {
         if vm.is_exec_processing() {
-            return VmExecResult {
-                has_host_call: false,
-                host_call_data: String::new(),
-                result_value: "\"vm_busy\"".to_string(),
-            };
+            return VmExecResult::done("\"vm_busy\"");
         }
         let res = vm.run_func_with_input(&func_name, Some(&input_json), cb_id);
-        if let Some(ref hcd) = vm.sending_host_call_data {
-            let data = hcd.clone();
-            vm.sending_host_call_data = None;
-            return VmExecResult {
-                has_host_call: true,
-                host_call_data: data,
-                result_value: String::new(),
-            };
-        }
-        VmExecResult {
-            has_host_call: false,
-            host_call_data: String::new(),
-            result_value: res.stringify(),
-        }
+        check_host_call(vm, &res.stringify())
     } else {
-        VmExecResult {
-            has_host_call: false,
-            host_call_data: String::new(),
-            result_value: "\"vm_not_found\"".to_string(),
-        }
+        VmExecResult::done("\"vm_not_found\"")
     }
 }
 
@@ -292,26 +256,9 @@ pub fn continue_execution(machine_id: String, input_json: String) -> VmExecResul
     let mut vms = VMS.lock().unwrap();
     if let Some(vm) = vms.get_mut(&machine_id) {
         vm.continue_run(input_json);
-        if let Some(ref hcd) = vm.sending_host_call_data {
-            let data = hcd.clone();
-            vm.sending_host_call_data = None;
-            return VmExecResult {
-                has_host_call: true,
-                host_call_data: data,
-                result_value: String::new(),
-            };
-        }
-        VmExecResult {
-            has_host_call: false,
-            host_call_data: String::new(),
-            result_value: "\"done\"".to_string(),
-        }
+        check_host_call(vm, "\"done\"")
     } else {
-        VmExecResult {
-            has_host_call: false,
-            host_call_data: String::new(),
-            result_value: "\"vm_not_found\"".to_string(),
-        }
+        VmExecResult::done("\"vm_not_found\"")
     }
 }
 
