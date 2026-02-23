@@ -106,7 +106,9 @@ class CanvasCommand {
 
     return CanvasCommand(
       type: type,
-      params: (json['params'] as Map<String, dynamic>?) ?? {},
+      params: json['params'] != null
+          ? Map<String, dynamic>.from(json['params'] as Map)
+          : {},
       id: json['id'] as String?,
     );
   }
