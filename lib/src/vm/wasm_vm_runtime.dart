@@ -123,7 +123,8 @@ class WasmVm implements VmRuntimeClient {
           name: '${import.module}.${import.name}',
           params: params,
           results: results,
-          call: (args) => _handleImportedFunction(import.name, args ?? const []),
+          call: ([List<Object?>? args]) =>
+              _handleImportedFunction(import.name, args ?? const []),
         ),
       );
     }
