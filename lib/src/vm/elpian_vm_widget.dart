@@ -7,6 +7,7 @@ import '../models/elpian_node.dart';
 import 'elpian_vm.dart';
 import 'quickjs_vm.dart';
 import 'runtime_kind.dart';
+import 'wasm_vm.dart';
 import 'vm_runtime_client.dart';
 import 'host_api_catalog.dart';
 import 'host_handler.dart';
@@ -63,6 +64,7 @@ class ElpianVmWidget extends StatefulWidget {
   ///
   /// - [ElpianRuntime.elpian]: Rust VM sandbox (default), expects AST for [astJson].
   /// - [ElpianRuntime.quickJs]: QuickJS runtime, expects JavaScript in [code].
+  /// - [ElpianRuntime.wasm]: WebAssembly runtime, expects WASM config JSON in [code].
   final ElpianRuntime runtime;
 
   /// Optional ElpianEngine instance to use for rendering.
@@ -154,6 +156,7 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
   late ElpianEngine _engine;
   ElpianVm? _vm;
   QuickJsVm? _quickJsVm;
+  WasmVm? _wasmVm;
   Map<String, dynamic>? _currentViewJson;
   String? _error;
   bool _isLoading = true;
@@ -190,7 +193,7 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
         }
 
         _vm = vm;
-      } else {
+      } else if (widget.runtime == ElpianRuntime.quickJs) {
         await QuickJsVm.initialize();
         if (widget.code == null) {
           setState(() {
@@ -200,6 +203,16 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
           return;
         }
         _quickJsVm = await QuickJsVm.fromCode(widget.machineId, widget.code!);
+      } else {
+        await WasmVm.initialize();
+        if (widget.code == null) {
+          setState(() {
+            _error = 'WASM runtime requires `code` (WASM config JSON).';
+            _isLoading = false;
+          });
+          return;
+        }
+        _wasmVm = await WasmVm.fromCode(widget.machineId, widget.code!);
       }
 
       // Wire all UI events to VM function names declared in node.events.
@@ -228,7 +241,7 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
       );
 
       // Register built-in host handlers (core + DOM + Canvas APIs).
-      final VmRuntimeClient runtimeVm = _vm ?? _quickJsVm!;
+      final VmRuntimeClient runtimeVm = _vm ?? _quickJsVm ?? _wasmVm!;
       final hostHandlers = <String, HostCallHandler>{
         for (final apiName in VmHostApiCatalog.allHostApiNames)
           apiName: (name, payload) => hostHandler.handleHostCall(name, payload),
@@ -260,7 +273,7 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
   }
 
   Future<void> _routeEventToVm(ElpianEvent event) async {
-    final VmRuntimeClient? runtimeVm = _vm ?? _quickJsVm;
+    final VmRuntimeClient? runtimeVm = _vm ?? _quickJsVm ?? _wasmVm;
     if (runtimeVm == null) return;
     final nodeId = event.currentTarget?.toString();
     if (nodeId == null || nodeId.isEmpty) return;
@@ -329,7 +342,7 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
   }
 
   Future<void> _callEntryFunction() async {
-    final VmRuntimeClient? runtimeVm = _vm ?? _quickJsVm;
+    final VmRuntimeClient? runtimeVm = _vm ?? _quickJsVm ?? _wasmVm;
     if (runtimeVm == null) return;
     try {
       if (widget.entryInput != null) {
@@ -348,7 +361,7 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
   /// Call a function in the running VM from Dart.
   /// Useful for sending events back to the VM.
   Future<String> callVmFunction(String funcName, {String? input}) async {
-    final VmRuntimeClient? runtimeVm = _vm ?? _quickJsVm;
+    final VmRuntimeClient? runtimeVm = _vm ?? _quickJsVm ?? _wasmVm;
     if (runtimeVm == null) return '';
     if (input != null) {
       return runtimeVm.callFunctionWithInput(funcName, input);
@@ -360,6 +373,7 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
   void dispose() {
     _vm?.dispose();
     _quickJsVm?.dispose();
+    _wasmVm?.dispose();
     super.dispose();
   }
 
