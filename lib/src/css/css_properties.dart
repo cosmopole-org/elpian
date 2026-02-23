@@ -178,45 +178,34 @@ class CSSProperties {
     );
   }
 
+  static const _mainAxisAlignmentMap = <String, MainAxisAlignment>{
+    'center': MainAxisAlignment.center,
+    'flex-start': MainAxisAlignment.start,
+    'start': MainAxisAlignment.start,
+    'flex-end': MainAxisAlignment.end,
+    'end': MainAxisAlignment.end,
+    'space-between': MainAxisAlignment.spaceBetween,
+    'space-around': MainAxisAlignment.spaceAround,
+    'space-evenly': MainAxisAlignment.spaceEvenly,
+  };
+
   /// Get main axis alignment from CSS justifyContent
   static MainAxisAlignment getMainAxisAlignment(String? justifyContent) {
-    switch (justifyContent?.toLowerCase()) {
-      case 'center':
-        return MainAxisAlignment.center;
-      case 'flex-start':
-      case 'start':
-        return MainAxisAlignment.start;
-      case 'flex-end':
-      case 'end':
-        return MainAxisAlignment.end;
-      case 'space-between':
-        return MainAxisAlignment.spaceBetween;
-      case 'space-around':
-        return MainAxisAlignment.spaceAround;
-      case 'space-evenly':
-        return MainAxisAlignment.spaceEvenly;
-      default:
-        return MainAxisAlignment.start;
-    }
+    return _mainAxisAlignmentMap[justifyContent?.toLowerCase()] ?? MainAxisAlignment.start;
   }
+
+  static const _crossAxisAlignmentMap = <String, CrossAxisAlignment>{
+    'center': CrossAxisAlignment.center,
+    'flex-start': CrossAxisAlignment.start,
+    'start': CrossAxisAlignment.start,
+    'flex-end': CrossAxisAlignment.end,
+    'end': CrossAxisAlignment.end,
+    'stretch': CrossAxisAlignment.stretch,
+    'baseline': CrossAxisAlignment.baseline,
+  };
 
   /// Get cross axis alignment from CSS alignItems
   static CrossAxisAlignment getCrossAxisAlignment(String? alignItems) {
-    switch (alignItems?.toLowerCase()) {
-      case 'center':
-        return CrossAxisAlignment.center;
-      case 'flex-start':
-      case 'start':
-        return CrossAxisAlignment.start;
-      case 'flex-end':
-      case 'end':
-        return CrossAxisAlignment.end;
-      case 'stretch':
-        return CrossAxisAlignment.stretch;
-      case 'baseline':
-        return CrossAxisAlignment.baseline;
-      default:
-        return CrossAxisAlignment.start;
-    }
+    return _crossAxisAlignmentMap[alignItems?.toLowerCase()] ?? CrossAxisAlignment.start;
   }
 }

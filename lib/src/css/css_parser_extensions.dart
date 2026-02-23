@@ -15,72 +15,59 @@ class CSSParserExtensions {
     return value.toString();
   }
   
+  static const _clipBehaviorMap = <String, Clip>{
+    'none': Clip.none,
+    'hardedge': Clip.hardEdge,
+    'hard-edge': Clip.hardEdge,
+    'antialias': Clip.antiAlias,
+    'anti-alias': Clip.antiAlias,
+    'antialiaswithdavepath': Clip.antiAliasWithSaveLayer,
+    'antialias-with-save-layer': Clip.antiAliasWithSaveLayer,
+  };
+
   /// Parse clip behavior
   static Clip? parseClipBehavior(dynamic value) {
     if (value == null) return null;
-    if (value is String) {
-      switch (value.toLowerCase()) {
-        case 'none':
-          return Clip.none;
-        case 'hardedge':
-        case 'hard-edge':
-          return Clip.hardEdge;
-        case 'antialias':
-        case 'anti-alias':
-          return Clip.antiAlias;
-        case 'antialiaswithdavepath':
-        case 'antialias-with-save-layer':
-          return Clip.antiAliasWithSaveLayer;
-      }
-    }
+    if (value is String) return _clipBehaviorMap[value.toLowerCase()];
     return null;
   }
-  
+
+  static const _boxShapeMap = <String, BoxShape>{
+    'rectangle': BoxShape.rectangle,
+    'circle': BoxShape.circle,
+  };
+
   /// Parse box shape
   static BoxShape? parseBoxShape(dynamic value) {
     if (value == null) return null;
-    if (value is String) {
-      switch (value.toLowerCase()) {
-        case 'rectangle':
-          return BoxShape.rectangle;
-        case 'circle':
-          return BoxShape.circle;
-      }
-    }
+    if (value is String) return _boxShapeMap[value.toLowerCase()];
     return null;
   }
-  
+
+  static const _textDecorationStyleMap = <String, TextDecorationStyle>{
+    'solid': TextDecorationStyle.solid,
+    'double': TextDecorationStyle.double,
+    'dotted': TextDecorationStyle.dotted,
+    'dashed': TextDecorationStyle.dashed,
+    'wavy': TextDecorationStyle.wavy,
+  };
+
   /// Parse text decoration style
   static TextDecorationStyle? parseTextDecorationStyle(dynamic value) {
     if (value == null) return null;
-    if (value is String) {
-      switch (value.toLowerCase()) {
-        case 'solid':
-          return TextDecorationStyle.solid;
-        case 'double':
-          return TextDecorationStyle.double;
-        case 'dotted':
-          return TextDecorationStyle.dotted;
-        case 'dashed':
-          return TextDecorationStyle.dashed;
-        case 'wavy':
-          return TextDecorationStyle.wavy;
-      }
-    }
+    if (value is String) return _textDecorationStyleMap[value.toLowerCase()];
     return null;
   }
-  
+
+  static const _textBaselineMap = <String, TextBaseline>{
+    'alphabetic': TextBaseline.alphabetic,
+    'ideographic': TextBaseline.ideographic,
+  };
+
   /// Parse text baseline
   static TextBaseline? parseTextBaseline(dynamic value) {
     if (value == null) return null;
-    if (value is String) {
-      switch (value.toLowerCase()) {
-        case 'alphabetic':
-          return TextBaseline.alphabetic;
-        case 'ideographic':
-          return TextBaseline.ideographic;
-      }
-    }
+    if (value is String) return _textBaselineMap[value.toLowerCase()];
     return null;
   }
   
@@ -176,52 +163,41 @@ class CSSParserExtensions {
     return value.toString();
   }
   
+  static const _wrapAlignmentMap = <String, WrapAlignment>{
+    'start': WrapAlignment.start,
+    'end': WrapAlignment.end,
+    'center': WrapAlignment.center,
+    'space-between': WrapAlignment.spaceBetween,
+    'space-around': WrapAlignment.spaceAround,
+    'space-evenly': WrapAlignment.spaceEvenly,
+  };
+
   /// Parse wrap alignment
   static WrapAlignment parseWrapAlignment(String? value) {
-    switch (value?.toLowerCase()) {
-      case 'start':
-        return WrapAlignment.start;
-      case 'end':
-        return WrapAlignment.end;
-      case 'center':
-        return WrapAlignment.center;
-      case 'space-between':
-        return WrapAlignment.spaceBetween;
-      case 'space-around':
-        return WrapAlignment.spaceAround;
-      case 'space-evenly':
-        return WrapAlignment.spaceEvenly;
-      default:
-        return WrapAlignment.start;
-    }
+    return _wrapAlignmentMap[value?.toLowerCase()] ?? WrapAlignment.start;
   }
-  
+
+  static const _wrapCrossAlignmentMap = <String, WrapCrossAlignment>{
+    'start': WrapCrossAlignment.start,
+    'end': WrapCrossAlignment.end,
+    'center': WrapCrossAlignment.center,
+  };
+
   /// Parse wrap cross alignment
   static WrapCrossAlignment parseWrapCrossAlignment(String? value) {
-    switch (value?.toLowerCase()) {
-      case 'start':
-        return WrapCrossAlignment.start;
-      case 'end':
-        return WrapCrossAlignment.end;
-      case 'center':
-        return WrapCrossAlignment.center;
-      default:
-        return WrapCrossAlignment.start;
-    }
+    return _wrapCrossAlignmentMap[value?.toLowerCase()] ?? WrapCrossAlignment.start;
   }
-  
+
+  static const _axisMap = <String, Axis>{
+    'horizontal': Axis.horizontal,
+    'row': Axis.horizontal,
+    'vertical': Axis.vertical,
+    'column': Axis.vertical,
+  };
+
   /// Parse axis direction
   static Axis parseAxis(String? value) {
-    switch (value?.toLowerCase()) {
-      case 'horizontal':
-      case 'row':
-        return Axis.horizontal;
-      case 'vertical':
-      case 'column':
-        return Axis.vertical;
-      default:
-        return Axis.horizontal;
-    }
+    return _axisMap[value?.toLowerCase()] ?? Axis.horizontal;
   }
   
   /// Parse matrix4 from string or map
@@ -301,40 +277,27 @@ class CSSParserExtensions {
     return CSSParser.parseDouble(value);
   }
   
+  static const _timingFunctionMap = <String, Curve>{
+    'linear': Curves.linear,
+    'ease': Curves.ease,
+    'ease-in': Curves.easeIn,
+    'ease-out': Curves.easeOut,
+    'ease-in-out': Curves.easeInOut,
+    'bounce': Curves.bounceIn,
+    'bounce-in': Curves.bounceIn,
+    'bounce-out': Curves.bounceOut,
+    'bounce-in-out': Curves.bounceInOut,
+    'elastic': Curves.elasticIn,
+    'elastic-in': Curves.elasticIn,
+    'elastic-out': Curves.elasticOut,
+    'elastic-in-out': Curves.elasticInOut,
+    'decelerate': Curves.decelerate,
+    'fast-out-slow-in': Curves.fastOutSlowIn,
+  };
+
   /// Parse animation timing function
   static Curve parseAnimationTimingFunction(String? value) {
-    switch (value?.toLowerCase()) {
-      case 'linear':
-        return Curves.linear;
-      case 'ease':
-        return Curves.ease;
-      case 'ease-in':
-        return Curves.easeIn;
-      case 'ease-out':
-        return Curves.easeOut;
-      case 'ease-in-out':
-        return Curves.easeInOut;
-      case 'bounce':
-      case 'bounce-in':
-        return Curves.bounceIn;
-      case 'bounce-out':
-        return Curves.bounceOut;
-      case 'bounce-in-out':
-        return Curves.bounceInOut;
-      case 'elastic':
-      case 'elastic-in':
-        return Curves.elasticIn;
-      case 'elastic-out':
-        return Curves.elasticOut;
-      case 'elastic-in-out':
-        return Curves.elasticInOut;
-      case 'decelerate':
-        return Curves.decelerate;
-      case 'fast-out-slow-in':
-        return Curves.fastOutSlowIn;
-      default:
-        return Curves.linear;
-    }
+    return _timingFunctionMap[value?.toLowerCase()] ?? Curves.linear;
   }
 
   /// Parse iteration count
@@ -378,38 +341,29 @@ class CSSParserExtensions {
     return value?.toLowerCase() != 'paused';
   }
   
+  static const _backgroundRepeatMap = <String, ImageRepeat>{
+    'repeat': ImageRepeat.repeat,
+    'repeat-x': ImageRepeat.repeatX,
+    'repeat-y': ImageRepeat.repeatY,
+    'no-repeat': ImageRepeat.noRepeat,
+  };
+
   /// Parse background repeat
   static ImageRepeat parseBackgroundRepeat(String? value) {
-    switch (value?.toLowerCase()) {
-      case 'repeat':
-        return ImageRepeat.repeat;
-      case 'repeat-x':
-        return ImageRepeat.repeatX;
-      case 'repeat-y':
-        return ImageRepeat.repeatY;
-      case 'no-repeat':
-        return ImageRepeat.noRepeat;
-      default:
-        return ImageRepeat.noRepeat;
-    }
+    return _backgroundRepeatMap[value?.toLowerCase()] ?? ImageRepeat.noRepeat;
   }
-  
+
+  static const _objectFitMap = <String, BoxFit>{
+    'fill': BoxFit.fill,
+    'contain': BoxFit.contain,
+    'cover': BoxFit.cover,
+    'none': BoxFit.none,
+    'scale-down': BoxFit.scaleDown,
+  };
+
   /// Parse object fit
   static BoxFit parseObjectFit(String? value) {
-    switch (value?.toLowerCase()) {
-      case 'fill':
-        return BoxFit.fill;
-      case 'contain':
-        return BoxFit.contain;
-      case 'cover':
-        return BoxFit.cover;
-      case 'none':
-        return BoxFit.none;
-      case 'scale-down':
-        return BoxFit.scaleDown;
-      default:
-        return BoxFit.contain;
-    }
+    return _objectFitMap[value?.toLowerCase()] ?? BoxFit.contain;
   }
   
   /// Parse list style type

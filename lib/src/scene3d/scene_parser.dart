@@ -91,14 +91,12 @@ class SceneParser {
     );
   }
 
-  static FogType _parseFogType(String? s) {
-    switch (s) {
-      case 'linear': return FogType.linear;
-      case 'exponential': return FogType.exponential;
-      default:
-        return FogType.none;
-    }
-  }
+  static const _fogTypeMap = <String, FogType>{
+    'linear': FogType.linear,
+    'exponential': FogType.exponential,
+  };
+
+  static FogType _parseFogType(String? s) => _fogTypeMap[s] ?? FogType.none;
 
   // ── Camera ───────────────────────────────────────────────────────
 
@@ -133,15 +131,14 @@ class SceneParser {
     );
   }
 
-  static CameraMode _parseCameraMode(String? s) {
-    switch (s) {
-      case 'orbit': return CameraMode.orbit;
-      case 'first_person': return CameraMode.firstPerson;
-      case 'follow': return CameraMode.follow;
-      case 'flythrough': return CameraMode.flythrough;
-      default: return CameraMode.fixed;
-    }
-  }
+  static const _cameraModeMap = <String, CameraMode>{
+    'orbit': CameraMode.orbit,
+    'first_person': CameraMode.firstPerson,
+    'follow': CameraMode.follow,
+    'flythrough': CameraMode.flythrough,
+  };
+
+  static CameraMode _parseCameraMode(String? s) => _cameraModeMap[s] ?? CameraMode.fixed;
 
   // ── Light ────────────────────────────────────────────────────────
 
@@ -172,14 +169,13 @@ class SceneParser {
     );
   }
 
-  static LightType _parseLightType(String? s) {
-    switch (s) {
-      case 'Point': return LightType.point;
-      case 'Spot': return LightType.spot;
-      case 'Area': return LightType.area;
-      default: return LightType.directional;
-    }
-  }
+  static const _lightTypeMap = <String, LightType>{
+    'Point': LightType.point,
+    'Spot': LightType.spot,
+    'Area': LightType.area,
+  };
+
+  static LightType _parseLightType(String? s) => _lightTypeMap[s] ?? LightType.directional;
 
   // ── Scene Node ───────────────────────────────────────────────────
 
@@ -294,23 +290,21 @@ class SceneParser {
     );
   }
 
-  static AlphaMode _parseAlphaMode(String? s) {
-    switch (s) {
-      case 'blend': return AlphaMode.blend;
-      case 'cutoff': return AlphaMode.cutoff;
-      default: return AlphaMode.opaque;
-    }
-  }
+  static const _alphaModeMap = <String, AlphaMode>{
+    'blend': AlphaMode.blend,
+    'cutoff': AlphaMode.cutoff,
+  };
 
-  static TextureType _parseTextureType(String? s) {
-    switch (s) {
-      case 'checkerboard': return TextureType.checkerboard;
-      case 'gradient': return TextureType.gradient;
-      case 'noise': return TextureType.noise;
-      case 'stripes': return TextureType.stripes;
-      default: return TextureType.none;
-    }
-  }
+  static AlphaMode _parseAlphaMode(String? s) => _alphaModeMap[s] ?? AlphaMode.opaque;
+
+  static const _textureTypeMap = <String, TextureType>{
+    'checkerboard': TextureType.checkerboard,
+    'gradient': TextureType.gradient,
+    'noise': TextureType.noise,
+    'stripes': TextureType.stripes,
+  };
+
+  static TextureType _parseTextureType(String? s) => _textureTypeMap[s] ?? TextureType.none;
 
   // ── Animation ────────────────────────────────────────────────────
 
@@ -340,18 +334,17 @@ class SceneParser {
     );
   }
 
-  static EasingType _parseEasing(String? s) {
-    switch (s) {
-      case 'EaseIn': return EasingType.easeIn;
-      case 'EaseOut': return EasingType.easeOut;
-      case 'EaseInOut': return EasingType.easeInOut;
-      case 'Bounce': return EasingType.bounce;
-      case 'Elastic': return EasingType.elastic;
-      case 'Back': return EasingType.back;
-      case 'Sine': return EasingType.sine;
-      default: return EasingType.linear;
-    }
-  }
+  static const _easingTypeMap = <String, EasingType>{
+    'EaseIn': EasingType.easeIn,
+    'EaseOut': EasingType.easeOut,
+    'EaseInOut': EasingType.easeInOut,
+    'Bounce': EasingType.bounce,
+    'Elastic': EasingType.elastic,
+    'Back': EasingType.back,
+    'Sine': EasingType.sine,
+  };
+
+  static EasingType _parseEasing(String? s) => _easingTypeMap[s] ?? EasingType.linear;
 
   // ── Particle Emitter ─────────────────────────────────────────────
 
@@ -379,15 +372,14 @@ class SceneParser {
     );
   }
 
-  static EmitterShape _parseEmitterShape(String? s) {
-    switch (s) {
-      case 'sphere': return EmitterShape.sphere;
-      case 'cone': return EmitterShape.cone;
-      case 'box': return EmitterShape.box;
-      case 'ring': return EmitterShape.ring;
-      default: return EmitterShape.point;
-    }
-  }
+  static const _emitterShapeMap = <String, EmitterShape>{
+    'sphere': EmitterShape.sphere,
+    'cone': EmitterShape.cone,
+    'box': EmitterShape.box,
+    'ring': EmitterShape.ring,
+  };
+
+  static EmitterShape _parseEmitterShape(String? s) => _emitterShapeMap[s] ?? EmitterShape.point;
 
   // ── Physics ──────────────────────────────────────────────────────
 
@@ -405,13 +397,12 @@ class SceneParser {
     );
   }
 
-  static ColliderType _parseColliderType(String? s) {
-    switch (s) {
-      case 'box': return ColliderType.box;
-      case 'plane': return ColliderType.plane;
-      default: return ColliderType.sphere;
-    }
-  }
+  static const _colliderTypeMap = <String, ColliderType>{
+    'box': ColliderType.box,
+    'plane': ColliderType.plane,
+  };
+
+  static ColliderType _parseColliderType(String? s) => _colliderTypeMap[s] ?? ColliderType.sphere;
 
   // ── Helpers ──────────────────────────────────────────────────────
 

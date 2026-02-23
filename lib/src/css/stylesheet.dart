@@ -31,17 +31,20 @@ class CSSStylesheet {
       
       _orderedRules.add(rule);
       
-      // Store by selector type
-      if (selector.startsWith('#')) {
-        _idRules[selector.substring(1)] = styles;
-      } else if (selector.startsWith('.')) {
-        _classRules[selector.substring(1)] = styles;
-      } else {
-        _rules[selector] = styles;
-      }
+      _storeRuleByType(selector, styles);
     }
   }
-  
+
+  void _storeRuleByType(String selector, Map<String, dynamic> styles) {
+    if (selector.startsWith('#')) {
+      _idRules[selector.substring(1)] = styles;
+    } else if (selector.startsWith('.')) {
+      _classRules[selector.substring(1)] = styles;
+    } else {
+      _rules[selector] = styles;
+    }
+  }
+
   Map<String, dynamic> _parseDeclarations(String declarations) {
     final styles = <String, dynamic>{};
     final properties = declarations.split(';');
@@ -80,16 +83,9 @@ class CSSStylesheet {
     );
     
     _orderedRules.add(rule);
-    
-    if (selector.startsWith('#')) {
-      _idRules[selector.substring(1)] = styles;
-    } else if (selector.startsWith('.')) {
-      _classRules[selector.substring(1)] = styles;
-    } else {
-      _rules[selector] = styles;
-    }
+    _storeRuleByType(selector, styles);
   }
-  
+
   /// Remove a rule by selector
   void removeRule(String selector) {
     _orderedRules.removeWhere((rule) => rule.selector == selector);
@@ -113,22 +109,21 @@ class CSSStylesheet {
     final mergedStyles = <String, dynamic>{};
     
     // 1. Apply tag-based rules (lowest priority)
-    if (_rules.containsKey(tagName)) {
-      mergedStyles.addAll(_rules[tagName]!);
-    }
-    
+    final tagStyles = _rules[tagName];
+    if (tagStyles != null) mergedStyles.addAll(tagStyles);
+
     // 2. Apply class-based rules
     if (classes != null) {
       for (final className in classes) {
-        if (_classRules.containsKey(className)) {
-          mergedStyles.addAll(_classRules[className]!);
-        }
+        final classStyles = _classRules[className];
+        if (classStyles != null) mergedStyles.addAll(classStyles);
       }
     }
-    
+
     // 3. Apply ID-based rules (higher priority)
-    if (id != null && _idRules.containsKey(id)) {
-      mergedStyles.addAll(_idRules[id]!);
+    if (id != null) {
+      final idStyles = _idRules[id];
+      if (idStyles != null) mergedStyles.addAll(idStyles);
     }
     
     // 4. Apply inline styles (highest priority)
@@ -221,40 +216,17 @@ class MediaQuery {
     required this.stylesheet,
   });
   
+  static final _dimensionPattern = RegExp(r'(min|max)-(width|height):\s*(\d+)');
+
   bool matches(double width, double height) {
-    // Simple media query matching
-    if (query.contains('min-width')) {
-      final match = RegExp(r'min-width:\s*(\d+)').firstMatch(query);
-      if (match != null) {
-        final minWidth = double.parse(match.group(1)!);
-        if (width < minWidth) return false;
-      }
+    for (final match in _dimensionPattern.allMatches(query)) {
+      final isMin = match.group(1) == 'min';
+      final isWidth = match.group(2) == 'width';
+      final threshold = double.parse(match.group(3)!);
+      final actual = isWidth ? width : height;
+      if (isMin && actual < threshold) return false;
+      if (!isMin && actual > threshold) return false;
     }
-    
-    if (query.contains('max-width')) {
-      final match = RegExp(r'max-width:\s*(\d+)').firstMatch(query);
-      if (match != null) {
-        final maxWidth = double.parse(match.group(1)!);
-        if (width > maxWidth) return false;
-      }
-    }
-    
-    if (query.contains('min-height')) {
-      final match = RegExp(r'min-height:\s*(\d+)').firstMatch(query);
-      if (match != null) {
-        final minHeight = double.parse(match.group(1)!);
-        if (height < minHeight) return false;
-      }
-    }
-    
-    if (query.contains('max-height')) {
-      final match = RegExp(r'max-height:\s*(\d+)').firstMatch(query);
-      if (match != null) {
-        final maxHeight = double.parse(match.group(1)!);
-        if (height > maxHeight) return false;
-      }
-    }
-    
     return true;
   }
 }

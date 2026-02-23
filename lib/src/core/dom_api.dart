@@ -31,10 +31,10 @@ class ElpianDOM {
       return getElementById(selector.substring(1));
     } else if (selector.startsWith('.')) {
       final elements = getElementsByClassName(selector.substring(1));
-      return elements.isNotEmpty ? elements.first : null;
+      return elements.isEmpty ? null : elements.first;
     } else {
       final elements = getElementsByTagName(selector);
-      return elements.isNotEmpty ? elements.first : null;
+      return elements.isEmpty ? null : elements.first;
     }
   }
   
@@ -42,7 +42,7 @@ class ElpianDOM {
   List<ElpianElement> querySelectorAll(String selector) {
     if (selector.startsWith('#')) {
       final element = getElementById(selector.substring(1));
-      return element != null ? [element] : [];
+      return [if (element != null) element];
     } else if (selector.startsWith('.')) {
       return getElementsByClassName(selector.substring(1));
     } else {
@@ -65,14 +65,10 @@ class ElpianDOM {
     
     _elementsList.add(element);
     
-    final tagElements = _elementsByTag[tagName] ?? [];
-    tagElements.add(element);
-    _elementsByTag[tagName] = tagElements;
-    
+    (_elementsByTag[tagName] ??= []).add(element);
+
     for (final className in classes ?? []) {
-      final classElements = _elementsByClass[className] ?? [];
-      classElements.add(element);
-      _elementsByClass[className] = classElements;
+      (_elementsByClass[className] ??= []).add(element);
     }
     
     return element;
@@ -182,10 +178,7 @@ class ElpianElement {
   void addClass(String className) {
     if (!classes.contains(className)) {
       classes.add(className);
-      
-      final classElements = dom._elementsByClass[className] ?? [];
-      classElements.add(this);
-      dom._elementsByClass[className] = classElements;
+      (dom._elementsByClass[className] ??= []).add(this);
     }
   }
   

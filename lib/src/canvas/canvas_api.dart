@@ -106,9 +106,7 @@ class CanvasCommand {
 
     return CanvasCommand(
       type: type,
-      params: json['params'] != null
-          ? Map.from(json['params'] as Map<dynamic, dynamic>)
-          : {},
+      params: (json['params'] as Map<String, dynamic>?) ?? {},
       id: json['id'] as String?,
     );
   }
@@ -653,13 +651,12 @@ class CanvasAPIExecutor {
   }
 
   double _getDouble(Map<String, dynamic> params, String key,
-      [double defaultValue = 0.0]) {
-    final value = params[key];
-    if (value is double) return value;
-    if (value is int) return value.toDouble();
-    if (value is String) return double.tryParse(value) ?? defaultValue;
-    return defaultValue;
-  }
+      [double defaultValue = 0.0]) => switch (params[key]) {
+    double v => v,
+    int v => v.toDouble(),
+    String v => double.tryParse(v) ?? defaultValue,
+    _ => defaultValue,
+  };
 
   Color _parseColor(dynamic value) {
     if (value is Color) return value;
@@ -691,25 +688,17 @@ class CanvasAPIExecutor {
     return Colors.black;
   }
 
-  StrokeCap _parseLineCap(String? cap) {
-    switch (cap) {
-      case 'round':
-        return StrokeCap.round;
-      case 'square':
-        return StrokeCap.square;
-      default:
-        return StrokeCap.butt;
-    }
-  }
+  static const _lineCapMap = <String, StrokeCap>{
+    'round': StrokeCap.round,
+    'square': StrokeCap.square,
+  };
 
-  StrokeJoin _parseLineJoin(String? join) {
-    switch (join) {
-      case 'round':
-        return StrokeJoin.round;
-      case 'bevel':
-        return StrokeJoin.bevel;
-      default:
-        return StrokeJoin.miter;
-    }
-  }
+  StrokeCap _parseLineCap(String? cap) => _lineCapMap[cap] ?? StrokeCap.butt;
+
+  static const _lineJoinMap = <String, StrokeJoin>{
+    'round': StrokeJoin.round,
+    'bevel': StrokeJoin.bevel,
+  };
+
+  StrokeJoin _parseLineJoin(String? join) => _lineJoinMap[join] ?? StrokeJoin.miter;
 }
