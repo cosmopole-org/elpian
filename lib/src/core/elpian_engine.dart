@@ -305,60 +305,67 @@ class ElpianEngine {
     return result;
   }
 
+  static void _addIfNotNull(Map<String, dynamic> map, String key, dynamic value) {
+    if (value != null) map[key] = value;
+  }
+
   /// Convert a CSSStyle back to a style map for merging
   Map<String, dynamic> _styleToMap(CSSStyle style) {
     final map = <String, dynamic>{};
-    if (style.width != null) map['width'] = style.width;
-    if (style.height != null) map['height'] = style.height;
-    if (style.minWidth != null) map['minWidth'] = style.minWidth;
-    if (style.maxWidth != null) map['maxWidth'] = style.maxWidth;
-    if (style.minHeight != null) map['minHeight'] = style.minHeight;
-    if (style.maxHeight != null) map['maxHeight'] = style.maxHeight;
+    _addIfNotNull(map, 'width', style.width);
+    _addIfNotNull(map, 'height', style.height);
+    _addIfNotNull(map, 'minWidth', style.minWidth);
+    _addIfNotNull(map, 'maxWidth', style.maxWidth);
+    _addIfNotNull(map, 'minHeight', style.minHeight);
+    _addIfNotNull(map, 'maxHeight', style.maxHeight);
     if (style.padding != null) map['padding'] = '${style.padding!.top} ${style.padding!.right} ${style.padding!.bottom} ${style.padding!.left}';
     if (style.margin != null) map['margin'] = '${style.margin!.top} ${style.margin!.right} ${style.margin!.bottom} ${style.margin!.left}';
     if (style.backgroundColor != null) map['backgroundColor'] = _colorToString(style.backgroundColor!);
     if (style.color != null) map['color'] = _colorToString(style.color!);
-    if (style.fontSize != null) map['fontSize'] = style.fontSize;
+    _addIfNotNull(map, 'fontSize', style.fontSize);
     if (style.fontWeight != null) map['fontWeight'] = _fontWeightToString(style.fontWeight!);
     if (style.fontStyle != null) map['fontStyle'] = style.fontStyle == FontStyle.italic ? 'italic' : 'normal';
-    if (style.fontFamily != null) map['fontFamily'] = style.fontFamily;
-    if (style.letterSpacing != null) map['letterSpacing'] = style.letterSpacing;
-    if (style.wordSpacing != null) map['wordSpacing'] = style.wordSpacing;
-    if (style.lineHeight != null) map['lineHeight'] = style.lineHeight;
+    _addIfNotNull(map, 'fontFamily', style.fontFamily);
+    _addIfNotNull(map, 'letterSpacing', style.letterSpacing);
+    _addIfNotNull(map, 'wordSpacing', style.wordSpacing);
+    _addIfNotNull(map, 'lineHeight', style.lineHeight);
     if (style.textAlign != null) map['textAlign'] = style.textAlign.toString().split('.').last;
-    if (style.borderRadius != null) map['borderRadius'] = style.borderRadius;
+    _addIfNotNull(map, 'borderRadius', style.borderRadius);
     if (style.borderColor != null) map['borderColor'] = _colorToString(style.borderColor!);
-    if (style.borderWidth != null) map['borderWidth'] = style.borderWidth;
-    if (style.opacity != null) map['opacity'] = style.opacity;
-    if (style.display != null) map['display'] = style.display;
-    if (style.flexDirection != null) map['flexDirection'] = style.flexDirection;
-    if (style.justifyContent != null) map['justifyContent'] = style.justifyContent;
-    if (style.alignItems != null) map['alignItems'] = style.alignItems;
-    if (style.flex != null) map['flex'] = style.flex;
-    if (style.gap != null) map['gap'] = style.gap;
-    if (style.flexWrap != null) map['flexWrap'] = style.flexWrap;
-    if (style.gradient != null) map['gradient'] = style.gradient;
-    if (style.boxShadow != null) map['boxShadow'] = style.boxShadow;
-    if (style.textShadow != null) map['textShadow'] = style.textShadow;
-    if (style.rotate != null) map['rotate'] = style.rotate;
-    if (style.scale != null) map['scale'] = style.scale;
-    if (style.visible != null) map['visible'] = style.visible;
-    if (style.position != null) map['position'] = style.position;
-    if (style.top != null) map['top'] = style.top;
-    if (style.right != null) map['right'] = style.right;
-    if (style.bottom != null) map['bottom'] = style.bottom;
-    if (style.left != null) map['left'] = style.left;
+    _addIfNotNull(map, 'borderWidth', style.borderWidth);
+    _addIfNotNull(map, 'opacity', style.opacity);
+    _addIfNotNull(map, 'display', style.display);
+    _addIfNotNull(map, 'flexDirection', style.flexDirection);
+    _addIfNotNull(map, 'justifyContent', style.justifyContent);
+    _addIfNotNull(map, 'alignItems', style.alignItems);
+    _addIfNotNull(map, 'flex', style.flex);
+    _addIfNotNull(map, 'gap', style.gap);
+    _addIfNotNull(map, 'flexWrap', style.flexWrap);
+    _addIfNotNull(map, 'gradient', style.gradient);
+    _addIfNotNull(map, 'boxShadow', style.boxShadow);
+    _addIfNotNull(map, 'textShadow', style.textShadow);
+    _addIfNotNull(map, 'rotate', style.rotate);
+    _addIfNotNull(map, 'scale', style.scale);
+    _addIfNotNull(map, 'visible', style.visible);
+    _addIfNotNull(map, 'position', style.position);
+    _addIfNotNull(map, 'top', style.top);
+    _addIfNotNull(map, 'right', style.right);
+    _addIfNotNull(map, 'bottom', style.bottom);
+    _addIfNotNull(map, 'left', style.left);
     return map;
   }
 
-  String _colorToString(Color color) {
+  static String _colorToString(Color color) {
     return 'rgba(${color.red},${color.green},${color.blue},${color.alpha / 255.0})';
   }
 
-  String _fontWeightToString(FontWeight weight) {
-    if (weight == FontWeight.bold) return 'bold';
-    if (weight == FontWeight.normal) return 'normal';
-    return '${weight.value}';
+  static const _fontWeightStringMap = <FontWeight, String>{
+    FontWeight.bold: 'bold',
+    FontWeight.normal: 'normal',
+  };
+
+  static String _fontWeightToString(FontWeight weight) {
+    return _fontWeightStringMap[weight] ?? '${weight.value}';
   }
 
   Widget renderFromJson(Map<String, dynamic> json) {

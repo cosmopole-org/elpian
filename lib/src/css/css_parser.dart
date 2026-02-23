@@ -273,38 +273,29 @@ class CSSParser {
     return null;
   }
 
+  static const _alignmentMap = <String, Alignment>{
+    'center': Alignment.center,
+    'topleft': Alignment.topLeft,
+    'top-left': Alignment.topLeft,
+    'topcenter': Alignment.topCenter,
+    'top-center': Alignment.topCenter,
+    'topright': Alignment.topRight,
+    'top-right': Alignment.topRight,
+    'centerleft': Alignment.centerLeft,
+    'center-left': Alignment.centerLeft,
+    'centerright': Alignment.centerRight,
+    'center-right': Alignment.centerRight,
+    'bottomleft': Alignment.bottomLeft,
+    'bottom-left': Alignment.bottomLeft,
+    'bottomcenter': Alignment.bottomCenter,
+    'bottom-center': Alignment.bottomCenter,
+    'bottomright': Alignment.bottomRight,
+    'bottom-right': Alignment.bottomRight,
+  };
+
   static AlignmentGeometry? parseAlignment(dynamic value) {
     if (value == null) return null;
-    if (value is String) {
-      switch (value.toLowerCase()) {
-        case 'center':
-          return Alignment.center;
-        case 'topleft':
-        case 'top-left':
-          return Alignment.topLeft;
-        case 'topcenter':
-        case 'top-center':
-          return Alignment.topCenter;
-        case 'topright':
-        case 'top-right':
-          return Alignment.topRight;
-        case 'centerleft':
-        case 'center-left':
-          return Alignment.centerLeft;
-        case 'centerright':
-        case 'center-right':
-          return Alignment.centerRight;
-        case 'bottomleft':
-        case 'bottom-left':
-          return Alignment.bottomLeft;
-        case 'bottomcenter':
-        case 'bottom-center':
-          return Alignment.bottomCenter;
-        case 'bottomright':
-        case 'bottom-right':
-          return Alignment.bottomRight;
-      }
-    }
+    if (value is String) return _alignmentMap[value.toLowerCase()];
     if (value is Map) {
       final x = parseDouble(value['x']) ?? 0.0;
       final y = parseDouble(value['y']) ?? 0.0;
@@ -349,167 +340,119 @@ class CSSParser {
     return null;
   }
 
+  static const _fontWeightMap = <String, FontWeight>{
+    'bold': FontWeight.bold,
+    'normal': FontWeight.normal,
+    'light': FontWeight.w300,
+    '100': FontWeight.w100,
+    '200': FontWeight.w200,
+    '300': FontWeight.w300,
+    '400': FontWeight.w400,
+    '500': FontWeight.w500,
+    '600': FontWeight.w600,
+    '700': FontWeight.w700,
+    '800': FontWeight.w800,
+    '900': FontWeight.w900,
+    'w100': FontWeight.w100,
+    'w200': FontWeight.w200,
+    'w300': FontWeight.w300,
+    'w400': FontWeight.w400,
+    'w500': FontWeight.w500,
+    'w600': FontWeight.w600,
+    'w700': FontWeight.w700,
+    'w800': FontWeight.w800,
+    'w900': FontWeight.w900,
+  };
+
   static FontWeight? _parseFontWeight(dynamic value) {
     if (value == null) return null;
     if (value is FontWeight) return value;
-    if (value is String) {
-      switch (value.toLowerCase()) {
-        case 'bold':
-          return FontWeight.bold;
-        case 'normal':
-          return FontWeight.normal;
-        case 'light':
-          return FontWeight.w300;
-        case '100':
-          return FontWeight.w100;
-        case '200':
-          return FontWeight.w200;
-        case '300':
-          return FontWeight.w300;
-        case '400':
-          return FontWeight.w400;
-        case '500':
-          return FontWeight.w500;
-        case '600':
-          return FontWeight.w600;
-        case '700':
-          return FontWeight.w700;
-        case '800':
-          return FontWeight.w800;
-        case '900':
-          return FontWeight.w900;
-        case 'w100':
-          return FontWeight.w100;
-        case 'w200':
-          return FontWeight.w200;
-        case 'w300':
-          return FontWeight.w300;
-        case 'w400':
-          return FontWeight.w400;
-        case 'w500':
-          return FontWeight.w500;
-        case 'w600':
-          return FontWeight.w600;
-        case 'w700':
-          return FontWeight.w700;
-        case 'w800':
-          return FontWeight.w800;
-        case 'w900':
-          return FontWeight.w900;
-      }
-    }
-    if (value is int) {
-      return FontWeight.values[(value ~/ 100).clamp(1, 9) - 1];
-    }
+    if (value is String) return _fontWeightMap[value.toLowerCase()];
+    if (value is int) return FontWeight.values[(value ~/ 100).clamp(1, 9) - 1];
     return null;
   }
 
+  static const _fontStyleMap = <String, FontStyle>{
+    'italic': FontStyle.italic,
+    'normal': FontStyle.normal,
+  };
+
   static FontStyle? _parseFontStyle(dynamic value) {
     if (value == null) return null;
-    if (value is String) {
-      switch (value.toLowerCase()) {
-        case 'italic':
-          return FontStyle.italic;
-        case 'normal':
-          return FontStyle.normal;
-      }
-    }
+    if (value is String) return _fontStyleMap[value.toLowerCase()];
     return null;
   }
+
+  static const _textAlignMap = <String, TextAlign>{
+    'left': TextAlign.left,
+    'right': TextAlign.right,
+    'center': TextAlign.center,
+    'justify': TextAlign.justify,
+    'start': TextAlign.start,
+    'end': TextAlign.end,
+  };
 
   static TextAlign? _parseTextAlign(dynamic value) {
     if (value == null) return null;
     if (value is TextAlign) return value;
-    if (value is String) {
-      switch (value.toLowerCase()) {
-        case 'left':
-          return TextAlign.left;
-        case 'right':
-          return TextAlign.right;
-        case 'center':
-          return TextAlign.center;
-        case 'justify':
-          return TextAlign.justify;
-        case 'start':
-          return TextAlign.start;
-        case 'end':
-          return TextAlign.end;
-      }
-    }
+    if (value is String) return _textAlignMap[value.toLowerCase()];
     return null;
   }
+
+  static const _textDecorationMap = <String, TextDecoration>{
+    'underline': TextDecoration.underline,
+    'overline': TextDecoration.overline,
+    'line-through': TextDecoration.lineThrough,
+    'linethrough': TextDecoration.lineThrough,
+    'none': TextDecoration.none,
+  };
 
   static TextDecoration? _parseTextDecoration(dynamic value) {
     if (value == null) return null;
-    if (value is String) {
-      switch (value.toLowerCase()) {
-        case 'underline':
-          return TextDecoration.underline;
-        case 'overline':
-          return TextDecoration.overline;
-        case 'line-through':
-        case 'linethrough':
-          return TextDecoration.lineThrough;
-        case 'none':
-          return TextDecoration.none;
-      }
-    }
+    if (value is String) return _textDecorationMap[value.toLowerCase()];
     return null;
   }
+
+  static const _textOverflowMap = <String, TextOverflow>{
+    'ellipsis': TextOverflow.ellipsis,
+    'clip': TextOverflow.clip,
+    'fade': TextOverflow.fade,
+    'visible': TextOverflow.visible,
+  };
 
   static TextOverflow? _parseTextOverflow(dynamic value) {
     if (value == null) return null;
-    if (value is String) {
-      switch (value.toLowerCase()) {
-        case 'ellipsis':
-          return TextOverflow.ellipsis;
-        case 'clip':
-          return TextOverflow.clip;
-        case 'fade':
-          return TextOverflow.fade;
-        case 'visible':
-          return TextOverflow.visible;
-      }
-    }
+    if (value is String) return _textOverflowMap[value.toLowerCase()];
     return null;
   }
+
+  static const _overflowMap = <String, Overflow>{
+    'visible': Overflow.visible,
+    'clip': Overflow.clip,
+  };
 
   static Overflow? _parseOverflow(dynamic value) {
     if (value == null) return null;
-    if (value is String) {
-      switch (value.toLowerCase()) {
-        case 'visible':
-          return Overflow.visible;
-        case 'clip':
-          return Overflow.clip;
-      }
-    }
+    if (value is String) return _overflowMap[value.toLowerCase()];
     return null;
   }
 
+  static const _boxFitMap = <String, BoxFit>{
+    'fill': BoxFit.fill,
+    'contain': BoxFit.contain,
+    'cover': BoxFit.cover,
+    'fitwidth': BoxFit.fitWidth,
+    'fit-width': BoxFit.fitWidth,
+    'fitheight': BoxFit.fitHeight,
+    'fit-height': BoxFit.fitHeight,
+    'none': BoxFit.none,
+    'scaledown': BoxFit.scaleDown,
+    'scale-down': BoxFit.scaleDown,
+  };
+
   static BoxFit? _parseBoxFit(dynamic value) {
     if (value == null) return null;
-    if (value is String) {
-      switch (value.toLowerCase()) {
-        case 'fill':
-          return BoxFit.fill;
-        case 'contain':
-          return BoxFit.contain;
-        case 'cover':
-          return BoxFit.cover;
-        case 'fitwidth':
-        case 'fit-width':
-          return BoxFit.fitWidth;
-        case 'fitheight':
-        case 'fit-height':
-          return BoxFit.fitHeight;
-        case 'none':
-          return BoxFit.none;
-        case 'scaledown':
-        case 'scale-down':
-          return BoxFit.scaleDown;
-      }
-    }
+    if (value is String) return _boxFitMap[value.toLowerCase()];
     return null;
   }
 
@@ -640,107 +583,75 @@ class CSSParser {
     return null;
   }
 
+  static const _curveMap = <String, Curve>{
+    'linear': Curves.linear,
+    'ease': Curves.ease,
+    'easein': Curves.easeIn,
+    'ease-in': Curves.easeIn,
+    'easeout': Curves.easeOut,
+    'ease-out': Curves.easeOut,
+    'easeinout': Curves.easeInOut,
+    'ease-in-out': Curves.easeInOut,
+    'bounce': Curves.bounceIn,
+    'bouncein': Curves.bounceIn,
+    'bounce-in': Curves.bounceIn,
+    'bounceout': Curves.bounceOut,
+    'bounce-out': Curves.bounceOut,
+    'bounceinout': Curves.bounceInOut,
+    'bounce-in-out': Curves.bounceInOut,
+    'elastic': Curves.elasticIn,
+    'elasticin': Curves.elasticIn,
+    'elastic-in': Curves.elasticIn,
+    'elasticout': Curves.elasticOut,
+    'elastic-out': Curves.elasticOut,
+    'elasticinout': Curves.elasticInOut,
+    'elastic-in-out': Curves.elasticInOut,
+    'decelerate': Curves.decelerate,
+    'fastoutslowin': Curves.fastOutSlowIn,
+    'fast-out-slow-in': Curves.fastOutSlowIn,
+    'slowmiddle': Curves.slowMiddle,
+    'slow-middle': Curves.slowMiddle,
+    'easeincubic': Curves.easeInCubic,
+    'ease-in-cubic': Curves.easeInCubic,
+    'easeoutcubic': Curves.easeOutCubic,
+    'ease-out-cubic': Curves.easeOutCubic,
+    'easeinoutcubic': Curves.easeInOutCubic,
+    'ease-in-out-cubic': Curves.easeInOutCubic,
+    'easeinquart': Curves.easeInQuart,
+    'ease-in-quart': Curves.easeInQuart,
+    'easeoutquart': Curves.easeOutQuart,
+    'ease-out-quart': Curves.easeOutQuart,
+    'easeinoutquart': Curves.easeInOutQuart,
+    'ease-in-out-quart': Curves.easeInOutQuart,
+    'easeinquint': Curves.easeInQuint,
+    'ease-in-quint': Curves.easeInQuint,
+    'easeoutquint': Curves.easeOutQuint,
+    'ease-out-quint': Curves.easeOutQuint,
+    'easeinoutquint': Curves.easeInOutQuint,
+    'ease-in-out-quint': Curves.easeInOutQuint,
+    'easeinexpo': Curves.easeInExpo,
+    'ease-in-expo': Curves.easeInExpo,
+    'easeoutexpo': Curves.easeOutExpo,
+    'ease-out-expo': Curves.easeOutExpo,
+    'easeinoutexpo': Curves.easeInOutExpo,
+    'ease-in-out-expo': Curves.easeInOutExpo,
+    'easeincirc': Curves.easeInCirc,
+    'ease-in-circ': Curves.easeInCirc,
+    'easeoutcirc': Curves.easeOutCirc,
+    'ease-out-circ': Curves.easeOutCirc,
+    'easeinoutcirc': Curves.easeInOutCirc,
+    'ease-in-out-circ': Curves.easeInOutCirc,
+    'easeinback': Curves.easeInBack,
+    'ease-in-back': Curves.easeInBack,
+    'easeoutback': Curves.easeOutBack,
+    'ease-out-back': Curves.easeOutBack,
+    'easeinoutback': Curves.easeInOutBack,
+    'ease-in-out-back': Curves.easeInOutBack,
+  };
+
   static Curve? parseCurve(dynamic value) {
     if (value == null) return null;
-    if (value is String) {
-      switch (value.toLowerCase()) {
-        case 'linear':
-          return Curves.linear;
-        case 'ease':
-          return Curves.ease;
-        case 'easein':
-        case 'ease-in':
-          return Curves.easeIn;
-        case 'easeout':
-        case 'ease-out':
-          return Curves.easeOut;
-        case 'easeinout':
-        case 'ease-in-out':
-          return Curves.easeInOut;
-        case 'bounce':
-        case 'bouncein':
-        case 'bounce-in':
-          return Curves.bounceIn;
-        case 'bounceout':
-        case 'bounce-out':
-          return Curves.bounceOut;
-        case 'bounceinout':
-        case 'bounce-in-out':
-          return Curves.bounceInOut;
-        case 'elastic':
-        case 'elasticin':
-        case 'elastic-in':
-          return Curves.elasticIn;
-        case 'elasticout':
-        case 'elastic-out':
-          return Curves.elasticOut;
-        case 'elasticinout':
-        case 'elastic-in-out':
-          return Curves.elasticInOut;
-        case 'decelerate':
-          return Curves.decelerate;
-        case 'fastoutslowin':
-        case 'fast-out-slow-in':
-          return Curves.fastOutSlowIn;
-        case 'slowmiddle':
-        case 'slow-middle':
-          return Curves.slowMiddle;
-        case 'easeincubic':
-        case 'ease-in-cubic':
-          return Curves.easeInCubic;
-        case 'easeoutcubic':
-        case 'ease-out-cubic':
-          return Curves.easeOutCubic;
-        case 'easeinoutcubic':
-        case 'ease-in-out-cubic':
-          return Curves.easeInOutCubic;
-        case 'easeinquart':
-        case 'ease-in-quart':
-          return Curves.easeInQuart;
-        case 'easeoutquart':
-        case 'ease-out-quart':
-          return Curves.easeOutQuart;
-        case 'easeinoutquart':
-        case 'ease-in-out-quart':
-          return Curves.easeInOutQuart;
-        case 'easeinquint':
-        case 'ease-in-quint':
-          return Curves.easeInQuint;
-        case 'easeoutquint':
-        case 'ease-out-quint':
-          return Curves.easeOutQuint;
-        case 'easeinoutquint':
-        case 'ease-in-out-quint':
-          return Curves.easeInOutQuint;
-        case 'easeinexpo':
-        case 'ease-in-expo':
-          return Curves.easeInExpo;
-        case 'easeoutexpo':
-        case 'ease-out-expo':
-          return Curves.easeOutExpo;
-        case 'easeinoutexpo':
-        case 'ease-in-out-expo':
-          return Curves.easeInOutExpo;
-        case 'easeincirc':
-        case 'ease-in-circ':
-          return Curves.easeInCirc;
-        case 'easeoutcirc':
-        case 'ease-out-circ':
-          return Curves.easeOutCirc;
-        case 'easeinoutcirc':
-        case 'ease-in-out-circ':
-          return Curves.easeInOutCirc;
-        case 'easeinback':
-        case 'ease-in-back':
-          return Curves.easeInBack;
-        case 'easeoutback':
-        case 'ease-out-back':
-          return Curves.easeOutBack;
-        case 'easeinoutback':
-        case 'ease-in-out-back':
-          return Curves.easeInOutBack;
-      }
-    }
+    if (value is String) return _curveMap[value.toLowerCase()];
     return null;
   }
 
