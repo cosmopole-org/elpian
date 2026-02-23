@@ -15,8 +15,8 @@ impl Scope {
             tag,
             memory: Rc::new(RefCell::new(ValGroup::new_empty())),
             frozen_pointer: initial_pointer,
-            frozen_start: frozen_start,
-            frozen_end: frozen_end,
+            frozen_start,
+            frozen_end,
         }
     }
     pub fn new_with_args(tag: String, initial_pointer: usize, frozen_start: usize, frozen_end: usize, args: HashMap<String, Val>) -> Self {
@@ -24,8 +24,8 @@ impl Scope {
             tag,
             memory: Rc::new(RefCell::new(ValGroup::new(args))),
             frozen_pointer: initial_pointer,
-            frozen_start: frozen_start,
-            frozen_end: frozen_end,
+            frozen_start,
+            frozen_end,
         }
     }
     pub fn update_frozen_pointer(&mut self, pointer: usize) {

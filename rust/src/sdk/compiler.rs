@@ -54,7 +54,7 @@ fn serialize_expr(val: serde_json::Value) -> Vec<u8> {
         }
         "bool" => {
             result.push(6);
-            result.push(if val["data"]["value"].as_bool().unwrap() == true {
+            result.push(if val["data"]["value"].as_bool().unwrap() {
                 0x01
             } else {
                 0x00
@@ -83,7 +83,6 @@ fn serialize_expr(val: serde_json::Value) -> Vec<u8> {
             let mut tt_bytes = val["data"]["targetType"]
                 .as_str()
                 .unwrap()
-                .to_string()
                 .as_bytes()
                 .to_vec();
             result.append(&mut i32::to_be_bytes(tt_bytes.len() as i32).to_vec());
@@ -235,20 +234,16 @@ fn serialize_condition_chain(
     result.append(&mut i64::to_be_bytes(body_start as i64).to_vec());
     result.append(&mut i64::to_be_bytes(body_end as i64).to_vec());
     let mut after_body: Vec<u8> = vec![];
-    let elseif_stmt = operation["data"].get("elseifStmt");
-    if !elseif_stmt.is_none() {
+    if let Some(elseif_stmt) = operation["data"].get("elseifStmt") {
         let (mut compiled_body, mut branch_after_points) =
-            serialize_condition_chain(elseif_stmt.unwrap().clone(), true, body_end);
+            serialize_condition_chain(elseif_stmt.clone(), true, body_end);
         after_body.append(&mut compiled_body);
         baps.append(&mut branch_after_points);
-    } else {
-        let else_stmt = operation["data"].get("elseStmt");
-        if !else_stmt.is_none() {
-            let (mut compiled_body, mut branch_after_points) =
-                serialize_condition_chain(else_stmt.unwrap().clone(), false, body_end);
-            after_body.append(&mut compiled_body);
-            baps.append(&mut branch_after_points);
-        }
+    } else if let Some(else_stmt) = operation["data"].get("elseStmt") {
+        let (mut compiled_body, mut branch_after_points) =
+            serialize_condition_chain(else_stmt.clone(), false, body_end);
+        after_body.append(&mut compiled_body);
+        baps.append(&mut branch_after_points);
     }
     if is_conditioned {
         result.append(&mut i64::to_be_bytes(body_end as i64).to_vec());
@@ -266,46 +261,26 @@ pub fn compile_ast(program: serde_json::Value, start_point: usize) -> Vec<u8> {
     let mut step_start_map: HashMap<i64, usize> = HashMap::new();
     let mut reserved_branch_map: HashMap<i64, Vec<usize>> = HashMap::new();
     for operation in program["body"].as_array().unwrap().iter() {
-        if !step_start_map.contains_key(&op_counter) {
-            step_start_map.insert(op_counter, start_point + result.len());
-        }
+        step_start_map.entry(op_counter).or_insert(start_point + result.len());
         match operation["type"].as_str().unwrap() {
             "jumpOperation" => {
                 result.push(0x15);
                 let true_branch = result.len();
-                result.append(&mut vec![0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+                result.extend_from_slice(&[0u8; 8]);
                 let true_step = operation["data"]["stepNumber"].as_i64().unwrap();
-                if !reserved_branch_map.contains_key(&true_step) {
-                    reserved_branch_map.insert(true_step, vec![]);
-                }
-                reserved_branch_map
-                    .get_mut(&true_step)
-                    .unwrap()
-                    .push(true_branch);
+                reserved_branch_map.entry(true_step).or_default().push(true_branch);
             }
             "conditionalBranch" => {
                 result.push(0x16);
                 result.append(&mut serialize_expr(operation["data"]["condition"].clone()));
                 let true_branch = result.len();
-                result.append(&mut vec![0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+                result.extend_from_slice(&[0u8; 8]);
                 let false_branch = result.len();
-                result.append(&mut vec![0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+                result.extend_from_slice(&[0u8; 8]);
                 let true_step = operation["data"]["trueBranch"].as_i64().unwrap();
                 let false_step = operation["data"]["falseBranch"].as_i64().unwrap();
-                if !reserved_branch_map.contains_key(&true_step) {
-                    reserved_branch_map.insert(true_step, vec![]);
-                }
-                reserved_branch_map
-                    .get_mut(&true_step)
-                    .unwrap()
-                    .push(true_branch);
-                if !reserved_branch_map.contains_key(&false_step) {
-                    reserved_branch_map.insert(false_step, vec![]);
-                }
-                reserved_branch_map
-                    .get_mut(&false_step)
-                    .unwrap()
-                    .push(false_branch);
+                reserved_branch_map.entry(true_step).or_default().push(true_branch);
+                reserved_branch_map.entry(false_step).or_default().push(false_branch);
             }
             "host_call" => {
                 result.push(0x0d);
@@ -342,13 +317,13 @@ pub fn compile_ast(program: serde_json::Value, start_point: usize) -> Vec<u8> {
             "ifStmt" => {
                 let (mut compiled_code, baps) =
                     serialize_condition_chain(operation.clone(), true, start_point + result.len());
-                let brach_after =
+                let branch_after =
                     i64::to_be_bytes((start_point + result.len() + compiled_code.len()) as i64)
                         .to_vec();
                 for bap in baps.iter() {
                     let s = *bap - start_point - result.len();
                     let e = *bap + 8 - start_point - result.len();
-                    compiled_code[s..e].copy_from_slice(brach_after.as_slice());
+                    compiled_code[s..e].copy_from_slice(branch_after.as_slice());
                 }
                 result.append(&mut compiled_code);
             }
@@ -495,7 +470,7 @@ pub fn compile_ast(program: serde_json::Value, start_point: usize) -> Vec<u8> {
             result[address..address + 8].copy_from_slice(sp_bytes.as_slice());
         }
     }
-    if result.len() == 0 {
+    if result.is_empty() {
         result.push(0x00);
     }
     result
