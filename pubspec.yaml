@@ -12,6 +12,8 @@ dependencies:
   collection: ^1.17.0
   ffi: ^2.1.0
   flutter_js: ^0.8.3
+  wasm_run: ^0.1.0+2
+  wasm_run_flutter: ^0.1.0
   rust_lib_elpian_vm:
     path: rust_builder
 

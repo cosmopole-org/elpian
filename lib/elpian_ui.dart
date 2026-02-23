@@ -5,6 +5,7 @@ export 'src/vm/elpian_vm.dart';
 export 'src/vm/elpian_vm_widget.dart';
 export 'src/vm/runtime_kind.dart';
 export 'src/vm/host_handler.dart';
+export 'src/vm/wasm_vm.dart';
 export 'src/vm/frb_generated/vm_types.dart';
 export 'src/vm/frb_generated/api.dart'
     if (dart.library.js_interop) 'src/vm/frb_generated/api_web.dart'
