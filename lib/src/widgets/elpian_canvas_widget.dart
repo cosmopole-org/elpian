@@ -5,8 +5,8 @@ import '../models/elpian_node.dart';
 
 class ElpianCanvasWidget {
   static Widget build(ElpianNode node, List<Widget> children) {
-    final width = node.props['width'] as double?;
-    final height = node.props['height'] as double?;
+    final width = _toDouble(node.props['width']);
+    final height = _toDouble(node.props['height']);
     final backgroundColor = node.props['backgroundColor'] as Color?;
 
     final commands = _normalizeCommands(node.props['commands']);
@@ -32,5 +32,12 @@ class ElpianCanvasWidget {
     }
 
     return const [];
+  }
+
+  static double? _toDouble(dynamic value) {
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
   }
 }
