@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/elpian_node.dart';
 import '../css/css_properties.dart';
 import '../core/event_dispatcher.dart';
+import '../core/event_system.dart';
 
 class HtmlButton {
   static Widget build(ElpianNode node, List<Widget> children) {
@@ -16,7 +17,17 @@ class HtmlButton {
     Widget result = ElevatedButton(
       onPressed: () {
         final dispatcher = EventDispatcher();
+        // Dispatch both 'click' and 'tap' so that handlers registered
+        // under either name are triggered (e.g. QuickJS events: { tap: fn }).
         dispatcher.dispatchClick(elementId);
+        dispatcher.dispatchEvent(
+          ElpianEvent(
+            type: 'tap',
+            eventType: ElpianEventType.tap,
+            target: elementId,
+          ),
+          elementId,
+        );
       },
       style: ButtonStyle(
         backgroundColor: node.style?.backgroundColor != null
