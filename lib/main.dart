@@ -51,7 +51,7 @@ class _UnifiedShellState extends State<_UnifiedShell> {
           debugPrint('println: $msg');
         },
         hostHandlers: {
-          'getProfile': (apiName, payload) async {
+          'getProfile': (apiName, payload) {
             return jsonEncode({
               'type': 'string',
               'data': {
@@ -438,13 +438,13 @@ function buildCanvasShapes() {
         width: 400, height: 160,
         commands: [
           { type: 'setFillStyle', params: { color: '#8b5cf6' } },
-          { type: 'fillCircle', params: { cx: 70, cy: 80, radius: 50 } },
+          { type: 'fillCircle', params: { x: 70, y: 80, radius: 50 } },
           { type: 'setStrokeStyle', params: { color: '#f97316' } },
           { type: 'setLineWidth', params: { width: 4 } },
-          { type: 'strokeCircle', params: { cx: 200, cy: 80, radius: 50 } },
+          { type: 'strokeCircle', params: { x: 200, y: 80, radius: 50 } },
           { type: 'setFillStyle', params: { color: '#06b6d4' } },
           { type: 'beginPath', params: {} },
-          { type: 'ellipse', params: { cx: 330, cy: 80, rx: 55, ry: 40 } },
+          { type: 'ellipse', params: { x: 330, y: 80, radiusX: 55, radiusY: 40 } },
           { type: 'fill', params: {} }
         ]
       }
@@ -540,8 +540,8 @@ function buildCanvasGradients() {
       props: {
         width: 400, height: 120,
         commands: [
-          { type: 'createLinearGradient', params: { id: 'g1', x1: 40, y1: 60, x2: 360, y2: 60, colors: ['#ef4444', '#8b5cf6', '#3b82f6'] } },
-          { type: 'setFillGradient', params: { id: 'g1' } },
+          { type: 'createLinearGradient', params: { id: 'g1', x0: 40, y0: 60, x1: 360, y1: 60, colors: ['#ef4444', '#8b5cf6', '#3b82f6'] } },
+          { type: 'setFillStyle', params: { gradientId: 'g1' } },
           { type: 'fillRect', params: { x: 40, y: 20, width: 320, height: 80 } }
         ]
       }
@@ -553,9 +553,9 @@ function buildCanvasGradients() {
       props: {
         width: 400, height: 180,
         commands: [
-          { type: 'createRadialGradient', params: { id: 'g2', cx: 200, cy: 90, radius: 70, colors: ['#fbbf24', '#f97316', '#ef4444'] } },
-          { type: 'setFillGradient', params: { id: 'g2' } },
-          { type: 'fillCircle', params: { cx: 200, cy: 90, radius: 70 } }
+          { type: 'createRadialGradient', params: { id: 'g2', x: 200, y: 90, r: 70, colors: ['#fbbf24', '#f97316', '#ef4444'] } },
+          { type: 'setFillStyle', params: { gradientId: 'g2' } },
+          { type: 'fillCircle', params: { x: 200, y: 90, radius: 70 } }
         ]
       }
     }
