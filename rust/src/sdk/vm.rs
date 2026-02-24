@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::sdk::{compiler, data::Val, executor::Executor};
 
@@ -71,19 +71,29 @@ impl VM {
         } else {
             let input_val = match input {
                 Some(json_str) => {
-                    let value: Value = serde_json::from_str(json_str).unwrap();
-                    self.convert_json_value_to_val(value)
+                    let trimmed = json_str.trim();
+                    if trimmed.is_empty() {
+                        Val::new(0, Rc::new(RefCell::new(Box::new(0))))
+                    } else {
+                        match serde_json::from_str::<Value>(trimmed) {
+                            Ok(value) => self.convert_json_value_to_val(value),
+                            Err(_) => {
+                                // Fallback: treat non-JSON payloads as plain strings.
+                                Val::new(7, Rc::new(RefCell::new(Box::new(trimmed.to_string()))))
+                            }
+                        }
+                    }
                 }
                 None => Val::new(0, Rc::new(RefCell::new(Box::new(0)))),
             };
             Val::new(
                 9,
-                Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(
-                    Array::new(vec![
+                Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(Array::new(
+                    vec![
                         Val::new(7, Rc::new(RefCell::new(Box::new(func_name.to_string())))),
                         input_val,
-                    ]),
-                ))))),
+                    ],
+                )))))),
             )
         };
         let r = self
@@ -106,37 +116,127 @@ impl VM {
         self.handle_executor_request(res_next.0, res_next.1, res_next.2)
     }
     fn convert_json_value_to_val(&self, val: Value) -> Val {
-        match val["type"].as_str().unwrap() {
-            "i16" => Val::new(1, Rc::new(RefCell::new(Box::new(val["data"]["value"].as_i64().unwrap() as i16)))),
-            "i32" => Val::new(2, Rc::new(RefCell::new(Box::new(val["data"]["value"].as_i64().unwrap() as i32)))),
-            "i64" => Val::new(3, Rc::new(RefCell::new(Box::new(val["data"]["value"].as_i64().unwrap())))),
-            "f32" => Val::new(4, Rc::new(RefCell::new(Box::new(val["data"]["value"].as_f64().unwrap() as f32)))),
-            "f64" => Val::new(5, Rc::new(RefCell::new(Box::new(val["data"]["value"].as_f64().unwrap())))),
-            "bool" => Val::new(6, Rc::new(RefCell::new(Box::new(val["data"]["value"].as_bool().unwrap())))),
-            "string" => Val::new(7, Rc::new(RefCell::new(Box::new(val["data"]["value"].as_str().unwrap().to_string())))),
-            "object" => {
-                let mut obj_map = HashMap::new();
-                for (k, v) in val["data"]["value"].as_object().unwrap().iter() {
-                    obj_map.insert(k.clone(), self.convert_json_value_to_val(v.clone()));
+        let maybe_typed_value = val
+            .as_object()
+            .and_then(|obj| obj.get("type").and_then(Value::as_str).map(|t| (obj, t)));
+
+        if let Some((obj, typ)) = maybe_typed_value {
+            let data_value = obj
+                .get("data")
+                .and_then(Value::as_object)
+                .and_then(|data| data.get("value"))
+                .cloned()
+                .unwrap_or(Value::Null);
+
+            match typ {
+                "null" => return Val::new(0, Rc::new(RefCell::new(Box::new(0)))),
+                "i16" => {
+                    if let Some(v) = data_value.as_i64() {
+                        return Val::new(1, Rc::new(RefCell::new(Box::new(v as i16))));
+                    }
                 }
-                Val::new(
-                    8,
-                    Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(Object::new(-2, ValGroup::new(obj_map))))))),
-                )
+                "i32" => {
+                    if let Some(v) = data_value.as_i64() {
+                        return Val::new(2, Rc::new(RefCell::new(Box::new(v as i32))));
+                    }
+                }
+                "i64" => {
+                    if let Some(v) = data_value.as_i64() {
+                        return Val::new(3, Rc::new(RefCell::new(Box::new(v))));
+                    }
+                }
+                "f32" => {
+                    if let Some(v) = data_value.as_f64() {
+                        return Val::new(4, Rc::new(RefCell::new(Box::new(v as f32))));
+                    }
+                }
+                "f64" => {
+                    if let Some(v) = data_value.as_f64() {
+                        return Val::new(5, Rc::new(RefCell::new(Box::new(v))));
+                    }
+                }
+                "bool" => {
+                    if let Some(v) = data_value.as_bool() {
+                        return Val::new(6, Rc::new(RefCell::new(Box::new(v))));
+                    }
+                }
+                "string" => {
+                    if let Some(v) = data_value.as_str() {
+                        return Val::new(7, Rc::new(RefCell::new(Box::new(v.to_string()))));
+                    }
+                }
+                "object" => {
+                    if let Some(map) = data_value.as_object() {
+                        let mut obj_map = HashMap::new();
+                        for (k, v) in map.iter() {
+                            obj_map.insert(k.clone(), self.convert_json_value_to_val(v.clone()));
+                        }
+                        return Val::new(
+                            8,
+                            Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(Object::new(
+                                -2,
+                                ValGroup::new(obj_map),
+                            )))))),
+                        );
+                    }
+                }
+                "array" => {
+                    if let Some(items) = data_value.as_array() {
+                        let vals: Vec<Val> = items
+                            .iter()
+                            .map(|item| self.convert_json_value_to_val(item.clone()))
+                            .collect();
+                        return Val::new(
+                            9,
+                            Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(Array::new(
+                                vals,
+                            )))))),
+                        );
+                    }
+                }
+                _ => {}
             }
-            "array" => {
-                let items: Vec<Val> = val["data"]["value"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|item| self.convert_json_value_to_val(item.clone()))
+        }
+
+        match val {
+            Value::Null => Val::new(0, Rc::new(RefCell::new(Box::new(0)))),
+            Value::Bool(v) => Val::new(6, Rc::new(RefCell::new(Box::new(v)))),
+            Value::Number(n) => {
+                if let Some(i) = n.as_i64() {
+                    Val::new(3, Rc::new(RefCell::new(Box::new(i))))
+                } else {
+                    Val::new(
+                        5,
+                        Rc::new(RefCell::new(Box::new(n.as_f64().unwrap_or(0.0)))),
+                    )
+                }
+            }
+            Value::String(s) => Val::new(7, Rc::new(RefCell::new(Box::new(s)))),
+            Value::Array(items) => {
+                let vals: Vec<Val> = items
+                    .into_iter()
+                    .map(|item| self.convert_json_value_to_val(item))
                     .collect();
                 Val::new(
                     9,
-                    Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(Array::new(items)))))),
+                    Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(Array::new(
+                        vals,
+                    )))))),
                 )
             }
-            _ => Val::new(0, Rc::new(RefCell::new(Box::new(0)))),
+            Value::Object(map) => {
+                let mut obj_map = HashMap::new();
+                for (k, v) in map.into_iter() {
+                    obj_map.insert(k, self.convert_json_value_to_val(v));
+                }
+                Val::new(
+                    8,
+                    Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(Object::new(
+                        -2,
+                        ValGroup::new(obj_map),
+                    )))))),
+                )
+            }
         }
     }
     fn handle_executor_request(&mut self, op_code: u8, cb_id: i64, payload: Val) -> Val {

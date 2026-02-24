@@ -3662,15 +3662,14 @@ impl Executor {
                         let is_native = regs[1].as_bool();
                         if !is_native {
                             let func = regs[0].as_func().clone();
-                            let arg_count = regs[2].as_i32() as usize;
-                            if arg_count != func.borrow().params.len() {
-                                panic!("elpian error: func params count is not correct");
-                            }
+                            let expected_params = func.borrow().params.clone();
+                            let provided_args = regs[3].as_array().borrow().data.clone();
                             let mut args = HashMap::new();
-                            let mut i: usize = 0;
-                            for arg in regs[3].as_array().borrow().data.iter() {
-                                args.insert(func.borrow().params[i].clone(), arg.clone());
-                                i += 1;
+                            for (i, param_name) in expected_params.iter().enumerate() {
+                                let arg = provided_args.get(i).cloned().unwrap_or_else(|| {
+                                    Val::new(0, Rc::new(RefCell::new(Box::new(0))))
+                                });
+                                args.insert(param_name.clone(), arg);
                             }
                             self.ctx
                                 .memory

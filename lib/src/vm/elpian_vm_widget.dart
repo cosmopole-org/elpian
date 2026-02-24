@@ -161,6 +161,7 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
   Map<String, dynamic>? _currentViewJson;
   String? _error;
   bool _isLoading = true;
+  int _scopeRenderTokenCounter = 0;
 
   @override
   void initState() {
@@ -187,7 +188,9 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
         if (vm == null) {
           setState(() {
             final detail = ElpianVm.lastApiError;
-            _error = detail == null ? 'Failed to create VM' : 'Failed to create VM: $detail';
+            _error = detail == null
+                ? 'Failed to create VM'
+                : 'Failed to create VM: $detail';
             _isLoading = false;
           });
           return;
@@ -224,10 +227,10 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
 
       // Set up host handlers
       final hostHandler = HostHandler(
-        onRender: (viewJson) {
+        onRender: (viewJson, scopeKey) {
           if (mounted) {
             setState(() {
-              _currentViewJson = viewJson;
+              _applyRenderUpdate(viewJson, scopeKey: scopeKey);
             });
           }
         },
@@ -303,11 +306,26 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
 
     if (handler is! String || handler.isEmpty) return;
 
-    final payload = jsonEncode(_eventToJson(event));
+    // The Elpian runtime expects typed JSON input for function arguments.
+    // Keep this path typed so both native and wasm runtimes decode event args.
+    final payload = jsonEncode(
+      _toTypedVmValue(
+        _eventToJson(event),
+      ),
+    );
     try {
       await runtimeVm.callFunctionWithInput(handler, payload);
     } catch (e) {
-      debugPrint('ElpianVmWidget: Error calling event handler "$handler": $e');
+      // Backward compatibility for handlers declared without params in
+      // older AST programs/runtimes.
+      try {
+        await runtimeVm.callFunction(handler);
+      } catch (fallbackError) {
+        debugPrint(
+          'ElpianVmWidget: Error calling event handler "$handler": $e; '
+          'fallback failed: $fallbackError',
+        );
+      }
     }
   }
 
@@ -361,6 +379,69 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
     return base;
   }
 
+  Map<String, dynamic> _toTypedVmValue(dynamic value) {
+    if (value == null) {
+      return const {
+        'type': 'null',
+        'data': {'value': null},
+      };
+    }
+    if (value is bool) {
+      return {
+        'type': 'bool',
+        'data': {'value': value},
+      };
+    }
+    if (value is int) {
+      return {
+        'type': 'i64',
+        'data': {'value': value},
+      };
+    }
+    if (value is double) {
+      return {
+        'type': 'f64',
+        'data': {'value': value},
+      };
+    }
+    if (value is num) {
+      return {
+        'type': 'f64',
+        'data': {'value': value.toDouble()},
+      };
+    }
+    if (value is String) {
+      return {
+        'type': 'string',
+        'data': {'value': value},
+      };
+    }
+    if (value is List) {
+      return {
+        'type': 'array',
+        'data': {
+          'value': value.map(_toTypedVmValue).toList(),
+        },
+      };
+    }
+    if (value is Map) {
+      final map = <String, dynamic>{};
+      for (final entry in value.entries) {
+        map[entry.key.toString()] = _toTypedVmValue(entry.value);
+      }
+      return {
+        'type': 'object',
+        'data': {'value': map},
+      };
+    }
+
+    // Fallback: preserve value as a string when type is unknown.
+    return {
+      'type': 'string',
+      'data': {'value': value.toString()},
+    };
+  }
+
   Future<void> _callEntryFunction() async {
     final VmRuntimeClient? runtimeVm = _vm ?? _quickJsVm ?? _wasmVm;
     if (runtimeVm == null) return;
@@ -375,6 +456,145 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
       }
     } catch (e) {
       debugPrint('ElpianVmWidget: Error calling ${widget.entryFunction}: $e');
+    }
+  }
+
+  void _applyRenderUpdate(
+    Map<String, dynamic> incomingViewJson, {
+    String? scopeKey,
+  }) {
+    final normalizedScopeKey = _normalizeScopeKey(scopeKey);
+
+    if (normalizedScopeKey == null || _currentViewJson == null) {
+      _currentViewJson = incomingViewJson;
+      return;
+    }
+
+    final replacement = _markScopeRerender(
+      _ensureNodeKey(incomingViewJson, normalizedScopeKey),
+    );
+    final replaced = _replaceNodeByKey(
+      _currentViewJson!,
+      normalizedScopeKey,
+      replacement,
+      scopeAncestorStack: <Map<String, dynamic>>[],
+    );
+
+    if (replaced) {
+      return;
+    }
+
+    debugPrint(
+      'ElpianVmWidget: scope "$normalizedScopeKey" not found. Applying full render.',
+    );
+    _currentViewJson = incomingViewJson;
+  }
+
+  bool _replaceNodeByKey(Map<String, dynamic> node, String targetKey,
+      Map<String, dynamic> replacement,
+      {required List<Map<String, dynamic>> scopeAncestorStack}) {
+    final key = node['key']?.toString();
+    if (key == targetKey) {
+      node
+        ..clear()
+        ..addAll(replacement);
+      _markScopeNodesForRefresh(scopeAncestorStack);
+      return true;
+    }
+
+    final isScopeNode = node['type']?.toString() == 'Scope';
+    if (isScopeNode) {
+      scopeAncestorStack.add(node);
+    }
+
+    final children = node['children'];
+    if (children is! List) {
+      if (isScopeNode) {
+        scopeAncestorStack.removeLast();
+      }
+      return false;
+    }
+
+    for (var i = 0; i < children.length; i++) {
+      final child = children[i];
+      if (child is! Map) continue;
+
+      final childMap = child is Map<String, dynamic>
+          ? child
+          : Map<String, dynamic>.from(child);
+      final replaced = _replaceNodeByKey(
+        childMap,
+        targetKey,
+        replacement,
+        scopeAncestorStack: scopeAncestorStack,
+      );
+      if (!identical(child, childMap)) {
+        children[i] = childMap;
+      }
+      if (replaced) {
+        if (isScopeNode) {
+          scopeAncestorStack.removeLast();
+        }
+        return true;
+      }
+    }
+
+    if (isScopeNode) {
+      scopeAncestorStack.removeLast();
+    }
+
+    return false;
+  }
+
+  String? _normalizeScopeKey(String? scopeKey) {
+    if (scopeKey == null) return null;
+    final normalized = scopeKey.trim();
+    if (normalized.isEmpty || normalized == 'null') return null;
+    return normalized;
+  }
+
+  Map<String, dynamic> _ensureNodeKey(
+    Map<String, dynamic> json,
+    String scopeKey,
+  ) {
+    if ((json['key']?.toString().isNotEmpty ?? false)) {
+      return json;
+    }
+    return <String, dynamic>{
+      ...json,
+      'key': scopeKey,
+    };
+  }
+
+  Map<String, dynamic> _markScopeRerender(Map<String, dynamic> json) {
+    _markScopeTokensInPlace(json);
+    return json;
+  }
+
+  void _markScopeNodesForRefresh(List<Map<String, dynamic>> scopeNodes) {
+    for (final scopeNode in scopeNodes) {
+      final props =
+          Map<String, dynamic>.from(scopeNode['props'] as Map? ?? const {});
+      props['__scopeRenderToken'] = ++_scopeRenderTokenCounter;
+      scopeNode['props'] = props;
+    }
+  }
+
+  void _markScopeTokensInPlace(dynamic node) {
+    if (node is! Map) return;
+
+    final type = node['type']?.toString();
+    if (type == 'Scope') {
+      final props =
+          Map<String, dynamic>.from(node['props'] as Map? ?? const {});
+      props['__scopeRenderToken'] = ++_scopeRenderTokenCounter;
+      node['props'] = props;
+    }
+
+    final children = node['children'];
+    if (children is! List) return;
+    for (final child in children) {
+      _markScopeTokensInPlace(child);
     }
   }
 

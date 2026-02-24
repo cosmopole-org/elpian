@@ -58,7 +58,14 @@ class QuickJsVm implements VmRuntimeClient {
     });
 
     _runtime.evaluate('''
-      globalThis.askHost = function(apiName, payload) {
+      globalThis.askHost = function(apiName) {
+        var args = Array.prototype.slice.call(arguments, 1);
+        var payload = '';
+        if (args.length === 1) {
+          payload = args[0];
+        } else if (args.length > 1) {
+          payload = args;
+        }
         return sendMessage('elpianHost', JSON.stringify({
           apiName: apiName,
           payload: payload
@@ -66,7 +73,6 @@ class QuickJsVm implements VmRuntimeClient {
       };
     ''');
   }
-
 
   Map<String, String> _normalizeHostRequest(dynamic raw) {
     dynamic request = raw;
@@ -85,7 +91,8 @@ class QuickJsVm implements VmRuntimeClient {
     if (request is Map) {
       final apiName = request['apiName']?.toString() ?? '';
       final payloadRaw = request['payload'];
-      final payload = payloadRaw is String ? payloadRaw : jsonEncode(payloadRaw);
+      final payload =
+          payloadRaw is String ? payloadRaw : jsonEncode(payloadRaw);
       return {'apiName': apiName, 'payload': payload};
     }
 
@@ -123,12 +130,12 @@ class QuickJsVm implements VmRuntimeClient {
     return result.stringResult;
   }
 
-  Future<String> callFunctionWithInput(String funcName, String inputJson) async {
+  Future<String> callFunctionWithInput(
+      String funcName, String inputJson) async {
     final escaped = jsonEncode(inputJson);
     final result = _runtime.evaluate('$funcName(JSON.parse($escaped));');
     return result.stringResult;
   }
-
 
   String _dispatchHostCall(String apiName, String payload) {
     final handler = _hostHandlers[apiName];

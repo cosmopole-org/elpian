@@ -22,25 +22,23 @@ class _ElpianScopeWidget extends StatefulWidget {
 }
 
 class _ElpianScopeWidgetState extends State<_ElpianScopeWidget> {
-  late int _version;
+  late int _renderToken;
   late Widget _cachedChild;
 
   @override
   void initState() {
     super.initState();
-    _version = _readVersion(widget.node);
+    _renderToken = _readRenderToken(widget.node);
     _cachedChild = _buildChildren(widget.children);
   }
 
   @override
   void didUpdateWidget(covariant _ElpianScopeWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final nextVersion = _readVersion(widget.node);
-    if (nextVersion > _version) {
-      setState(() {
-        _version = nextVersion;
-        _cachedChild = _buildChildren(widget.children);
-      });
+    final nextToken = _readRenderToken(widget.node);
+    if (nextToken != _renderToken) {
+      _renderToken = nextToken;
+      _cachedChild = _buildChildren(widget.children);
     }
   }
 
@@ -49,8 +47,8 @@ class _ElpianScopeWidgetState extends State<_ElpianScopeWidget> {
     return _cachedChild;
   }
 
-  int _readVersion(ElpianNode node) {
-    final raw = node.props['version'] ?? node.props['rev'] ?? node.props['scopeVersion'];
+  int _readRenderToken(ElpianNode node) {
+    final raw = node.props['__scopeRenderToken'];
     if (raw is num) return raw.toInt();
     if (raw is String) return int.tryParse(raw) ?? 0;
     return 0;

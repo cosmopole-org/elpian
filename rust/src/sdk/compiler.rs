@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 // #[wasm_bindgen]
 // extern "C" {
@@ -261,14 +261,19 @@ pub fn compile_ast(program: serde_json::Value, start_point: usize) -> Vec<u8> {
     let mut step_start_map: HashMap<i64, usize> = HashMap::new();
     let mut reserved_branch_map: HashMap<i64, Vec<usize>> = HashMap::new();
     for operation in program["body"].as_array().unwrap().iter() {
-        step_start_map.entry(op_counter).or_insert(start_point + result.len());
+        step_start_map
+            .entry(op_counter)
+            .or_insert(start_point + result.len());
         match operation["type"].as_str().unwrap() {
             "jumpOperation" => {
                 result.push(0x15);
                 let true_branch = result.len();
                 result.extend_from_slice(&[0u8; 8]);
                 let true_step = operation["data"]["stepNumber"].as_i64().unwrap();
-                reserved_branch_map.entry(true_step).or_default().push(true_branch);
+                reserved_branch_map
+                    .entry(true_step)
+                    .or_default()
+                    .push(true_branch);
             }
             "conditionalBranch" => {
                 result.push(0x16);
@@ -279,8 +284,14 @@ pub fn compile_ast(program: serde_json::Value, start_point: usize) -> Vec<u8> {
                 result.extend_from_slice(&[0u8; 8]);
                 let true_step = operation["data"]["trueBranch"].as_i64().unwrap();
                 let false_step = operation["data"]["falseBranch"].as_i64().unwrap();
-                reserved_branch_map.entry(true_step).or_default().push(true_branch);
-                reserved_branch_map.entry(false_step).or_default().push(false_branch);
+                reserved_branch_map
+                    .entry(true_step)
+                    .or_default()
+                    .push(true_branch);
+                reserved_branch_map
+                    .entry(false_step)
+                    .or_default()
+                    .push(false_branch);
             }
             "host_call" => {
                 result.push(0x0d);
@@ -444,12 +455,12 @@ pub fn compile_ast(program: serde_json::Value, start_point: usize) -> Vec<u8> {
                     result.append(&mut serialize_expr(operation["data"]["rightSide"].clone()));
                 } else if operation["data"]["leftSide"]["type"].as_str().unwrap() == "indexer" {
                     result.push(0x0c);
-                    let mut str_bytes =
-                        operation["data"]["leftSide"]["data"]["target"]["data"]["name"]
-                            .as_str()
-                            .unwrap()
-                            .as_bytes()
-                            .to_vec();
+                    let mut str_bytes = operation["data"]["leftSide"]["data"]["target"]["data"]
+                        ["name"]
+                        .as_str()
+                        .unwrap()
+                        .as_bytes()
+                        .to_vec();
                     let mut len_bytes = i32::to_be_bytes(str_bytes.len() as i32).to_vec();
                     result.append(&mut len_bytes);
                     result.append(&mut str_bytes);
@@ -1268,7 +1279,13 @@ pub fn compile_code(p: String) -> Vec<u8> {
                 counter += 1;
                 stack.last_mut().unwrap().2 = counter;
                 found = true;
-                stack.push((curr_token, path.clone(), 0, stack.len(), stack.last().unwrap().4));
+                stack.push((
+                    curr_token,
+                    path.clone(),
+                    0,
+                    stack.len(),
+                    stack.last().unwrap().4,
+                ));
                 break;
             } else if !keyword_map.contains_key(&curr_token) {
                 if curr_token.starts_with("\"")
@@ -1279,14 +1296,26 @@ pub fn compile_code(p: String) -> Vec<u8> {
                     counter += 1;
                     stack.last_mut().unwrap().2 = counter;
                     found = true;
-                    stack.push((curr_token, path.clone(), 0, stack.len(), stack.last().unwrap().4 + 1));
+                    stack.push((
+                        curr_token,
+                        path.clone(),
+                        0,
+                        stack.len(),
+                        stack.last().unwrap().4 + 1,
+                    ));
                     break;
                 } else if path.prefix == "id" {
                     println!("matched identifier {}", curr_token);
                     counter += 1;
                     stack.last_mut().unwrap().2 = counter;
                     found = true;
-                    stack.push((curr_token, path.clone(), 0, stack.len(), stack.last().unwrap().4 + 1));
+                    stack.push((
+                        curr_token,
+                        path.clone(),
+                        0,
+                        stack.len(),
+                        stack.last().unwrap().4 + 1,
+                    ));
                     break;
                 }
             } else if path.prefix == curr_token {
@@ -1294,7 +1323,13 @@ pub fn compile_code(p: String) -> Vec<u8> {
                 counter += 1;
                 stack.last_mut().unwrap().2 = counter;
                 found = true;
-                stack.push((curr_token, path.clone(), 0, stack.len(), stack.last().unwrap().4 + 1));
+                stack.push((
+                    curr_token,
+                    path.clone(),
+                    0,
+                    stack.len(),
+                    stack.last().unwrap().4 + 1,
+                ));
                 break;
             }
             counter += 1;

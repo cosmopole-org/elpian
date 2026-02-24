@@ -1,4 +1,3 @@
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/elpian_node.dart';
@@ -10,14 +9,14 @@ class EventEnabledWidget extends StatefulWidget {
   final Widget child;
   final ElpianNode node;
   final String? parentId;
-  
+
   const EventEnabledWidget({
     Key? key,
     required this.child,
     required this.node,
     this.parentId,
   }) : super(key: key);
-  
+
   @override
   State<EventEnabledWidget> createState() => _EventEnabledWidgetState();
 }
@@ -30,15 +29,16 @@ class _EventEnabledWidgetState extends State<EventEnabledWidget> {
   String _resolveElementId(ElpianNode node) {
     return node.key ?? 'element_${node.hashCode}';
   }
-  
+
   @override
   void initState() {
     super.initState();
     _elementId = _resolveElementId(widget.node);
-    
+
     // Register node in dispatcher
-    _dispatcher.registerNode(_elementId, widget.node, parentId: widget.parentId);
-    
+    _dispatcher.registerNode(_elementId, widget.node,
+        parentId: widget.parentId);
+
     // Setup focus listener
     _focusNode.addListener(_onFocusChange);
   }
@@ -60,7 +60,7 @@ class _EventEnabledWidgetState extends State<EventEnabledWidget> {
       _elementId = newId;
     }
   }
-  
+
   @override
   void dispose() {
     _focusNode.removeListener(_onFocusChange);
@@ -68,7 +68,7 @@ class _EventEnabledWidgetState extends State<EventEnabledWidget> {
     _dispatcher.unregisterNode(_elementId);
     super.dispose();
   }
-  
+
   void _onFocusChange() {
     if (_focusNode.hasFocus) {
       _dispatcher.dispatchFocus(_elementId);
@@ -76,26 +76,37 @@ class _EventEnabledWidgetState extends State<EventEnabledWidget> {
       _dispatcher.dispatchBlur(_elementId);
     }
   }
-  
+
   @override
   Widget build(BuildContext context) {
     Widget result = widget.child;
-    
+
     // Check if node has any events defined
     if (widget.node.events == null || widget.node.events!.isEmpty) {
       return result;
     }
-    
+
     final events = widget.node.events!;
-    
+
     // Wrap with GestureDetector for tap/click events
     if (_hasAnyEvent(events, [
-      'click', 'tap', 'doubletap', 'longpress',
-      'tapdown', 'tapup', 'tapcancel',
-      'drag', 'dragstart', 'dragend',
-      'swipeleft', 'swiperight', 'swipeup', 'swipedown',
+      'click',
+      'tap',
+      'doubletap',
+      'longpress',
+      'tapdown',
+      'tapup',
+      'tapcancel',
+      'drag',
+      'dragstart',
+      'dragend',
+      'swipeleft',
+      'swiperight',
+      'swipeup',
+      'swipedown',
     ])) {
       result = GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: events.containsKey('click') || events.containsKey('tap')
             ? () {
                 if (events.containsKey('tap')) {
@@ -115,79 +126,79 @@ class _EventEnabledWidgetState extends State<EventEnabledWidget> {
             : null,
         onDoubleTap: events.containsKey('doubletap')
             ? () => _dispatcher.dispatchEvent(
-                ElpianEvent(
-                  type: 'doubletap',
-                  eventType: ElpianEventType.doubleClick,
-                  target: _elementId,
-                ),
-                _elementId,
-              )
+                  ElpianEvent(
+                    type: 'doubletap',
+                    eventType: ElpianEventType.doubleClick,
+                    target: _elementId,
+                  ),
+                  _elementId,
+                )
             : null,
         onLongPress: events.containsKey('longpress')
             ? () => _dispatcher.dispatchEvent(
-                ElpianEvent(
-                  type: 'longpress',
-                  eventType: ElpianEventType.longPress,
-                  target: _elementId,
-                ),
-                _elementId,
-              )
+                  ElpianEvent(
+                    type: 'longpress',
+                    eventType: ElpianEventType.longPress,
+                    target: _elementId,
+                  ),
+                  _elementId,
+                )
             : null,
         onTapDown: events.containsKey('tapdown')
             ? (details) => _dispatcher.dispatchEvent(
-                ElpianPointerEvent(
-                  type: 'tapdown',
-                  eventType: ElpianEventType.tapDown,
-                  target: _elementId,
-                  position: details.globalPosition,
-                  localPosition: details.localPosition,
-                ),
-                _elementId,
-              )
+                  ElpianPointerEvent(
+                    type: 'tapdown',
+                    eventType: ElpianEventType.tapDown,
+                    target: _elementId,
+                    position: details.globalPosition,
+                    localPosition: details.localPosition,
+                  ),
+                  _elementId,
+                )
             : null,
         onTapUp: events.containsKey('tapup')
             ? (details) => _dispatcher.dispatchEvent(
-                ElpianPointerEvent(
-                  type: 'tapup',
-                  eventType: ElpianEventType.tapUp,
-                  target: _elementId,
-                  position: details.globalPosition,
-                  localPosition: details.localPosition,
-                ),
-                _elementId,
-              )
+                  ElpianPointerEvent(
+                    type: 'tapup',
+                    eventType: ElpianEventType.tapUp,
+                    target: _elementId,
+                    position: details.globalPosition,
+                    localPosition: details.localPosition,
+                  ),
+                  _elementId,
+                )
             : null,
         onTapCancel: events.containsKey('tapcancel')
             ? () => _dispatcher.dispatchEvent(
-                ElpianEvent(
-                  type: 'tapcancel',
-                  eventType: ElpianEventType.tapCancel,
-                  target: _elementId,
-                ),
-                _elementId,
-              )
+                  ElpianEvent(
+                    type: 'tapcancel',
+                    eventType: ElpianEventType.tapCancel,
+                    target: _elementId,
+                  ),
+                  _elementId,
+                )
             : null,
         onPanStart: events.containsKey('dragstart')
             ? (details) => _dispatcher.dispatchDragStart(
-                _elementId,
-                details.globalPosition,
-                localPosition: details.localPosition,
-              )
+                  _elementId,
+                  details.globalPosition,
+                  localPosition: details.localPosition,
+                )
             : null,
         onPanUpdate: events.containsKey('drag')
             ? (details) => _dispatcher.dispatchDrag(
-                _elementId,
-                details.globalPosition,
-                details.delta,
-                localPosition: details.localPosition,
-              )
+                  _elementId,
+                  details.globalPosition,
+                  details.delta,
+                  localPosition: details.localPosition,
+                )
             : null,
         onPanEnd: events.containsKey('dragend')
             ? (details) => _dispatcher.dispatchDragEnd(
-                _elementId,
-                Offset.zero,
-                localPosition: Offset.zero,
-              )
+                  _elementId,
+                  Offset.zero,
+                  localPosition: Offset.zero,
+                )
             : null,
         onHorizontalDragEnd: _hasAnyEvent(events, ['swipeleft', 'swiperight'])
             ? (details) {
@@ -242,13 +253,18 @@ class _EventEnabledWidgetState extends State<EventEnabledWidget> {
         child: result,
       );
     }
-    
+
     // Wrap with Listener for pointer events
     if (_hasAnyEvent(events, [
-      'pointerdown', 'pointerup', 'pointermove',
-      'pointerenter', 'pointerexit', 'pointerhover',
+      'pointerdown',
+      'pointerup',
+      'pointermove',
+      'pointerenter',
+      'pointerexit',
+      'pointerhover',
     ])) {
       result = Listener(
+        behavior: HitTestBehavior.translucent,
         onPointerDown: events.containsKey('pointerdown')
             ? (details) => _dispatcher.dispatchPointerDown(_elementId, details)
             : null,
@@ -261,50 +277,50 @@ class _EventEnabledWidgetState extends State<EventEnabledWidget> {
         child: result,
       );
     }
-    
+
     // Wrap with MouseRegion for hover events
     if (_hasAnyEvent(events, ['pointerenter', 'pointerexit', 'pointerhover'])) {
       result = MouseRegion(
         onEnter: events.containsKey('pointerenter')
             ? (event) => _dispatcher.dispatchEvent(
-                ElpianPointerEvent(
-                  type: 'pointerenter',
-                  eventType: ElpianEventType.pointerEnter,
-                  target: _elementId,
-                  position: event.position,
-                  localPosition: event.localPosition,
-                ),
-                _elementId,
-              )
+                  ElpianPointerEvent(
+                    type: 'pointerenter',
+                    eventType: ElpianEventType.pointerEnter,
+                    target: _elementId,
+                    position: event.position,
+                    localPosition: event.localPosition,
+                  ),
+                  _elementId,
+                )
             : null,
         onExit: events.containsKey('pointerexit')
             ? (event) => _dispatcher.dispatchEvent(
-                ElpianPointerEvent(
-                  type: 'pointerexit',
-                  eventType: ElpianEventType.pointerExit,
-                  target: _elementId,
-                  position: event.position,
-                  localPosition: event.localPosition,
-                ),
-                _elementId,
-              )
+                  ElpianPointerEvent(
+                    type: 'pointerexit',
+                    eventType: ElpianEventType.pointerExit,
+                    target: _elementId,
+                    position: event.position,
+                    localPosition: event.localPosition,
+                  ),
+                  _elementId,
+                )
             : null,
         onHover: events.containsKey('pointerhover')
             ? (event) => _dispatcher.dispatchEvent(
-                ElpianPointerEvent(
-                  type: 'pointerhover',
-                  eventType: ElpianEventType.pointerHover,
-                  target: _elementId,
-                  position: event.position,
-                  localPosition: event.localPosition,
-                ),
-                _elementId,
-              )
+                  ElpianPointerEvent(
+                    type: 'pointerhover',
+                    eventType: ElpianEventType.pointerHover,
+                    target: _elementId,
+                    position: event.position,
+                    localPosition: event.localPosition,
+                  ),
+                  _elementId,
+                )
             : null,
         child: result,
       );
     }
-    
+
     // Wrap with Focus for keyboard events
     if (_hasAnyEvent(events, ['focus', 'blur', 'keydown', 'keyup'])) {
       result = Focus(
@@ -333,10 +349,10 @@ class _EventEnabledWidgetState extends State<EventEnabledWidget> {
         child: result,
       );
     }
-    
+
     return result;
   }
-  
+
   bool _hasAnyEvent(Map<String, dynamic> events, List<String> eventNames) {
     return eventNames.any((name) => events.containsKey(name));
   }

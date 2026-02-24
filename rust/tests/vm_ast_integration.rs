@@ -10,7 +10,8 @@ fn collect_host_calls(mut vm: VM) -> (Vec<Value>, Val) {
             .sending_host_call_data
             .clone()
             .expect("host call payload should exist when vm is paused");
-        let payload: Value = serde_json::from_str(&raw).expect("host call payload should be valid JSON");
+        let payload: Value =
+            serde_json::from_str(&raw).expect("host call payload should be valid JSON");
         host_calls.push(payload);
         result = vm.continue_run("{\"type\":\"bool\",\"data\":{\"value\":true}}".to_string());
     }
@@ -517,7 +518,10 @@ fn vm_message_example_updates_text_from_function_input() {
     let mut vm = VM::compile_and_create_of_ast("vm-message".to_string(), program, 0, vec![]);
     let boot = vm.run();
     assert_eq!(boot.typ, 253);
-    assert_eq!(host_call_from_paused_vm(&vm)["payload"], "[\"Waiting for Flutter input...\"]");
+    assert_eq!(
+        host_call_from_paused_vm(&vm)["payload"],
+        "[\"Waiting for Flutter input...\"]"
+    );
     let _ = continue_past_host_call(&mut vm);
 
     let updated = vm.run_func_with_input(
@@ -526,7 +530,10 @@ fn vm_message_example_updates_text_from_function_input() {
         0,
     );
     assert_eq!(updated.typ, 253);
-    assert_eq!(host_call_from_paused_vm(&vm)["payload"], "[\"Hello from Flutter\"]");
+    assert_eq!(
+        host_call_from_paused_vm(&vm)["payload"],
+        "[\"Hello from Flutter\"]"
+    );
 }
 
 #[test]
@@ -561,12 +568,116 @@ fn host_call_ast_round_trips_through_continue_run() {
     let first = vm.run();
 
     assert_eq!(first.typ, 253);
-    let call_data = vm.sending_host_call_data.clone().expect("host call payload should exist");
+    let call_data = vm
+        .sending_host_call_data
+        .clone()
+        .expect("host call payload should exist");
     let call_json: Value = serde_json::from_str(&call_data).expect("valid host call json");
     assert_eq!(call_json["machineId"], "host-vm");
     assert_eq!(call_json["apiName"], "render");
-    assert!(call_json["payload"].as_str().unwrap_or_default().contains("\"Text\""));
+    assert!(call_json["payload"]
+        .as_str()
+        .unwrap_or_default()
+        .contains("\"Text\""));
 
     let final_result = vm.continue_run("{\"type\":\"bool\",\"data\":{\"value\":true}}".to_string());
     assert_eq!(final_result.stringify(), "\"[undefined]\"");
+}
+
+#[test]
+fn function_call_with_extra_input_args_does_not_panic_for_zero_param_functions() {
+    let program = json!({
+      "type": "program",
+      "body": [
+        {
+          "type": "functionDefinition",
+          "data": {
+            "name": "rerender",
+            "params": [],
+            "body": [
+              {
+                "type": "host_call",
+                "data": {
+                  "name": "render",
+                  "args": [
+                    {
+                      "type": "object",
+                      "data": { "value": {
+                        "type": { "type": "string", "data": { "value": "Text" } },
+                        "props": {
+                          "type": "object",
+                          "data": { "value": {
+                            "text": { "type": "string", "data": { "value": "rerendered" } }
+                          }}
+                        }
+                      }}
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    });
+
+    let mut vm = VM::compile_and_create_of_ast("vm-extra-args".to_string(), program, 0, vec![]);
+    let boot = vm.run();
+    assert_eq!(boot.stringify(), "\"[undefined]\"");
+
+    // Simulates current UI event routing that always forwards an input payload.
+    let with_input =
+        vm.run_func_with_input("rerender", Some(r#"{"type":"tap","target":"card-1"}"#), 0);
+    assert_eq!(with_input.typ, 253);
+    assert_eq!(host_call_from_paused_vm(&vm)["apiName"], "render");
+    assert!(host_call_from_paused_vm(&vm)["payload"]
+        .as_str()
+        .unwrap_or_default()
+        .contains("rerendered"));
+}
+
+#[test]
+fn function_call_with_plain_json_input_maps_to_vm_object() {
+    let program = json!({
+      "type": "program",
+      "body": [
+        {
+          "type": "functionDefinition",
+          "data": {
+            "name": "handleEvent",
+            "params": ["event"],
+            "body": [
+              {
+                "type": "host_call",
+                "data": {
+                  "name": "println",
+                  "args": [
+                    {
+                      "type": "indexer",
+                      "data": {
+                        "target": { "type": "identifier", "data": { "name": "event" } },
+                        "index": { "type": "string", "data": { "value": "type" } }
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    });
+
+    let mut vm = VM::compile_and_create_of_ast("vm-plain-json".to_string(), program, 0, vec![]);
+    let boot = vm.run();
+    assert_eq!(boot.stringify(), "\"[undefined]\"");
+
+    let result = vm.run_func_with_input(
+        "handleEvent",
+        Some(r#"{"type":"tap","currentTarget":"button_1"}"#),
+        0,
+    );
+    assert_eq!(result.typ, 253);
+    assert_eq!(host_call_from_paused_vm(&vm)["apiName"], "println");
+    assert_eq!(host_call_from_paused_vm(&vm)["payload"], "[\"tap\"]");
 }

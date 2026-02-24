@@ -2,8 +2,8 @@
 /// Uses wasm-bindgen to expose the VM API to JavaScript/Dart on web.
 #[cfg(target_arch = "wasm32")]
 mod wasm {
-    use wasm_bindgen::prelude::*;
     use serde_json::json;
+    use wasm_bindgen::prelude::*;
 
     use crate::api::{
         continue_execution, create_vm_from_ast, create_vm_from_code, destroy_vm, execute_vm,
@@ -57,7 +57,9 @@ mod wasm {
         input_json: String,
         cb_id: i64,
     ) -> String {
-        result_to_json(execute_vm_func_with_input(machine_id, func_name, input_json, cb_id))
+        result_to_json(execute_vm_func_with_input(
+            machine_id, func_name, input_json, cb_id,
+        ))
     }
 
     #[wasm_bindgen]

@@ -5,7 +5,6 @@
 /// The VmExecResult is serialized as JSON across the boundary.
 ///
 /// Memory: Strings returned from Rust must be freed by calling `elpian_free_string`.
-
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 
@@ -67,7 +66,11 @@ pub extern "C" fn elpian_create_vm_from_ast(
 ) -> i32 {
     let mid = unsafe { c_str_to_string(machine_id) };
     let ast = unsafe { c_str_to_string(ast_json) };
-    if create_vm_from_ast(mid, ast) { 1 } else { 0 }
+    if create_vm_from_ast(mid, ast) {
+        1
+    } else {
+        0
+    }
 }
 
 /// Create a VM from source code. Returns 1 on success, 0 on failure.
@@ -78,14 +81,22 @@ pub extern "C" fn elpian_create_vm_from_code(
 ) -> i32 {
     let mid = unsafe { c_str_to_string(machine_id) };
     let c = unsafe { c_str_to_string(code) };
-    if create_vm_from_code(mid, c) { 1 } else { 0 }
+    if create_vm_from_code(mid, c) {
+        1
+    } else {
+        0
+    }
 }
 
 /// Validate AST JSON. Returns 1 if valid, 0 if not.
 #[unsafe(no_mangle)]
 pub extern "C" fn elpian_validate_ast(ast_json: *const c_char) -> i32 {
     let ast = unsafe { c_str_to_string(ast_json) };
-    if validate_ast(ast) { 1 } else { 0 }
+    if validate_ast(ast) {
+        1
+    } else {
+        0
+    }
 }
 
 /// Execute a VM's main program. Returns JSON string (must be freed).
@@ -136,12 +147,20 @@ pub extern "C" fn elpian_continue_execution(
 #[unsafe(no_mangle)]
 pub extern "C" fn elpian_destroy_vm(machine_id: *const c_char) -> i32 {
     let mid = unsafe { c_str_to_string(machine_id) };
-    if destroy_vm(mid) { 1 } else { 0 }
+    if destroy_vm(mid) {
+        1
+    } else {
+        0
+    }
 }
 
 /// Check if a VM exists. Returns 1 if exists, 0 if not.
 #[unsafe(no_mangle)]
 pub extern "C" fn elpian_vm_exists(machine_id: *const c_char) -> i32 {
     let mid = unsafe { c_str_to_string(machine_id) };
-    if vm_exists(mid) { 1 } else { 0 }
+    if vm_exists(mid) {
+        1
+    } else {
+        0
+    }
 }

@@ -40,13 +40,10 @@ let bevyInteractive = true;
 let bevyFps = 60;
 let gameInteractive = true;
 let gameFps = 60;
-let bevyScopeVersion = 1;
-let gameScopeVersion = 1;
 
 // Real-world demo state
 let rwSearch = '';
 let rwFilter = 'all';
-let rwOpsVersion = 1;
 let rwTickets = [
   { id: 'T-101', title: 'Login latency spikes', owner: 'SRE', status: 'open', priority: 'high' },
   { id: 'T-102', title: 'Billing email mismatch', owner: 'Support', status: 'open', priority: 'med' },
@@ -60,14 +57,12 @@ let rwCart = [
 ];
 let rwPromoCode = '';
 let rwDiscount = 0;
-let rwCheckoutVersion = 1;
 
 let rwChatDraft = '';
 let rwChatMessages = [
   { id: 1, from: 'Ava', text: 'Customer reported an outage in EU-West.' },
   { id: 2, from: 'You', text: 'Looking into it now. Can you pull logs?' }
 ];
-let rwChatVersion = 1;
 
 let rwPipeline = {
   todo: [
@@ -81,7 +76,6 @@ let rwPipeline = {
     { id: 'P-4', title: 'SLA dashboard', owner: 'Data' }
   ]
 };
-let rwPipelineVersion = 1;
 
 function safeJsonParse(name, raw) {
   try {
@@ -1901,13 +1895,117 @@ function divider() {
   return { type: 'Container', props: { style: { height: '1', backgroundColor: '#e2e8f0', margin: '8 0' } } };
 }
 
-function scope(child, key, version) {
+function scope(child, key) {
   return {
     type: 'Scope',
     key: key,
-    props: { version: version },
     children: [child]
   };
+}
+
+const SHELL_TABS_SCOPE_KEY = 'scope-shell-tabs';
+const SHELL_BODY_SCOPE_KEY = 'scope-shell-body';
+const SHELL_CONTENT_SCOPE_KEY = 'scope-shell-content';
+const VM_PANEL_SCOPE_KEY = 'scope-vm-panel';
+const TAB_SCOPE_KEYS = [
+  'scope-tab-ui',
+  'scope-tab-canvas',
+  'scope-tab-vm',
+  'scope-tab-dom-canvas',
+  'scope-tab-landing',
+  'scope-tab-bevy',
+  'scope-tab-game',
+  'scope-tab-real-world'
+];
+
+function tabBuilders() {
+  return [
+    buildUiWidgetsTab,
+    buildCanvasTab,
+    buildVmDemosTab,
+    buildDomCanvasTab,
+    buildLandingPageTab,
+    buildBevyTab,
+    buildGameTab,
+    buildRealWorldTab
+  ];
+}
+
+function vmSubTabVisible(index) {
+  return activeTab === 2 && activeSubTab === index;
+}
+
+function realWorldSubTabVisible(index) {
+  return activeTab === 7 && activeSubTab === index;
+}
+
+function buildVmPanel() {
+  const content = [buildCounterDemo, buildClockDemo, buildAnalogClockDemo, buildWhiteboardDemo, buildThemeDemo, buildHostDataDemo];
+  const idx = Math.min(activeSubTab, content.length - 1);
+  return content[idx]();
+}
+
+function buildActiveTabScope() {
+  const builders = tabBuilders();
+  const idx = Math.min(activeTab, builders.length - 1);
+  return scope(builders[idx](), TAB_SCOPE_KEYS[idx]);
+}
+
+function buildShellBody() {
+  return {
+    type: 'Expanded',
+    children: [
+      {
+        type: 'ListView',
+        props: { scrollable: !wbIsDrawing, style: { backgroundColor: '#f8fafc' } },
+        children: [
+          scope(buildActiveTabScope(), SHELL_CONTENT_SCOPE_KEY)
+        ]
+      }
+    ]
+  };
+}
+
+function renderScoped(scopeKey, node) {
+  askHost('render', JSON.stringify(node), scopeKey);
+}
+
+function rerenderShellTabs() {
+  renderScoped(
+    SHELL_TABS_SCOPE_KEY,
+    scope(buildTabBar(), SHELL_TABS_SCOPE_KEY)
+  );
+}
+
+function rerenderShellContent() {
+  renderScoped(
+    SHELL_CONTENT_SCOPE_KEY,
+    scope(buildActiveTabScope(), SHELL_CONTENT_SCOPE_KEY)
+  );
+}
+
+function rerenderShellBody() {
+  renderScoped(
+    SHELL_BODY_SCOPE_KEY,
+    scope(buildShellBody(), SHELL_BODY_SCOPE_KEY)
+  );
+}
+
+function rerenderActiveTab() {
+  const builders = tabBuilders();
+  const idx = Math.min(activeTab, builders.length - 1);
+  renderScoped(
+    TAB_SCOPE_KEYS[idx],
+    scope(builders[idx](), TAB_SCOPE_KEYS[idx])
+  );
+}
+
+function rerenderVmPanel() {
+  if (activeTab !== 2) return;
+  renderScoped(
+    VM_PANEL_SCOPE_KEY,
+    scope(buildVmPanel(), VM_PANEL_SCOPE_KEY)
+  );
 }
 
 function money(v) {
@@ -1975,7 +2073,7 @@ function wbScheduleRender() {
   const now = Date.now();
   if (now - wbLastRenderAt >= 16) {
     wbLastRenderAt = now;
-    renderApp();
+    if (vmSubTabVisible(3)) rerenderVmPanel();
     return;
   }
   if (wbRenderPending) return;
@@ -1992,7 +2090,7 @@ function wbScheduleRender() {
 function wbRenderTick() {
   wbRenderPending = false;
   wbLastRenderAt = Date.now();
-  renderApp();
+  if (vmSubTabVisible(3)) rerenderVmPanel();
 }
 
 function startClockTimer() {
@@ -2407,11 +2505,9 @@ function buildCanvasGradients() {
 // ─────────────────────────────────────────────────────────
 function buildVmDemosTab() {
   const subTabs = ['Counter', 'Clock', 'Analog Clock', 'Whiteboard', 'Theme Toggle', 'Host Data'];
-  const content = [buildCounterDemo, buildClockDemo, buildAnalogClockDemo, buildWhiteboardDemo, buildThemeDemo, buildHostDataDemo];
-  const idx = Math.min(activeSubTab, content.length - 1);
   return col([
     buildSubTabs(subTabs),
-    content[idx]()
+    scope(buildVmPanel(), VM_PANEL_SCOPE_KEY)
   ], { padding: '16' });
 }
 
@@ -2735,7 +2831,7 @@ function buildLandingPageTab() {
     ]),
     spacer(12),
     landingOk
-      ? scope(LANDING_PAGE_JSON, 'scope-landing', 'v1')
+      ? scope(LANDING_PAGE_JSON, 'scope-landing')
       : card([text('Landing page JSON failed: ' + (landingErr || 'unknown error'), { fontSize: '14', color: '#ef4444' })])
   ], { padding: '16' });
 }
@@ -2763,7 +2859,7 @@ function buildBevyTab() {
         interactive: bevyInteractive,
         scene: BEVY_SCENE_JSON
       }
-    }, 'scope-bevy', bevyScopeVersion)
+    }, 'scope-bevy')
   ], { padding: '16' });
 }
 
@@ -2792,7 +2888,7 @@ function buildGameTab() {
         sceneKey: 'game-scene-v1',
         scene: GAME_SCENE_JSON
       }
-    }, 'scope-game', gameScopeVersion)
+    }, 'scope-game')
   ], { padding: '16' });
 }
 
@@ -2858,7 +2954,7 @@ function buildOpsConsole() {
     ], { gap: '8', flexWrap: 'wrap' }),
     spacer(10),
     ...list
-  ]), 'scope-ops', rwOpsVersion);
+  ]), 'scope-ops');
 }
 
 function buildCheckoutDemo() {
@@ -2899,7 +2995,7 @@ function buildCheckoutDemo() {
       row([text('Discount', { fontSize: '13', color: '#64748b' }), text(money(rwDiscount), { fontSize: '13', color: '#1e293b' })], { justifyContent: 'space-between' }),
       row([text('Total', { fontSize: '15', fontWeight: 'bold', color: '#1e293b' }), text(money(rwCartTotal()), { fontSize: '15', fontWeight: 'bold', color: '#1e293b' })], { justifyContent: 'space-between' })
     ])
-  ]), 'scope-checkout', rwCheckoutVersion);
+  ]), 'scope-checkout');
 }
 
 function buildSupportChat() {
@@ -2929,7 +3025,7 @@ function buildSupportChat() {
     { type: 'TextField', key: 'chat_input', props: { hint: 'Write a message...' }, events: { input: 'rwChatInput' } },
     spacer(8),
     btn('Send Update', 'rwChatSend', { backgroundColor: '#6366f1' })
-  ]), 'scope-chat', rwChatVersion);
+  ]), 'scope-chat');
 }
 
 function buildPipelineDemo() {
@@ -2968,39 +3064,18 @@ function buildPipelineDemo() {
       column('In Progress', rwPipeline.doing, 'doing'),
       column('Done', rwPipeline.done, 'done')
     ], { gap: '8', flexWrap: 'wrap' })
-  ]), 'scope-pipeline', rwPipelineVersion);
+  ]), 'scope-pipeline');
 }
 
 // ─────────────────────────────────────────────────────────
 // Root renderer
 // ─────────────────────────────────────────────────────────
 function renderApp() {
-  const tabContent = [
-    buildUiWidgetsTab,
-    buildCanvasTab,
-    buildVmDemosTab,
-    buildDomCanvasTab,
-    buildLandingPageTab,
-    buildBevyTab,
-    buildGameTab,
-    buildRealWorldTab
-  ];
-  const idx = Math.min(activeTab, tabContent.length - 1);
-
   askHost('render', JSON.stringify({
     type: 'Column',
     children: [
-      buildTabBar(),
-      {
-        type: 'Expanded',
-        children: [
-          {
-            type: 'ListView',
-            props: { scrollable: !wbIsDrawing, style: { backgroundColor: '#f8fafc' } },
-            children: [tabContent[idx]()]
-          }
-        ]
-      }
+      scope(buildTabBar(), SHELL_TABS_SCOPE_KEY),
+      scope(buildShellBody(), SHELL_BODY_SCOPE_KEY)
     ]
   }));
 }
@@ -3010,58 +3085,72 @@ function renderApp() {
 // ─────────────────────────────────────────────────────────
 
 // Tab switching
-function switchTab_0() { activeTab = 0; activeSubTab = 0; renderApp(); }
-function switchTab_1() { activeTab = 1; activeSubTab = 0; renderApp(); }
-function switchTab_2() { activeTab = 2; activeSubTab = 0; renderApp(); }
-function switchTab_3() { activeTab = 3; activeSubTab = 0; renderApp(); }
-function switchTab_4() { activeTab = 4; activeSubTab = 0; renderApp(); }
-function switchTab_5() { activeTab = 5; activeSubTab = 0; renderApp(); }
-function switchTab_6() { activeTab = 6; activeSubTab = 0; renderApp(); }
-function switchTab_7() { activeTab = 7; activeSubTab = 0; renderApp(); }
+function switchTab(index) {
+  activeTab = index;
+  activeSubTab = 0;
+  rerenderShellTabs();
+  rerenderShellContent();
+}
+
+function switchTab_0() { switchTab(0); }
+function switchTab_1() { switchTab(1); }
+function switchTab_2() { switchTab(2); }
+function switchTab_3() { switchTab(3); }
+function switchTab_4() { switchTab(4); }
+function switchTab_5() { switchTab(5); }
+function switchTab_6() { switchTab(6); }
+function switchTab_7() { switchTab(7); }
 
 // Sub-tab switching
-function switchSubTab_0() { activeSubTab = 0; renderApp(); }
-function switchSubTab_1() { activeSubTab = 1; renderApp(); }
-function switchSubTab_2() { activeSubTab = 2; renderApp(); }
-function switchSubTab_3() { activeSubTab = 3; renderApp(); }
-function switchSubTab_4() { activeSubTab = 4; renderApp(); }
-function switchSubTab_5() { activeSubTab = 5; renderApp(); }
+function switchSubTab(index) {
+  activeSubTab = index;
+  rerenderActiveTab();
+}
+
+function switchSubTab_0() { switchSubTab(0); }
+function switchSubTab_1() { switchSubTab(1); }
+function switchSubTab_2() { switchSubTab(2); }
+function switchSubTab_3() { switchSubTab(3); }
+function switchSubTab_4() { switchSubTab(4); }
+function switchSubTab_5() { switchSubTab(5); }
 
 // Counter
 function increment() {
   count += 1;
   askHost('println', `Count: ${count}`);
   askHost('updateApp', JSON.stringify({ source: 'quickjs', action: 'increment', value: count }));
-  renderApp();
+  if (vmSubTabVisible(0)) rerenderVmPanel();
 }
 
 function decrement() {
   count = Math.max(0, count - 1);
   askHost('println', `Count: ${count}`);
-  renderApp();
+  if (vmSubTabVisible(0)) rerenderVmPanel();
 }
 
 function resetCounter() {
   count = 0;
-  renderApp();
+  if (vmSubTabVisible(0)) rerenderVmPanel();
 }
 
 // Clock
 function refreshClock() {
   clockTime = new Date().toISOString();
-  renderApp();
+  if (vmSubTabVisible(1) || vmSubTabVisible(2)) rerenderVmPanel();
+  if (activeTab === 4) rerenderActiveTab();
 }
 
 function tickClock() {
   clockTime = new Date().toISOString();
-  renderApp();
+  if (vmSubTabVisible(1) || vmSubTabVisible(2)) rerenderVmPanel();
 }
 
 // Theme
 function toggleTheme() {
   isDark = !isDark;
   askHost('println', `Theme toggled: isDark=${isDark}`);
-  renderApp();
+  if (vmSubTabVisible(4)) rerenderVmPanel();
+  if (activeTab === 4) rerenderActiveTab();
 }
 
 // Host data
@@ -3076,33 +3165,63 @@ function loadProfile() {
     askHost('println', `Profile parse error: ${String(e)}`);
   }
   askHost('updateApp', JSON.stringify({ source: 'quickjs', action: 'profileLoaded', profile: profile }));
-  renderApp();
+  if (vmSubTabVisible(5)) rerenderVmPanel();
 }
 
 // DOM+Canvas
 function domCanvasInc() {
   domCanvasCount += 1;
   domCanvasColorIdx = (domCanvasColorIdx + 1) % domCanvasColors.length;
-  renderApp();
+  if (activeTab === 3) rerenderActiveTab();
 }
 
 function domCanvasDec() {
   domCanvasCount = Math.max(0, domCanvasCount - 1);
   domCanvasColorIdx = (domCanvasColorIdx + domCanvasColors.length - 1) % domCanvasColors.length;
-  renderApp();
+  if (activeTab === 3) rerenderActiveTab();
 }
 
 // 3D demo toggles
-function toggleBevyInteractive() { bevyInteractive = !bevyInteractive; bevyScopeVersion += 1; renderApp(); }
-function toggleBevyFps() { bevyFps = bevyFps === 60 ? 30 : 60; bevyScopeVersion += 1; renderApp(); }
-function toggleGameInteractive() { gameInteractive = !gameInteractive; gameScopeVersion += 1; renderApp(); }
-function toggleGameFps() { gameFps = gameFps === 60 ? 30 : 60; gameScopeVersion += 1; renderApp(); }
+function toggleBevyInteractive() {
+  bevyInteractive = !bevyInteractive;
+  if (activeTab === 5) rerenderActiveTab();
+}
+
+function toggleBevyFps() {
+  bevyFps = bevyFps === 60 ? 30 : 60;
+  if (activeTab === 5) rerenderActiveTab();
+}
+
+function toggleGameInteractive() {
+  gameInteractive = !gameInteractive;
+  if (activeTab === 6) rerenderActiveTab();
+}
+
+function toggleGameFps() {
+  gameFps = gameFps === 60 ? 30 : 60;
+  if (activeTab === 6) rerenderActiveTab();
+}
 
 // Real-world demo handlers
-function rwSearchInput(e) { rwSearch = (e && e.value) ? String(e.value) : ''; rwOpsVersion += 1; renderApp(); }
-function rwFilterAll() { rwFilter = 'all'; rwOpsVersion += 1; renderApp(); }
-function rwFilterOpen() { rwFilter = 'open'; rwOpsVersion += 1; renderApp(); }
-function rwFilterClosed() { rwFilter = 'closed'; rwOpsVersion += 1; renderApp(); }
+function rwSearchInput(e) {
+  rwSearch = (e && e.value) ? String(e.value) : '';
+  if (realWorldSubTabVisible(0)) renderScoped('scope-ops', buildOpsConsole());
+}
+
+function rwFilterAll() {
+  rwFilter = 'all';
+  if (realWorldSubTabVisible(0)) renderScoped('scope-ops', buildOpsConsole());
+}
+
+function rwFilterOpen() {
+  rwFilter = 'open';
+  if (realWorldSubTabVisible(0)) renderScoped('scope-ops', buildOpsConsole());
+}
+
+function rwFilterClosed() {
+  rwFilter = 'closed';
+  if (realWorldSubTabVisible(0)) renderScoped('scope-ops', buildOpsConsole());
+}
 
 function rwToggleTicket(e) {
   const key = (e && e.currentTarget) ? String(e.currentTarget) : '';
@@ -3113,8 +3232,7 @@ function rwToggleTicket(e) {
       break;
     }
   }
-  rwOpsVersion += 1;
-  renderApp();
+  if (realWorldSubTabVisible(0)) renderScoped('scope-ops', buildOpsConsole());
 }
 
 function rwCartInc(e) {
@@ -3123,8 +3241,7 @@ function rwCartInc(e) {
   for (let i = 0; i < rwCart.length; i += 1) {
     if (rwCart[i].id === id) rwCart[i].qty += 1;
   }
-  rwCheckoutVersion += 1;
-  renderApp();
+  if (realWorldSubTabVisible(1)) renderScoped('scope-checkout', buildCheckoutDemo());
 }
 
 function rwCartDec(e) {
@@ -3133,8 +3250,7 @@ function rwCartDec(e) {
   for (let i = 0; i < rwCart.length; i += 1) {
     if (rwCart[i].id === id) rwCart[i].qty = Math.max(0, rwCart[i].qty - 1);
   }
-  rwCheckoutVersion += 1;
-  renderApp();
+  if (realWorldSubTabVisible(1)) renderScoped('scope-checkout', buildCheckoutDemo());
 }
 
 function rwPromoInput(e) { rwPromoCode = (e && e.value) ? String(e.value) : ''; }
@@ -3143,8 +3259,7 @@ function rwPromoApply() {
   if (code === 'shipfree') rwDiscount = 5;
   else if (code === 'save10') rwDiscount = 10;
   else rwDiscount = 0;
-  rwCheckoutVersion += 1;
-  renderApp();
+  if (realWorldSubTabVisible(1)) renderScoped('scope-checkout', buildCheckoutDemo());
 }
 
 function rwChatInput(e) { rwChatDraft = (e && e.value) ? String(e.value) : ''; }
@@ -3153,8 +3268,7 @@ function rwChatSend() {
   if (!msg) return;
   rwChatMessages.push({ id: Date.now(), from: 'You', text: msg });
   rwChatDraft = '';
-  rwChatVersion += 1;
-  renderApp();
+  if (realWorldSubTabVisible(2)) renderScoped('scope-chat', buildSupportChat());
 }
 
 function rwPipeLeft(e) {
@@ -3171,8 +3285,7 @@ function rwPipeLeft(e) {
   if (itemIdx === -1) return;
   const item = current.splice(itemIdx, 1)[0];
   rwPipeline[order[idx - 1]].push(item);
-  rwPipelineVersion += 1;
-  renderApp();
+  if (realWorldSubTabVisible(3)) renderScoped('scope-pipeline', buildPipelineDemo());
 }
 
 function rwPipeRight(e) {
@@ -3189,8 +3302,7 @@ function rwPipeRight(e) {
   if (itemIdx === -1) return;
   const item = current.splice(itemIdx, 1)[0];
   rwPipeline[order[idx + 1]].push(item);
-  rwPipelineVersion += 1;
-  renderApp();
+  if (realWorldSubTabVisible(3)) renderScoped('scope-pipeline', buildPipelineDemo());
 }
 
 // No-op for static buttons
@@ -3264,7 +3376,10 @@ function wbDragEnd(_e) {
 }
 
 function wbPointerDown(e) {
-  wbIsDrawing = true;
+  if (!wbIsDrawing) {
+    wbIsDrawing = true;
+    rerenderShellBody();
+  }
   wbStartStroke(wbEventPoint(e));
   wbScheduleRender();
 }
@@ -3288,8 +3403,11 @@ function wbPointerMove(e) {
 
 function wbPointerUp(_e) {
   wbCurrentStroke = null;
-  wbIsDrawing = false;
-  renderApp();
+  if (wbIsDrawing) {
+    wbIsDrawing = false;
+    rerenderShellBody();
+  }
+  if (vmSubTabVisible(3)) rerenderVmPanel();
 }
 
 function wbClear() {
@@ -3297,7 +3415,7 @@ function wbClear() {
   wbCurrentStroke = null;
   wbEnsureContext();
   wbInitContext();
-  renderApp();
+  if (vmSubTabVisible(3)) rerenderVmPanel();
 }
 
 function wbUndo() {
@@ -3341,25 +3459,25 @@ function wbUndo() {
         commands: [{ type: 'stroke', params: {} }]
       });
     }
-    renderApp();
+    if (vmSubTabVisible(3)) rerenderVmPanel();
   }
 }
 
 function wbToggleEraser() {
   wbEraser = !wbEraser;
-  renderApp();
+  if (vmSubTabVisible(3)) rerenderVmPanel();
 }
 
-function wbBrushSmall() { wbBrush = 2; wbEraser = false; renderApp(); }
-function wbBrushMedium() { wbBrush = 4; wbEraser = false; renderApp(); }
-function wbBrushLarge() { wbBrush = 7; wbEraser = false; renderApp(); }
+function wbBrushSmall() { wbBrush = 2; wbEraser = false; if (vmSubTabVisible(3)) rerenderVmPanel(); }
+function wbBrushMedium() { wbBrush = 4; wbEraser = false; if (vmSubTabVisible(3)) rerenderVmPanel(); }
+function wbBrushLarge() { wbBrush = 7; wbEraser = false; if (vmSubTabVisible(3)) rerenderVmPanel(); }
 
-function wbColor_0() { wbColor = wbPalette[0]; wbEraser = false; renderApp(); }
-function wbColor_1() { wbColor = wbPalette[1]; wbEraser = false; renderApp(); }
-function wbColor_2() { wbColor = wbPalette[2]; wbEraser = false; renderApp(); }
-function wbColor_3() { wbColor = wbPalette[3]; wbEraser = false; renderApp(); }
-function wbColor_4() { wbColor = wbPalette[4]; wbEraser = false; renderApp(); }
-function wbColor_5() { wbColor = wbPalette[5]; wbEraser = false; renderApp(); }
+function wbColor_0() { wbColor = wbPalette[0]; wbEraser = false; if (vmSubTabVisible(3)) rerenderVmPanel(); }
+function wbColor_1() { wbColor = wbPalette[1]; wbEraser = false; if (vmSubTabVisible(3)) rerenderVmPanel(); }
+function wbColor_2() { wbColor = wbPalette[2]; wbEraser = false; if (vmSubTabVisible(3)) rerenderVmPanel(); }
+function wbColor_3() { wbColor = wbPalette[3]; wbEraser = false; if (vmSubTabVisible(3)) rerenderVmPanel(); }
+function wbColor_4() { wbColor = wbPalette[4]; wbEraser = false; if (vmSubTabVisible(3)) rerenderVmPanel(); }
+function wbColor_5() { wbColor = wbPalette[5]; wbEraser = false; if (vmSubTabVisible(3)) rerenderVmPanel(); }
 
 // ─────────────────────────────────────────────────────────
 // Boot

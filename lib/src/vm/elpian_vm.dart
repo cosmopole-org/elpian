@@ -77,6 +77,7 @@ class ElpianVm implements VmRuntimeClient {
   ///
   /// Register a handler for any host API name used by the VM runtime.
   /// Includes core APIs plus DOM/Canvas host APIs exposed by ElpianVmWidget.
+  @override
   void registerHostHandler(String apiName, HostCallHandler handler) {
     _hostHandlers[apiName] = handler;
   }
@@ -87,12 +88,14 @@ class ElpianVm implements VmRuntimeClient {
   }
 
   /// Set a default handler for any unregistered host API calls.
+  @override
   void setDefaultHostHandler(HostCallHandler handler) {
     _defaultHostHandler = handler;
   }
 
   /// Execute the VM's main program and process all host calls
   /// until completion.
+  @override
   Future<String> run() async {
     _isRunning = true;
     try {
@@ -104,6 +107,7 @@ class ElpianVm implements VmRuntimeClient {
   }
 
   /// Execute a named function in the VM.
+  @override
   Future<String> callFunction(String funcName) async {
     _isRunning = true;
     _cbCounter++;
@@ -125,6 +129,7 @@ class ElpianVm implements VmRuntimeClient {
   /// ```json
   /// {"type": "string", "data": {"value": "hello"}}
   /// ```
+  @override
   Future<String> callFunctionWithInput(String funcName, String inputJson) async {
     _isRunning = true;
     _cbCounter++;
@@ -196,6 +201,7 @@ class ElpianVm implements VmRuntimeClient {
   }
 
   /// Destroy this VM instance and release Rust-side resources.
+  @override
   Future<void> dispose() async {
     await ElpianVmApi.destroyVm(machineId: machineId);
   }

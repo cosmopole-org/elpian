@@ -16,7 +16,7 @@
 //! - Particle system rendering
 //! - Environment settings (ambient light, fog)
 
-use glam::{Vec2, Vec3, Vec4, Mat4};
+use glam::{Mat4, Vec2, Vec3, Vec4};
 
 use crate::bevy_scene::schema::*;
 
@@ -25,8 +25,8 @@ use crate::bevy_scene::schema::*;
 pub struct SceneRenderer {
     pub width: u32,
     pub height: u32,
-    pub pixels: Vec<u8>,    // RGBA8, length = width * height * 4
-    pub depth: Vec<f32>,    // depth buffer, length = width * height
+    pub pixels: Vec<u8>, // RGBA8, length = width * height * 4
+    pub depth: Vec<f32>, // depth buffer, length = width * height
     pub elapsed_time: f32,
 }
 
@@ -200,14 +200,13 @@ impl SceneRenderer {
     ) {
         match node {
             JsonNode::Mesh3D(mesh) => {
-                let local = self.compute_animated_transform(
-                    &mesh.transform,
-                    &mesh.animation,
-                );
+                let local = self.compute_animated_transform(&mesh.transform, &mesh.animation);
                 let world = *parent_transform * local;
                 let material = MaterialState::from_def(&mesh.material);
                 let triangles = generate_mesh_triangles(&mesh.mesh);
-                self.rasterize_triangles(&triangles, &world, view_proj, camera, lights, &material, env);
+                self.rasterize_triangles(
+                    &triangles, &world, view_proj, camera, lights, &material, env,
+                );
 
                 // Render children
                 for child in &mesh.children {
@@ -219,7 +218,9 @@ impl SceneRenderer {
                 let world = *parent_transform * local;
                 let material = MaterialState::from_def(&rb.material);
                 let triangles = generate_mesh_triangles(&rb.mesh);
-                self.rasterize_triangles(&triangles, &world, view_proj, camera, lights, &material, env);
+                self.rasterize_triangles(
+                    &triangles, &world, view_proj, camera, lights, &material, env,
+                );
             }
             JsonNode::Terrain(terrain) => {
                 let local = terrain.transform.to_mat4();
@@ -240,12 +241,17 @@ impl SceneRenderer {
                         Vec3::Y,
                     ),
                 ];
-                self.rasterize_triangles(&triangles, &world, view_proj, camera, lights, &material, env);
+                self.rasterize_triangles(
+                    &triangles, &world, view_proj, camera, lights, &material, env,
+                );
             }
             JsonNode::Water(water) => {
                 let local = water.transform.to_mat4();
                 let world = *parent_transform * local;
-                let wc = water.water_color.as_ref().map(|c| c.to_vec3())
+                let wc = water
+                    .water_color
+                    .as_ref()
+                    .map(|c| c.to_vec3())
                     .unwrap_or(Vec3::new(0.0, 0.5, 1.0));
                 let material = MaterialState {
                     base_color: wc,
@@ -276,7 +282,9 @@ impl SceneRenderer {
                         Vec3::Y,
                     ),
                 ];
-                self.rasterize_triangles(&triangles, &world, view_proj, camera, lights, &material, env);
+                self.rasterize_triangles(
+                    &triangles, &world, view_proj, camera, lights, &material, env,
+                );
             }
             JsonNode::Particles(particle) => {
                 let local = particle.transform.to_mat4();
@@ -318,7 +326,9 @@ impl SceneRenderer {
         match &anim.animation_type {
             AnimationType::Rotate { axis, degrees } => {
                 let axis_vec = axis.to_glam().normalize_or_zero();
-                if axis_vec == Vec3::ZERO { return base_mat; }
+                if axis_vec == Vec3::ZERO {
+                    return base_mat;
+                }
                 let angle = degrees.to_radians() * t;
                 let rot = Mat4::from_axis_angle(axis_vec, angle);
                 base_mat * rot
@@ -339,9 +349,12 @@ impl SceneRenderer {
                 let y = (t * std::f32::consts::PI).sin() * height;
                 base_mat * Mat4::from_translation(Vec3::new(0.0, y, 0.0))
             }
-            AnimationType::Pulse { min_scale, max_scale } => {
-                let s = min_scale + (max_scale - min_scale) *
-                    (0.5 + 0.5 * (t * std::f32::consts::TAU).sin());
+            AnimationType::Pulse {
+                min_scale,
+                max_scale,
+            } => {
+                let s = min_scale
+                    + (max_scale - min_scale) * (0.5 + 0.5 * (t * std::f32::consts::TAU).sin());
                 base_mat * Mat4::from_scale(Vec3::splat(s))
             }
         }
@@ -372,18 +385,29 @@ impl SceneRenderer {
         for i in 0..count {
             let spawn_time = (i as f32) / particle.emission_rate;
             let age = (self.elapsed_time - spawn_time) % particle.lifetime;
-            if age < 0.0 { continue; }
+            if age < 0.0 {
+                continue;
+            }
 
             // Particle position: base + velocity*age + 0.5*gravity*age^2
             let vel = particle.velocity.to_glam();
             let grav = particle.gravity.to_glam();
             let offset = vel * age + grav * 0.5 * age * age;
 
-            let particle_world = *world * Mat4::from_translation(offset) *
-                Mat4::from_scale(Vec3::splat(particle.size));
+            let particle_world = *world
+                * Mat4::from_translation(offset)
+                * Mat4::from_scale(Vec3::splat(particle.size));
 
             let triangles = generate_mesh_triangles(&MeshType::Named(MeshTypeName::Cube));
-            self.rasterize_triangles(&triangles, &particle_world, view_proj, camera, lights, &material, env);
+            self.rasterize_triangles(
+                &triangles,
+                &particle_world,
+                view_proj,
+                camera,
+                lights,
+                &material,
+                env,
+            );
         }
     }
 
@@ -447,7 +471,16 @@ impl SceneRenderer {
                 let s1 = self.ndc_to_screen(ndc1);
                 let s2 = self.ndc_to_screen(ndc2);
 
-                self.fill_triangle(s0, s1, s2, ndc0.z, ndc1.z, ndc2.z, &lit_color, material.alpha);
+                self.fill_triangle(
+                    s0,
+                    s1,
+                    s2,
+                    ndc0.z,
+                    ndc1.z,
+                    ndc2.z,
+                    &lit_color,
+                    material.alpha,
+                );
             } else {
                 // Triangle crosses near plane: clip against w = w_clip_plane.
                 // Collect clip-space vertices, splitting edges that cross.
@@ -487,7 +520,16 @@ impl SceneRenderer {
                         let sb = self.ndc_to_screen(ndc_b);
                         let sc = self.ndc_to_screen(ndc_c);
 
-                        self.fill_triangle(sa, sb, sc, ndc_a.z, ndc_b.z, ndc_c.z, &lit_color, material.alpha);
+                        self.fill_triangle(
+                            sa,
+                            sb,
+                            sc,
+                            ndc_a.z,
+                            ndc_b.z,
+                            ndc_c.z,
+                            &lit_color,
+                            material.alpha,
+                        );
                     }
                 }
             }
@@ -503,8 +545,12 @@ impl SceneRenderer {
 
     fn fill_triangle(
         &mut self,
-        v0: Vec2, v1: Vec2, v2: Vec2,
-        z0: f32, z1: f32, z2: f32,
+        v0: Vec2,
+        v1: Vec2,
+        v2: Vec2,
+        z0: f32,
+        z1: f32,
+        z2: f32,
         color: &[f32; 3],
         alpha: f32,
     ) {
@@ -515,7 +561,9 @@ impl SceneRenderer {
         let max_y = v0.y.max(v1.y).max(v2.y).min(self.height as f32 - 1.0) as i32;
 
         let area = edge_function(v0, v1, v2);
-        if area.abs() < 0.001 { return; } // Degenerate triangle
+        if area.abs() < 0.001 {
+            return;
+        } // Degenerate triangle
         let inv_area = 1.0 / area;
 
         for y in min_y..=max_y {
@@ -554,9 +602,15 @@ impl SceneRenderer {
                             let dst_g = self.pixels[pidx + 1] as f32 / 255.0;
                             let dst_b = self.pixels[pidx + 2] as f32 / 255.0;
                             let src_a = alpha;
-                            self.pixels[pidx] = ((color[0] * src_a + dst_r * (1.0 - src_a)).clamp(0.0, 1.0) * 255.0) as u8;
-                            self.pixels[pidx + 1] = ((color[1] * src_a + dst_g * (1.0 - src_a)).clamp(0.0, 1.0) * 255.0) as u8;
-                            self.pixels[pidx + 2] = ((color[2] * src_a + dst_b * (1.0 - src_a)).clamp(0.0, 1.0) * 255.0) as u8;
+                            self.pixels[pidx] = ((color[0] * src_a + dst_r * (1.0 - src_a))
+                                .clamp(0.0, 1.0)
+                                * 255.0) as u8;
+                            self.pixels[pidx + 1] = ((color[1] * src_a + dst_g * (1.0 - src_a))
+                                .clamp(0.0, 1.0)
+                                * 255.0) as u8;
+                            self.pixels[pidx + 2] = ((color[2] * src_a + dst_b * (1.0 - src_a))
+                                .clamp(0.0, 1.0)
+                                * 255.0) as u8;
                             self.pixels[pidx + 3] = 255;
                         }
                     }
@@ -610,16 +664,13 @@ pub fn generate_mesh_triangles(mesh_type: &MeshType) -> Vec<Triangle> {
     match mesh_type {
         MeshType::Named(MeshTypeName::Cube) => generate_cube(1.0),
         MeshType::Parameterized(param) => match param {
-            MeshTypeParam::Sphere { radius, subdivisions } => {
-                generate_uv_sphere(*radius, (*subdivisions).max(4))
-            }
+            MeshTypeParam::Sphere {
+                radius,
+                subdivisions,
+            } => generate_uv_sphere(*radius, (*subdivisions).max(4)),
             MeshTypeParam::Plane { size } => generate_plane(*size),
-            MeshTypeParam::Cylinder { radius, height } => {
-                generate_cylinder(*radius, *height, 16)
-            }
-            MeshTypeParam::Cone { radius, height } => {
-                generate_cone(*radius, *height, 16)
-            }
+            MeshTypeParam::Cylinder { radius, height } => generate_cylinder(*radius, *height, 16),
+            MeshTypeParam::Cone { radius, height } => generate_cone(*radius, *height, 16),
             MeshTypeParam::Capsule { radius, depth } => {
                 // Approximate as cylinder + two hemispheres
                 let mut tris = generate_cylinder(*radius, *depth, 16);
@@ -637,9 +688,10 @@ pub fn generate_mesh_triangles(mesh_type: &MeshType) -> Vec<Triangle> {
                 }));
                 tris
             }
-            MeshTypeParam::Torus { radius, tube_radius } => {
-                generate_torus(*radius, *tube_radius, 24, 12)
-            }
+            MeshTypeParam::Torus {
+                radius,
+                tube_radius,
+            } => generate_torus(*radius, *tube_radius, 24, 12),
             MeshTypeParam::File { .. } => {
                 // File meshes not supported in software renderer; show placeholder cube
                 generate_cube(1.0)
@@ -652,17 +704,35 @@ fn generate_cube(size: f32) -> Vec<Triangle> {
     let h = size / 2.0;
     let vertices = [
         // Front face
-        Vec3::new(-h, -h, h), Vec3::new(h, -h, h), Vec3::new(h, h, h), Vec3::new(-h, h, h),
+        Vec3::new(-h, -h, h),
+        Vec3::new(h, -h, h),
+        Vec3::new(h, h, h),
+        Vec3::new(-h, h, h),
         // Back face
-        Vec3::new(-h, -h, -h), Vec3::new(-h, h, -h), Vec3::new(h, h, -h), Vec3::new(h, -h, -h),
+        Vec3::new(-h, -h, -h),
+        Vec3::new(-h, h, -h),
+        Vec3::new(h, h, -h),
+        Vec3::new(h, -h, -h),
         // Top face
-        Vec3::new(-h, h, -h), Vec3::new(-h, h, h), Vec3::new(h, h, h), Vec3::new(h, h, -h),
+        Vec3::new(-h, h, -h),
+        Vec3::new(-h, h, h),
+        Vec3::new(h, h, h),
+        Vec3::new(h, h, -h),
         // Bottom face
-        Vec3::new(-h, -h, -h), Vec3::new(h, -h, -h), Vec3::new(h, -h, h), Vec3::new(-h, -h, h),
+        Vec3::new(-h, -h, -h),
+        Vec3::new(h, -h, -h),
+        Vec3::new(h, -h, h),
+        Vec3::new(-h, -h, h),
         // Right face
-        Vec3::new(h, -h, -h), Vec3::new(h, h, -h), Vec3::new(h, h, h), Vec3::new(h, -h, h),
+        Vec3::new(h, -h, -h),
+        Vec3::new(h, h, -h),
+        Vec3::new(h, h, h),
+        Vec3::new(h, -h, h),
         // Left face
-        Vec3::new(-h, -h, -h), Vec3::new(-h, -h, h), Vec3::new(-h, h, h), Vec3::new(-h, h, -h),
+        Vec3::new(-h, -h, -h),
+        Vec3::new(-h, -h, h),
+        Vec3::new(-h, h, h),
+        Vec3::new(-h, h, -h),
     ];
 
     let normals = [
@@ -677,8 +747,18 @@ fn generate_cube(size: f32) -> Vec<Triangle> {
     let mut triangles = Vec::with_capacity(12);
     for face in 0..6 {
         let base = face * 4;
-        triangles.push(Triangle::new(vertices[base], vertices[base + 1], vertices[base + 2], normals[face]));
-        triangles.push(Triangle::new(vertices[base], vertices[base + 2], vertices[base + 3], normals[face]));
+        triangles.push(Triangle::new(
+            vertices[base],
+            vertices[base + 1],
+            vertices[base + 2],
+            normals[face],
+        ));
+        triangles.push(Triangle::new(
+            vertices[base],
+            vertices[base + 2],
+            vertices[base + 3],
+            normals[face],
+        ));
     }
     triangles
 }
@@ -818,7 +898,12 @@ fn generate_cone(radius: f32, height: f32, segments: u32) -> Vec<Triangle> {
     triangles
 }
 
-fn generate_torus(radius: f32, tube_radius: f32, radial_segments: u32, tubular_segments: u32) -> Vec<Triangle> {
+fn generate_torus(
+    radius: f32,
+    tube_radius: f32,
+    radial_segments: u32,
+    tubular_segments: u32,
+) -> Vec<Triangle> {
     let mut triangles = Vec::new();
 
     for i in 0..radial_segments {
@@ -843,11 +928,7 @@ fn generate_torus(radius: f32, tube_radius: f32, radial_segments: u32, tubular_s
 
 fn torus_point(radius: f32, tube_radius: f32, theta: f32, phi: f32) -> Vec3 {
     let r = radius + tube_radius * phi.cos();
-    Vec3::new(
-        r * theta.cos(),
-        tube_radius * phi.sin(),
-        r * theta.sin(),
-    )
+    Vec3::new(r * theta.cos(), tube_radius * phi.sin(), r * theta.sin())
 }
 
 // ── Camera ───────────────────────────────────────────────────────────
@@ -870,12 +951,7 @@ impl CameraState {
             let half_w = half_h * aspect;
             Mat4::orthographic_rh(-half_w, half_w, -half_h, half_h, self.near, self.far)
         } else {
-            Mat4::perspective_rh(
-                self.fov.to_radians(),
-                aspect,
-                self.near,
-                self.far,
-            )
+            Mat4::perspective_rh(self.fov.to_radians(), aspect, self.near, self.far)
         };
         projection * view
     }
@@ -911,10 +987,18 @@ impl MaterialState {
     fn from_def(def: &MaterialDef) -> Self {
         let alpha = def.base_color.as_ref().map(|c| c.a).unwrap_or(1.0);
         Self {
-            base_color: def.base_color.as_ref().map(|c| c.to_vec3()).unwrap_or(Vec3::new(0.8, 0.8, 0.8)),
+            base_color: def
+                .base_color
+                .as_ref()
+                .map(|c| c.to_vec3())
+                .unwrap_or(Vec3::new(0.8, 0.8, 0.8)),
             metallic: def.metallic.unwrap_or(0.0),
             roughness: def.roughness.unwrap_or(0.5),
-            emissive: def.emissive.as_ref().map(|c| c.to_vec3()).unwrap_or(Vec3::ZERO),
+            emissive: def
+                .emissive
+                .as_ref()
+                .map(|c| c.to_vec3())
+                .unwrap_or(Vec3::ZERO),
             alpha,
         }
     }
@@ -960,9 +1044,7 @@ fn compute_lighting(
 
     for light in lights {
         let (light_dir, attenuation) = match light.light_type {
-            LightStateType::Directional => {
-                (-light.direction.normalize(), 1.0)
-            }
+            LightStateType::Directional => (-light.direction.normalize(), 1.0),
             LightStateType::Point => {
                 let to_light = light.position - position;
                 let dist = to_light.length();
@@ -975,7 +1057,13 @@ fn compute_lighting(
                 let dist = to_light.length();
                 let dir = to_light / dist.max(0.001);
                 let spot_dot = dir.dot(-light.direction.normalize());
-                let spot_att = if spot_dot > 0.9 { 1.0 } else if spot_dot > 0.8 { (spot_dot - 0.8) * 10.0 } else { 0.0 };
+                let spot_att = if spot_dot > 0.9 {
+                    1.0
+                } else if spot_dot > 0.8 {
+                    (spot_dot - 0.8) * 10.0
+                } else {
+                    0.0
+                };
                 let att = spot_att / (1.0 + 0.09 * dist + 0.032 * dist * dist);
                 (dir, att)
             }
@@ -994,7 +1082,8 @@ fn compute_lighting(
         } else {
             0.04
         };
-        let specular = light.color * light.intensity * n_dot_h.powf(shininess) * spec_strength * attenuation;
+        let specular =
+            light.color * light.intensity * n_dot_h.powf(shininess) * spec_strength * attenuation;
 
         diffuse_total += diffuse;
         specular_total += specular;
@@ -1018,16 +1107,27 @@ fn apply_easing(progress: f32, easing: &EasingType) -> f32 {
         EasingType::EaseIn => progress * progress,
         EasingType::EaseOut => progress * (2.0 - progress),
         EasingType::EaseInOut => {
-            if progress < 0.5 { 2.0 * progress * progress }
-            else { -1.0 + (4.0 - 2.0 * progress) * progress }
+            if progress < 0.5 {
+                2.0 * progress * progress
+            } else {
+                -1.0 + (4.0 - 2.0 * progress) * progress
+            }
         }
         EasingType::Bounce => {
             let n1 = 7.5625;
             let d1 = 2.75;
-            if progress < 1.0 / d1 { n1 * progress * progress }
-            else if progress < 2.0 / d1 { let p = progress - 1.5 / d1; n1 * p * p + 0.75 }
-            else if progress < 2.5 / d1 { let p = progress - 2.25 / d1; n1 * p * p + 0.9375 }
-            else { let p = progress - 2.625 / d1; n1 * p * p + 0.984375 }
+            if progress < 1.0 / d1 {
+                n1 * progress * progress
+            } else if progress < 2.0 / d1 {
+                let p = progress - 1.5 / d1;
+                n1 * p * p + 0.75
+            } else if progress < 2.5 / d1 {
+                let p = progress - 2.25 / d1;
+                n1 * p * p + 0.9375
+            } else {
+                let p = progress - 2.625 / d1;
+                n1 * p * p + 0.984375
+            }
         }
     }
 }

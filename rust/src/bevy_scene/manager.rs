@@ -185,5 +185,8 @@ pub fn scene_exists(scene_id: &str) -> bool {
 /// Get the current elapsed time for a scene.
 pub fn get_elapsed_time(scene_id: &str) -> f32 {
     let scenes = SCENES.lock().unwrap();
-    scenes.get(scene_id).map(|i| i.renderer.elapsed_time).unwrap_or(0.0)
+    scenes
+        .get(scene_id)
+        .map(|i| i.renderer.elapsed_time)
+        .unwrap_or(0.0)
 }

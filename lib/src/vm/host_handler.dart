@@ -6,8 +6,13 @@ import '../canvas/canvas_context_store.dart';
 import '../core/dom_api.dart';
 import 'host_api_catalog.dart';
 
+typedef RenderHostCallback = void Function(
+  Map<String, dynamic> viewJson,
+  String? scopeKey,
+);
+
 class HostHandler {
-  final void Function(Map<String, dynamic> viewJson)? onRender;
+  final RenderHostCallback? onRender;
   final void Function(Map<String, dynamic> updateData)? onUpdateApp;
   final void Function(String message)? onPrintln;
 
@@ -45,25 +50,24 @@ class HostHandler {
     }
   }
 
-
   String handleRender(String payload) {
     try {
-      final dynamic parsed = _unwrapHostArgs(_parseVmPayload(payload));
+      final dynamic parsed = _parseVmPayload(payload);
+      final args = _asHostArgs(parsed);
+      final viewArg = args.isNotEmpty ? args.first : null;
+      final scopeKey = args.length > 1 ? _asNullableString(args[1]) : null;
 
-      if (parsed is Map<String, dynamic>) {
-        onRender?.call(parsed);
-      } else if (parsed is String) {
-        try {
-          final jsonParsed = jsonDecode(parsed);
-          if (jsonParsed is Map<String, dynamic>) {
-            onRender?.call(jsonParsed);
-          }
-        } catch (_) {
-          onRender?.call({
+      final viewJson = _coerceJsonMap(viewArg);
+      if (viewJson != null) {
+        onRender?.call(viewJson, scopeKey);
+      } else if (viewArg is String) {
+        onRender?.call(
+          {
             'type': 'Text',
-            'props': {'text': parsed},
-          });
-        }
+            'props': {'text': viewArg},
+          },
+          scopeKey,
+        );
       }
       return _makeResponse('i16', 0);
     } catch (e) {
@@ -103,19 +107,33 @@ class HostHandler {
         case 'dom.createElement':
           final tagName = args['tagName']?.toString() ?? 'div';
           final id = args['id']?.toString();
-          final classes = (args['classes'] as List?)?.map((e) => e.toString()).toList();
+          final classes =
+              (args['classes'] as List?)?.map((e) => e.toString()).toList();
           final element = dom.createElement(tagName, id: id, classes: classes);
           return _makeResponse('object', _encodeElement(element));
         case 'dom.getElementById':
-          return _makeResponse('object', _encodeElement(dom.getElementById(args['id']?.toString() ?? '')));
+          return _makeResponse('object',
+              _encodeElement(dom.getElementById(args['id']?.toString() ?? '')));
         case 'dom.getElementsByClassName':
-          return _makeResponse('array', _encodeElements(dom.getElementsByClassName(args['className']?.toString() ?? '')));
+          return _makeResponse(
+              'array',
+              _encodeElements(dom.getElementsByClassName(
+                  args['className']?.toString() ?? '')));
         case 'dom.getElementsByTagName':
-          return _makeResponse('array', _encodeElements(dom.getElementsByTagName(args['tagName']?.toString() ?? '')));
+          return _makeResponse(
+              'array',
+              _encodeElements(
+                  dom.getElementsByTagName(args['tagName']?.toString() ?? '')));
         case 'dom.querySelector':
-          return _makeResponse('object', _encodeElement(dom.querySelector(args['selector']?.toString() ?? '')));
+          return _makeResponse(
+              'object',
+              _encodeElement(
+                  dom.querySelector(args['selector']?.toString() ?? '')));
         case 'dom.querySelectorAll':
-          return _makeResponse('array', _encodeElements(dom.querySelectorAll(args['selector']?.toString() ?? '')));
+          return _makeResponse(
+              'array',
+              _encodeElements(
+                  dom.querySelectorAll(args['selector']?.toString() ?? '')));
         case 'dom.removeElement':
           final element = _elementFromArgs(args);
           if (element != null) dom.removeElement(element);
@@ -130,34 +148,58 @@ class HostHandler {
           _elementFromArgs(args)?.innerHTML = args['html']?.toString();
           return _makeResponse('i16', 0);
         case 'dom.setAttribute':
-          _elementFromArgs(args)?.setAttribute(args['name']?.toString() ?? '', args['value']);
+          _elementFromArgs(args)
+              ?.setAttribute(args['name']?.toString() ?? '', args['value']);
           return _makeResponse('i16', 0);
         case 'dom.getAttribute':
-          return _makeResponse('string', (_elementFromArgs(args)?.getAttribute(args['name']?.toString() ?? '') ?? '').toString());
+          return _makeResponse(
+              'string',
+              (_elementFromArgs(args)
+                          ?.getAttribute(args['name']?.toString() ?? '') ??
+                      '')
+                  .toString());
         case 'dom.removeAttribute':
-          _elementFromArgs(args)?.removeAttribute(args['name']?.toString() ?? '');
+          _elementFromArgs(args)
+              ?.removeAttribute(args['name']?.toString() ?? '');
           return _makeResponse('i16', 0);
         case 'dom.hasAttribute':
-          return _makeResponse('bool', _elementFromArgs(args)?.hasAttribute(args['name']?.toString() ?? '') ?? false);
+          return _makeResponse(
+              'bool',
+              _elementFromArgs(args)
+                      ?.hasAttribute(args['name']?.toString() ?? '') ??
+                  false);
         case 'dom.setStyle':
-          _elementFromArgs(args)?.setStyle(args['property']?.toString() ?? '', args['value']);
+          _elementFromArgs(args)
+              ?.setStyle(args['property']?.toString() ?? '', args['value']);
           return _makeResponse('i16', 0);
         case 'dom.getStyle':
-          return _makeResponse('string', (_elementFromArgs(args)?.getStyle(args['property']?.toString() ?? '') ?? '').toString());
+          return _makeResponse(
+              'string',
+              (_elementFromArgs(args)
+                          ?.getStyle(args['property']?.toString() ?? '') ??
+                      '')
+                  .toString());
         case 'dom.setStyleObject':
-          final styles = Map<String, dynamic>.from(args['styles'] as Map? ?? const {});
+          final styles =
+              Map<String, dynamic>.from(args['styles'] as Map? ?? const {});
           _elementFromArgs(args)?.setStyleObject(styles);
           return _makeResponse('i16', 0);
         case 'dom.addClass':
           _elementFromArgs(args)?.addClass(args['className']?.toString() ?? '');
           return _makeResponse('i16', 0);
         case 'dom.removeClass':
-          _elementFromArgs(args)?.removeClass(args['className']?.toString() ?? '');
+          _elementFromArgs(args)
+              ?.removeClass(args['className']?.toString() ?? '');
           return _makeResponse('i16', 0);
         case 'dom.hasClass':
-          return _makeResponse('bool', _elementFromArgs(args)?.hasClass(args['className']?.toString() ?? '') ?? false);
+          return _makeResponse(
+              'bool',
+              _elementFromArgs(args)
+                      ?.hasClass(args['className']?.toString() ?? '') ??
+                  false);
         case 'dom.toggleClass':
-          _elementFromArgs(args)?.toggleClass(args['className']?.toString() ?? '');
+          _elementFromArgs(args)
+              ?.toggleClass(args['className']?.toString() ?? '');
           return _makeResponse('i16', 0);
         case 'dom.appendChild':
           final parent = _elementFromArgs(args, key: 'parentId');
@@ -168,7 +210,9 @@ class HostHandler {
           final parent = _elementFromArgs(args, key: 'parentId');
           final newChild = _elementFromArgs(args, key: 'newChildId');
           final refChild = _elementFromArgs(args, key: 'referenceChildId');
-          if (parent != null && newChild != null) parent.insertBefore(newChild, refChild);
+          if (parent != null && newChild != null) {
+            parent.insertBefore(newChild, refChild);
+          }
           return _makeResponse('i16', 0);
         case 'dom.removeChild':
           final parent = _elementFromArgs(args, key: 'parentId');
@@ -188,18 +232,30 @@ class HostHandler {
           final event = args['event']?.toString() ?? '';
           final callbackName = args['callback']?.toString();
           if (element != null && callbackName != null) {
-            element.addEventListener(event, () => onUpdateApp?.call({'domEvent': callbackName, 'elementId': element.id, 'event': event}));
+            element.addEventListener(
+                event,
+                () => onUpdateApp?.call({
+                      'domEvent': callbackName,
+                      'elementId': element.id,
+                      'event': event
+                    }));
           }
           return _makeResponse('i16', 0);
         case 'dom.removeEventListener':
-          _elementFromArgs(args)?.removeEventListener(args['event']?.toString() ?? '');
+          _elementFromArgs(args)
+              ?.removeEventListener(args['event']?.toString() ?? '');
           return _makeResponse('i16', 0);
         case 'dom.dispatchEvent':
-          _elementFromArgs(args)?.dispatchEvent(args['event']?.toString() ?? '', data: args['data']);
+          _elementFromArgs(args)?.dispatchEvent(args['event']?.toString() ?? '',
+              data: args['data']);
           return _makeResponse('i16', 0);
         case 'dom.toJson':
           final element = _elementFromArgs(args);
-          return _makeResponse('object', element == null ? <String, dynamic>{} : element.toElpianNode().toJson());
+          return _makeResponse(
+              'object',
+              element == null
+                  ? <String, dynamic>{}
+                  : element.toElpianNode().toJson());
         case 'dom.getAllElements':
           return _makeResponse('array', _encodeElements(dom.allElements));
       }
@@ -222,7 +278,8 @@ class HostHandler {
         return _makeResponse('i16', 0);
       }
       if (apiName == 'canvas.getCommands') {
-        return _makeResponse('array', canvas.commands.map((c) => c.toJson()).toList());
+        return _makeResponse(
+            'array', canvas.commands.map((c) => c.toJson()).toList());
       }
       if (apiName == 'canvas.addCommand') {
         final command = _canvasCommandFromArgs(args);
@@ -254,65 +311,73 @@ class HostHandler {
   String _handleCanvasContextApi(String apiName, String payload) {
     final args = _normalizedArgs(payload);
     switch (apiName) {
-      case 'canvas.ctx.create': {
-        final id = args['id']?.toString();
-        final width = _toDouble(args['width']) ?? 0;
-        final height = _toDouble(args['height']) ?? 0;
-        final ctx = CanvasContextStore.instance.create(
-          id: id,
-          width: width,
-          height: height,
-        );
-        return _makeResponse('string', ctx.id);
-      }
-      case 'canvas.ctx.dispose': {
-        final id = args['id']?.toString();
-        if (id != null && id.isNotEmpty) {
-          CanvasContextStore.instance.dispose(id);
+      case 'canvas.ctx.create':
+        {
+          final id = args['id']?.toString();
+          final width = _toDouble(args['width']) ?? 0;
+          final height = _toDouble(args['height']) ?? 0;
+          final ctx = CanvasContextStore.instance.create(
+            id: id,
+            width: width,
+            height: height,
+          );
+          return _makeResponse('string', ctx.id);
         }
-        return _makeResponse('i16', 0);
-      }
-      case 'canvas.ctx.clear': {
-        final id = args['id']?.toString();
-        final ctx = id == null ? null : CanvasContextStore.instance.get(id);
-        ctx?.clear();
-        return _makeResponse('i16', 0);
-      }
-      case 'canvas.ctx.setSize': {
-        final id = args['id']?.toString();
-        final ctx = id == null ? null : CanvasContextStore.instance.get(id);
-        if (ctx != null) {
-          final width = _toDouble(args['width']) ?? ctx.width;
-          final height = _toDouble(args['height']) ?? ctx.height;
-          ctx.setSize(width, height);
+      case 'canvas.ctx.dispose':
+        {
+          final id = args['id']?.toString();
+          if (id != null && id.isNotEmpty) {
+            CanvasContextStore.instance.dispose(id);
+          }
+          return _makeResponse('i16', 0);
         }
-        return _makeResponse('i16', 0);
-      }
-      case 'canvas.ctx.addCommand': {
-        final id = args['id']?.toString();
-        final ctx = id == null ? null : CanvasContextStore.instance.get(id);
-        if (ctx == null) return _makeResponse('i16', 0);
-        final commandJson = args['command'] ?? args;
-        if (commandJson is Map) {
-          final cmd = CanvasCommand.fromJson(Map<String, dynamic>.from(commandJson));
-          ctx.addCommand(cmd);
+      case 'canvas.ctx.clear':
+        {
+          final id = args['id']?.toString();
+          final ctx = id == null ? null : CanvasContextStore.instance.get(id);
+          ctx?.clear();
+          return _makeResponse('i16', 0);
         }
-        return _makeResponse('i16', 0);
-      }
-      case 'canvas.ctx.addCommands': {
-        final id = args['id']?.toString();
-        final ctx = id == null ? null : CanvasContextStore.instance.get(id);
-        if (ctx == null) return _makeResponse('i16', 0);
-        final raw = args['commands'];
-        if (raw is List) {
-          final commands = raw
-              .whereType<Map>()
-              .map((entry) => CanvasCommand.fromJson(Map<String, dynamic>.from(entry)))
-              .toList();
-          ctx.addCommands(commands);
+      case 'canvas.ctx.setSize':
+        {
+          final id = args['id']?.toString();
+          final ctx = id == null ? null : CanvasContextStore.instance.get(id);
+          if (ctx != null) {
+            final width = _toDouble(args['width']) ?? ctx.width;
+            final height = _toDouble(args['height']) ?? ctx.height;
+            ctx.setSize(width, height);
+          }
+          return _makeResponse('i16', 0);
         }
-        return _makeResponse('i16', 0);
-      }
+      case 'canvas.ctx.addCommand':
+        {
+          final id = args['id']?.toString();
+          final ctx = id == null ? null : CanvasContextStore.instance.get(id);
+          if (ctx == null) return _makeResponse('i16', 0);
+          final commandJson = args['command'] ?? args;
+          if (commandJson is Map) {
+            final cmd =
+                CanvasCommand.fromJson(Map<String, dynamic>.from(commandJson));
+            ctx.addCommand(cmd);
+          }
+          return _makeResponse('i16', 0);
+        }
+      case 'canvas.ctx.addCommands':
+        {
+          final id = args['id']?.toString();
+          final ctx = id == null ? null : CanvasContextStore.instance.get(id);
+          if (ctx == null) return _makeResponse('i16', 0);
+          final raw = args['commands'];
+          if (raw is List) {
+            final commands = raw
+                .whereType<Map>()
+                .map((entry) =>
+                    CanvasCommand.fromJson(Map<String, dynamic>.from(entry)))
+                .toList();
+            ctx.addCommands(commands);
+          }
+          return _makeResponse('i16', 0);
+        }
     }
     return _makeResponse('i16', 0);
   }
@@ -336,18 +401,24 @@ class HostHandler {
     if (typeRaw == null) return null;
     final type = _findCanvasType(typeRaw);
     if (type == null) return null;
-    final params = Map<String, dynamic>.from(args['params'] as Map? ?? const {});
-    return CanvasCommand(type: type, params: params, id: args['id']?.toString());
+    final params =
+        Map<String, dynamic>.from(args['params'] as Map? ?? const {});
+    return CanvasCommand(
+        type: type, params: params, id: args['id']?.toString());
   }
 
-  ElpianElement? _elementFromArgs(Map<String, dynamic> args, {String key = 'id'}) {
+  ElpianElement? _elementFromArgs(Map<String, dynamic> args,
+      {String key = 'id'}) {
     final id = args[key]?.toString() ?? args['selector']?.toString();
     if (id == null || id.isEmpty) return null;
     return dom.getElementById(id) ?? dom.querySelector(id);
   }
 
   List<Map<String, dynamic>> _encodeElements(List<ElpianElement> elements) {
-    return elements.map(_encodeElement).whereType<Map<String, dynamic>>().toList();
+    return elements
+        .map(_encodeElement)
+        .whereType<Map<String, dynamic>>()
+        .toList();
   }
 
   Map<String, dynamic>? _encodeElement(ElpianElement? element) {
@@ -389,6 +460,33 @@ class HostHandler {
     if (unwrapped is Map<String, dynamic>) return unwrapped;
     if (unwrapped is Map) return Map<String, dynamic>.from(unwrapped);
     return {};
+  }
+
+  List<dynamic> _asHostArgs(dynamic parsed) {
+    if (parsed is List<dynamic>) return parsed;
+    return <dynamic>[parsed];
+  }
+
+  String? _asNullableString(dynamic value) {
+    if (value == null) return null;
+    final parsed = value.toString().trim();
+    if (parsed.isEmpty || parsed == 'null') return null;
+    return parsed;
+  }
+
+  Map<String, dynamic>? _coerceJsonMap(dynamic value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return Map<String, dynamic>.from(value);
+    if (value is! String) return null;
+
+    try {
+      final decoded = jsonDecode(value);
+      if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+    } catch (_) {
+      // Not a JSON map; caller can decide fallback behavior.
+    }
+    return null;
   }
 
   String _makeResponse(String type, dynamic value) {

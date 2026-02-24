@@ -180,10 +180,22 @@ pub struct ParticleNode {
     pub gravity: Vec3Def,
 }
 
-fn default_emission_rate() -> f32 { 10.0 }
-fn default_one() -> f32 { 1.0 }
-fn default_particle_size() -> f32 { 0.1 }
-fn default_gravity() -> Vec3Def { Vec3Def { x: 0.0, y: -9.8, z: 0.0 } }
+fn default_emission_rate() -> f32 {
+    10.0
+}
+fn default_one() -> f32 {
+    1.0
+}
+fn default_particle_size() -> f32 {
+    0.1
+}
+fn default_gravity() -> Vec3Def {
+    Vec3Def {
+        x: 0.0,
+        y: -9.8,
+        z: 0.0,
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TerrainNode {
@@ -203,7 +215,9 @@ pub struct TerrainNode {
     pub transform: TransformDef,
 }
 
-fn default_terrain_size() -> f32 { 100.0 }
+fn default_terrain_size() -> f32 {
+    100.0
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkyboxNode {
@@ -237,8 +251,12 @@ pub struct WaterNode {
     pub transparency: f32,
 }
 
-fn default_wave_amp() -> f32 { 0.5 }
-fn default_water_transparency() -> f32 { 0.7 }
+fn default_wave_amp() -> f32 {
+    0.5
+}
+fn default_water_transparency() -> f32 {
+    0.7
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RigidBodyNode {
@@ -269,8 +287,12 @@ pub struct EnvironmentNode {
     pub fog_distance: f32,
 }
 
-fn default_ambient_intensity() -> f32 { 0.8 }
-fn default_fog_distance() -> f32 { 100.0 }
+fn default_ambient_intensity() -> f32 {
+    0.8
+}
+fn default_fog_distance() -> f32 {
+    100.0
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GroupNode {
@@ -328,11 +350,18 @@ pub struct ColorDef {
 
 impl Default for ColorDef {
     fn default() -> Self {
-        Self { r: 1.0, g: 1.0, b: 1.0, a: 1.0 }
+        Self {
+            r: 1.0,
+            g: 1.0,
+            b: 1.0,
+            a: 1.0,
+        }
     }
 }
 
-fn default_alpha() -> f32 { 1.0 }
+fn default_alpha() -> f32 {
+    1.0
+}
 
 impl ColorDef {
     pub fn to_rgba_u8(&self) -> [u8; 4] {
@@ -361,7 +390,11 @@ pub struct Vec3Def {
 
 impl Default for Vec3Def {
     fn default() -> Self {
-        Self { x: 0.0, y: 0.0, z: 0.0 }
+        Self {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+        }
     }
 }
 
@@ -393,20 +426,28 @@ impl Default for TransformDef {
 
 impl TransformDef {
     pub fn to_mat4(&self) -> glam::Mat4 {
-        let translation = self.position.as_ref()
+        let translation = self
+            .position
+            .as_ref()
             .map(|p| glam::Vec3::new(p.x, p.y, p.z))
             .unwrap_or(glam::Vec3::ZERO);
 
-        let rotation = self.rotation.as_ref()
-            .map(|r| glam::Quat::from_euler(
-                glam::EulerRot::XYZ,
-                r.x.to_radians(),
-                r.y.to_radians(),
-                r.z.to_radians(),
-            ))
+        let rotation = self
+            .rotation
+            .as_ref()
+            .map(|r| {
+                glam::Quat::from_euler(
+                    glam::EulerRot::XYZ,
+                    r.x.to_radians(),
+                    r.y.to_radians(),
+                    r.z.to_radians(),
+                )
+            })
             .unwrap_or(glam::Quat::IDENTITY);
 
-        let scale = self.scale.as_ref()
+        let scale = self
+            .scale
+            .as_ref()
             .map(|s| glam::Vec3::new(s.x, s.y, s.z))
             .unwrap_or(glam::Vec3::ONE);
 
@@ -431,18 +472,54 @@ pub enum MeshTypeName {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "shape")]
 pub enum MeshTypeParam {
-    Sphere { #[serde(default = "default_one")] radius: f32, #[serde(default = "default_subdivisions")] subdivisions: u32 },
-    Plane { #[serde(default = "default_one")] size: f32 },
-    Capsule { #[serde(default = "default_half")] radius: f32, #[serde(default = "default_one")] depth: f32 },
-    Cylinder { #[serde(default = "default_half")] radius: f32, #[serde(default = "default_one")] height: f32 },
-    Cone { #[serde(default = "default_half")] radius: f32, #[serde(default = "default_one")] height: f32 },
-    Torus { #[serde(default = "default_one")] radius: f32, #[serde(default = "default_quarter")] tube_radius: f32 },
-    File { path: String },
+    Sphere {
+        #[serde(default = "default_one")]
+        radius: f32,
+        #[serde(default = "default_subdivisions")]
+        subdivisions: u32,
+    },
+    Plane {
+        #[serde(default = "default_one")]
+        size: f32,
+    },
+    Capsule {
+        #[serde(default = "default_half")]
+        radius: f32,
+        #[serde(default = "default_one")]
+        depth: f32,
+    },
+    Cylinder {
+        #[serde(default = "default_half")]
+        radius: f32,
+        #[serde(default = "default_one")]
+        height: f32,
+    },
+    Cone {
+        #[serde(default = "default_half")]
+        radius: f32,
+        #[serde(default = "default_one")]
+        height: f32,
+    },
+    Torus {
+        #[serde(default = "default_one")]
+        radius: f32,
+        #[serde(default = "default_quarter")]
+        tube_radius: f32,
+    },
+    File {
+        path: String,
+    },
 }
 
-fn default_subdivisions() -> u32 { 16 }
-fn default_half() -> f32 { 0.5 }
-fn default_quarter() -> f32 { 0.25 }
+fn default_subdivisions() -> u32 {
+    16
+}
+fn default_half() -> f32 {
+    0.5
+}
+fn default_quarter() -> f32 {
+    0.25
+}
 
 // ── Material Types ───────────────────────────────────────────────────
 
@@ -541,8 +618,12 @@ pub struct PhysicsDef {
     pub collider_type: ColliderType,
 }
 
-fn default_friction() -> f32 { 0.3 }
-fn default_true() -> bool { true }
+fn default_friction() -> f32 {
+    0.3
+}
+fn default_true() -> bool {
+    true
+}
 
 impl Default for PhysicsDef {
     fn default() -> Self {

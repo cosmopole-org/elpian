@@ -90,10 +90,18 @@ async function initMachine(machineId) {
   const askHost = ctx.newFunction('askHost', (...args) => {
     try {
       const apiName = args[0] ? ctx.dump(args[0]) : '';
-      const payloadValue = args[1] ? ctx.dump(args[1]) : '';
-      const payload = typeof payloadValue === 'string'
-        ? payloadValue
-        : JSON.stringify(payloadValue ?? null);
+      const payloadArgs = args.slice(1).map((arg) => ctx.dump(arg));
+      let payload = '';
+
+      if (payloadArgs.length === 1) {
+        const payloadValue = payloadArgs[0];
+        payload = typeof payloadValue === 'string'
+          ? payloadValue
+          : JSON.stringify(payloadValue ?? null);
+      } else if (payloadArgs.length > 1) {
+        payload = JSON.stringify(payloadArgs);
+      }
+
       const response = globalThis.__elpianQuickJsHostCall(machineId, String(apiName ?? ''), payload);
       return ctx.newString(typeof response === 'string' ? response : JSON.stringify(response));
     } catch (error) {

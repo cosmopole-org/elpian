@@ -4,8 +4,8 @@
 /// JavaScript/Dart on the web platform.
 #[cfg(target_arch = "wasm32")]
 mod wasm {
-    use wasm_bindgen::prelude::*;
     use serde_json::json;
+    use wasm_bindgen::prelude::*;
 
     use crate::bevy_scene::manager;
 

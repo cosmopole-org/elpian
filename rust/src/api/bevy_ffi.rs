@@ -6,7 +6,6 @@
 ///
 /// Memory: Strings returned by Rust must be freed with `elpian_free_string`.
 /// Pixel buffers are owned by the scene and valid until the next render call.
-
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::ptr;
@@ -57,29 +56,35 @@ pub extern "C" fn elpian_bevy_create_scene(
 ) -> i32 {
     let sid = unsafe { c_str_to_string(scene_id) };
     let j = unsafe { c_str_to_string(json) };
-    if manager::create_scene(sid, j, width, height) { 1 } else { 0 }
+    if manager::create_scene(sid, j, width, height) {
+        1
+    } else {
+        0
+    }
 }
 
 /// Update an existing scene with new JSON data. Returns 1 on success.
 #[unsafe(no_mangle)]
-pub extern "C" fn elpian_bevy_update_scene(
-    scene_id: *const c_char,
-    json: *const c_char,
-) -> i32 {
+pub extern "C" fn elpian_bevy_update_scene(scene_id: *const c_char, json: *const c_char) -> i32 {
     let sid = unsafe { c_str_to_string(scene_id) };
     let j = unsafe { c_str_to_string(json) };
-    if manager::update_scene(sid, j) { 1 } else { 0 }
+    if manager::update_scene(sid, j) {
+        1
+    } else {
+        0
+    }
 }
 
 /// Render one frame. delta_time is seconds since last frame.
 /// Returns 1 on success, 0 if scene not found.
 #[unsafe(no_mangle)]
-pub extern "C" fn elpian_bevy_render_frame(
-    scene_id: *const c_char,
-    delta_time: f32,
-) -> i32 {
+pub extern "C" fn elpian_bevy_render_frame(scene_id: *const c_char, delta_time: f32) -> i32 {
     let sid = unsafe { c_str_to_string(scene_id) };
-    if manager::render_frame(&sid, delta_time) { 1 } else { 0 }
+    if manager::render_frame(&sid, delta_time) {
+        1
+    } else {
+        0
+    }
 }
 
 /// Resize the scene's render target. Returns 1 on success.
@@ -90,7 +95,11 @@ pub extern "C" fn elpian_bevy_resize_scene(
     height: u32,
 ) -> i32 {
     let sid = unsafe { c_str_to_string(scene_id) };
-    if manager::resize_scene(&sid, width, height) { 1 } else { 0 }
+    if manager::resize_scene(&sid, width, height) {
+        1
+    } else {
+        0
+    }
 }
 
 /// Get a pointer to the scene's rendered pixel buffer (RGBA8).
@@ -99,9 +108,7 @@ pub extern "C" fn elpian_bevy_resize_scene(
 /// The pointer is valid until the next render_frame or destroy call.
 /// The buffer size is width * height * 4 bytes.
 #[unsafe(no_mangle)]
-pub extern "C" fn elpian_bevy_get_frame_ptr(
-    scene_id: *const c_char,
-) -> *const u8 {
+pub extern "C" fn elpian_bevy_get_frame_ptr(scene_id: *const c_char) -> *const u8 {
     let sid = unsafe { c_str_to_string(scene_id) };
     match manager::get_frame_data(&sid) {
         Some((ptr, _)) => ptr,
@@ -117,9 +124,7 @@ pub extern "C" fn elpian_bevy_get_frame_ptr(
 ///
 /// Uses an atomic snapshot to avoid inconsistent data from separate lock/unlock cycles.
 #[unsafe(no_mangle)]
-pub extern "C" fn elpian_bevy_get_frame_json(
-    scene_id: *const c_char,
-) -> *mut c_char {
+pub extern "C" fn elpian_bevy_get_frame_json(scene_id: *const c_char) -> *mut c_char {
     let sid = unsafe { c_str_to_string(scene_id) };
 
     let (width, height, pixels, frame_count) = match manager::get_frame_snapshot(&sid) {
@@ -142,9 +147,7 @@ pub extern "C" fn elpian_bevy_get_frame_json(
 
 /// Get the size of the rendered frame buffer in bytes.
 #[unsafe(no_mangle)]
-pub extern "C" fn elpian_bevy_get_frame_size(
-    scene_id: *const c_char,
-) -> u32 {
+pub extern "C" fn elpian_bevy_get_frame_size(scene_id: *const c_char) -> u32 {
     let sid = unsafe { c_str_to_string(scene_id) };
     match manager::get_frame_data(&sid) {
         Some((_, len)) => len as u32,
@@ -154,9 +157,7 @@ pub extern "C" fn elpian_bevy_get_frame_size(
 
 /// Get the scene dimensions as a packed u64: (width << 32) | height.
 #[unsafe(no_mangle)]
-pub extern "C" fn elpian_bevy_get_scene_dimensions(
-    scene_id: *const c_char,
-) -> u64 {
+pub extern "C" fn elpian_bevy_get_scene_dimensions(scene_id: *const c_char) -> u64 {
     let sid = unsafe { c_str_to_string(scene_id) };
     match manager::get_scene_dimensions(&sid) {
         Some((w, h)) => ((w as u64) << 32) | (h as u64),
@@ -177,49 +178,52 @@ pub extern "C" fn elpian_bevy_send_input(
 ) -> i32 {
     let sid = unsafe { c_str_to_string(scene_id) };
     let input = unsafe { c_str_to_string(input_json) };
-    if manager::send_input(&sid, &input) { 1 } else { 0 }
+    if manager::send_input(&sid, &input) {
+        1
+    } else {
+        0
+    }
 }
 
 /// Destroy a scene and free its resources. Returns 1 if found.
 #[unsafe(no_mangle)]
-pub extern "C" fn elpian_bevy_destroy_scene(
-    scene_id: *const c_char,
-) -> i32 {
+pub extern "C" fn elpian_bevy_destroy_scene(scene_id: *const c_char) -> i32 {
     let sid = unsafe { c_str_to_string(scene_id) };
-    if manager::destroy_scene(&sid) { 1 } else { 0 }
+    if manager::destroy_scene(&sid) {
+        1
+    } else {
+        0
+    }
 }
 
 /// Check if a scene exists. Returns 1 if it does.
 #[unsafe(no_mangle)]
-pub extern "C" fn elpian_bevy_scene_exists(
-    scene_id: *const c_char,
-) -> i32 {
+pub extern "C" fn elpian_bevy_scene_exists(scene_id: *const c_char) -> i32 {
     let sid = unsafe { c_str_to_string(scene_id) };
-    if manager::scene_exists(&sid) { 1 } else { 0 }
+    if manager::scene_exists(&sid) {
+        1
+    } else {
+        0
+    }
 }
 
 /// Get the elapsed time for a scene in seconds.
 #[unsafe(no_mangle)]
-pub extern "C" fn elpian_bevy_get_elapsed_time(
-    scene_id: *const c_char,
-) -> f32 {
+pub extern "C" fn elpian_bevy_get_elapsed_time(scene_id: *const c_char) -> f32 {
     let sid = unsafe { c_str_to_string(scene_id) };
     manager::get_elapsed_time(&sid)
 }
 
 /// Get the frame count for a scene.
 #[unsafe(no_mangle)]
-pub extern "C" fn elpian_bevy_get_frame_count(
-    scene_id: *const c_char,
-) -> u64 {
+pub extern "C" fn elpian_bevy_get_frame_count(scene_id: *const c_char) -> u64 {
     let sid = unsafe { c_str_to_string(scene_id) };
     manager::get_frame_count(&sid)
 }
 
 // ── Base64 Encoder ───────────────────────────────────────────────────
 
-const BASE64_CHARS: &[u8; 64] =
-    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const BASE64_CHARS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 fn base64_encode(data: &[u8]) -> String {
     let mut result = String::with_capacity((data.len() + 2) / 3 * 4);

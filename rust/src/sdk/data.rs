@@ -62,13 +62,15 @@ impl Val {
             },
             8 => Val {
                 typ: self.typ,
-                data: Rc::new(RefCell::new(Box::new(
-                    Rc::new(RefCell::new(self.as_object().borrow().clone_object())),
-                ))),
+                data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(
+                    self.as_object().borrow().clone_object(),
+                ))))),
             },
             9 => Val {
                 typ: self.typ,
-                data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(self.as_array().borrow().clone_arr()))))),
+                data: Rc::new(RefCell::new(Box::new(Rc::new(RefCell::new(
+                    self.as_array().borrow().clone_arr(),
+                ))))),
             },
             10 => Val {
                 typ: self.typ,
@@ -102,13 +104,25 @@ impl Val {
         self.data.borrow().downcast_ref::<String>().unwrap().clone()
     }
     pub fn as_object(&self) -> Rc<RefCell<Object>> {
-        self.data.borrow().downcast_ref::<Rc<RefCell<Object>>>().unwrap().clone()
+        self.data
+            .borrow()
+            .downcast_ref::<Rc<RefCell<Object>>>()
+            .unwrap()
+            .clone()
     }
     pub fn as_array(&self) -> Rc<RefCell<Array>> {
-        self.data.borrow().downcast_ref::<Rc<RefCell<Array>>>().unwrap().clone()
+        self.data
+            .borrow()
+            .downcast_ref::<Rc<RefCell<Array>>>()
+            .unwrap()
+            .clone()
     }
     pub fn as_func(&self) -> Rc<RefCell<Function>> {
-        self.data.borrow().downcast_ref::<Rc<RefCell<Function>>>().unwrap().clone()
+        self.data
+            .borrow()
+            .downcast_ref::<Rc<RefCell<Function>>>()
+            .unwrap()
+            .clone()
     }
     pub fn is_empty(&self) -> bool {
         self.typ == 0
@@ -222,7 +236,12 @@ pub struct Function {
 
 impl Function {
     pub fn new(name: String, start: usize, end: usize, params: Vec<String>) -> Self {
-        Function { name, start, end, params }
+        Function {
+            name,
+            start,
+            end,
+            params,
+        }
     }
     pub fn clone_func(&self) -> Self {
         Function::new(self.name.clone(), self.start, self.end, self.params.clone())

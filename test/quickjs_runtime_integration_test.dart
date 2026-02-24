@@ -10,10 +10,12 @@ void main() {
         () async {
       final engine = ElpianEngine();
       Map<String, dynamic>? lastView;
+      String? lastScopeKey;
 
       final hostHandler = HostHandler(
-        onRender: (viewJson) {
+        onRender: (viewJson, scopeKey) {
           lastView = viewJson;
+          lastScopeKey = scopeKey;
         },
       );
 
@@ -31,6 +33,7 @@ void main() {
 
       expect(lastView, isNotNull);
       expect(lastView!['type'], equals('Column'));
+      expect(lastScopeKey, isNull);
       expect(response, contains('"type":"i16"'));
 
       final renderedWidget = engine.renderFromJson(lastView!);
@@ -39,17 +42,25 @@ void main() {
 
     test('HostHandler supports array-wrapped host args format', () async {
       Map<String, dynamic>? lastView;
-      final hostHandler = HostHandler(onRender: (viewJson) => lastView = viewJson);
+      String? lastScopeKey;
+      final hostHandler = HostHandler(
+        onRender: (viewJson, scopeKey) {
+          lastView = viewJson;
+          lastScopeKey = scopeKey;
+        },
+      );
 
       hostHandler.handleRender(jsonEncode([
         {
           'type': 'Text',
           'props': {'text': 'wrapped payload'},
-        }
+        },
+        'scope-child'
       ]));
 
       expect(lastView, isNotNull);
       expect(lastView!['type'], equals('Text'));
+      expect(lastScopeKey, equals('scope-child'));
     });
 
     test('HostHandler updateApp + println callbacks receive JS-side payloads',
@@ -77,8 +88,6 @@ void main() {
       expect(println, equals('quickjs says hi'));
     });
 
-
-
     test('HostHandler supports DOM + Canvas host API catalog', () {
       final hostHandler = HostHandler();
 
@@ -100,8 +109,9 @@ void main() {
           {'x': 0, 'y': 0, 'width': 100, 'height': 50}
         ]),
       );
-      final commands = jsonDecode(hostHandler.handleHostCall('canvas.getCommands', '[]'))
-          as Map<String, dynamic>;
+      final commands =
+          jsonDecode(hostHandler.handleHostCall('canvas.getCommands', '[]'))
+              as Map<String, dynamic>;
       expect(commands['type'], equals('array'));
       expect((commands['data']['value'] as List).isNotEmpty, isTrue);
     });
