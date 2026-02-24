@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -13,7 +12,6 @@ class WasmVm implements VmRuntimeClient {
   final Map<String, HostCallHandler> _hostHandlers = {};
   HostCallHandler? _defaultHostHandler;
 
-  WasmModule? _module;
   WasmInstance? _instance;
   WasmMemory? _memory;
   _WasmVmConfig? _config;
@@ -139,7 +137,6 @@ class WasmVm implements VmRuntimeClient {
     }
 
     _config = config;
-    _module = module;
     _instance = instance;
     _memory = memory;
   }
@@ -290,7 +287,6 @@ class WasmVm implements VmRuntimeClient {
   Future<void> dispose() async {
     _instance?.dispose();
     _instance = null;
-    _module = null;
     _memory = null;
     _config = null;
   }

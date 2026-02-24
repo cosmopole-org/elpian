@@ -6,6 +6,14 @@ class VmHostApiCatalog {
     'updateApp',
   };
 
+
+  static const timerApiNames = <String>{
+    'setTimeout',
+    'setInterval',
+    'clearTimeout',
+    'clearInterval',
+  };
+
   static const domApiNames = <String>{
     'dom.getElementById',
     'dom.getElementsByClassName',
@@ -40,6 +48,12 @@ class VmHostApiCatalog {
   };
 
   static const canvasApiNames = <String>{
+    'canvas.ctx.create',
+    'canvas.ctx.dispose',
+    'canvas.ctx.clear',
+    'canvas.ctx.setSize',
+    'canvas.ctx.addCommand',
+    'canvas.ctx.addCommands',
     'canvas.addCommand',
     'canvas.addCommands',
     'canvas.clear',
@@ -106,6 +120,7 @@ class VmHostApiCatalog {
 
   static const allHostApiNames = <String>{
     ...coreApiNames,
+    ...timerApiNames,
     ...domApiNames,
     ...canvasApiNames,
   };

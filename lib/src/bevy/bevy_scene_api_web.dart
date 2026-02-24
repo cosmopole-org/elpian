@@ -65,8 +65,6 @@ external JSBoolean _wasmSceneExists(JSString sceneId);
 @JS('elpian_bevy_wasm_get_elapsed_time')
 external JSNumber _wasmGetElapsedTime(JSString sceneId);
 
-@JS('elpian_bevy_wasm_get_frame_count')
-external JSNumber _wasmGetFrameCount(JSString sceneId);
 
 // ── API class ───────────────────────────────────────────────────────
 

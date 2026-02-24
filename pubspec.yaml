@@ -25,5 +25,6 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
+    - assets/unified_program.js
     - lib/example/landing_page.json
     - lib/example/bevy_scene.json

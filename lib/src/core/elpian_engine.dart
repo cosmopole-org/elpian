@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:elpian_ui/elpian_ui.dart';
 import '../widgets/elpian_canvas_widget.dart';
+import '../widgets/elpian_cached_canvas.dart';
+import '../widgets/elpian_scope.dart';
 
 // HTML Widgets
 
@@ -78,6 +80,8 @@ class ElpianEngine {
     _registry.register('Scaffold', ElpianScaffold.build);
     _registry.register('AppBar', ElpianAppBar.build);
     _registry.register('Canvas', ElpianCanvasWidget.build);
+    _registry.register('CachedCanvas', ElpianCachedCanvas.build);
+    _registry.register('Scope', ElpianScope.build);
 
     // Bevy 3D Scene Renderer
     _registry.register('BevyScene', BevySceneWidget.build);
@@ -293,11 +297,19 @@ class ElpianEngine {
     // Build the widget
     Widget result = builder(nodeWithStyle, children);
 
+    final key = nodeWithStyle.key;
+
     // Wrap with event handling if node has events
     if (nodeWithStyle.events != null && nodeWithStyle.events!.isNotEmpty) {
       result = EventEnabledWidget(
+        key: key == null ? null : ValueKey<String>(key),
         node: nodeWithStyle,
         parentId: parentId,
+        child: result,
+      );
+    } else if (key != null && key.isNotEmpty) {
+      result = KeyedSubtree(
+        key: ValueKey<String>(key),
         child: result,
       );
     }

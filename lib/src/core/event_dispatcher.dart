@@ -241,38 +241,38 @@ class EventDispatcher {
     dispatchEvent(event, elementId);
   }
   
-  void dispatchDragStart(String elementId, Offset position) {
+  void dispatchDragStart(String elementId, Offset position, {Offset? localPosition}) {
     final event = ElpianPointerEvent(
       type: 'dragstart',
       eventType: ElpianEventType.dragStart,
       target: elementId,
       position: position,
-      localPosition: position,
+      localPosition: localPosition ?? position,
     );
     
     dispatchEvent(event, elementId);
   }
   
-  void dispatchDrag(String elementId, Offset position, Offset delta) {
+  void dispatchDrag(String elementId, Offset position, Offset delta, {Offset? localPosition}) {
     final event = ElpianPointerEvent(
       type: 'drag',
       eventType: ElpianEventType.drag,
       target: elementId,
       position: position,
-      localPosition: position,
+      localPosition: localPosition ?? position,
       delta: delta,
     );
     
     dispatchEvent(event, elementId);
   }
   
-  void dispatchDragEnd(String elementId, Offset position) {
+  void dispatchDragEnd(String elementId, Offset position, {Offset? localPosition}) {
     final event = ElpianPointerEvent(
       type: 'dragend',
       eventType: ElpianEventType.dragEnd,
       target: elementId,
       position: position,
-      localPosition: position,
+      localPosition: localPosition ?? position,
     );
     
     dispatchEvent(event, elementId);
@@ -364,4 +364,3 @@ class EventDispatcher {
     };
   }
 }
-

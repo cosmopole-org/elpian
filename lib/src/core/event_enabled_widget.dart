@@ -24,19 +24,41 @@ class EventEnabledWidget extends StatefulWidget {
 
 class _EventEnabledWidgetState extends State<EventEnabledWidget> {
   final EventDispatcher _dispatcher = EventDispatcher();
-  late final String _elementId;
+  late String _elementId;
   final FocusNode _focusNode = FocusNode();
+
+  String _resolveElementId(ElpianNode node) {
+    return node.key ?? 'element_${node.hashCode}';
+  }
   
   @override
   void initState() {
     super.initState();
-    _elementId = widget.node.key ?? 'element_${widget.node.hashCode}';
+    _elementId = _resolveElementId(widget.node);
     
     // Register node in dispatcher
     _dispatcher.registerNode(_elementId, widget.node, parentId: widget.parentId);
     
     // Setup focus listener
     _focusNode.addListener(_onFocusChange);
+  }
+
+  @override
+  void didUpdateWidget(EventEnabledWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    final oldId = _resolveElementId(oldWidget.node);
+    final newId = _resolveElementId(widget.node);
+
+    // Reconcile registry if the element id or parent changed, or the node
+    // instance changed (new render tree).
+    if (oldId != newId ||
+        oldWidget.parentId != widget.parentId ||
+        oldWidget.node != widget.node) {
+      _dispatcher.unregisterNode(oldId);
+      _dispatcher.registerNode(newId, widget.node, parentId: widget.parentId);
+      _elementId = newId;
+    }
   }
   
   @override
@@ -149,6 +171,7 @@ class _EventEnabledWidgetState extends State<EventEnabledWidget> {
             ? (details) => _dispatcher.dispatchDragStart(
                 _elementId,
                 details.globalPosition,
+                localPosition: details.localPosition,
               )
             : null,
         onPanUpdate: events.containsKey('drag')
@@ -156,12 +179,14 @@ class _EventEnabledWidgetState extends State<EventEnabledWidget> {
                 _elementId,
                 details.globalPosition,
                 details.delta,
+                localPosition: details.localPosition,
               )
             : null,
         onPanEnd: events.containsKey('dragend')
             ? (details) => _dispatcher.dispatchDragEnd(
                 _elementId,
                 Offset.zero,
+                localPosition: Offset.zero,
               )
             : null,
         onHorizontalDragEnd: _hasAnyEvent(events, ['swipeleft', 'swiperight'])

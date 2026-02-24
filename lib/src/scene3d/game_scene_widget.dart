@@ -42,6 +42,9 @@ class GameSceneWidget extends StatefulWidget {
   /// Callback invoked after each frame is rendered.
   final VoidCallback? onFrameRendered;
 
+  /// Stable key to prevent reparsing when scene JSON is structurally unchanged.
+  final String? sceneKey;
+
   const GameSceneWidget({
     super.key,
     this.sceneJson,
@@ -51,6 +54,7 @@ class GameSceneWidget extends StatefulWidget {
     this.autoStart = true,
     this.backgroundColor = const Color(0xFF141420),
     this.onFrameRendered,
+    this.sceneKey,
   }) : assert(sceneJson != null || sceneMap != null,
             'Either sceneJson or sceneMap must be provided');
 
@@ -60,20 +64,32 @@ class GameSceneWidget extends StatefulWidget {
     final sceneData = props['scene'] ?? props['sceneJson'];
     final fps = (props['fps'] as num?)?.toInt() ?? 60;
     final interactive = props['interactive'] as bool? ?? true;
+    final width = (props['width'] as num?)?.toDouble();
+    final height = (props['height'] as num?)?.toDouble();
+    final sceneKey = props['sceneKey']?.toString();
 
+    Widget scene;
     if (sceneData is Map<String, dynamic>) {
-      return GameSceneWidget(
+      scene = GameSceneWidget(
         sceneMap: sceneData,
         fps: fps,
         interactive: interactive,
+        sceneKey: sceneKey,
+      );
+    } else {
+      scene = GameSceneWidget(
+        sceneJson: sceneData?.toString() ?? '{"world":[]}',
+        fps: fps,
+        interactive: interactive,
+        sceneKey: sceneKey,
       );
     }
 
-    return GameSceneWidget(
-      sceneJson: sceneData?.toString() ?? '{"world":[]}',
-      fps: fps,
-      interactive: interactive,
-    );
+    if (width != null || height != null) {
+      return SizedBox(width: width, height: height, child: scene);
+    }
+
+    return scene;
   }
 
   @override
@@ -151,8 +167,12 @@ class _GameSceneWidgetState extends State<GameSceneWidget>
   @override
   void didUpdateWidget(GameSceneWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.sceneKey != null && widget.sceneKey == oldWidget.sceneKey) {
+      return;
+    }
     if (widget.sceneJson != oldWidget.sceneJson ||
-        widget.sceneMap != oldWidget.sceneMap) {
+        widget.sceneMap != oldWidget.sceneMap ||
+        widget.sceneKey != oldWidget.sceneKey) {
       _parseScene();
     }
   }

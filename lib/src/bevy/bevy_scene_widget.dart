@@ -5,8 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
 import 'bevy_scene_controller.dart';
-import 'bevy_scene_api.dart'
-    if (dart.library.js_interop) 'bevy_scene_api_web.dart';
 import 'dart_scene_renderer.dart';
 import '../models/elpian_node.dart';
 
@@ -214,7 +212,7 @@ class _BevySceneWidgetState extends State<BevySceneWidget>
     bool success;
     try {
       success = _controller!.loadScene(
-        json!,
+        json,
         width: renderWidth,
         height: renderHeight,
       );
@@ -304,7 +302,7 @@ class _BevySceneWidgetState extends State<BevySceneWidget>
       _parseSceneJson();
       if (!_useDartRenderer) {
         final json = widget.sceneJson ?? jsonEncode(widget.sceneMap);
-        _controller?.updateScene(json!);
+        _controller?.updateScene(json);
       }
     }
   }

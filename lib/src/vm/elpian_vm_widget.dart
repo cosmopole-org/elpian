@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../core/elpian_engine.dart';
 import '../core/event_system.dart';
-import '../models/elpian_node.dart';
 import 'elpian_vm.dart';
 import 'quickjs_vm.dart';
 import 'runtime_kind.dart';
@@ -11,6 +10,7 @@ import 'wasm_vm.dart';
 import 'vm_runtime_client.dart';
 import 'host_api_catalog.dart';
 import 'host_handler.dart';
+import 'timer_host_api.dart';
 
 /// A Flutter widget that runs an Elpian Rust VM sandbox and renders
 /// the view tree it produces via the ElpianEngine.
@@ -157,6 +157,7 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
   ElpianVm? _vm;
   QuickJsVm? _quickJsVm;
   WasmVm? _wasmVm;
+  VmTimerHostApi? _timerHostApi;
   Map<String, dynamic>? _currentViewJson;
   String? _error;
   bool _isLoading = true;
@@ -242,9 +243,28 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
 
       // Register built-in host handlers (core + DOM + Canvas APIs).
       final VmRuntimeClient runtimeVm = _vm ?? _quickJsVm ?? _wasmVm!;
+      _timerHostApi?.dispose();
+      _timerHostApi = VmTimerHostApi(
+        invoke: (funcName, inputJson) async {
+          if (inputJson == null) {
+            await runtimeVm.callFunction(funcName);
+          } else {
+            await runtimeVm.callFunctionWithInput(funcName, inputJson);
+          }
+        },
+        onError: (message) {
+          debugPrint('ElpianVmWidget: $message');
+        },
+      );
+
+      final timerHandlers = <String, HostCallHandler>{
+        for (final apiName in VmHostApiCatalog.timerApiNames)
+          apiName: (name, payload) => _timerHostApi!.handle(name, payload),
+      };
       final hostHandlers = <String, HostCallHandler>{
         for (final apiName in VmHostApiCatalog.allHostApiNames)
           apiName: (name, payload) => hostHandler.handleHostCall(name, payload),
+        ...timerHandlers,
         ...?widget.hostHandlers,
       };
       runtimeVm.registerHostHandlers(hostHandlers);
@@ -374,6 +394,7 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
     _vm?.dispose();
     _quickJsVm?.dispose();
     _wasmVm?.dispose();
+    _timerHostApi?.dispose();
     super.dispose();
   }
 

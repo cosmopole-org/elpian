@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
-import 'dart:js_util' as js_util;
 
 import 'package:flutter/foundation.dart';
 
@@ -70,7 +69,8 @@ class QuickJsVm implements VmRuntimeClient {
     _defaultHostHandler = handler;
   }
 
-  Future<String> _callAsync({required String method, required List<JSAny?> args}) async {
+  Future<String> _callAsync(
+      {required String method, required List<JSAny?> args}) async {
     final quickJs = globalContext['elpianQuickJs'];
     if (quickJs == null) {
       throw StateError(
@@ -82,18 +82,20 @@ class QuickJsVm implements VmRuntimeClient {
 
     final jsValue = result.dartify();
 
-    if (jsValue == null || jsValue is String || jsValue is num || jsValue is bool) {
+    if (jsValue == null ||
+        jsValue is String ||
+        jsValue is num ||
+        jsValue is bool) {
       return jsValue?.toString() ?? '';
     }
 
     final jsResultObject = result as Object;
-    final isThenable = js_util.hasProperty(jsResultObject, 'then');
-    if (isThenable) {
-      final value = await js_util.promiseToFuture<Object?>(jsResultObject);
+    if (jsResultObject is JSPromise) {
+      final value = await jsResultObject.toDart;
       return value?.toString() ?? '';
     }
 
-    return jsValue.toString();
+    return jsResultObject.toString();
   }
 
   Future<String> runCode(String code) {
@@ -131,22 +133,22 @@ class QuickJsVm implements VmRuntimeClient {
     if (handler != null) {
       final result = handler(apiName, payload);
       if (result is String) return result;
-      return '{\"type\":\"i16\",\"data\":{\"value\":0}}';
+      return '{"type":"i16","data":{"value":0}}';
     }
 
     if (_defaultHostHandler != null) {
       final result = _defaultHostHandler!(apiName, payload);
       if (result is String) return result;
-      return '{\"type\":\"i16\",\"data\":{\"value\":0}}';
+      return '{"type":"i16","data":{"value":0}}';
     }
 
     if (apiName == 'println') {
       debugPrint('QuickJsVm[$machineId]: $payload');
     }
     if (apiName == 'stringify') {
-      return '{\"type\":\"string\",\"data\":{\"value\":${jsonEncode(payload)}}}';
+      return '{"type":"string","data":{"value":${jsonEncode(payload)}}}';
     }
-    return '{\"type\":\"i16\",\"data\":{\"value\":0}}';
+    return '{"type":"i16","data":{"value":0}}';
   }
 
   @override

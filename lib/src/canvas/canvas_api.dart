@@ -270,6 +270,13 @@ class CanvasAPIExecutor {
     }
   }
 
+  /// Execute a subset of commands (incremental rendering)
+  void executeCommands(Canvas canvas, Size size, List<CanvasCommand> subset) {
+    for (final command in subset) {
+      _executeCommand(canvas, size, command);
+    }
+  }
+
   void _executeCommand(Canvas canvas, Size size, CanvasCommand command) {
     final params = command.params;
 

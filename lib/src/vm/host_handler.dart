@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import '../canvas/canvas_api.dart';
+import '../canvas/canvas_context_store.dart';
 import '../core/dom_api.dart';
 import 'host_api_catalog.dart';
 
@@ -43,6 +44,7 @@ class HostHandler {
         return _makeResponse('i16', 0);
     }
   }
+
 
   String handleRender(String payload) {
     try {
@@ -210,6 +212,10 @@ class HostHandler {
 
   String _handleCanvasApi(String apiName, String payload) {
     try {
+      if (apiName.startsWith('canvas.ctx.')) {
+        return _handleCanvasContextApi(apiName, payload);
+      }
+
       final args = _normalizedArgs(payload);
       if (apiName == 'canvas.clear') {
         canvas.clear();
@@ -243,6 +249,79 @@ class HostHandler {
       debugPrint('HostHandler: canvas API error ($apiName): $e');
       return _makeResponse('i16', 0);
     }
+  }
+
+  String _handleCanvasContextApi(String apiName, String payload) {
+    final args = _normalizedArgs(payload);
+    switch (apiName) {
+      case 'canvas.ctx.create': {
+        final id = args['id']?.toString();
+        final width = _toDouble(args['width']) ?? 0;
+        final height = _toDouble(args['height']) ?? 0;
+        final ctx = CanvasContextStore.instance.create(
+          id: id,
+          width: width,
+          height: height,
+        );
+        return _makeResponse('string', ctx.id);
+      }
+      case 'canvas.ctx.dispose': {
+        final id = args['id']?.toString();
+        if (id != null && id.isNotEmpty) {
+          CanvasContextStore.instance.dispose(id);
+        }
+        return _makeResponse('i16', 0);
+      }
+      case 'canvas.ctx.clear': {
+        final id = args['id']?.toString();
+        final ctx = id == null ? null : CanvasContextStore.instance.get(id);
+        ctx?.clear();
+        return _makeResponse('i16', 0);
+      }
+      case 'canvas.ctx.setSize': {
+        final id = args['id']?.toString();
+        final ctx = id == null ? null : CanvasContextStore.instance.get(id);
+        if (ctx != null) {
+          final width = _toDouble(args['width']) ?? ctx.width;
+          final height = _toDouble(args['height']) ?? ctx.height;
+          ctx.setSize(width, height);
+        }
+        return _makeResponse('i16', 0);
+      }
+      case 'canvas.ctx.addCommand': {
+        final id = args['id']?.toString();
+        final ctx = id == null ? null : CanvasContextStore.instance.get(id);
+        if (ctx == null) return _makeResponse('i16', 0);
+        final commandJson = args['command'] ?? args;
+        if (commandJson is Map) {
+          final cmd = CanvasCommand.fromJson(Map<String, dynamic>.from(commandJson));
+          ctx.addCommand(cmd);
+        }
+        return _makeResponse('i16', 0);
+      }
+      case 'canvas.ctx.addCommands': {
+        final id = args['id']?.toString();
+        final ctx = id == null ? null : CanvasContextStore.instance.get(id);
+        if (ctx == null) return _makeResponse('i16', 0);
+        final raw = args['commands'];
+        if (raw is List) {
+          final commands = raw
+              .whereType<Map>()
+              .map((entry) => CanvasCommand.fromJson(Map<String, dynamic>.from(entry)))
+              .toList();
+          ctx.addCommands(commands);
+        }
+        return _makeResponse('i16', 0);
+      }
+    }
+    return _makeResponse('i16', 0);
+  }
+
+  double? _toDouble(dynamic value) {
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
   }
 
   CanvasCommandType? _findCanvasType(String commandName) {

@@ -4,9 +4,14 @@ import '../css/css_properties.dart';
 
 class ElpianListView {
   static Widget build(ElpianNode node, List<Widget> children) {
+    final scrollable = node.props['scrollable'];
+    final bool isScrollable = scrollable is bool ? scrollable : true;
+
     Widget result = ListView(
-      children: children,
       shrinkWrap: true,
+      physics: isScrollable ? null : const NeverScrollableScrollPhysics(),
+      primary: isScrollable ? null : false,
+      children: children,
     );
 
     if (node.style != null) {

@@ -79,7 +79,6 @@ VmExecResult _errorResult(String message) => VmExecResult(
 class ElpianVmApi {
   static ElpianVmApi? _instance;
   static String? _lastError;
-  static bool _nativeAvailable = false;
 
   static String? get lastError => _lastError;
 
@@ -193,10 +192,8 @@ class ElpianVmApi {
     if (_instance != null) return _instance;
     try {
       _instance = ElpianVmApi._();
-      _nativeAvailable = true;
       return _instance;
     } catch (e) {
-      _nativeAvailable = false;
       _setLastError('Failed to load native VM library: $e');
       return null;
     }

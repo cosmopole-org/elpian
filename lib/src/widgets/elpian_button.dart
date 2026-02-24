@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../models/elpian_node.dart';
-import '../css/css_properties.dart';
 import '../core/event_dispatcher.dart';
 import '../core/event_system.dart';
 

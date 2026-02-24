@@ -60,11 +60,13 @@ class _ElpianCanvasState extends State<ElpianCanvas> {
       width: widget.width,
       height: widget.height,
       color: widget.backgroundColor,
-      child: CustomPaint(
-        painter: CanvasPainter(executor),
-        size: Size(
-          widget.width ?? double.infinity,
-          widget.height ?? double.infinity,
+      child: RepaintBoundary(
+        child: CustomPaint(
+          painter: CanvasPainter(executor),
+          size: Size(
+            widget.width ?? double.infinity,
+            widget.height ?? double.infinity,
+          ),
         ),
       ),
     );
