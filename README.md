@@ -1,34 +1,93 @@
-# Elpian UI
+<p align="center">
+  <h1 align="center">Elpian UI</h1>
+  <p align="center">
+    <strong>A high-performance Flutter engine that renders HTML, CSS, Flutter DSL, Canvas 2D, and 3D scene graphs from JSON into native widgets.</strong>
+  </p>
+  <p align="center">
+    <a href="#-quick-start">Quick Start</a> &bull;
+    <a href="#-features">Features</a> &bull;
+    <a href="#-code-examples">Examples</a> &bull;
+    <a href="#-documentation">Docs</a> &bull;
+    <a href="#-platform-support">Platforms</a>
+  </p>
+</p>
 
-A high-performance Flutter UI engine that renders HTML, CSS, Flutter DSL, and 3D scene graphs from JSON and markup formats into native Flutter 2D/3D widgets.
+---
 
-## Features
+Define your entire UI in JSON. Render it natively in Flutter. Elpian bridges the gap between web-style markup and native mobile/desktop performance &mdash; supporting everything from simple layouts to full 3D scenes and scripted application logic.
 
-### Rendering Engines
-- **Flutter DSL** - 60+ Flutter widgets rendered from JSON definitions
-- **HTML Rendering** - 70+ HTML5 elements with semantic tag support
-- **CSS Engine** - 150+ CSS properties including flexbox, grid, transforms, animations, and filters
-- **Canvas 2D** - Full 2D graphics API with 50+ drawing commands
-- **3D Scene Graphs** - Define 3D scenes in JSON, rendered via Bevy (Rust/GPU) or pure-Dart canvas
-- **Elpian VM** - Sandboxed Rust VM with FFI/WASM for scripting UI logic
+```dart
+final widget = ElpianEngine().renderFromJson({
+  'type': 'div',
+  'style': {'padding': '24', 'backgroundColor': '#1E1E2E', 'borderRadius': 16},
+  'children': [
+    {'type': 'h1', 'props': {'text': 'Hello, Elpian'}, 'style': {'color': '#CDD6F4', 'fontSize': 28}}
+  ]
+});
+```
 
-### Core Capabilities
-- **JSON Stylesheet Parser** - Define CSS stylesheets in JSON with media queries, variables, and keyframe animations
-- **DOM API** - Full DOM manipulation API (getElementById, querySelector, appendChild, etc.)
-- **Event System** - 40+ event types with bubbling, capturing, delegation, and custom events
-- **Extensible Architecture** - Register custom widgets and host handlers
+## At a Glance
 
-## Installation
+| | |
+|---|---|
+| **201** Dart source files | **17** Rust source files |
+| **60+** Flutter widgets | **70+** HTML5 elements |
+| **150+** CSS properties | **50+** Canvas 2D commands |
+| **40+** event types | **22** animation widgets |
+| **6** platforms supported | **13** example apps included |
 
-Add to your `pubspec.yaml`:
+---
+
+## &#x2728; Features
+
+### &#x1F3D7;&#xFE0F; Rendering Engines
+
+| Engine | Description |
+|--------|-------------|
+| **Flutter DSL** | 60+ Flutter widgets rendered from JSON &mdash; layout, controls, animation, interaction |
+| **HTML Rendering** | 70+ HTML5 semantic elements &mdash; `div`, `section`, `form`, `table`, `video`, and more |
+| **CSS Engine** | 150+ CSS properties &mdash; flexbox, grid, transforms, animations, filters, variables |
+| **Canvas 2D** | Full 2D graphics API with paths, shapes, gradients, text, and transforms |
+| **3D Scene Graphs** | JSON-defined 3D worlds rendered via **Bevy** (Rust/GPU) or a pure-Dart fallback |
+| **Elpian VM** | Sandboxed Rust bytecode VM with FFI (native) and WASM (web) for scripting UI logic |
+
+### &#x2699;&#xFE0F; Core Systems
+
+- **JSON Stylesheets** &mdash; CSS-like rules in JSON with media queries, variables, keyframe animations, and cascade
+- **DOM API** &mdash; `getElementById`, `querySelector`, `appendChild`, style & class management, and more
+- **Event System** &mdash; 40+ event types with capturing, bubbling, delegation, debounce, and throttle
+- **Widget Registry** &mdash; 200+ pre-registered builders, plus custom widget registration
+- **QuickJS Runtime** &mdash; Embedded JavaScript engine for scripting alongside the Rust VM
+
+---
+
+## &#x1F680; Quick Start
+
+### Installation
+
+Add Elpian to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
   elpian_ui:
-    path: ./path/to/elpian_ui
+    path: ./path/to/elpian
 ```
 
-## Quick Start
+```bash
+flutter pub get
+```
+
+### Run the demo
+
+```bash
+flutter run -t lib/example/landing_page_example.dart
+```
+
+---
+
+## &#x1F4BB; Code Examples
+
+### Render UI from JSON
 
 ```dart
 import 'package:elpian_ui/elpian_ui.dart';
@@ -41,31 +100,21 @@ final widget = engine.renderFromJson({
     'padding': '20',
     'backgroundColor': '#2196F3',
     'borderRadius': 12,
-    'boxShadow': [{
-      'color': 'rgba(0,0,0,0.2)',
-      'offset': {'x': 0, 'y': 4},
-      'blur': 8
-    }]
+    'boxShadow': [{'color': 'rgba(0,0,0,0.2)', 'offset': {'x': 0, 'y': 4}, 'blur': 8}]
   },
   'children': [
     {
       'type': 'h1',
       'props': {'text': 'Hello World'},
-      'style': {
-        'color': 'white',
-        'fontSize': 32,
-        'fontWeight': 'bold'
-      }
+      'style': {'color': 'white', 'fontSize': 32, 'fontWeight': 'bold'}
     }
   ]
 });
 ```
 
-### JSON Stylesheet
+### JSON Stylesheets
 
 ```dart
-final engine = ElpianEngine();
-
 engine.loadStylesheet({
   'rules': [
     {
@@ -74,33 +123,18 @@ engine.loadStylesheet({
         'backgroundColor': '#FFFFFF',
         'padding': '20',
         'borderRadius': 12,
-        'boxShadow': [
-          {
-            'color': 'rgba(0,0,0,0.1)',
-            'offset': {'x': 0, 'y': 2},
-            'blur': 8,
-          }
-        ],
+        'boxShadow': [{'color': 'rgba(0,0,0,0.1)', 'offset': {'x': 0, 'y': 2}, 'blur': 8}],
       }
     },
     {
       'selector': '.btn-primary',
-      'styles': {
-        'backgroundColor': '#2196F3',
-        'color': '#FFFFFF',
-        'padding': '12 24',
-      }
+      'styles': {'backgroundColor': '#2196F3', 'color': '#FFFFFF', 'padding': '12 24'}
     }
   ],
   'mediaQueries': [
     {
       'query': 'min-width: 768',
-      'rules': [
-        {
-          'selector': '.card',
-          'styles': {'padding': '40'}
-        }
-      ]
+      'rules': [{'selector': '.card', 'styles': {'padding': '40'}}]
     }
   ]
 });
@@ -109,10 +143,7 @@ final ui = engine.renderFromJson({
   'type': 'div',
   'props': {'className': 'card'},
   'children': [
-    {
-      'type': 'Button',
-      'props': {'text': 'Click Me', 'className': 'btn-primary'}
-    }
+    {'type': 'Button', 'props': {'text': 'Click Me', 'className': 'btn-primary'}}
   ]
 });
 ```
@@ -120,11 +151,8 @@ final ui = engine.renderFromJson({
 ### Event Handling
 
 ```dart
-final engine = ElpianEngine();
-
 engine.setGlobalEventHandler((event) {
-  print('Event: ${event.type}');
-  print('Target: ${event.target}');
+  print('Event: ${event.type} on ${event.target}');
   if (event is ElpianPointerEvent) {
     print('Position: ${event.position}');
   }
@@ -141,7 +169,7 @@ final widget = engine.renderFromJson({
 });
 ```
 
-### DOM API
+### DOM Manipulation
 
 ```dart
 final dom = ElpianDOM();
@@ -155,10 +183,11 @@ final element = dom.getElementById('main');
 element?.addClass('active');
 element?.addEventListener('click', () => print('Clicked!'));
 
+// Convert to renderable widget
 final node = element?.toElpianNode();
 ```
 
-### 3D Scene Rendering
+### 3D Scene Graphs
 
 ```json
 {
@@ -183,6 +212,10 @@ final node = element?.toElpianNode();
 }
 ```
 
+Mesh primitives: **Box**, **Sphere**, **Plane**, **Cylinder**, **Capsule**, **Torus**
+Materials: PBR with color, metallic, roughness
+Lighting: Point, Directional, Spot with shadows
+
 ### VM-Driven UI
 
 ```dart
@@ -201,11 +234,9 @@ ElpianVmWidget(
 )
 ```
 
-## Custom Widget Registration
+### Custom Widget Registration
 
 ```dart
-final engine = ElpianEngine();
-
 engine.registerWidget('MyCustomCard', (node, children) {
   return Container(
     padding: const EdgeInsets.all(16),
@@ -213,11 +244,7 @@ engine.registerWidget('MyCustomCard', (node, children) {
       color: Colors.white,
       borderRadius: BorderRadius.circular(12),
       boxShadow: [
-        BoxShadow(
-          color: Colors.black.withOpacity(0.1),
-          blurRadius: 8,
-          offset: const Offset(0, 4),
-        ),
+        BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8, offset: const Offset(0, 4)),
       ],
     ),
     child: Column(children: children),
@@ -225,51 +252,158 @@ engine.registerWidget('MyCustomCard', (node, children) {
 });
 ```
 
-## Project Structure
+---
+
+## &#x1F9E9; Widget & Element Coverage
+
+<details>
+<summary><strong>&#x1F4D0; Layout Widgets (30+)</strong></summary>
+
+Container, Column, Row, Stack, Positioned, Expanded, Flexible, Wrap, Center, Align, Padding, SizedBox, AspectRatio, FractionallySizedBox, FittedBox, LimitedBox, ConstrainedBox, OverflowBox, Baseline, Spacer, IndexedStack, RotatedBox, DecoratedBox, ClipRRect
+
+</details>
+
+<details>
+<summary><strong>&#x1F39B;&#xFE0F; UI Controls (15+)</strong></summary>
+
+Button, TextField, Checkbox, Radio, Switch, Slider, Chip, Badge, CircularProgressIndicator, LinearProgressIndicator, Divider, VerticalDivider
+
+</details>
+
+<details>
+<summary><strong>&#x1F3AC; Animation Widgets (22)</strong></summary>
+
+AnimatedContainer, AnimatedOpacity, AnimatedCrossFade, AnimatedSwitcher, AnimatedAlign, AnimatedPadding, AnimatedPositioned, AnimatedScale, AnimatedRotation, AnimatedSlide, AnimatedSize, AnimatedDefaultTextStyle, AnimatedGradient, FadeTransition, SlideTransition, ScaleTransition, RotationTransition, SizeTransition, TweenAnimationBuilder, StaggeredAnimation, Shimmer, Pulse
+
+</details>
+
+<details>
+<summary><strong>&#x1F446; Interaction Widgets (10+)</strong></summary>
+
+InkWell, GestureDetector, Tooltip, Dismissible, Draggable, DragTarget, Opacity, Transform, Hero
+
+</details>
+
+<details>
+<summary><strong>&#x1F310; HTML5 Elements (70+)</strong></summary>
+
+**Document:** div, span, section, article, header, footer, nav, aside, main
+
+**Typography:** h1-h6, p, strong, em, mark, small, del, ins, sub, sup, abbr, cite, kbd, samp, var, code, pre, blockquote, br, hr, time, data
+
+**Lists:** ul, ol, li &bull; **Tables:** table, tr, td, th
+
+**Forms:** form, input, button, select, option, optgroup, textarea, label, fieldset, legend, datalist, output, progress, meter
+
+**Media:** img, picture, source, figure, figcaption, video, audio, track, canvas, iframe, embed, object, param, map, area
+
+**Interactive:** a, details, summary, dialog
+
+</details>
+
+<details>
+<summary><strong>&#x1F3A8; CSS Properties (150+)</strong></summary>
+
+**Box Model (25):** width, height, min/max dimensions, padding, margin, box-sizing, overflow
+
+**Positioning (10):** position (relative/absolute/fixed/sticky), top, right, bottom, left, z-index, float, clear
+
+**Flexbox (20):** display, flex-direction, flex-wrap, justify-content, align-items, align-content, align-self, gap, order, flex-grow/shrink/basis
+
+**Grid (15):** grid-template-columns/rows/areas, grid-auto-columns/rows/flow, grid-column/row/area, grid-gap, justify-items/self
+
+**Typography (25):** color, font-size/weight/style/family, letter-spacing, word-spacing, line-height, text-align/decoration/transform/overflow, white-space
+
+**Background (10):** background-color/image/size/position/repeat/attachment/clip/origin, linear & radial gradients
+
+**Border (20):** border, border-width/style/color per side, border-radius per corner, outline, border-collapse/spacing
+
+**Transform (20):** rotate, scale, translate, skew per axis, perspective, transform-origin/style, backface-visibility
+
+**Effects (15):** opacity, visibility, box-shadow, text-shadow, drop-shadow, blur, brightness, contrast, grayscale, hue-rotate, invert, saturate, sepia, backdrop-blur
+
+**Animation (12):** transition-duration/delay/property/timing-function, animation-name/duration/delay/timing-function/iteration-count/direction/fill-mode/play-state
+
+</details>
+
+---
+
+## &#x1F30D; Platform Support
+
+| Platform | 2D / HTML / CSS | Canvas 2D | 3D (Bevy GPU) | 3D (Dart) | VM |
+|:--------:|:---------------:|:---------:|:-------------:|:---------:|:--:|
+| Android | &#x2705; | &#x2705; | &#x2705; FFI | &#x2705; | &#x2705; FFI |
+| iOS | &#x2705; | &#x2705; | &#x2705; FFI | &#x2705; | &#x2705; FFI |
+| Web | &#x2705; | &#x2705; | &#x2705; WASM | &#x2705; | &#x2705; WASM |
+| macOS | &#x2705; | &#x2705; | &#x2705; FFI | &#x2705; | &#x2705; FFI |
+| Linux | &#x2705; | &#x2705; | &#x2705; FFI | &#x2705; | &#x2705; FFI |
+| Windows | &#x2705; | &#x2705; | &#x2705; FFI | &#x2705; | &#x2705; FFI |
+
+---
+
+## &#x1F4C1; Project Structure
 
 ```
 elpian/
 ├── lib/
-│   ├── elpian_ui.dart            # Main library export
+│   ├── elpian_ui.dart              # Main library export
 │   ├── src/
-│   │   ├── core/                 # ElpianEngine, widget registry, event system
-│   │   ├── models/               # ElpianNode, CSSStyle data models
-│   │   ├── parser/               # JSON parser
-│   │   ├── css/                  # CSS parser, stylesheet, JSON stylesheet
-│   │   ├── canvas/               # 2D Canvas API
-│   │   ├── widgets/              # 60+ Flutter widget builders
-│   │   ├── html_widgets/         # 70+ HTML element builders
-│   │   ├── bevy/                 # Bevy 3D scene integration (Rust FFI)
-│   │   ├── scene3d/              # Pure-Dart 3D renderer
-│   │   └── vm/                   # Elpian VM (Rust FFI/WASM)
-│   └── example/                  # Demo applications
-├── rust/                         # Rust VM + Bevy crate
-├── rust_builder/                 # Flutter FFI plugin
-├── test/                         # Unit tests
-├── web/                          # Web assets + Bevy WASM demo
+│   │   ├── core/                   # Engine, widget registry, event system, DOM API
+│   │   ├── models/                 # ElpianNode, CSSStyle data models
+│   │   ├── parser/                 # JSON parser
+│   │   ├── css/                    # CSS parser, stylesheets, JSON stylesheet engine
+│   │   ├── canvas/                 # 2D Canvas API
+│   │   ├── widgets/                # 60+ Flutter widget builders
+│   │   ├── html_widgets/           # 70+ HTML element builders
+│   │   ├── bevy/                   # Bevy 3D scene integration (Rust FFI)
+│   │   ├── scene3d/                # Pure-Dart 3D renderer (fallback)
+│   │   └── vm/                     # Elpian VM + QuickJS integration
+│   └── example/                    # 13 demo applications
+├── rust/                           # Rust VM + Bevy crate (compiler, executor, FFI)
+├── rust_builder/                   # Flutter FFI plugin (all platforms)
+├── test/                           # Unit & integration tests
+├── web/                            # Web assets, WASM loader, PWA manifest
+├── .github/workflows/              # CI/CD: build WASM + deploy to GitHub Pages
 └── pubspec.yaml
 ```
 
-## Documentation
+---
+
+## &#x1F4D6; Documentation
 
 | Document | Description |
-|----------|-------------|
-| [QUICKSTART.md](QUICKSTART.md) | Getting started guide |
-| [FEATURES.md](FEATURES.md) | Complete feature set reference |
-| [EVENT_SYSTEM.md](EVENT_SYSTEM.md) | Event handling documentation |
-| [JSON_STYLESHEET.md](JSON_STYLESHEET.md) | JSON stylesheet system |
-| [CANVAS_API.md](CANVAS_API.md) | 2D Canvas drawing API |
-| [VM_INTEGRATION.md](VM_INTEGRATION.md) | Rust VM and FFI integration |
-| [2d_graphics.md](2d_graphics.md) | 2D UI element reference |
-| [3d_graphics.md](3d_graphics.md) | 3D scene graph reference |
-| [logic_vm.md](logic_vm.md) | VM AST and API reference |
+|:---------|:------------|
+| [QUICKSTART.md](QUICKSTART.md) | &#x26A1; Getting started guide |
+| [FEATURES.md](FEATURES.md) | &#x1F4CB; Complete feature set reference |
+| [EVENT_SYSTEM.md](EVENT_SYSTEM.md) | &#x1F4E1; Event handling & propagation |
+| [JSON_STYLESHEET.md](JSON_STYLESHEET.md) | &#x1F3A8; JSON stylesheet system |
+| [CANVAS_API.md](CANVAS_API.md) | &#x1F58C;&#xFE0F; 2D Canvas drawing API |
+| [VM_LOGIC.md](VM_LOGIC.md) | &#x1F9F0; Rust VM AST & API reference |
+| [2D_GRAPHICS.md](2D_GRAPHICS.md) | &#x1F5BC;&#xFE0F; 2D UI element reference |
+| [3D_GRAPHICS.md](3D_GRAPHICS.md) | &#x1F4E6; 3D scene graph reference |
 
-## Testing
+---
+
+## &#x1F527; Use Cases
+
+- **&#x2601;&#xFE0F; Server-Driven UI** &mdash; Render complete interfaces from backend JSON configs
+- **&#x1F4DD; Dynamic Forms** &mdash; Generate forms from schema definitions at runtime
+- **&#x1F4F0; Content Management** &mdash; Render CMS content with full CSS styling
+- **&#x1F500; A/B Testing** &mdash; Switch UI variants without shipping app updates
+- **&#x1F3D7;&#xFE0F; No-Code Builders** &mdash; Visual UI builders that output JSON for Elpian to render
+- **&#x1F4CA; 3D Visualization** &mdash; Product viewers, data viz, interactive scenes
+- **&#x1F4DC; Scripted Applications** &mdash; VM-driven apps with dynamic logic and rendering
+
+---
+
+## &#x1F3C3; Running Tests
 
 ```bash
 flutter test
 ```
 
-## License
+---
+
+## &#x1F4C4; License
 
 MIT License
