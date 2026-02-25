@@ -221,6 +221,24 @@ void main() {
       expect(find.text('Math expression is required'), findsOneWidget);
     });
 
+
+    testWidgets('math expression renders common math symbols', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: engine.renderFromJson({
+              'type': 'MathExpression',
+              'props': <String, dynamic>{
+                'expression': r'\alpha^2 + \beta_1 \to \infty',
+              },
+            }),
+          ),
+        ),
+      );
+
+      expect(find.textContaining('α² + β₁ → ∞'), findsOneWidget);
+    });
+
     testWidgets('math expression sanitizes unsafe TeX commands', (tester) async {
       await tester.pumpWidget(
         MaterialApp(

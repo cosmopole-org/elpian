@@ -18,7 +18,6 @@ dependencies:
   url_launcher: ^6.3.1
   webview_flutter: ^4.10.0
   just_audio: ^0.9.42
-  flutter_math_fork: ^0.7.4
   rust_lib_elpian_vm:
     path: rust_builder
 
