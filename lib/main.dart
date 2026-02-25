@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'example/dom_canvas_logic_example.dart';
 import 'example/quickjs_calculator_example.dart';
 import 'example/quickjs_example.dart';
+import 'example/quickjs_whiteboard_example.dart';
 import 'example/vm_example.dart';
 
 void main() {
@@ -32,7 +33,7 @@ class ElpianExamplesHome extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 4,
+      length: 5,
       child: Scaffold(
         body: SafeArea(
           child: Column(
@@ -44,6 +45,7 @@ class ElpianExamplesHome extends StatelessWidget {
                   isScrollable: true,
                   tabs: [
                     Tab(text: 'Calculator'),
+                    Tab(text: 'Whiteboard'),
                     Tab(text: 'QuickJS Runtime'),
                     Tab(text: 'AST VM'),
                     Tab(text: 'DOM + Canvas'),
@@ -52,8 +54,10 @@ class ElpianExamplesHome extends StatelessWidget {
               ),
               const Expanded(
                 child: TabBarView(
+                  physics: NeverScrollableScrollPhysics(),
                   children: [
                     QuickJsCalculatorExamplePage(),
+                    QuickJsWhiteboardExamplePage(),
                     QuickJsExamplePage(),
                     VmExamplePage(),
                     DomCanvasLogicExamplePage(),
