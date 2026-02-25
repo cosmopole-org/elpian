@@ -1,0 +1,180 @@
+# Widget & Element Functional Audit
+
+This audit is generated from the registry in `ElpianEngine` and a manual behavior pass over registered builders.
+
+- Total registered Flutter DSL widgets: **85**
+- Total registered HTML elements: **76**
+
+## Flutter DSL registrations
+All registered Flutter DSL widget types resolve to concrete builders and are considered implemented wrappers around native Flutter widgets/components.
+
+- `Container` → `ElpianContainer.build` (implemented)
+- `Text` → `ElpianText.build` (implemented)
+- `Button` → `ElpianButton.build` (implemented)
+- `Image` → `ElpianImage.build` (implemented)
+- `Column` → `ElpianColumn.build` (implemented)
+- `Row` → `ElpianRow.build` (implemented)
+- `Stack` → `ElpianStack.build` (implemented)
+- `Positioned` → `ElpianPositioned.build` (implemented)
+- `Expanded` → `ElpianExpanded.build` (implemented)
+- `Flexible` → `ElpianFlexible.build` (implemented)
+- `Center` → `ElpianCenter.build` (implemented)
+- `Padding` → `ElpianPadding.build` (implemented)
+- `Align` → `ElpianAlign.build` (implemented)
+- `SizedBox` → `ElpianSizedBox.build` (implemented)
+- `ListView` → `ElpianListView.build` (implemented)
+- `GridView` → `ElpianGridView.build` (implemented)
+- `TextField` → `ElpianTextField.build` (implemented)
+- `Checkbox` → `ElpianCheckbox.build` (implemented)
+- `Radio` → `ElpianRadio.build` (implemented)
+- `Switch` → `ElpianSwitch.build` (implemented)
+- `Slider` → `ElpianSlider.build` (implemented)
+- `Icon` → `ElpianIcon.build` (implemented)
+- `Card` → `ElpianCard.build` (implemented)
+- `Scaffold` → `ElpianScaffold.build` (implemented)
+- `AppBar` → `ElpianAppBar.build` (implemented)
+- `Canvas` → `ElpianCanvasWidget.build` (implemented)
+- `CachedCanvas` → `ElpianCachedCanvas.build` (implemented)
+- `Scope` → `ElpianScope.build` (implemented)
+- `BevyScene` → `BevySceneWidget.build` (implemented)
+- `Bevy3D` → `BevySceneWidget.build` (implemented)
+- `Scene3D` → `BevySceneWidget.build` (implemented)
+- `GameScene` → `GameSceneWidget.build` (implemented)
+- `Game3D` → `GameSceneWidget.build` (implemented)
+- `Wrap` → `ElpianWrap.build` (implemented)
+- `InkWell` → `ElpianInkWell.build` (implemented)
+- `GestureDetector` → `ElpianGestureDetector.build` (implemented)
+- `Opacity` → `ElpianOpacity.build` (implemented)
+- `Transform` → `ElpianTransform.build` (implemented)
+- `ClipRRect` → `ElpianClipRRect.build` (implemented)
+- `ConstrainedBox` → `ElpianConstrainedBox.build` (implemented)
+- `AspectRatio` → `ElpianAspectRatio.build` (implemented)
+- `FractionallySizedBox` → `ElpianFractionallySizedBox.build` (implemented)
+- `FittedBox` → `ElpianFittedBox.build` (implemented)
+- `LimitedBox` → `ElpianLimitedBox.build` (implemented)
+- `OverflowBox` → `ElpianOverflowBox.build` (implemented)
+- `Baseline` → `ElpianBaseline.build` (implemented)
+- `Spacer` → `ElpianSpacer.build` (implemented)
+- `Divider` → `ElpianDivider.build` (implemented)
+- `VerticalDivider` → `ElpianVerticalDivider.build` (implemented)
+- `CircularProgressIndicator` → `ElpianCircularProgressIndicator.build` (implemented)
+- `LinearProgressIndicator` → `ElpianLinearProgressIndicator.build` (implemented)
+- `Tooltip` → `ElpianTooltip.build` (implemented)
+- `Badge` → `ElpianBadge.build` (implemented)
+- `Chip` → `ElpianChip.build` (implemented)
+- `Dismissible` → `ElpianDismissible.build` (implemented)
+- `Draggable` → `ElpianDraggable.build` (implemented)
+- `DragTarget` → `ElpianDragTarget.build` (implemented)
+- `Hero` → `ElpianHero.build` (implemented)
+- `IndexedStack` → `ElpianIndexedStack.build` (implemented)
+- `RotatedBox` → `ElpianRotatedBox.build` (implemented)
+- `DecoratedBox` → `ElpianDecoratedBox.build` (implemented)
+- `MathExpression` → `ElpianMathExpression.build` (implemented)
+- `Math` → `ElpianMathExpression.build` (implemented)
+- `AnimatedContainer` → `ElpianAnimatedContainer.build` (implemented)
+- `AnimatedOpacity` → `ElpianAnimatedOpacity.build` (implemented)
+- `AnimatedCrossFade` → `ElpianAnimatedCrossFade.build` (implemented)
+- `AnimatedSwitcher` → `ElpianAnimatedSwitcher.build` (implemented)
+- `AnimatedAlign` → `ElpianAnimatedAlign.build` (implemented)
+- `AnimatedPadding` → `ElpianAnimatedPadding.build` (implemented)
+- `AnimatedPositioned` → `ElpianAnimatedPositioned.build` (implemented)
+- `AnimatedScale` → `ElpianAnimatedScale.build` (implemented)
+- `AnimatedRotation` → `ElpianAnimatedRotation.build` (implemented)
+- `AnimatedSlide` → `ElpianAnimatedSlide.build` (implemented)
+- `AnimatedSize` → `ElpianAnimatedSize.build` (implemented)
+- `AnimatedDefaultTextStyle` → `ElpianAnimatedDefaultTextStyle.build` (implemented)
+- `FadeTransition` → `ElpianFadeTransition.build` (implemented)
+- `SlideTransition` → `ElpianSlideTransition.build` (implemented)
+- `ScaleTransition` → `ElpianScaleTransition.build` (implemented)
+- `RotationTransition` → `ElpianRotationTransition.build` (implemented)
+- `SizeTransition` → `ElpianSizeTransition.build` (implemented)
+- `TweenAnimationBuilder` → `ElpianTweenAnimationBuilder.build` (implemented)
+- `StaggeredAnimation` → `ElpianStaggeredAnimation.build` (implemented)
+- `Shimmer` → `ElpianShimmer.build` (implemented)
+- `Pulse` → `ElpianPulse.build` (implemented)
+- `AnimatedGradient` → `ElpianAnimatedGradient.build` (implemented)
+
+## HTML element registrations
+Status legend: **Implemented** = does expected visual/interactive role in engine scope; **Partial** = meaningful support but not full browser-equivalent semantics.
+
+- `div` → `HtmlDiv.build` — **Implemented**
+- `span` → `HtmlSpan.build` — **Implemented**
+- `h1` → `HtmlH1.build` — **Implemented**
+- `h2` → `HtmlH2.build` — **Implemented**
+- `h3` → `HtmlH3.build` — **Implemented**
+- `h4` → `HtmlH4.build` — **Implemented**
+- `h5` → `HtmlH5.build` — **Implemented**
+- `h6` → `HtmlH6.build` — **Implemented**
+- `p` → `HtmlP.build` — **Implemented**
+- `a` → `HtmlA.build` — **Partial** (Launches URLs via platform launcher; no SPA/router interception model)
+- `button` → `HtmlButton.build` — **Implemented**
+- `input` → `HtmlInput.build` — **Partial** (Text/checkbox/radio field basics; no full browser validation model)
+- `img` → `HtmlImg.build` — **Implemented**
+- `ul` → `HtmlUl.build` — **Implemented**
+- `ol` → `HtmlOl.build` — **Implemented**
+- `li` → `HtmlLi.build` — **Implemented**
+- `table` → `HtmlTable.build` — **Implemented**
+- `tr` → `HtmlTr.build` — **Implemented**
+- `td` → `HtmlTd.build` — **Implemented**
+- `th` → `HtmlTh.build` — **Implemented**
+- `form` → `HtmlForm.build` — **Partial** (Visual grouping only; no native form submission lifecycle)
+- `label` → `HtmlLabel.build` — **Implemented**
+- `select` → `HtmlSelect.build` — **Partial** (Basic dropdown rendering; no full DOM form integration)
+- `option` → `HtmlOption.build` — **Implemented**
+- `textarea` → `HtmlTextarea.build` — **Partial** (Multiline text input only; no full browser validation model)
+- `section` → `HtmlSection.build` — **Implemented**
+- `article` → `HtmlArticle.build` — **Implemented**
+- `header` → `HtmlHeader.build` — **Implemented**
+- `footer` → `HtmlFooter.build` — **Implemented**
+- `nav` → `HtmlNav.build` — **Implemented**
+- `aside` → `HtmlAside.build` — **Implemented**
+- `main` → `HtmlMain.build` — **Implemented**
+- `video` → `HtmlVideo.build` — **Implemented**
+- `audio` → `HtmlAudio.build` — **Implemented**
+- `canvas` → `HtmlCanvas.build` — **Partial** (Delegates to ElpianCanvas command renderer; requires command payloads for drawing)
+- `iframe` → `HtmlIframe.build` — **Partial** (Inline rendering uses WebView on supported targets, external open fallback elsewhere)
+- `strong` → `HtmlStrong.build` — **Implemented**
+- `em` → `HtmlEm.build` — **Implemented**
+- `code` → `HtmlCode.build` — **Implemented**
+- `pre` → `HtmlPre.build` — **Implemented**
+- `blockquote` → `HtmlBlockquote.build` — **Implemented**
+- `hr` → `HtmlHr.build` — **Implemented**
+- `br` → `HtmlBr.build` — **Implemented**
+- `figure` → `HtmlFigure.build` — **Implemented**
+- `figcaption` → `HtmlFigcaption.build` — **Implemented**
+- `mark` → `HtmlMark.build` — **Implemented**
+- `del` → `HtmlDel.build` — **Implemented**
+- `ins` → `HtmlIns.build` — **Implemented**
+- `sub` → `HtmlSub.build` — **Implemented**
+- `sup` → `HtmlSup.build` — **Implemented**
+- `small` → `HtmlSmall.build` — **Implemented**
+- `abbr` → `HtmlAbbr.build` — **Implemented**
+- `cite` → `HtmlCite.build` — **Implemented**
+- `kbd` → `HtmlKbd.build` — **Implemented**
+- `samp` → `HtmlSamp.build` — **Implemented**
+- `var` → `HtmlVar.build` — **Implemented**
+- `details` → `HtmlDetails.build` — **Implemented**
+- `summary` → `HtmlSummary.build` — **Implemented**
+- `dialog` → `HtmlDialog.build` — **Implemented**
+- `progress` → `HtmlProgress.build` — **Implemented**
+- `meter` → `HtmlMeter.build` — **Implemented**
+- `time` → `HtmlTime.build` — **Implemented**
+- `data` → `HtmlData.build` — **Implemented**
+- `output` → `HtmlOutput.build` — **Implemented**
+- `fieldset` → `HtmlFieldset.build` — **Implemented**
+- `legend` → `HtmlLegend.build` — **Implemented**
+- `datalist` → `HtmlDatalist.build` — **Implemented**
+- `optgroup` → `HtmlOptgroup.build` — **Implemented**
+- `picture` → `HtmlPicture.build` — **Implemented**
+- `source` → `HtmlSource.build` — **Implemented**
+- `track` → `HtmlTrack.build` — **Implemented**
+- `embed` → `HtmlEmbed.build` — **Partial** (Type-based media dispatch + embedded URL fallback; plugin/runtime support varies by platform)
+- `object` → `HtmlObject.build` — **Partial** (Delegates to embed semantics via data/src mapping)
+- `param` → `HtmlParam.build` — **Implemented**
+- `map` → `HtmlMap.build` — **Implemented**
+- `area` → `HtmlArea.build` — **Implemented**
+
+## Conclusion
+- The registry is complete (every registered type resolves to a builder).
+- Most Flutter DSL widgets are production-usable wrappers.
+- Several HTML elements are intentionally partial relative to full browser DOM behavior; they are functional within framework scope but not 1:1 browser engines.
