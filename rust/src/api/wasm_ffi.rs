@@ -46,8 +46,8 @@ mod wasm {
     }
 
     #[wasm_bindgen]
-    pub fn elpian_wasm_execute_func(machine_id: String, func_name: String, cb_id: i64) -> String {
-        result_to_json(execute_vm_func(machine_id, func_name, cb_id))
+    pub fn elpian_wasm_execute_func(machine_id: String, func_name: String, cb_id: i32) -> String {
+        result_to_json(execute_vm_func(machine_id, func_name, cb_id as i64))
     }
 
     #[wasm_bindgen]
@@ -55,10 +55,10 @@ mod wasm {
         machine_id: String,
         func_name: String,
         input_json: String,
-        cb_id: i64,
+        cb_id: i32,
     ) -> String {
         result_to_json(execute_vm_func_with_input(
-            machine_id, func_name, input_json, cb_id,
+            machine_id, func_name, input_json, cb_id as i64,
         ))
     }
 

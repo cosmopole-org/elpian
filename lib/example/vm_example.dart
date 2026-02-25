@@ -194,31 +194,78 @@ Map<String, dynamic> _counterProgram() => {
             }),
             'children': _arr([
               _obj({
-                'type': _str('Text'),
+                'type': _str('Container'),
                 'props': _obj({
-                  'text': _str('Interactive Counter (AST Program)'),
                   'style': _obj({
-                    'fontSize': _str('20'),
-                    'fontWeight': _str('bold'),
+                    'padding': _str('16'),
+                    'backgroundColor': _str('#ffffff'),
+                    'borderRadius': _str('12'),
                   }),
                 }),
-              }),
-              _obj({
-                'type': _str('SizedBox'),
-                'props': _obj({
-                  'style': _obj({'height': _str('12')}),
+                'events': _obj({
+                  'tap': _str('increment'),
                 }),
-              }),
-              _obj({
-                'type': _str('Text'),
-                'props': _obj({
-                  'text': _plus(_str('Count: '), _id('count')),
-                  'style': _obj({
-                    'fontSize': _str('26'),
-                    'color': _str('#3f51b5'),
-                    'fontWeight': _str('700'),
+                'children': _arr([
+                  _obj({
+                    'type': _str('Text'),
+                    'props': _obj({
+                      'text': _str('Interactive Counter (AST Program)'),
+                      'style': _obj({
+                        'fontSize': _str('20'),
+                        'fontWeight': _str('bold'),
+                      }),
+                    }),
                   }),
-                }),
+                  _obj({
+                    'type': _str('SizedBox'),
+                    'props': _obj({
+                      'style': _obj({'height': _str('12')}),
+                    }),
+                  }),
+                  _obj({
+                    'type': _str('Text'),
+                    'props': _obj({
+                      'text': _plus(_str('Count: '), _id('count')),
+                      'style': _obj({
+                        'fontSize': _str('26'),
+                        'color': _str('#3f51b5'),
+                        'fontWeight': _str('700'),
+                      }),
+                    }),
+                  }),
+                  _obj({
+                    'type': _str('SizedBox'),
+                    'props': _obj({
+                      'style': _obj({'height': _str('8')}),
+                    }),
+                  }),
+                  _obj({
+                    'type': _str('Text'),
+                    'props': _obj({
+                      'text': _str(
+                          'Tap this card or the buttons below to change the count'),
+                      'style': _obj({
+                        'fontSize': _str('13'),
+                        'color': _str('#666666'),
+                      }),
+                    }),
+                  }),
+                  _obj({
+                    'type': _str('SizedBox'),
+                    'props': _obj({
+                      'style': _obj({'height': _str('12')}),
+                    }),
+                  }),
+                  _obj({
+                    'type': _str('Button'),
+                    'props': _obj({
+                      'text': _str('Increment in-card'),
+                    }),
+                    'events': _obj({
+                      'tap': _str('increment'),
+                    }),
+                  }),
+                ]),
               }),
             ]),
           })),
@@ -265,6 +312,9 @@ Map<String, dynamic> _themeProgram() => {
                 'borderRadius': _str('12'),
               }),
             }),
+            'events': _obj({
+              'tap': _str('toggleTheme'),
+            }),
             'children': _arr([
               _obj({
                 'type': _str('Text'),
@@ -286,6 +336,20 @@ Map<String, dynamic> _themeProgram() => {
                 'props': _obj({
                   'text': _plus(_str('Current mode: '), _id('isDark')),
                   'style': _obj({'fontSize': _str('15'), 'color': _id('fg')}),
+                }),
+              }),
+              _obj({
+                'type': _str('SizedBox'),
+                'props': _obj({'style': _obj({'height': _str('12')})}),
+              }),
+              _obj({
+                'type': _str('Text'),
+                'props': _obj({
+                  'text': _str('Tap this card or the button below to toggle'),
+                  'style': _obj({
+                    'fontSize': _str('13'),
+                    'color': _id('fg'),
+                  }),
                 }),
               }),
             ]),
