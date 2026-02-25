@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/elpian_node.dart';
 import '../css/css_properties.dart';
 import '../models/css_style.dart';
@@ -25,8 +26,16 @@ class HtmlA {
     final textStyle = CSSProperties.createTextStyle(mergedStyle);
 
     Widget result = GestureDetector(
-      onTap: () {
-        debugPrint('Link clicked: $href');
+      onTap: () async {
+        final uri = Uri.tryParse(href);
+        if (uri == null) {
+          debugPrint('Invalid href: $href');
+          return;
+        }
+
+        if (!await launchUrl(uri, mode: LaunchMode.platformDefault)) {
+          debugPrint('Failed to open link: $href');
+        }
       },
       child: children.isNotEmpty
           ? Wrap(
