@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../core/elpian_engine.dart';
 import '../core/event_system.dart';
@@ -152,7 +154,8 @@ class ElpianVmWidget extends StatefulWidget {
   State<ElpianVmWidget> createState() => _ElpianVmWidgetState();
 }
 
-class _ElpianVmWidgetState extends State<ElpianVmWidget> {
+class _ElpianVmWidgetState extends State<ElpianVmWidget>
+    with WidgetsBindingObserver {
   late ElpianEngine _engine;
   ElpianVm? _vm;
   QuickJsVm? _quickJsVm;
@@ -162,15 +165,164 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
   String? _error;
   bool _isLoading = true;
   int _scopeRenderTokenCounter = 0;
+  Map<String, dynamic> _hostEnvironmentData = const <String, dynamic>{};
+  String? _hostEnvironmentDigest;
+  bool _hostEnvironmentSyncScheduled = false;
+  bool _dependenciesReady = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _engine = widget.engine ?? ElpianEngine();
     if (widget.stylesheet != null) {
       _engine.loadStylesheet(widget.stylesheet!);
     }
     _initVm();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _dependenciesReady = true;
+    _scheduleHostEnvironmentSync();
+  }
+
+  @override
+  void didChangeMetrics() {
+    _scheduleHostEnvironmentSync(force: true);
+  }
+
+  VmRuntimeClient? get _activeRuntimeVm => _vm ?? _quickJsVm ?? _wasmVm;
+
+  void _scheduleHostEnvironmentSync({bool force = false}) {
+    if (_hostEnvironmentSyncScheduled) return;
+    _hostEnvironmentSyncScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      _hostEnvironmentSyncScheduled = false;
+      if (!mounted) return;
+      await _syncHostEnvironmentToRuntime(force: force);
+    });
+  }
+
+  Future<void> _syncHostEnvironmentToRuntime({bool force = false}) async {
+    final runtimeVm = _activeRuntimeVm;
+    if (runtimeVm == null) {
+      _updateHostEnvironmentCache();
+      return;
+    }
+    final changed = _updateHostEnvironmentCache();
+    if (!changed && !force) return;
+    try {
+      await runtimeVm.setGlobalHostData(_hostEnvironmentData);
+    } catch (e) {
+      debugPrint('ElpianVmWidget: failed to sync host env: $e');
+    }
+  }
+
+  bool _updateHostEnvironmentCache() {
+    final next = _buildHostEnvironmentData();
+    final digest = jsonEncode(next);
+    if (digest == _hostEnvironmentDigest) return false;
+    _hostEnvironmentDigest = digest;
+    _hostEnvironmentData = next;
+    return true;
+  }
+
+  Map<String, dynamic> _buildHostEnvironmentData() {
+    final mediaQuery = _dependenciesReady ? MediaQuery.maybeOf(context) : null;
+    final fallbackView = _fallbackView();
+    final view = _dependenciesReady
+        ? (View.maybeOf(context) ?? fallbackView)
+        : fallbackView;
+
+    final double devicePixelRatio = mediaQuery?.devicePixelRatio ??
+        view?.devicePixelRatio ??
+        fallbackView?.devicePixelRatio ??
+        1.0;
+
+    final ui.Size physicalSize =
+        view?.physicalSize ?? fallbackView?.physicalSize ?? ui.Size.zero;
+
+    final ui.Size logicalSize = mediaQuery?.size ??
+        (devicePixelRatio > 0
+            ? ui.Size(
+                physicalSize.width / devicePixelRatio,
+                physicalSize.height / devicePixelRatio,
+              )
+            : ui.Size.zero);
+
+    final orientation =
+        logicalSize.width >= logicalSize.height ? 'landscape' : 'portrait';
+    final uri = Uri.base;
+
+    return <String, dynamic>{
+      'machineId': widget.machineId,
+      'runtime': widget.runtime.name,
+      'viewport': {
+        'width': logicalSize.width,
+        'height': logicalSize.height,
+        'devicePixelRatio': devicePixelRatio,
+        'orientation': orientation,
+      },
+      'screen': {
+        'physicalWidth': physicalSize.width,
+        'physicalHeight': physicalSize.height,
+      },
+      'safeArea': mediaQuery == null
+          ? _edgeInsetsToMapFromViewPadding(
+              view?.padding,
+              devicePixelRatio,
+            )
+          : {
+              'top': mediaQuery.padding.top,
+              'right': mediaQuery.padding.right,
+              'bottom': mediaQuery.padding.bottom,
+              'left': mediaQuery.padding.left,
+            },
+      'page': {
+        'href': uri.toString(),
+        'scheme': uri.scheme,
+        'host': uri.host,
+        'port': uri.hasPort ? uri.port : null,
+        'path': uri.path,
+        'query': uri.query,
+        'queryParameters': uri.queryParameters,
+        'fragment': uri.fragment,
+      },
+      'platform': {
+        'isWeb': kIsWeb,
+        'defaultTargetPlatform': defaultTargetPlatform.name,
+        'locale':
+            WidgetsBinding.instance.platformDispatcher.locale.toLanguageTag(),
+      },
+    };
+  }
+
+  ui.FlutterView? _fallbackView() {
+    final views = WidgetsBinding.instance.platformDispatcher.views;
+    if (views.isNotEmpty) return views.first;
+    return null;
+  }
+
+  Map<String, dynamic> _edgeInsetsToMapFromViewPadding(
+    ui.ViewPadding? padding,
+    double devicePixelRatio,
+  ) {
+    if (padding == null || devicePixelRatio <= 0) {
+      return const {
+        'top': 0.0,
+        'right': 0.0,
+        'bottom': 0.0,
+        'left': 0.0,
+      };
+    }
+    return {
+      'top': padding.top / devicePixelRatio,
+      'right': padding.right / devicePixelRatio,
+      'bottom': padding.bottom / devicePixelRatio,
+      'left': padding.left / devicePixelRatio,
+    };
   }
 
   Future<void> _initVm() async {
@@ -242,6 +394,7 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
           }
         },
         onPrintln: widget.onPrintln,
+        onGetEnvironment: () => _hostEnvironmentData,
       );
 
       // Register built-in host handlers (core + DOM + Canvas APIs).
@@ -271,6 +424,7 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
         ...?widget.hostHandlers,
       };
       runtimeVm.registerHostHandlers(hostHandlers);
+      await _syncHostEnvironmentToRuntime(force: true);
 
       // Execute the VM
       await runtimeVm.run();
@@ -611,6 +765,7 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _vm?.dispose();
     _quickJsVm?.dispose();
     _wasmVm?.dispose();
@@ -642,6 +797,8 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget> {
     if (_currentViewJson == null) {
       return const SizedBox.shrink();
     }
+
+    _scheduleHostEnvironmentSync();
 
     try {
       return _engine.renderFromJson(_currentViewJson!);

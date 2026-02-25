@@ -4,8 +4,8 @@ class VmHostApiCatalog {
     'stringify',
     'render',
     'updateApp',
+    'env.get',
   };
-
 
   static const timerApiNames = <String>{
     'setTimeout',

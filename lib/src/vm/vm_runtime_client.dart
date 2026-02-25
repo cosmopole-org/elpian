@@ -8,6 +8,10 @@ abstract class VmRuntimeClient {
 
   void setDefaultHostHandler(HostCallHandler handler);
 
+  /// Inject host-side global metadata (environment, viewport, page info, etc.)
+  /// into the runtime, when supported.
+  Future<void> setGlobalHostData(Map<String, dynamic> data);
+
   Future<String> run();
 
   Future<String> callFunction(String funcName);

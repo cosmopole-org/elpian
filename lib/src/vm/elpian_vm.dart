@@ -26,6 +26,7 @@ class ElpianVm implements VmRuntimeClient {
   final String machineId;
   final Map<String, HostCallHandler> _hostHandlers = {};
   HostCallHandler? _defaultHostHandler;
+  Map<String, dynamic> _globalHostData = const {};
   bool _isRunning = false;
   int _cbCounter = 0;
 
@@ -93,6 +94,11 @@ class ElpianVm implements VmRuntimeClient {
     _defaultHostHandler = handler;
   }
 
+  @override
+  Future<void> setGlobalHostData(Map<String, dynamic> data) async {
+    _globalHostData = Map<String, dynamic>.from(data);
+  }
+
   /// Execute the VM's main program and process all host calls
   /// until completion.
   @override
@@ -130,7 +136,8 @@ class ElpianVm implements VmRuntimeClient {
   /// {"type": "string", "data": {"value": "hello"}}
   /// ```
   @override
-  Future<String> callFunctionWithInput(String funcName, String inputJson) async {
+  Future<String> callFunctionWithInput(
+      String funcName, String inputJson) async {
     _isRunning = true;
     _cbCounter++;
     try {
@@ -151,7 +158,8 @@ class ElpianVm implements VmRuntimeClient {
   Future<String> _processExecutionLoop(VmExecResult result) async {
     while (result.hasHostCall) {
       // Parse the host call request
-      final hostCallData = jsonDecode(result.hostCallData) as Map<String, dynamic>;
+      final hostCallData =
+          jsonDecode(result.hostCallData) as Map<String, dynamic>;
       final apiName = hostCallData['apiName'] as String;
       final payload = hostCallData['payload'] as String;
 
@@ -192,6 +200,11 @@ class ElpianVm implements VmRuntimeClient {
       case 'println':
         debugPrint('ElpianVm[$machineId]: $payload');
         return '{"type": "i16", "data": {"value": 0}}';
+      case 'env.get':
+        return jsonEncode({
+          'type': 'object',
+          'data': {'value': _globalHostData},
+        });
       case 'stringify':
         return '{"type": "string", "data": {"value": ${jsonEncode(payload)}}}';
       default:

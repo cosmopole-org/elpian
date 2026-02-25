@@ -9,7 +9,8 @@ class QuickJsVm implements VmRuntimeClient {
   static Future<void> initialize() async {}
 
   static Future<QuickJsVm> fromCode(String machineId, String code) async {
-    throw UnsupportedError('QuickJS runtime is not available on this platform.');
+    throw UnsupportedError(
+        'QuickJS runtime is not available on this platform.');
   }
 
   static Future<QuickJsVm> fromAst(String machineId, String astJson) async {
@@ -25,11 +26,20 @@ class QuickJsVm implements VmRuntimeClient {
   @override
   void setDefaultHostHandler(HostCallHandler handler) {}
 
+  @override
+  Future<void> setGlobalHostData(Map<String, dynamic> data) async {}
+
+  @override
   Future<String> run() async => '';
 
+  @override
   Future<String> callFunction(String funcName) async => '';
 
-  Future<String> callFunctionWithInput(String funcName, String inputJson) async => '';
+  @override
+  Future<String> callFunctionWithInput(
+          String funcName, String inputJson) async =>
+      '';
 
+  @override
   Future<void> dispose() async {}
 }

@@ -116,6 +116,25 @@ void main() {
       expect((commands['data']['value'] as List).isNotEmpty, isTrue);
     });
 
+    test('HostHandler exposes environment payload via env.get', () {
+      final hostHandler = HostHandler(
+        onGetEnvironment: () => {
+          'viewport': {'width': 412.0, 'height': 915.0},
+          'page': {'path': '/demo'},
+        },
+      );
+
+      final response = jsonDecode(
+        hostHandler.handleHostCall('env.get', '{}'),
+      ) as Map<String, dynamic>;
+
+      expect(response['type'], equals('object'));
+      final env = response['data']['value'] as Map<String, dynamic>;
+      final viewport = env['viewport'] as Map<String, dynamic>;
+      expect(viewport['width'], equals(412.0));
+      expect((env['page'] as Map<String, dynamic>)['path'], equals('/demo'));
+    });
+
     test('VM widgets expose runtime selection for QuickJS', () {
       const widget = ElpianVmWidget.fromCode(
         machineId: 'quickjs-widget-contract',

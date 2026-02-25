@@ -11,6 +11,7 @@ class QuickJsVm implements VmRuntimeClient {
   final String machineId;
   final Map<String, HostCallHandler> _hostHandlers = {};
   HostCallHandler? _defaultHostHandler;
+  Map<String, dynamic> _globalHostData = const {};
   String? _bootCode;
 
   QuickJsVm({required this.machineId});
@@ -67,6 +68,27 @@ class QuickJsVm implements VmRuntimeClient {
   @override
   void setDefaultHostHandler(HostCallHandler handler) {
     _defaultHostHandler = handler;
+  }
+
+  @override
+  Future<void> setGlobalHostData(Map<String, dynamic> data) async {
+    _globalHostData = Map<String, dynamic>.from(data);
+    final encoded = jsonEncode(jsonEncode(_globalHostData));
+    await _callAsync(
+      method: 'evalCode',
+      args: [
+        machineId.toJS,
+        '''
+          (function() {
+            var __env = JSON.parse($encoded);
+            globalThis.__ELPIAN_HOST_ENV__ = __env;
+            globalThis.ELPIAN_HOST_ENV = __env;
+            globalThis.getElpianHostEnv = function() { return globalThis.__ELPIAN_HOST_ENV__; };
+          })();
+        '''
+            .toJS
+      ],
+    );
   }
 
   Future<String> _callAsync(
@@ -144,6 +166,12 @@ class QuickJsVm implements VmRuntimeClient {
 
     if (apiName == 'println') {
       debugPrint('QuickJsVm[$machineId]: $payload');
+    }
+    if (apiName == 'env.get') {
+      return jsonEncode({
+        'type': 'object',
+        'data': {'value': _globalHostData},
+      });
     }
     if (apiName == 'stringify') {
       return '{"type":"string","data":{"value":${jsonEncode(payload)}}}';

@@ -13,7 +13,8 @@ class WasmVm implements VmRuntimeClient {
   }
 
   static Future<WasmVm> fromAst(String machineId, String astJson) async {
-    throw UnsupportedError('WASM runtime expects a JSON runtime config in `code`.');
+    throw UnsupportedError(
+        'WASM runtime expects a JSON runtime config in `code`.');
   }
 
   @override
@@ -26,13 +27,18 @@ class WasmVm implements VmRuntimeClient {
   void setDefaultHostHandler(HostCallHandler handler) {}
 
   @override
+  Future<void> setGlobalHostData(Map<String, dynamic> data) async {}
+
+  @override
   Future<String> run() async => '';
 
   @override
   Future<String> callFunction(String funcName) async => '';
 
   @override
-  Future<String> callFunctionWithInput(String funcName, String inputJson) async => '';
+  Future<String> callFunctionWithInput(
+          String funcName, String inputJson) async =>
+      '';
 
   @override
   Future<void> dispose() async {}

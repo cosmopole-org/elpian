@@ -15,6 +15,7 @@ class HostHandler {
   final RenderHostCallback? onRender;
   final void Function(Map<String, dynamic> updateData)? onUpdateApp;
   final void Function(String message)? onPrintln;
+  final Map<String, dynamic> Function()? onGetEnvironment;
 
   final ElpianDOM dom;
   final CanvasAPIExecutor canvas;
@@ -23,6 +24,7 @@ class HostHandler {
     this.onRender,
     this.onUpdateApp,
     this.onPrintln,
+    this.onGetEnvironment,
     ElpianDOM? dom,
     CanvasAPIExecutor? canvas,
   })  : dom = dom ?? ElpianDOM(),
@@ -43,6 +45,8 @@ class HostHandler {
         return handleUpdateApp(payload);
       case 'println':
         return handlePrintln(payload);
+      case 'env.get':
+        return handleEnvGet(payload);
       case 'stringify':
         return handleStringify(payload);
       default:
@@ -98,6 +102,11 @@ class HostHandler {
 
   String handleStringify(String payload) {
     return _makeResponse('string', payload);
+  }
+
+  String handleEnvGet(String payload) {
+    final data = onGetEnvironment?.call() ?? const <String, dynamic>{};
+    return _makeResponse('object', data);
   }
 
   String _handleDomApi(String apiName, String payload) {

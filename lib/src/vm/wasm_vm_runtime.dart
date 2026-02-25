@@ -11,6 +11,7 @@ class WasmVm implements VmRuntimeClient {
   final String machineId;
   final Map<String, HostCallHandler> _hostHandlers = {};
   HostCallHandler? _defaultHostHandler;
+  Map<String, dynamic> _globalHostData = const {};
 
   WasmInstance? _instance;
   WasmMemory? _memory;
@@ -35,7 +36,8 @@ class WasmVm implements VmRuntimeClient {
   }
 
   static Future<WasmVm> fromAst(String machineId, String astJson) async {
-    throw UnsupportedError('WASM runtime expects JSON runtime config in `code`.');
+    throw UnsupportedError(
+        'WASM runtime expects JSON runtime config in `code`.');
   }
 
   @override
@@ -51,6 +53,11 @@ class WasmVm implements VmRuntimeClient {
   @override
   void setDefaultHostHandler(HostCallHandler handler) {
     _defaultHostHandler = handler;
+  }
+
+  @override
+  Future<void> setGlobalHostData(Map<String, dynamic> data) async {
+    _globalHostData = Map<String, dynamic>.from(data);
   }
 
   @override
@@ -70,7 +77,8 @@ class WasmVm implements VmRuntimeClient {
 
     final fnText = _writeString(funcName);
     try {
-      _requireFunction(_config!.exports.callFunction).call([fnText.ptr, fnText.length]);
+      _requireFunction(_config!.exports.callFunction)
+          .call([fnText.ptr, fnText.length]);
       return _readResultString();
     } finally {
       _dealloc(fnText);
@@ -78,7 +86,8 @@ class WasmVm implements VmRuntimeClient {
   }
 
   @override
-  Future<String> callFunctionWithInput(String funcName, String inputJson) async {
+  Future<String> callFunctionWithInput(
+      String funcName, String inputJson) async {
     _assertLoaded();
 
     final fnText = _writeString(funcName);
@@ -110,14 +119,20 @@ class WasmVm implements VmRuntimeClient {
         orElse: () => null,
       );
 
-      final params = List<ValueTy?>.from(funcTy?.parameters ?? const <ValueTy>[]);
+      final params =
+          List<ValueTy?>.from(funcTy?.parameters ?? const <ValueTy>[]);
       final results = funcTy?.results;
 
       builder.addImport(
         import.module,
         import.name,
         WasmFunction(
-          (Object? _, [Object? __, Object? ___, Object? ____, Object? _____, Object? ______]) {},
+          (Object? _,
+              [Object? __,
+              Object? ___,
+              Object? ____,
+              Object? _____,
+              Object? ______]) {},
           name: '${import.module}.${import.name}',
           params: params,
           results: results,
@@ -133,7 +148,8 @@ class WasmVm implements VmRuntimeClient {
         instance.exports.values.whereType<WasmMemory>().firstOrNull;
 
     if (memory == null) {
-      throw StateError('WASM memory export not found: ${config.exports.memory}');
+      throw StateError(
+          'WASM memory export not found: ${config.exports.memory}');
     }
 
     _config = config;
@@ -182,6 +198,12 @@ class WasmVm implements VmRuntimeClient {
     if (apiName == 'println') {
       debugPrint('WasmVm[$machineId]: $payload');
     }
+    if (apiName == 'env.get') {
+      return jsonEncode({
+        'type': 'object',
+        'data': {'value': _globalHostData},
+      });
+    }
     if (apiName == 'stringify') {
       return jsonEncode({
         'type': 'string',
@@ -209,13 +231,15 @@ class WasmVm implements VmRuntimeClient {
     final result = alloc.call([utf8.length]);
     final ptr = result.isEmpty ? 0 : _intArg(result.first);
     if (ptr <= 0) {
-      throw StateError('WASM alloc returned invalid pointer for length ${utf8.length}.');
+      throw StateError(
+          'WASM alloc returned invalid pointer for length ${utf8.length}.');
     }
 
     final memory = _memory!.view;
     final end = ptr + utf8.length;
     if (end > memory.length) {
-      throw StateError('WASM memory write out of range (ptr=$ptr len=${utf8.length}).');
+      throw StateError(
+          'WASM memory write out of range (ptr=$ptr len=${utf8.length}).');
     }
     memory.setRange(ptr, end, utf8);
     return _WasmTextRef(ptr: ptr, length: utf8.length);
@@ -245,8 +269,10 @@ class WasmVm implements VmRuntimeClient {
   }
 
   String _readResultString() {
-    final resultPtr = _requireFunction(_config!.exports.getResultPtr).call(const []);
-    final resultLen = _requireFunction(_config!.exports.getResultLen).call(const []);
+    final resultPtr =
+        _requireFunction(_config!.exports.getResultPtr).call(const []);
+    final resultLen =
+        _requireFunction(_config!.exports.getResultLen).call(const []);
 
     final ptr = resultPtr.isEmpty ? 0 : _intArg(resultPtr.first);
     final len = resultLen.isEmpty ? 0 : _intArg(resultLen.first);
@@ -298,7 +324,8 @@ class WasmVm implements VmRuntimeClient {
 
     final assetPath = config.wasmAssetPath;
     if (assetPath == null || assetPath.isEmpty) {
-      throw StateError('WASM config must provide either `wasmBase64` or `wasmAssetPath`.');
+      throw StateError(
+          'WASM config must provide either `wasmBase64` or `wasmAssetPath`.');
     }
 
     final bytes = await rootBundle.load(assetPath);
@@ -361,7 +388,8 @@ class _WasmVmExports {
       dealloc: map['dealloc']?.toString() ?? 'dealloc',
       run: map['run']?.toString() ?? 'run',
       callFunction: map['callFunction']?.toString() ?? 'call_function',
-      callFunctionWithInput: map['callFunctionWithInput']?.toString() ?? 'call_function_with_input',
+      callFunctionWithInput: map['callFunctionWithInput']?.toString() ??
+          'call_function_with_input',
       getResultPtr: map['getResultPtr']?.toString() ?? 'get_result_ptr',
       getResultLen: map['getResultLen']?.toString() ?? 'get_result_len',
     );

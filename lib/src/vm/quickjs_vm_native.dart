@@ -11,6 +11,7 @@ class QuickJsVm implements VmRuntimeClient {
   final String machineId;
   final Map<String, HostCallHandler> _hostHandlers = {};
   HostCallHandler? _defaultHostHandler;
+  Map<String, dynamic> _globalHostData = const {};
 
   late final JavascriptRuntime _runtime;
   bool _initialized = false;
@@ -114,22 +115,40 @@ class QuickJsVm implements VmRuntimeClient {
     _defaultHostHandler = handler;
   }
 
+  @override
+  Future<void> setGlobalHostData(Map<String, dynamic> data) async {
+    _globalHostData = Map<String, dynamic>.from(data);
+    if (!_initialized) return;
+    final encoded = jsonEncode(jsonEncode(_globalHostData));
+    _runtime.evaluate('''
+      (function() {
+        var __env = JSON.parse($encoded);
+        globalThis.__ELPIAN_HOST_ENV__ = __env;
+        globalThis.ELPIAN_HOST_ENV = __env;
+        globalThis.getElpianHostEnv = function() { return globalThis.__ELPIAN_HOST_ENV__; };
+      })();
+    ''');
+  }
+
   Future<String> runCode(String code) async {
     final result = _runtime.evaluate(code);
     return result.stringResult;
   }
 
+  @override
   Future<String> run() async {
     final code = _bootCode;
     if (code == null || code.isEmpty) return '';
     return runCode(code);
   }
 
+  @override
   Future<String> callFunction(String funcName) async {
     final result = _runtime.evaluate('$funcName();');
     return result.stringResult;
   }
 
+  @override
   Future<String> callFunctionWithInput(
       String funcName, String inputJson) async {
     final escaped = jsonEncode(inputJson);
@@ -142,24 +161,31 @@ class QuickJsVm implements VmRuntimeClient {
     if (handler != null) {
       final result = handler(apiName, payload);
       if (result is String) return result;
-      return '{\"type\":\"i16\",\"data\":{\"value\":0}}';
+      return '{"type":"i16","data":{"value":0}}';
     }
 
     if (_defaultHostHandler != null) {
       final result = _defaultHostHandler!(apiName, payload);
       if (result is String) return result;
-      return '{\"type\":\"i16\",\"data\":{\"value\":0}}';
+      return '{"type":"i16","data":{"value":0}}';
     }
 
     if (apiName == 'println') {
       debugPrint('QuickJsVm[$machineId]: $payload');
     }
-    if (apiName == 'stringify') {
-      return '{\"type\":\"string\",\"data\":{\"value\":${jsonEncode(payload)}}}';
+    if (apiName == 'env.get') {
+      return jsonEncode({
+        'type': 'object',
+        'data': {'value': _globalHostData},
+      });
     }
-    return '{\"type\":\"i16\",\"data\":{\"value\":0}}';
+    if (apiName == 'stringify') {
+      return '{"type":"string","data":{"value":${jsonEncode(payload)}}}';
+    }
+    return '{"type":"i16","data":{"value":0}}';
   }
 
+  @override
   Future<void> dispose() async {
     _runtime.dispose();
   }
