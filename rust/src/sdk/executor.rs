@@ -322,7 +322,6 @@ impl Operation for CallFunction {
             self.params.push(*data.downcast::<Val>().unwrap());
         }
         if let Some(func) = &self.func {
-            println!("keyhan");
             if func.borrow().params.len() == self.params.len() {
                 self.state = ExecStates::CallFuncFinished;
             }
