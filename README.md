@@ -218,19 +218,84 @@ Lighting: Point, Directional, Spot with shadows
 
 ### VM-Driven UI
 
+#### QuickJS runtime sample (`ElpianRuntime.quickJs`)
+
 ```dart
-ElpianVmWidget(
-  machineId: 'my-app',
+ElpianVmWidget.fromCode(
+  machineId: 'quickjs-counter-demo',
+  runtime: ElpianRuntime.quickJs,
   code: r'''
-    def view = {
-      "type": "Column",
-      "children": [
-        {"type": "Text", "props": {"text": "Hello from VM!"}},
-        {"type": "Button", "props": {"text": "Click me"}}
-      ]
-    }
-    askHost("render", view)
-  ''',
+let count = 0;
+
+function renderCounter() {
+  askHost('render', JSON.stringify({
+    type: 'Column',
+    props: { style: { padding: '20', backgroundColor: '#f5f7ff' } },
+    children: [
+      { type: 'Text', props: { text: `QuickJS Count: ${count}` } },
+      { type: 'Button', props: { text: 'Increment' }, events: { tap: 'increment' } }
+    ]
+  }));
+}
+
+function increment() {
+  count += 1;
+  askHost('println', `Count changed to ${count}`);
+  renderCounter();
+}
+
+renderCounter();
+''',
+)
+```
+
+#### Elpian AST VM sample (`ElpianRuntime.elpian`)
+
+```dart
+ElpianVmWidget.fromAst(
+  machineId: 'vm-ast-counter',
+  astJson: jsonEncode({
+    'type': 'program',
+    'data': {'body': [
+      {
+        'type': 'definition',
+        'data': {
+          'leftSide': {
+            'type': 'identifier',
+            'data': {'name': 'view'}
+          },
+          'rightSide': {
+            'type': 'object',
+            'data': {
+              'value': {
+                'type': {'type': 'string', 'data': {'value': 'Text'}},
+                'props': {
+                  'type': 'object',
+                  'data': {
+                    'value': {
+                      'text': {
+                        'type': 'string',
+                        'data': {'value': 'Hello from Elpian AST VM!'}
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        'type': 'host_call',
+        'data': {
+          'name': 'render',
+          'args': [
+            {'type': 'identifier', 'data': {'name': 'view'}}
+          ]
+        }
+      }
+    ]}
+  }),
 )
 ```
 
