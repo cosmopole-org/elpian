@@ -38,6 +38,22 @@ final widget = ElpianEngine().renderFromJson({
 
 ---
 
+## 🖼️ Demo Screenshots
+
+<p align="center">
+  <img src="example/IMG_20260226_161047_415.jpg" alt="Elpian landing page" width="31%" />
+  <img src="example/Screenshot_20260225_185558_Chrome.jpg" alt="QuickJS calculator demo" width="31%" />
+  <img src="example/Screenshot_20260225_185705_Chrome.jpg" alt="QuickJS whiteboard demo" width="31%" />
+</p>
+
+<p align="center">
+  <img src="example/Screenshot_20260226_161118_Telegram.jpg" alt="3D scene demo" width="48%" />
+</p>
+
+> These screenshots highlight real Elpian examples: landing UI rendering, QuickJS calculator + whiteboard, 3D scene graph rendering, and Canvas API primitives.
+
+---
+
 ## &#x2728; Features
 
 ### &#x1F3D7;&#xFE0F; Rendering Engines
