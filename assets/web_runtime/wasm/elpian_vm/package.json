@@ -1,0 +1,15 @@
+{
+  "name": "elpian_vm",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "elpian_vm_bg.wasm",
+    "elpian_vm.js",
+    "elpian_vm.d.ts"
+  ],
+  "main": "elpian_vm.js",
+  "types": "elpian_vm.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

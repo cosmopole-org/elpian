@@ -28,6 +28,24 @@ dependencies:
     path: ./path/to/elpian_ui
 ```
 
+## Example App
+
+This repository now includes a full cross-platform example app in `example/`.
+
+```bash
+cd example
+flutter run
+```
+
+## Web Setup (for host apps)
+
+If you use VM/QuickJS features on web, include these scripts in your app's `web/index.html`:
+
+```html
+<script type="module" src="assets/packages/elpian_ui/assets/web_runtime/elpian_wasm_loader.js"></script>
+<script type="module" src="assets/packages/elpian_ui/assets/web_runtime/quickjs_web_runtime.js"></script>
+```
+
 ## Quick Start
 
 ```dart
@@ -242,11 +260,13 @@ elpian/
 │   │   ├── bevy/                 # Bevy 3D scene integration (Rust FFI)
 │   │   ├── scene3d/              # Pure-Dart 3D renderer
 │   │   └── vm/                   # Elpian VM (Rust FFI/WASM)
-│   └── example/                  # Demo applications
+├── example/                      # Cross-platform example runner app
+│   ├── lib/examples/             # All demo pages
+│   └── assets/examples/          # Example JSON/JS assets
 ├── rust/                         # Rust VM + Bevy crate
 ├── rust_builder/                 # Flutter FFI plugin
 ├── test/                         # Unit tests
-├── web/                          # Web assets + Bevy WASM demo
+├── assets/web_runtime/           # Web runtime scripts + WASM bundle
 └── pubspec.yaml
 ```
 

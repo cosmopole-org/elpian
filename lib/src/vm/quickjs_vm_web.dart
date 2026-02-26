@@ -96,7 +96,8 @@ class QuickJsVm implements VmRuntimeClient {
     final quickJs = globalContext['elpianQuickJs'];
     if (quickJs == null) {
       throw StateError(
-        'QuickJS web runtime not loaded. Ensure web/quickjs_web_runtime.js is included in index.html.',
+        'QuickJS web runtime not loaded. Ensure '
+        'assets/packages/elpian_ui/assets/web_runtime/quickjs_web_runtime.js is included in your web index.html.',
       );
     }
 

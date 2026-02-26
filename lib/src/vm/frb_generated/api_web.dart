@@ -40,7 +40,8 @@ external JSString _wasmExecuteFuncWithInput(
     JSString machineId, JSString funcName, JSString inputJson, JSNumber cbId);
 
 @JS('elpian_wasm_continue_execution')
-external JSString _wasmContinueExecution(JSString machineId, JSString inputJson);
+external JSString _wasmContinueExecution(
+    JSString machineId, JSString inputJson);
 
 @JS('elpian_wasm_destroy_vm')
 external JSBoolean _wasmDestroyVm(JSString machineId);
@@ -70,9 +71,9 @@ class ElpianVmApi {
     _lastError = null;
   }
 
-  static const _wasmMissing =
-      'Elpian WASM module is not loaded. '
-      'Build it with: cd rust && wasm-pack build --target web';
+  static const _wasmMissing = 'Elpian WASM module is not loaded. Ensure '
+      'assets/packages/elpian_ui/assets/web_runtime/elpian_wasm_loader.js is included in '
+      'web/index.html, then build wasm with: cd rust && wasm-pack build --target web';
 
   static Future<void> initVmSystem() async {
     try {

@@ -23,8 +23,8 @@ dev_dependencies:
   flutter_lints: ^2.0.0
 
 flutter:
-  uses-material-design: true
   assets:
-    - assets/unified_program.js
-    - lib/example/landing_page.json
-    - lib/example/bevy_scene.json
+    - assets/web_runtime/quickjs_web_runtime.js
+    - assets/web_runtime/elpian_wasm_loader.js
+    - assets/web_runtime/wasm/elpian_vm/elpian_vm.js
+    - assets/web_runtime/wasm/elpian_vm/elpian_vm_bg.wasm

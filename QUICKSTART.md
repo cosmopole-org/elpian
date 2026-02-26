@@ -30,10 +30,11 @@ dependencies:
 flutter pub get
 ```
 
-### 3. Run the example
+### 3. Run the example app (all platforms)
 
 ```bash
-flutter run -t lib/example/landing_page_example.dart
+cd example
+flutter run
 ```
 
 ## Basic Usage
@@ -134,18 +135,20 @@ elpian/
 │   │   ├── bevy/            # Bevy 3D scene (Rust FFI)
 │   │   ├── scene3d/         # Pure-Dart 3D renderer
 │   │   └── vm/              # Elpian VM integration
-│   └── example/             # Demo applications
+├── example/                 # Cross-platform demo runner app (Android/iOS/Web/Desktop)
+│   ├── lib/examples/        # All demo pages
+│   └── assets/examples/     # Example JSON/JS assets
 ├── rust/                    # Rust VM + Bevy crate
 ├── rust_builder/            # Flutter FFI plugin
 ├── test/                    # Unit tests
-├── web/                     # Web assets
+├── assets/web_runtime/      # Web runtime scripts + WASM bundle
 └── pubspec.yaml
 ```
 
 ## Next Steps
 
-1. Explore the example apps in `lib/example/`
-2. See `lib/example/example_dsl.json` and `lib/example/landing_page.json` for JSON structure examples
+1. Explore the example app in `example/`
+2. See `example/assets/examples/example_dsl.json` and `example/assets/examples/landing_page.json` for JSON structure examples
 3. Read the detailed docs: [FEATURES.md](FEATURES.md), [EVENT_SYSTEM.md](EVENT_SYSTEM.md), [CANVAS_API.md](CANVAS_API.md)
 4. Check [VM_INTEGRATION.md](VM_INTEGRATION.md) for Rust VM scripting
 5. See [2d_graphics.md](2d_graphics.md) and [3d_graphics.md](3d_graphics.md) for scene graph rendering
