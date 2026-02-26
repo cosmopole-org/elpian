@@ -129,6 +129,7 @@ export 'src/widgets/elpian_hero.dart';
 export 'src/widgets/elpian_indexed_stack.dart';
 export 'src/widgets/elpian_rotated_box.dart';
 export 'src/widgets/elpian_decorated_box.dart';
+export 'src/widgets/elpian_math_expression.dart';
 
 // HTML Widgets - Basic
 export 'src/html_widgets/html_div.dart';

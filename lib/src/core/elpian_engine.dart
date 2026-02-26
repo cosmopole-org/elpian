@@ -121,6 +121,8 @@ class ElpianEngine {
     _registry.register('IndexedStack', ElpianIndexedStack.build);
     _registry.register('RotatedBox', ElpianRotatedBox.build);
     _registry.register('DecoratedBox', ElpianDecoratedBox.build);
+    _registry.register('MathExpression', ElpianMathExpression.build);
+    _registry.register('Math', ElpianMathExpression.build);
 
     // Animation widgets - Implicit
     _registry.register('AnimatedContainer', ElpianAnimatedContainer.build);
