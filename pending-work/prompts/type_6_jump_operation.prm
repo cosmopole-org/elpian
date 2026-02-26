@@ -1,0 +1,14 @@
+
+detect the jump operation of the input which i give you and put it in a structure like below and just output it only:
+{
+    "type": "jumpOperation",
+    "data": {
+        "falseBranch": {{ the step number which program execution pointer must move to from this step }}
+    }
+}
+
+the input is:
+
+    - jump to step 4
+
+just output the result.

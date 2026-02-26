@@ -1,0 +1,225 @@
+i'm trying to parse a code into a custom AST which i defined its rules.
+
+assume there is a Val structure which should hold a data of types:
+    - i16
+    {
+        "type": "i16",
+        "data": {
+            "value": {{ int16 raw value for example 5 }}
+        }
+    }
+    - i32
+        {
+        "type": "i32",
+        "data": {
+            "value": {{ int32 raw value for example 100000 }}
+        }
+    }
+    - i64
+        {
+        "type": "i64",
+        "data": {
+            "value": {{ int64 raw value for example 2000000 }}
+        }
+    }
+    - f32
+    {
+        "type": "f32",
+        "data": {
+            "value": {{ float32 raw value for example 123.14 }}
+        }
+    }
+    - f64
+    {
+        "type": "f64",
+        "data": {
+            "value": {{ float64 raw value for example 1230.141 }}
+        }
+    }
+    - bool
+    {
+        "type": "bool",
+        "data": {
+            "value": {{ bool raw value for example true or false }}
+        }
+    }
+    - string
+    {
+        "type": "string",
+        "data": {
+            "value": {{ string raw value for example "hello world" }}
+        }
+    }
+    - object
+    {
+        "type": "object",
+        "data": {
+            "value": {{ object raw value for example { "name": {{ string Val }}, "age": {{ i16 Val }} } }}
+        }
+    }
+    - array
+    {
+        "type": "array",
+        "data": {
+            "value": {{ array raw value for example [ {{ string Val }}, {{ string Val }}, {{ string Val }} ] }}
+        }
+    }
+    - function
+    {
+        "type": "function",
+        "data": {
+            "value": {{ function raw value for example {
+                "name": "{{ a raw string which is function name }}",
+                "body": {{ an arrray of other operations with mentioned types before }}
+            } }}
+        }
+    }
+    - identifier
+    {
+        "type": "identifier",
+        "data": {
+            "name": {{ name of the varaible which is defined previously and now can be used as identifier }}
+        }
+    }
+
+the possible operations are:
+
+1. definition:
+
+detect assignment target variable being defined and the value being assigned and put them in the
+structure below and just output it only:
+
+{
+    "type": "definition",
+    "data": {
+        "leftSide": {
+            "type": "identifier",
+            "data": {
+                "name": "{{ variable name }}"
+            }
+        },
+        "rightSide": {{ the value being assign to the target variable. is must be in "Val" structure }}
+    }
+}
+
+2. assignment:
+
+detect assignment target variable and the value being assigned and put them in the
+structure below and just output it only:
+
+{
+    "type": "assignment",
+    "data": {
+        "leftSide": {
+            "type": "identifier",
+            "data": {
+                "name": "{{ variable name }}"
+            }
+        },
+        "rightSide": {{ the value being assign to the target variable. is must be in "Val" structure }}
+    }
+}
+
+3. calculation:
+
+detect the calculation expressions inside the input which i give you and put it in a nested
+structure like below and just output it only:
+note: each level of nested structure can be reolved into a "Val" at runtime. the nested
+structures can be a "Val" with one of the mentioned types above, or a "functionCall",
+or even an "arithmetic" type.
+
+if it is an arithmetic operation then the structure is:
+{
+    "type": "arithmetic",
+    "data": {
+        "operation": "{{ the operator as a string for example: "+" or "-" or "*" or "/" or "^" (for power) or "%" (for mod) }}",
+        "operand1": {{ can be another nested calculation (arithmetic type, one of Val types, or functionCall type) }},
+        "operand2": {{ can be another nested calculation (arithmetic type, one of Val types, or functionCall type) }}
+    }
+}
+if it is a function call operation then the structure is:
+{
+    "type": "functionCall",
+    "data": {
+        "callee": "{{ it can be either an identifier Val or an complex expression ( i mean a calculation ) that will finally resolved into a simple Val which is an identifier or directly a runnable function Val }}",
+        "args": {{ an array of calculations in which each calculation can be a arithmetic type, one of Val types, or another functionCall type }},
+    }
+}
+
+4. functionDefinition:
+
+detect the function definition inside the input which i give you and put it in a
+structure like below and just output it only:
+{
+    "type": "functionDefinition",
+    "data": {
+        "name": "{{ the name of the function to be defined which must be a raw string. for example "print" }}",
+        "params": {{ an arrray of raw strings which are the name of the parameters of the function. for example ["num1", "textToPrint"] }},
+        "body": {{ an arrray of other operations with mentioned types before }}
+    }
+}
+
+5. conditionalBranch:
+
+detect the conditional barnch inside the input which i give you and put it in a
+structure like below and just output it only:
+{
+    "type": "conditionalBranch",
+    "data": {
+        "condition": "{{ can be an expression (basic or complex) which can consist of a nested operation between Val types, functionCalls or arithmetics. it must be resolvable into a bool Val type }}",
+        "trueBranch": {{ the step number which program execution pointer must move to if the condition leads to true }},
+        "falseBranch": {{ the step number which program execution pointer must move to if the condition leads to false }}
+    }
+}
+
+6. jump operation:
+
+detect the jump operation of the input which i give you and put it in a structure like below and just output it only:
+{
+    "type": "jumpOperation",
+    "data": {
+        "falseBranch": {{ the step number which program execution pointer must move to from this step }}
+    }
+}
+
+7. return operation:
+
+detect the returning details inside the input which i give you and put it in a
+structure like below and just output it only:
+{
+    "type": "returnOperation",
+    "data": {
+        "value": "{{ can be an expression (basic or complex) which can consist of a nested operation between Val types, functionCalls or arithmetics like explained before }}",
+    }
+}
+
+8. function call operation:
+
+if it is a standalone function call then detect the function call details inside the input which i give you and put it in a
+structure like below and just output it only:
+{
+    "type": "functionCall",
+    "data": {
+        "callee": "{{ it can be either an identifier Val or an complex expression ( i mean a calculation ) that will finally resolved into a simple Val which is an identifier or directly a runnable function Val }}",
+        "args": {{ an array of calculations in which each calculation can be a arithmetic type, one of Val types, or another functionCall type }},
+    }
+}
+
+9. host api call:
+
+if it is a host api call then detect the call details inside the input which i give you and put it in a
+structure like below and just output it only:
+{
+    "type": "host_call",
+    "data": {
+        "name": "{{ it is a raw string which is name of host api to be called. it can only be one of these values:
+            - "println" to print something
+            - "stringify" to convert a non string value to string
+            - "getInput" to get an input string from user
+          and nothing else unless the user specifically asks to call a host api with a name and passing the argument
+        }}",
+        "singleArg": {{ an array of calculations in which each calculation can be a arithmetic type, one of Val types, or another functionCall type }},
+    }
+}
+
+now let me first give you the code.

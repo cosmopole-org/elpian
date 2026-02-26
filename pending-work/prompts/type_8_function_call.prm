@@ -1,0 +1,16 @@
+
+if it is a standalone function call then detect the function call details inside the input which i give you and put it in a
+structure like below and just output it only:
+{
+    "type": "functionCall",
+    "data": {
+        "callee": "{{ it can be either an identifier Val or an complex expression ( i mean a calculation ) that will finally resolved into a simple Val which is an identifier or directly a runnable function Val }}",
+        "args": {{ an array of calculations in which each calculation can be a arithmetic type, one of Val types, or another functionCall type }},
+    }
+}
+
+the input is:
+
+    - call function printSum on the variable a and value 1
+
+just output the result.

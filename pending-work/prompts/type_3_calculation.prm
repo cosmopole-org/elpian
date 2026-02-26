@@ -1,0 +1,30 @@
+
+detect the calculation expressions inside the input which i give you and put it in a nested
+structure like below and just output it only:
+note: each level of nested structure can be reolved into a "Val" at runtime. the nested
+structures can be a "Val" with one of the mentioned types above, or a "functionCall",
+or even an "arithmetic" type.
+
+if it is an arithmetic operation then the structure is:
+{
+    "type": "arithmetic",
+    "data": {
+        "operation": "{{ the operator as a string for example: "+" or "-" or "*" or "/" or "^" (for power) or "%" (for mod) or "==", ">", "<", ">=", "<=" (for comparisons) }}",
+        "operand1": {{ can be another nested calculation (arithmetic type, one of Val types, or functionCall type) }},
+        "operand2": {{ can be another nested calculation (arithmetic type, one of Val types, or functionCall type) }}
+    }
+}
+if it is a function call operation then the structure is:
+{
+    "type": "functionCall",
+    "data": {
+        "callee": "{{ it can be either an identifier Val or an complex expression ( i mean a calculation ) that will finally resolved into a simple Val which is an identifier or directly a runnable function Val }}",
+        "args": {{ an array of calculations in which each calculation can be a arithmetic type, one of Val types, or another functionCall type }},
+    }
+}
+
+the input is:
+
+    - calculate the result of sum of (a * 2) and b
+
+just output the result.

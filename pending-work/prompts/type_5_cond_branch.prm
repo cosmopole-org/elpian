@@ -1,0 +1,17 @@
+
+detect the conditional barnch inside the input which i give you and put it in a
+structure like below and just output it only:
+{
+    "type": "conditionalBranch",
+    "data": {
+        "condition": "{{ can be an expression (basic or complex) which can consist of a nested operation between Val types, functionCalls or arithmetics. it must be resolvable into a bool Val type }}",
+        "trueBranch": {{ the step number which program execution pointer must move to if the condition leads to true }},
+        "falseBranch": {{ the step number which program execution pointer must move to if the condition leads to false }}
+    }
+}
+
+the input is:
+
+    - if the value of a == 1 then go to step 1 and if it is not, then go to step 3
+
+just output the result.

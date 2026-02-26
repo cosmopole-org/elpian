@@ -1,0 +1,22 @@
+
+detect assignment target variable being defined and the value being assigned and put them in the
+structure below and just output it only:
+
+{
+    "type": "definition",
+    "data": {
+        "leftSide": {
+            "type": "identifier",
+            "data": {
+                "name": "{{ variable name }}"
+            }
+        },
+        "rightSide": {{ the value being assign to the target variable. is must be in "Val" structure }}
+    }
+}
+
+the input is:
+
+    - define a new variable and name it @count with initial value 0.
+
+just output the result.

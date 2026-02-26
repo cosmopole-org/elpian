@@ -1,0 +1,20 @@
+
+detect the function definition inside the input which i give you and put it in a
+structure like below and just output it only:
+{
+    "type": "functionDefinition",
+    "data": {
+        "name": "{{ the name of the function to be defined which must be a raw string. for example "print" }}",
+        "params": {{ an arrray of raw strings which are the name of the parameters of the function. for example ["num1", "textToPrint"] }},
+        "body": {{ an arrray of other operations with mentioned types before }}
+    }
+}
+
+the input is:
+
+    - define function printSum on (num1, num2) {
+        step 1. (calculate num1 + num2) and define the it as num_res
+        step 2. call host to println the num_res
+    }
+
+just output the result.

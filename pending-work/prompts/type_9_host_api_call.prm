@@ -1,0 +1,22 @@
+
+if it is a host api call then detect the call details inside the input which i give you and put it in a
+structure like below and just output it only:
+{
+    "type": "host_call",
+    "data": {
+        "name": "{{ it is a raw string which is name of host api to be called. it can only be one of these values:
+            - "println"
+            - "stringify"
+            - "initApp"
+            - "updateApp
+          and nothing else
+        }}",
+        "singleArg": {{ an array of calculations in which each calculation can be a arithmetic type, one of Val types, or another functionCall type }},
+    }
+}
+
+the input is:
+
+    - call host to println variable b
+
+just output the result.

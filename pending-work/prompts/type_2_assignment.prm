@@ -1,0 +1,22 @@
+
+detect assignment target variable and the value being assigned and put them in the
+structure below and just output it only:
+
+{
+    "type": "assignment",
+    "data": {
+        "leftSide": {
+            "type": "identifier",
+            "data": {
+                "name": "{{ variable name }}"
+            }
+        },
+        "rightSide": {{ the value being assign to the target variable. is must be in "Val" structure }}
+    }
+}
+
+the input is:
+
+    - update the variable @count and assign value 123 to it.
+
+just output the result.

@@ -1,0 +1,110 @@
+
+assume there are 6 classes of commands:
+
+    1. definition operation: when you want to define new data in memory, for example defining a new variable
+       or memory unit, or defining any new variable or data in the program.  "assign the variable y to memory x"
+       or "memorize y as x"
+
+    2. assignment operation: when you want to assign a piece of data to an existing variable or memroy unit
+       previously defined in the program. for example: "assign the variable y to memory x" or "update the x's
+       value to y"
+    
+    3. arithmetic operation: when you want to resolve and calculate a math expression in the program,
+       for example: "assume x as input, calculate (x + 1) ^ 2 and return it.
+    
+    4. function definition: when the user asks for defining a new function so that when calling it, a new
+       set of operations will be executed. for example: "define a new function that 'calculates (x + 3) / 2 and
+       assigns it to variable x which is previously defined'.
+    
+    5. conditional branch: when user asks for an operation in which when program reaches that point, a condition
+       will be checked and based on the result which can be true or false, the program can jump to 2 different points
+       in the program. the condition can be any expressions that can be resolved into true or false. for example:
+       "if x + 3 > y then jump to step 2 else check if stringify(x) == "2" and if it is true go to step 5 else
+       just move to step 7".
+    
+    6. jump operation: when the user wants to branch the program execution from the current point to another step or point
+       in the program specifying the step number. it can only jump to a position in the same function or component. for
+       example: "jump to step 9"
+    
+    7. return operation: when the program is running a function then if user asks for retuning something or just returning
+       from the function. for example: "return the variable i defined in this function which is named 'a' as result".
+    
+    8. function call: when user asks for calling a function which previously defined in the program so that it will move
+       program execution point to start of the function and do some other computation, then return back to the previous
+       point. for example: "do sum function on a and b and assign it back to c".
+    
+    9. host api call: if the program asks the host to do something then it is a "host api call" operation. it is similar
+       to function call but the function is not defined in the program but hard coded in host interface. for example:
+       "print variable @test"
+
+remember that when a step includes operations between ( ) then that operation is a sub-step and the step must be divided
+into multiple sub-steps. some of them can be executed in parallel and some sequential.
+
+now i will give you a program and specify type of all operations in the list by the type number.
+for example:
+
+program [
+    step 1. function sum for inputs (operand1, operand2) [
+        step 1. define a new variable and name it @a with initial value 0.
+        step 2. calculate math operation operand1 + operand2 and assign it to @a.
+        step 3. return the value of @a.
+    ]
+    step 2. function subtract for inputs (operand1, operand2) [
+        step 1. define a new variable and name it @a with initial value 0.
+        step 2. calculate math operation operand1 - operand2 and assign it to @a.
+        step 3. return the value of @a.
+    ]
+    step 3. calculate result of (function sum on 1 and 2) / (function subtract on 5 and 3)
+            and keep value as unit @temp.
+
+    step 4. ask host to print the @temp.
+]
+
+the output will be:
+
+program [
+    step 1. function sum for inputs (operand1, operand2) [
+        step 1. 1
+        step 2. 3
+        step 3. 7
+    ]
+    step 2. function subtract for inputs (operand1, operand2) [
+        step 1. 1
+        step 2. 3
+        step 3. 7
+    ]
+    step 3.1.1. 8
+    step 3.1.2  8
+    steo 3.2    3
+
+    step 4. 9
+]
+
+as you can see the sub-steps in parallel have same prefix.
+
+now classify this program's operations into types and generate the result with the structure same
+as the example i mentioned.
+
+the input:
+
+program [
+    step 1. function subtract for inputs (@input) [
+        step 1. (ask host to stringify the @input) and return it as result.
+    ]
+    step 2. define a new variable and name it @count with initial value 0.
+    step 3. (calculate math operation @count + 1) and assign it to @count.
+    step 4. ask host to print the @count.
+]
+
+only output the result as a code snippet.
+
+program [
+    step 1. function measure for inputs (@input) [
+        step 1. if the @input is equal to 1 then go to step 2 else go to step 3.
+        step 2. (ask host to stringify the @input) and return it as result.
+        step 3. ((ask host to stringify the @input), then calculate ["hello " + its result]) and finally return it as result.
+    ]
+    step 2. define a new variable and name it @count with initial value 0.
+    step 3. (calculate math operation @count + 1) and assign it to @count.
+    step 4. ask host to print the the result of measure on @count.
+]

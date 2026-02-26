@@ -1,0 +1,15 @@
+
+detect the returning details inside the input which i give you and put it in a
+structure like below and just output it only:
+{
+    "type": "returnOperation",
+    "data": {
+        "value": "{{ can be an expression (basic or complex) which can consist of a nested operation between Val types, functionCalls or arithmetics like explained }}",
+    }
+}
+
+the input is:
+
+    - return the result of (variable a + 1)
+
+just output the result.
