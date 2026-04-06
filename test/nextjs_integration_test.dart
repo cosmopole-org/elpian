@@ -12,6 +12,12 @@ void main() {
         },
         'meta': {'route': '/home'},
         'navigation': {'redirectTo': '/auth', 'replace': true},
+        'clientComponents': {
+          'profile-card': {
+            'jsCode': 'function MainComponent(){ return "ok"; }',
+            'jsEntryFunction': 'MainComponent',
+          },
+        },
         'jsCode': 'function MainComponent(){ return "ok"; }',
         'jsEntryFunction': 'MainComponent',
         'vmAstJson': '{"type":"program","body":[]}',
@@ -20,6 +26,7 @@ void main() {
       expect(envelope.component['type'], equals('Text'));
       expect(envelope.meta?['route'], equals('/home'));
       expect(envelope.navigation?['redirectTo'], equals('/auth'));
+      expect(envelope.clientComponents?['profile-card'], isA<Map<String, dynamic>>());
       expect(envelope.jsCode, contains('MainComponent'));
       expect(envelope.jsEntryFunction, equals('MainComponent'));
       expect(envelope.vmAstJson, isNotNull);
@@ -47,6 +54,16 @@ void main() {
         () => NextjsRenderEnvelope.fromJson({
           'component': {'type': 'Text'},
           'jsEntryFunction': 101,
+        }),
+        throwsFormatException,
+      );
+    });
+
+    test('throws for invalid clientComponents type', () {
+      expect(
+        () => NextjsRenderEnvelope.fromJson({
+          'component': {'type': 'Text'},
+          'clientComponents': 'not-an-object',
         }),
         throwsFormatException,
       );
@@ -111,6 +128,57 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Loaded route: /welcome'), findsOneWidget);
+    });
+
+    testWidgets('resolves packed client component scripts in server hierarchy', (tester) async {
+      final widget = MaterialApp(
+        home: Scaffold(
+          body: NextjsServerWidget(
+            route: '/client-demo',
+            loader: (route, {props, headers}) async {
+              return {
+                'component': {
+                  'type': 'Column',
+                  'children': [
+                    {
+                      'type': 'Text',
+                      'props': {'text': 'Server before'},
+                    },
+                    {
+                      'type': 'clientComp',
+                      'componentId': 'counter-main',
+                      'props': {'start': 7},
+                    },
+                    {
+                      'type': 'Text',
+                      'props': {'text': 'Server after'},
+                    },
+                  ],
+                },
+                'clientComponents': {
+                  'counter-main': {
+                    'jsCode': '''
+                      function MainComponent(props){
+                        return JSON.stringify({
+                          type: "Text",
+                          props: {text: "Client count: " + props.start}
+                        });
+                      }
+                    '''
+                  }
+                },
+              };
+            },
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(widget);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Server before'), findsOneWidget);
+      expect(find.text('Client count: 7'), findsOneWidget);
+      expect(find.text('Server after'), findsOneWidget);
     });
 
     testWidgets('navigates using NextjsLink widget', (tester) async {
