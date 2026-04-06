@@ -23,6 +23,10 @@ export 'src/core/event_enabled_widget.dart';
 export 'src/models/elpian_node.dart';
 export 'src/models/css_style.dart';
 
+
+// Next.js Integration
+export 'src/integrations/nextjs_bridge.dart';
+export 'src/integrations/nextjs_server_widget.dart';
 // Parser
 export 'src/parser/json_parser.dart';
 

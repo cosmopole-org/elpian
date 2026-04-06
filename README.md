@@ -66,6 +66,7 @@ final widget = ElpianEngine().renderFromJson({
 | **Canvas 2D** | Full 2D graphics API with paths, shapes, gradients, text, and transforms |
 | **3D Scene Graphs** | JSON-defined 3D worlds rendered via **Bevy** (Rust/GPU) or a pure-Dart fallback |
 | **Elpian VM** | Sandboxed Rust bytecode VM with FFI (native) and WASM (web) for scripting UI logic |
+| **Next.js Bridge** | Server-driven Next.js payloads (`component` + `stylesheet`) rendered natively by Elpian clients |
 
 ### &#x2699;&#xFE0F; Core Systems
 
@@ -102,6 +103,18 @@ flutter run -t lib/example/landing_page_example.dart
 ---
 
 ## &#x1F4BB; Code Examples
+
+
+### Next.js Black-Box Client
+
+```dart
+const NextjsServerWidget(
+  serverBaseUrl: 'https://mini.example.com',
+  route: '/',
+);
+```
+
+This mode uses your Next.js server as the UI source and fetches real Next.js routes by default (not only a single API endpoint), then renders returned Elpian components natively on the client with `NextjsLink` + server navigation commands. Routes can also return `jsCode` + `jsEntryFunction` (default `MainComponent`) and `vmAstJson`; scripts can call host `render` to push UI DSL from code. Server payloads may also use `type: "clientComp"` with inline `jsCode`.
 
 ### Render UI from JSON
 
@@ -438,6 +451,7 @@ elpian/
 │   │   ├── html_widgets/           # 70+ HTML element builders
 │   │   ├── bevy/                   # Bevy 3D scene integration (Rust FFI)
 │   │   ├── scene3d/                # Pure-Dart 3D renderer (fallback)
+│   │   ├── integrations/           # Next.js + server-driven rendering adapters
 │   │   └── vm/                     # Elpian VM + QuickJS integration
 │   └── example/                    # 13 demo applications
 ├── rust/                           # Rust VM + Bevy crate (compiler, executor, FFI)
@@ -462,6 +476,7 @@ elpian/
 | [VM_LOGIC.md](VM_LOGIC.md) | &#x1F9F0; Rust VM AST & API reference |
 | [2D_GRAPHICS.md](2D_GRAPHICS.md) | &#x1F5BC;&#xFE0F; 2D UI element reference |
 | [3D_GRAPHICS.md](3D_GRAPHICS.md) | &#x1F4E6; 3D scene graph reference |
+| [NEXTJS_INTEGRATION.md](NEXTJS_INTEGRATION.md) | &#x1F519; Next.js server payloads rendered by Elpian |
 
 ---
 
