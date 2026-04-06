@@ -79,6 +79,8 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
   String? _lastScriptSignature;
   static bool _elpianVmInitialized = false;
   Map<String, dynamic>? _scriptRenderedComponent;
+  final Map<String, Map<String, dynamic>> _clientComponentCache =
+      <String, Map<String, dynamic>>{};
 
   @override
   void initState() {
@@ -122,7 +124,10 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
     );
 
     final envelope = NextjsRenderEnvelope.fromJson(payload);
-    final resolvedComponent = await _resolveClientComponentNodes(envelope.component);
+    final resolvedComponent = await _resolveClientComponentNodes(
+      envelope.component,
+      packedClientComponents: envelope.clientComponents,
+    );
 
     return {
       ...payload,
@@ -209,10 +214,14 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
 
   Future<Map<String, dynamic>> _resolveClientComponentNodes(
     Map<String, dynamic> node,
+    {Map<String, dynamic>? packedClientComponents}
   ) async {
     final type = node['type']?.toString();
     if (type == 'clientComp' || type == 'client-component') {
-      final resolved = await _resolveClientComponentNode(node);
+      final resolved = await _resolveClientComponentNode(
+        node,
+        packedClientComponents: packedClientComponents,
+      );
       if (resolved != null) return resolved;
       return {
         'type': 'Text',
@@ -225,7 +234,19 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
       final resolvedChildren = <dynamic>[];
       for (final child in children) {
         if (child is Map<String, dynamic>) {
-          resolvedChildren.add(await _resolveClientComponentNodes(child));
+          resolvedChildren.add(
+            await _resolveClientComponentNodes(
+              child,
+              packedClientComponents: packedClientComponents,
+            ),
+          );
+        } else if (child is Map) {
+          resolvedChildren.add(
+            await _resolveClientComponentNodes(
+              Map<String, dynamic>.from(child as Map),
+              packedClientComponents: packedClientComponents,
+            ),
+          );
         } else {
           resolvedChildren.add(child);
         }
@@ -241,19 +262,36 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
 
   Future<Map<String, dynamic>?> _resolveClientComponentNode(
     Map<String, dynamic> node,
+    {Map<String, dynamic>? packedClientComponents}
   ) async {
     final props = (node['props'] is Map<String, dynamic>)
         ? Map<String, dynamic>.from(node['props'] as Map<String, dynamic>)
         : <String, dynamic>{};
 
-    final jsCode = node['jsCode']?.toString() ?? props['jsCode']?.toString();
+    String? jsCode = node['jsCode']?.toString() ?? props['jsCode']?.toString();
+    String? entry = node['jsEntryFunction']?.toString() ??
+        props['jsEntryFunction']?.toString() ??
+        'MainComponent';
+
+    if (jsCode == null || jsCode.isEmpty) {
+      final packedScript = _findPackedClientComponentScript(
+        node,
+        props,
+        packedClientComponents,
+      );
+      jsCode = packedScript?.jsCode;
+      entry = packedScript?.jsEntryFunction ?? entry;
+    }
+
+    if ((jsCode == null || jsCode.isEmpty) && widget.serverBaseUrl != null) {
+      final fetchedScript = await _fetchClientComponentScript(node, props);
+      jsCode = fetchedScript?.jsCode;
+      entry = fetchedScript?.jsEntryFunction ?? entry;
+    }
+
     if (jsCode == null || jsCode.isEmpty) {
       return null;
     }
-
-    final entry = node['jsEntryFunction']?.toString() ??
-        props['jsEntryFunction']?.toString() ??
-        'MainComponent';
 
     final component = await _runJsComponentCode(
       jsCode,
@@ -277,6 +315,180 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
     }
 
     return component;
+  }
+
+  _PackedClientScript? _findPackedClientComponentScript(
+    Map<String, dynamic> node,
+    Map<String, dynamic> props,
+    Map<String, dynamic>? packedClientComponents,
+  ) {
+    if (packedClientComponents == null || packedClientComponents.isEmpty) {
+      return null;
+    }
+
+    final keys = _clientComponentLookupKeys(node, props);
+    for (final key in keys) {
+      final raw = packedClientComponents[key];
+      if (raw == null) continue;
+      final packed = _normalizePackedScript(raw);
+      if (packed != null) return packed;
+    }
+
+    if (packedClientComponents.length == 1) {
+      return _normalizePackedScript(packedClientComponents.values.first);
+    }
+
+    return null;
+  }
+
+  Future<_PackedClientScript?> _fetchClientComponentScript(
+    Map<String, dynamic> node,
+    Map<String, dynamic> props,
+  ) async {
+    final lookupKeys = _clientComponentLookupKeys(node, props);
+    if (lookupKeys.isEmpty) return null;
+
+    for (final key in lookupKeys) {
+      final cached = _clientComponentCache[key];
+      if (cached != null) {
+        final packed = _normalizePackedScript(cached);
+        if (packed != null) return packed;
+      }
+    }
+
+    final baseUrl = widget.serverBaseUrl;
+    if (baseUrl == null || baseUrl.isEmpty) return null;
+
+    final client = HttpClient();
+    try {
+      final endpointPath =
+          widget.endpoint ?? '/api/elpian-client-component';
+      final endpointUri = Uri.parse(baseUrl).resolve(endpointPath);
+      final request = await client.postUrl(endpointUri).timeout(widget.timeout);
+      request.headers.contentType = ContentType.json;
+      request.headers.set('accept', 'application/json');
+      widget.headers?.forEach(request.headers.set);
+      request.write(
+        jsonEncode({
+          'route': _currentRoute,
+          'lookupKeys': lookupKeys,
+          'componentNode': node,
+        }),
+      );
+
+      final response = await request.close().timeout(widget.timeout);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return null;
+      }
+
+      final responseBody = await response.transform(utf8.decoder).join();
+      final decoded = jsonDecode(responseBody);
+      if (decoded is! Map<String, dynamic>) {
+        return null;
+      }
+
+      final componentsRaw = decoded['clientComponents'];
+      if (componentsRaw is Map<String, dynamic>) {
+        for (final entry in componentsRaw.entries) {
+          if (entry.value is Map<String, dynamic>) {
+            _clientComponentCache[entry.key] =
+                Map<String, dynamic>.from(entry.value as Map<String, dynamic>);
+          } else if (entry.value is String) {
+            _clientComponentCache[entry.key] = {'jsCode': entry.value};
+          }
+        }
+      }
+
+      final directPacked = _normalizePackedScript(decoded);
+      if (directPacked != null) {
+        for (final key in lookupKeys) {
+          _clientComponentCache[key] = {
+            'jsCode': directPacked.jsCode,
+            'jsEntryFunction': directPacked.jsEntryFunction,
+          };
+        }
+        return directPacked;
+      }
+
+      for (final key in lookupKeys) {
+        final cached = _clientComponentCache[key];
+        if (cached == null) continue;
+        final packed = _normalizePackedScript(cached);
+        if (packed != null) return packed;
+      }
+    } catch (_) {
+      // Ignore fetch failures, client component can still be resolved inline.
+    } finally {
+      client.close();
+    }
+
+    return null;
+  }
+
+  List<String> _clientComponentLookupKeys(
+    Map<String, dynamic> node,
+    Map<String, dynamic> props,
+  ) {
+    final keys = <String>{
+      ..._stringCandidates([
+        node['clientComponentKey'],
+        node['componentKey'],
+        node['componentId'],
+        node['id'],
+        node['name'],
+        node['path'],
+        node['componentPath'],
+        node['module'],
+      ]),
+      ..._stringCandidates([
+        props['clientComponentKey'],
+        props['componentKey'],
+        props['componentId'],
+        props['id'],
+        props['name'],
+        props['path'],
+        props['componentPath'],
+        props['module'],
+      ]),
+    };
+
+    if (keys.isEmpty) {
+      final fallback = 'anon-${node.hashCode.abs()}-${props.hashCode.abs()}';
+      keys.add(fallback);
+    }
+
+    return keys.toList(growable: false);
+  }
+
+  Iterable<String> _stringCandidates(List<dynamic> values) sync* {
+    for (final value in values) {
+      final text = value?.toString().trim();
+      if (text != null && text.isNotEmpty) {
+        yield text;
+      }
+    }
+  }
+
+  _PackedClientScript? _normalizePackedScript(dynamic raw) {
+    if (raw is String && raw.trim().isNotEmpty) {
+      return _PackedClientScript(jsCode: raw.trim(), jsEntryFunction: 'MainComponent');
+    }
+
+    if (raw is Map<String, dynamic>) {
+      final jsCode = raw['jsCode']?.toString();
+      if (jsCode == null || jsCode.trim().isEmpty) return null;
+      final entry = raw['jsEntryFunction']?.toString();
+      return _PackedClientScript(
+        jsCode: jsCode,
+        jsEntryFunction: (entry == null || entry.isEmpty) ? 'MainComponent' : entry,
+      );
+    }
+
+    if (raw is Map) {
+      return _normalizePackedScript(Map<String, dynamic>.from(raw));
+    }
+
+    return null;
   }
 
   void _handleNavigate(String route, {bool replace = false}) {
@@ -498,4 +710,14 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
       },
     );
   }
+}
+
+class _PackedClientScript {
+  const _PackedClientScript({
+    required this.jsCode,
+    required this.jsEntryFunction,
+  });
+
+  final String jsCode;
+  final String jsEntryFunction;
 }

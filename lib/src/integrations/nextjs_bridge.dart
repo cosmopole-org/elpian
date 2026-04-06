@@ -12,6 +12,7 @@ class NextjsRenderEnvelope {
     this.stylesheet,
     this.meta,
     this.navigation,
+    this.clientComponents,
     this.jsCode,
     this.vmAstJson,
     this.jsEntryFunction,
@@ -21,6 +22,7 @@ class NextjsRenderEnvelope {
   final Map<String, dynamic>? stylesheet;
   final Map<String, dynamic>? meta;
   final Map<String, dynamic>? navigation;
+  final Map<String, dynamic>? clientComponents;
 
   /// Optional JavaScript source (QuickJS) to execute on client.
   final String? jsCode;
@@ -54,6 +56,11 @@ class NextjsRenderEnvelope {
       throw FormatException('"navigation" must be a JSON object when provided.');
     }
 
+    final clientComponentsRaw = json['clientComponents'];
+    if (clientComponentsRaw != null && clientComponentsRaw is! Map<String, dynamic>) {
+      throw FormatException('"clientComponents" must be a JSON object when provided.');
+    }
+
     final jsCodeRaw = json['jsCode'];
     if (jsCodeRaw != null && jsCodeRaw is! String) {
       throw FormatException('"jsCode" must be a string when provided.');
@@ -74,6 +81,7 @@ class NextjsRenderEnvelope {
       stylesheet: stylesheetRaw,
       meta: metaRaw,
       navigation: navigationRaw,
+      clientComponents: clientComponentsRaw,
       jsCode: jsCodeRaw,
       vmAstJson: vmAstRaw,
       jsEntryFunction: jsEntryRaw,
@@ -86,6 +94,7 @@ class NextjsRenderEnvelope {
       if (stylesheet != null) 'stylesheet': stylesheet,
       if (meta != null) 'meta': meta,
       if (navigation != null) 'navigation': navigation,
+      if (clientComponents != null) 'clientComponents': clientComponents,
       if (jsCode != null) 'jsCode': jsCode,
       if (vmAstJson != null) 'vmAstJson': vmAstJson,
       if (jsEntryFunction != null) 'jsEntryFunction': jsEntryFunction,
