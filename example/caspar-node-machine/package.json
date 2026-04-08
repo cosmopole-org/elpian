@@ -1,0 +1,11 @@
+{
+  "name": "elpian-caspar-point-machine",
+  "version": "0.2.0",
+  "description": "Caspar VM machine program that emits Elpian point-signaling packets via host-imported VM APIs.",
+  "private": true,
+  "type": "module",
+  "main": "src/run-machine.js",
+  "scripts": {
+    "start": "node src/run-machine.js"
+  }
+}
