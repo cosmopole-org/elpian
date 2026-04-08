@@ -116,6 +116,10 @@ const NextjsServerWidget(
 
 This mode uses your Next.js server as the UI source and fetches real Next.js routes by default (not only a single API endpoint), then renders returned Elpian components natively on the client with `NextjsLink` + server navigation commands. Routes can also return `jsCode` + `jsEntryFunction` (default `MainComponent`) and `vmAstJson`; scripts can call host `render` to push UI DSL from code. Server payloads may also use `type: "clientComp"` with inline `jsCode`.
 
+### Caspar point-signaling machine (Node.js + Docker example)
+
+A complete VM-oriented machine example is available at `example/caspar-node-machine/`. It demonstrates how a Caspar machine program can use host-imported point signaling APIs to broadcast Elpian runtime mode selection (`nextjs_server`, `streaming_server`, or `fully_client_side`), then push `ui.init` and incremental `ui.patch` packets without exposing its own HTTP/WebSocket transport.
+
 ### Render UI from JSON
 
 ```dart
