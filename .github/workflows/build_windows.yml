@@ -51,19 +51,18 @@ jobs:
         working-directory: rust
         run: cargo build --release
 
-      - name: Flutter build profile (integration test target)
+      - name: Flutter build windows release
         working-directory: example
-        run: flutter build windows --profile --target=integration_test/elpian_benchmark_test.dart --no-pub
+        run: flutter build windows --release --target=lib/main.dart --no-pub
 
       - name: Zip
         shell: pwsh
         run: |
-          Compress-Archive -Path "example\build\windows\x64\runner\Profile\*" -DestinationPath elpian_benchmark_profile.zip -Force
+          Compress-Archive -Path "example\build\windows\x64\runner\Release\*" -DestinationPath elpian_windows_release.zip -Force
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: elpian-benchmark-profile
-          path: elpian_benchmark_profile.zip
+          name: elpian-windows-release
+          path: elpian_windows_release.zip
           retention-days: 90
-# benchmark build

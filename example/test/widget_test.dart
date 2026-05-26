@@ -5,7 +5,7 @@ import 'package:elpian_ui_example/main.dart';
 void main() {
   testWidgets('Elpian example app renders unified demo launcher',
       (WidgetTester tester) async {
-    await tester.pumpWidget(const ElpianExamplesApp());
+    await tester.pumpWidget(const ElpianExamplesApp(startMs: 100,));
     expect(find.text('Elpian UI Examples'), findsOneWidget);
     expect(find.text('QuickJS Calculator'), findsOneWidget);
     expect(find.text('AST VM'), findsOneWidget);
