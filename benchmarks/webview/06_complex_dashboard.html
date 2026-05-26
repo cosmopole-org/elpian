@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>WV Bench 06 – Complex Dashboard</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Segoe UI',system-ui,sans-serif; background:#f0f2f5; }
+  .dashboard { padding:20px; }
+  .header { background:linear-gradient(135deg,#667eea 0%,#764ba2 100%); color:white; padding:24px; border-radius:12px; margin-bottom:24px; box-shadow:0 8px 16px rgba(0,0,0,.1); }
+  .header h1 { font-size:28px; margin-bottom:8px; }
+  .header p { font-size:14px; opacity:.9; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:20px; }
+  .card { background:white; border-radius:12px; padding:20px; box-shadow:0 2px 8px rgba(0,0,0,.08); transition:transform .3s, box-shadow .3s; }
+  .card:hover { transform:translateY(-4px); box-shadow:0 8px 16px rgba(0,0,0,.12); }
+  .card-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+  .card-title { font-size:16px; font-weight:600; color:#333; }
+  .card-icon { font-size:24px; }
+  .card-value { font-size:32px; font-weight:700; color:#667eea; margin-bottom:12px; }
+  .card-label { font-size:13px; color:#999; margin-bottom:12px; }
+  .card-bar { height:8px; background:#e0e0e0; border-radius:4px; overflow:hidden; }
+  .card-bar-fill { height:100%; background:linear-gradient(90deg,#667eea,#764ba2); animation:pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{width:60%} 50%{width:85%} }
+  .stats { display:flex; gap:12px; margin-top:16px; }
+  .stat { flex:1; padding:8px; background:#f8f9fa; border-radius:8px; font-size:12px; text-align:center; }
+  .stat-value { font-weight:700; color:#667eea; font-size:16px; }
+  .chart { margin-top:16px; height:120px; background:linear-gradient(180deg,rgba(102,126,234,.1) 0%,rgba(102,126,234,0) 100%); border-radius:8px; }
+  .controls { display:flex; gap:10px; flex-wrap:wrap; margin-top:24px; }
+  .btn { padding:10px 20px; border:none; border-radius:8px; cursor:pointer; font-size:14px; font-weight:600; transition:all .3s; }
+  .btn-primary { background:#667eea; color:white; }
+  .btn-primary:hover { background:#764ba2; transform:scale(1.05); }
+  .btn-secondary { background:#e0e0e0; color:#333; }
+  .btn-secondary:hover { background:#d0d0d0; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<pre id="results">RUNNING BENCHMARK...</pre>
+<script>
+'use strict';
+
+const METRICS_ICONS = ['📊','💰','📈','⚡','🎯','📱','🔥','🎨'];
+const COLORS = ['#667eea','#764ba2','#f093fb','#4facfe','#00f2fe','#43e97b','#fa709a','#fee140'];
+
+function el(tag, cls, style, ...children) {
+  const e = document.createElement(tag);
+  if(cls) e.className = cls;
+  if(style) e.style.cssText = style;
+  for(const c of children) {
+    if(typeof c === 'string') e.appendChild(document.createTextNode(c));
+    else if(c) e.appendChild(c);
+  }
+  return e;
+}
+
+function buildDashboard(cardCount = 24) {
+  const root = el('div','dashboard');
+  
+  const header = el('div','header');
+  header.appendChild(el('h1','','','Performance Dashboard'));
+  header.appendChild(el('p','','','Real-time analytics and metrics'));
+  root.appendChild(header);
+  
+  const grid = el('div','grid');
+  for(let i=0; i<cardCount; i++) {
+    const card = el('div','card');
+    
+    const cardHeader = el('div','card-header');
+    cardHeader.appendChild(el('div','card-title','',`Metric ${i+1}`));
+    cardHeader.appendChild(el('div','card-icon','',METRICS_ICONS[i%METRICS_ICONS.length]));
+    card.appendChild(cardHeader);
+    
+    const value = Math.floor(Math.random()*10000) + 1000;
+    card.appendChild(el('div','card-value','',String(value)));
+    card.appendChild(el('div','card-label','',`Current Value • ${new Date().toLocaleTimeString()}`));
+    
+    const bar = el('div','card-bar');
+    const fill = el('div','card-bar-fill','',);
+    bar.appendChild(fill);
+    card.appendChild(bar);
+    
+    const stats = el('div','stats');
+    stats.appendChild(el('div','stat','',el('div','stat-value','','+12.5%'),'Growth'));
+    stats.appendChild(el('div','stat','',el('div','stat-value','','↑ 234'),'Peak'));
+    stats.appendChild(el('div','stat','',el('div','stat-value','','98%'),'Health'));
+    card.appendChild(stats);
+    
+    grid.appendChild(card);
+  }
+  root.appendChild(grid);
+  
+  const controls = el('div','controls');
+  const btnLabels = ['Refresh','Export','Settings','Help'];
+  for(const label of btnLabels) {
+    const btn = el('button',label.includes('Refresh')?'btn btn-primary':'btn btn-secondary','',label);
+    controls.appendChild(btn);
+  }
+  root.appendChild(controls);
+  
+  return root;
+}
+
+(function bench() {
+  const results = {scenario:'WV06_ComplexDashboard', timestamp:new Date().toISOString()};
+  
+  // Build performance
+  const buildTimes = [];
+  for(let i=0; i<80; i++) {
+    const t0 = performance.now();
+    buildDashboard(24);
+    const t1 = performance.now();
+    buildTimes.push(t1-t0);
+  }
+  buildTimes.sort((a,b)=>a-b);
+  results.build_count = buildTimes.length;
+  results.build_avg_ms = +(buildTimes.reduce((a,b)=>a+b,0)/buildTimes.length).toFixed(3);
+  results.build_p50_ms = +buildTimes[Math.floor(buildTimes.length*0.5)].toFixed(3);
+  results.build_p90_ms = +buildTimes[Math.floor(buildTimes.length*0.9)].toFixed(3);
+  results.build_p99_ms = +buildTimes[Math.floor(buildTimes.length*0.99)].toFixed(3);
+  results.build_max_ms = +buildTimes[buildTimes.length-1].toFixed(3);
+  results.build_fps_equiv = +(1000/results.build_avg_ms).toFixed(1);
+  results.build_jank_pct = +((buildTimes.filter(t=>t>16.67).length/buildTimes.length)*100).toFixed(2);
+  
+  // Render to DOM
+  const dashboard = buildDashboard(24);
+  document.getElementById('app').appendChild(dashboard);
+  
+  // Layout/reflow performance
+  const reflowTimes = [];
+  for(let i=0; i<150; i++) {
+    const t0 = performance.now();
+    void document.body.offsetHeight;
+    const t1 = performance.now();
+    reflowTimes.push(t1-t0);
+  }
+  reflowTimes.sort((a,b)=>a-b);
+  results.reflow_avg_ms = +(reflowTimes.reduce((a,b)=>a+b,0)/reflowTimes.length).toFixed(4);
+  results.reflow_p90_ms = +reflowTimes[Math.floor(reflowTimes.length*0.9)].toFixed(4);
+  results.reflow_p99_ms = +reflowTimes[Math.floor(reflowTimes.length*0.99)].toFixed(4);
+  
+  // Animation frame simulation (CSS animation readiness)
+  const cards = dashboard.querySelectorAll('.card');
+  results.card_count = cards.length;
+  results.dom_element_count = dashboard.querySelectorAll('*').length;
+  
+  // Style mutation perf
+  const mutationTimes = [];
+  for(let i=0; i<300; i++) {
+    const card = cards[i%cards.length];
+    const t0 = performance.now();
+    card.style.transform = `scale(${0.95+Math.random()*0.1})`;
+    card.style.opacity = (0.7+Math.random()*0.3).toFixed(2);
+    void card.offsetHeight;
+    const t1 = performance.now();
+    mutationTimes.push(t1-t0);
+  }
+  mutationTimes.sort((a,b)=>a-b);
+  results.mutation_avg_ms = +(mutationTimes.reduce((a,b)=>a+b,0)/mutationTimes.length).toFixed(4);
+  results.mutation_p95_ms = +mutationTimes[Math.floor(mutationTimes.length*0.95)].toFixed(4);
+  results.mutations_per_sec = +(1000/results.mutation_avg_ms).toFixed(0);
+  
+  // Memory
+  if(performance.memory) {
+    results.heap_used_mb = +(performance.memory.usedJSHeapSize/1048576).toFixed(2);
+    results.heap_total_mb = +(performance.memory.totalJSHeapSize/1048576).toFixed(2);
+  }
+  
+  // Paint timing
+  const paints = performance.getEntriesByType('paint');
+  results.first_paint_ms = paints[0]?+(paints[0].startTime).toFixed(2):0;
+  results.first_contentful_paint_ms = paints[1]?+(paints[1].startTime).toFixed(2):0;
+  
+  document.getElementById('results').textContent = JSON.stringify(results,null,2);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>WebView Benchmark Runner</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: monospace; background: #0d0d0d; color: #0f0; padding: 20px; font-size: 13px; }
+  h1 { color: #fff; margin-bottom: 16px; }
+  .status { margin: 4px 0; }
+  .done  { color: #4CAF50; }
+  .error { color: #F44336; }
+  #results { margin-top: 20px; color: #ddd; white-space: pre; }
+</style>
+</head>
+<body>
+<h1>WebView Benchmark Suite Runner</h1>
+<div id="log"></div>
+<pre id="results">RUNNING ALL BENCHMARKS...</pre>
+<script>
+'use strict';
+
+const PAGES = [
+  '01_basic_rendering.html',
+  '02_css_animations.html',
+  '03_complex_layout.html',
+  '04_canvas_drawing.html',
+  '05_list_scroll.html',
+];
+
+// Timeout per benchmark page (ms)
+const PAGE_TIMEOUT = 30000;
+
+const logEl   = document.getElementById('log');
+const resultEl = document.getElementById('results');
+
+function log(msg, cls) {
+  const div = document.createElement('div');
+  div.className = 'status' + (cls ? ' ' + cls : '');
+  div.textContent = msg;
+  logEl.appendChild(div);
+}
+
+// Load a benchmark page in a hidden iframe and wait for its #results element
+function runPage(src) {
+  return new Promise((resolve, reject) => {
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:fixed;width:1280px;height:800px;left:-2000px;top:0;';
+    document.body.appendChild(iframe);
+
+    let timer = setTimeout(() => {
+      document.body.removeChild(iframe);
+      reject(new Error(`Timeout: ${src}`));
+    }, PAGE_TIMEOUT);
+
+    // Poll for the results element to be populated
+    let pollInterval;
+    iframe.addEventListener('load', () => {
+      pollInterval = setInterval(() => {
+        try {
+          const doc = iframe.contentDocument || iframe.contentWindow?.document;
+          if (!doc) return;
+          const el = doc.getElementById('results');
+          if (el && el.textContent && el.textContent !== 'RUNNING') {
+            clearTimeout(timer);
+            clearInterval(pollInterval);
+            document.body.removeChild(iframe);
+            try {
+              resolve(JSON.parse(el.textContent));
+            } catch (_) {
+              resolve({ raw: el.textContent });
+            }
+          }
+        } catch (e) { /* cross-origin guard */ }
+      }, 300);
+    });
+
+    iframe.src = src;
+  });
+}
+
+async function runAll() {
+  const allResults = {};
+  const summary = [];
+
+  for (const page of PAGES) {
+    log(`▶ Running ${page} ...`);
+    const t0 = performance.now();
+    try {
+      const result = await runPage(page);
+      const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+      allResults[page] = result;
+      const fps = result.fps || result.scroll_fps || result.build_throughput_per_sec || '—';
+      const avgMs = result.avg_frame_ms || result.build_avg_ms || result.scroll_avg_ms || '—';
+      log(`  ✓ ${page} done in ${elapsed}s | fps=${fps} avg=${avgMs}ms`, 'done');
+      summary.push({ page, fps, avg_ms: avgMs, ...result });
+    } catch (e) {
+      log(`  ✗ ${page} ERROR: ${e.message}`, 'error');
+      allResults[page] = { error: e.message };
+    }
+  }
+
+  const finalReport = {
+    suite: 'WebView Benchmark Suite',
+    timestamp: new Date().toISOString(),
+    user_agent: navigator.userAgent,
+    results: allResults,
+    summary,
+  };
+
+  resultEl.textContent = JSON.stringify(finalReport, null, 2);
+  log('═══ All benchmarks complete ═══', 'done');
+  return finalReport;
+}
+
+runAll().catch(e => {
+  resultEl.textContent = JSON.stringify({ error: String(e) });
+});
+</script>
+</body>
+</html>

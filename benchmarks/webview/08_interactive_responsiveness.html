@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>WV Bench 08 – Interactive Responsiveness</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Segoe UI',sans-serif;background:#fff;padding:20px}
+  .container{max-width:1000px;margin:0 auto}
+  h1{color:#333;margin-bottom:24px;font-size:24px}
+  .test-section{margin-bottom:20px;padding:16px;background:#f5f5f5;border-radius:8px}
+  .btn{padding:10px 16px;background:#667eea;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600;margin:4px}
+  .btn:active{transform:scale(.98);background:#764ba2}
+  .input-field{width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px;margin-bottom:8px}
+  .list-container{max-height:200px;overflow-y:auto;background:white;border-radius:6px;border:1px solid #ddd}
+  .list-item{padding:10px;border-bottom:1px solid #eee;font-size:13px}
+  pre{background:#1e1e1e;color:#0f0;padding:12px;border-radius:6px;font-size:11px;max-height:300px;overflow-y:auto}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Interactive Responsiveness Benchmark (Auto)</h1>
+  <div class="test-section" id="btnSection">
+    <div id="btnGrid"></div>
+  </div>
+  <div class="test-section">
+    <input type="text" id="inputField" class="input-field" placeholder="Auto input...">
+    <textarea id="textArea" class="input-field" style="height:80px;resize:none"></textarea>
+    <div id="inputOutput" style="font-size:12px;color:#666;margin-top:4px"></div>
+  </div>
+  <div class="test-section">
+    <div class="list-container" id="scrollList"></div>
+  </div>
+  <pre id="results">RUNNING</pre>
+</div>
+
+<script>
+'use strict';
+
+// ── DOM Setup ────────────────────────────────────────────────────────────────
+const COLORS = ['#667eea','#764ba2','#f093fb','#4facfe','#00f2fe','#43e97b','#fa709a','#fee140'];
+
+// Build button grid
+const btnGrid = document.getElementById('btnGrid');
+const buttons = [];
+const BUTTON_COUNT = 20;
+for (let i = 0; i < BUTTON_COUNT; i++) {
+  const btn = document.createElement('button');
+  btn.className = 'btn';
+  btn.textContent = 'Btn' + (i + 1);
+  btn.style.background = COLORS[i % COLORS.length];
+  btnGrid.appendChild(btn);
+  buttons.push(btn);
+}
+
+// Build scroll list
+const scrollList = document.getElementById('scrollList');
+const LIST_ITEM_COUNT = 200;
+const frag = document.createDocumentFragment();
+for (let i = 0; i < LIST_ITEM_COUNT; i++) {
+  const d = document.createElement('div');
+  d.className = 'list-item';
+  d.textContent = 'Item #' + (i + 1) + ' — value: ' + (i * 1.618).toFixed(3);
+  frag.appendChild(d);
+}
+scrollList.appendChild(frag);
+void scrollList.getBoundingClientRect(); // force layout
+
+// ── Benchmark (fully automated) ──────────────────────────────────────────────
+(function run() {
+  const results = {
+    scenario: 'WV08_InteractiveResponsiveness',
+    timestamp: new Date().toISOString()
+  };
+
+  // 1. Button click dispatch timing (programmatic dispatchEvent)
+  const clickTimes = [];
+  const CLICK_N = 200;
+  for (let i = 0; i < CLICK_N; i++) {
+    const btn = buttons[i % buttons.length];
+    const t0 = performance.now();
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    btn.style.opacity = '0.8';
+    void btn.offsetHeight; // force style flush
+    btn.style.opacity = '1';
+    const t1 = performance.now();
+    clickTimes.push(t1 - t0);
+  }
+  clickTimes.sort((a, b) => a - b);
+  results.click_avg_ms   = +(clickTimes.reduce((a, b) => a + b, 0) / clickTimes.length).toFixed(4);
+  results.click_p95_ms   = +clickTimes[Math.floor(clickTimes.length * 0.95)].toFixed(4);
+  results.click_p99_ms   = +clickTimes[Math.floor(clickTimes.length * 0.99)].toFixed(4);
+  results.click_max_ms   = +clickTimes[clickTimes.length - 1].toFixed(4);
+  results.clicks_per_sec = +(1000 / results.click_avg_ms).toFixed(1);
+  results.click_count    = CLICK_N;
+
+  // 2. Input event dispatch timing
+  const input      = document.getElementById('inputField');
+  const textarea   = document.getElementById('textArea');
+  const inputTimes = [];
+  const INPUT_N    = 300;
+  const sampleText = 'The quick brown fox jumps over the lazy dog — Elpian benchmark test run ' ;
+
+  for (let i = 0; i < INPUT_N; i++) {
+    const target = i % 3 === 0 ? textarea : input;
+    const t0     = performance.now();
+    target.value = sampleText.slice(0, 20 + (i % 60));
+    target.dispatchEvent(new Event('input', { bubbles: true }));
+    void target.offsetHeight;
+    const t1 = performance.now();
+    inputTimes.push(t1 - t0);
+  }
+  inputTimes.sort((a, b) => a - b);
+  results.input_avg_ms    = +(inputTimes.reduce((a, b) => a + b, 0) / inputTimes.length).toFixed(4);
+  results.input_p90_ms    = +inputTimes[Math.floor(inputTimes.length * 0.90)].toFixed(4);
+  results.input_p99_ms    = +inputTimes[Math.floor(inputTimes.length * 0.99)].toFixed(4);
+  results.inputs_per_sec  = +(1000 / results.input_avg_ms).toFixed(1);
+  results.input_count     = INPUT_N;
+
+  // 3. Programmatic scroll + event timing
+  const scrollTimes = [];
+  const SCROLL_N    = 300;
+  let pos = 0, dir = 1;
+  const maxScroll = scrollList.scrollHeight - scrollList.clientHeight;
+
+  for (let i = 0; i < SCROLL_N; i++) {
+    const t0 = performance.now();
+    pos += dir * 80;
+    if (pos >= maxScroll) { pos = maxScroll; dir = -1; }
+    if (pos <= 0)          { pos = 0;         dir =  1; }
+    scrollList.scrollTop = pos;
+    scrollList.dispatchEvent(new Event('scroll', { bubbles: false }));
+    void scrollList.scrollTop; // read-back forces sync
+    const t1 = performance.now();
+    scrollTimes.push(t1 - t0);
+  }
+  scrollTimes.sort((a, b) => a - b);
+  results.scroll_avg_ms   = +(scrollTimes.reduce((a, b) => a + b, 0) / scrollTimes.length).toFixed(4);
+  results.scroll_p90_ms   = +scrollTimes[Math.floor(scrollTimes.length * 0.90)].toFixed(4);
+  results.scroll_p99_ms   = +scrollTimes[Math.floor(scrollTimes.length * 0.99)].toFixed(4);
+  results.scroll_fps      = +(1000 / results.scroll_avg_ms).toFixed(1);
+  results.scroll_jank_pct = +((scrollTimes.filter(t => t > 16.67).length / scrollTimes.length) * 100).toFixed(2);
+  results.scroll_count    = SCROLL_N;
+
+  // 4. DOM text update throughput (simulated text-content change loop)
+  const items       = scrollList.querySelectorAll('.list-item');
+  const updateTimes = [];
+  const UPDATE_N    = 500;
+  for (let i = 0; i < UPDATE_N; i++) {
+    const item = items[i % items.length];
+    const t0   = performance.now();
+    item.textContent = 'Updated item ' + (i % LIST_ITEM_COUNT + 1) + ' [rev ' + i + '] — v' + (i * 0.42).toFixed(2);
+    void item.getBoundingClientRect();
+    const t1   = performance.now();
+    updateTimes.push(t1 - t0);
+  }
+  updateTimes.sort((a, b) => a - b);
+  results.dom_update_avg_ms   = +(updateTimes.reduce((a, b) => a + b, 0) / updateTimes.length).toFixed(4);
+  results.dom_update_p90_ms   = +updateTimes[Math.floor(updateTimes.length * 0.90)].toFixed(4);
+  results.dom_updates_per_sec = +(1000 / results.dom_update_avg_ms).toFixed(0);
+
+  // 5. Style toggle throughput (hover simulation)
+  const hoverTimes = [];
+  const HOVER_N    = 400;
+  for (let i = 0; i < HOVER_N; i++) {
+    const btn = buttons[i % buttons.length];
+    const t0  = performance.now();
+    btn.style.transform  = 'scale(0.97)';
+    btn.style.boxShadow  = '0 2px 8px rgba(0,0,0,.2)';
+    void btn.offsetHeight;
+    btn.style.transform  = '';
+    btn.style.boxShadow  = '';
+    void btn.offsetHeight;
+    const t1 = performance.now();
+    hoverTimes.push(t1 - t0);
+  }
+  hoverTimes.sort((a, b) => a - b);
+  results.hover_avg_ms     = +(hoverTimes.reduce((a, b) => a + b, 0) / hoverTimes.length).toFixed(4);
+  results.hover_p90_ms     = +hoverTimes[Math.floor(hoverTimes.length * 0.90)].toFixed(4);
+  results.hover_ops_per_sec = +(1000 / results.hover_avg_ms).toFixed(1);
+
+  // 6. Memory
+  if (performance.memory) {
+    results.heap_used_mb  = +(performance.memory.usedJSHeapSize  / 1048576).toFixed(2);
+    results.heap_total_mb = +(performance.memory.totalJSHeapSize / 1048576).toFixed(2);
+  }
+  results.dom_node_count = document.querySelectorAll('*').length;
+
+  document.getElementById('results').textContent = JSON.stringify(results, null, 2);
+})();
+</script>
+</body>
+</html>

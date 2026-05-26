@@ -5,8 +5,8 @@ project(${PROJECT_NAME} LANGUAGES CXX)
 
 # Invoke the build for native code shared library
 add_custom_command(
-    OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/../rust/target/release/elpian_vm.dll"
-    COMMAND cargo build --manifest-path "${CMAKE_CURRENT_SOURCE_DIR}/../rust/Cargo.toml" --release
+    OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/../../rust/target/release/elpian_vm.dll"
+    COMMAND cargo build --manifest-path "${CMAKE_CURRENT_SOURCE_DIR}/../../rust/Cargo.toml" --release
     USES_TERMINAL
 )
 
@@ -15,6 +15,6 @@ add_custom_target(${PROJECT_NAME}_target
 )
 
 set(elpian_vm_bundled_libraries
-    "${CMAKE_CURRENT_SOURCE_DIR}/../rust/target/release/elpian_vm.dll"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../rust/target/release/elpian_vm.dll"
     PARENT_SCOPE
 )

@@ -1,0 +1,73 @@
+{
+  "suite": "Elpian Windows Benchmark",
+  "runner": "flutter test (Dart VM, real ElpianEngine)",
+  "timestamp": "2026-05-26T12:53:30.870264",
+  "benchmarks": [
+    {
+      "scenario": "S1_ComplexDashboard",
+      "fps": 365.8,
+      "avg_build_ms": 2.734,
+      "p50_ms": 2.09,
+      "p90_ms": 4.67,
+      "p99_ms": 39.96,
+      "worst_frame_ms": 39.96,
+      "jank_rate_pct": 1.0,
+      "total_frames": 100
+    },
+    {
+      "scenario": "S2_AnimationBuild",
+      "fps": 2960.7,
+      "avg_build_ms": 0.338,
+      "p50_ms": 0.25,
+      "p90_ms": 0.4,
+      "p99_ms": 2.88,
+      "worst_frame_ms": 2.88,
+      "jank_rate_pct": 0.0,
+      "total_frames": 150
+    },
+    {
+      "scenario": "S3_InteractiveInput",
+      "fps": 14668.1,
+      "avg_build_ms": 0.068,
+      "p50_ms": 0.02,
+      "p90_ms": 0.03,
+      "p99_ms": 1.48,
+      "worst_frame_ms": 6.92,
+      "jank_rate_pct": 0.0,
+      "total_frames": 200
+    },
+    {
+      "scenario": "S4_ScrollPerformance",
+      "fps": 637.5,
+      "avg_build_ms": 1.569,
+      "p50_ms": 1.22,
+      "p90_ms": 2.07,
+      "p99_ms": 17.19,
+      "worst_frame_ms": 17.19,
+      "jank_rate_pct": 1.0,
+      "total_frames": 100
+    },
+    {
+      "scenario": "S5_JSONParseThroughput",
+      "fps": 32733.2,
+      "avg_build_ms": 0.031,
+      "p50_ms": 0.02,
+      "p90_ms": 0.02,
+      "p99_ms": 0.07,
+      "worst_frame_ms": 2.61,
+      "jank_rate_pct": 0.0,
+      "total_frames": 500
+    },
+    {
+      "scenario": "S6_MemoryEfficiency",
+      "fps": 197.2,
+      "avg_build_ms": 5.072,
+      "p50_ms": 3.46,
+      "p90_ms": 8.93,
+      "p99_ms": 15.06,
+      "worst_frame_ms": 15.06,
+      "jank_rate_pct": 0.0,
+      "total_frames": 20
+    }
+  ]
+}

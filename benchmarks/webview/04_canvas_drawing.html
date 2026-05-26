@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>WV Bench 04 – Canvas 2D Drawing</title>
+<style>* { margin:0; padding:0; } body { background:#0d0d1a; }</style>
+</head>
+<body>
+<canvas id="c" width="800" height="500"></canvas>
+<pre id="results">RUNNING</pre>
+<script>
+'use strict';
+const COLORS = ['#E91E63','#9C27B0','#3F51B5','#2196F3','#00BCD4','#4CAF50','#FF9800','#F44336','#795548','#607D8B'];
+const c = document.getElementById('c');
+const ctx = c.getContext('2d');
+const W = c.width, H = c.height;
+
+function drawScene(t) {
+  ctx.fillStyle = '#1A1A2E';
+  ctx.fillRect(0, 0, W, H);
+  // 30 circles
+  for (let i = 0; i < 30; i++) {
+    const x = ((i * 27) + t * 1.5) % W;
+    const y = ((i * 19) + Math.sin(t * 0.02 + i) * 40 + H/2) % H;
+    ctx.beginPath();
+    ctx.arc(x, y, 8 + i % 12, 0, Math.PI * 2);
+    ctx.fillStyle = COLORS[i % COLORS.length];
+    ctx.fill();
+  }
+  // 20 lines
+  for (let i = 0; i < 20; i++) {
+    ctx.beginPath();
+    ctx.moveTo((i * 40 + t) % W, (i * 25) % H);
+    ctx.lineTo(((i * 40 + 80) + t * 0.5) % W, ((i * 25) + 60) % H);
+    ctx.strokeStyle = COLORS[(i + 3) % COLORS.length];
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+  // 10 rects
+  for (let i = 0; i < 10; i++) {
+    ctx.fillStyle = COLORS[(i + 5) % COLORS.length] + '44';
+    ctx.fillRect((i * 80 + t * 0.3) % W, (i * 50) % H, 60, 40);
+  }
+  // 8 quadratic curves
+  for (let i = 0; i < 8; i++) {
+    ctx.beginPath();
+    ctx.moveTo((i * 100 + t) % W, H * 0.8);
+    ctx.quadraticCurveTo(((i * 100 + 50) + Math.sin(t * 0.05) * 80) % W, H * 0.2, ((i * 100 + 100) + t * 0.2) % W, H * 0.8);
+    ctx.strokeStyle = COLORS[i % COLORS.length];
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+  // Gradient overlay
+  const g = ctx.createLinearGradient(0, 0, W, H);
+  g.addColorStop(0, 'rgba(33,150,243,.06)');
+  g.addColorStop(1, 'rgba(233,30,99,.06)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+  // Text
+  ctx.font = 'bold 16px monospace';
+  ctx.fillStyle = 'rgba(255,255,255,.9)';
+  ctx.fillText('Canvas Benchmark frame ' + t, 20, 28);
+}
+
+(function run() {
+  const results = { scenario: 'WV04_CanvasDrawing' };
+
+  // 1. Synchronous throughput: draw N frames, measure total wall time
+  const DRAW_N = 500;
+  const drawTimes = [];
+  for (let i = 0; i < DRAW_N; i++) {
+    const t0 = performance.now();
+    drawScene(i);
+    const t1 = performance.now();
+    drawTimes.push(t1 - t0);
+  }
+  drawTimes.sort((a,b)=>a-b);
+  const avgDraw = drawTimes.reduce((a,b)=>a+b,0) / drawTimes.length;
+
+  results.fps                  = +(1000 / avgDraw).toFixed(1);
+  results.avg_frame_ms         = +avgDraw.toFixed(3);
+  results.p50_frame_ms         = +drawTimes[Math.round(drawTimes.length*.50)].toFixed(3);
+  results.p90_frame_ms         = +drawTimes[Math.round(drawTimes.length*.90)].toFixed(3);
+  results.p99_frame_ms         = +drawTimes[Math.round(drawTimes.length*.99)].toFixed(3);
+  results.jank_rate_pct        = +(drawTimes.filter(d=>d>16.67).length / drawTimes.length * 100).toFixed(1);
+  results.worst_frame_ms       = +drawTimes[drawTimes.length-1].toFixed(3);
+  results.total_frames         = DRAW_N;
+  results.primitives_per_frame = 30 + 20 + 10 + 8 + 2; // circles+lines+rects+curves+text+grad
+
+  // 2. Individual primitive costs
+  const PRIM_N = 1000;
+
+  // Arc cost
+  const arcTimes = [];
+  for (let i = 0; i < PRIM_N; i++) {
+    const t0 = performance.now();
+    ctx.beginPath();
+    ctx.arc(i%W, (i*7)%H, 10, 0, Math.PI*2);
+    ctx.fillStyle = COLORS[i%COLORS.length];
+    ctx.fill();
+    const t1 = performance.now();
+    arcTimes.push(t1-t0);
+  }
+  results.arc_avg_ms = +(arcTimes.reduce((a,b)=>a+b,0)/arcTimes.length).toFixed(4);
+
+  // Line cost
+  const lineTimes = [];
+  for (let i = 0; i < PRIM_N; i++) {
+    const t0 = performance.now();
+    ctx.beginPath();
+    ctx.moveTo(i%W, (i*3)%H);
+    ctx.lineTo((i+50)%W, (i*3+50)%H);
+    ctx.stroke();
+    const t1 = performance.now();
+    lineTimes.push(t1-t0);
+  }
+  results.line_avg_ms = +(lineTimes.reduce((a,b)=>a+b,0)/lineTimes.length).toFixed(4);
+
+  // fillRect cost
+  const rectTimes = [];
+  for (let i = 0; i < PRIM_N; i++) {
+    const t0 = performance.now();
+    ctx.fillStyle = COLORS[i%COLORS.length];
+    ctx.fillRect(i%W, (i*7)%H, 40, 30);
+    const t1 = performance.now();
+    rectTimes.push(t1-t0);
+  }
+  results.rect_avg_ms = +(rectTimes.reduce((a,b)=>a+b,0)/rectTimes.length).toFixed(4);
+
+  if (performance.memory) {
+    results.heap_used_mb = +(performance.memory.usedJSHeapSize/1048576).toFixed(2);
+  }
+  results.timestamp = new Date().toISOString();
+  document.getElementById('results').textContent = JSON.stringify(results, null, 2);
+})();
+</script>
+</body>
+</html>

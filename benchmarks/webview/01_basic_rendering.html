@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>WV Bench 01 – Basic Rendering</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #f5f5f5; }
+  .card { background: #fff; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,.12); padding: 16px; margin: 8px; }
+  .btn  { display: inline-block; padding: 10px 20px; border-radius: 6px; color: #fff; font-size: 14px; border: none; margin: 4px; }
+  .row  { display: flex; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<pre id="results">RUNNING</pre>
+<script>
+'use strict';
+
+const COLORS = ['#4CAF50','#2196F3','#F44336','#FF9800','#9C27B0','#00BCD4','#E91E63','#607D8B'];
+
+function el(tag, style, ...children) {
+  const e = document.createElement(tag);
+  if (style) e.style.cssText = style;
+  for (const c of children) {
+    if (typeof c === 'string') e.appendChild(document.createTextNode(c));
+    else if (c) e.appendChild(c);
+  }
+  return e;
+}
+
+function buildPage(cardCount) {
+  const root = el('div', 'padding:20px');
+  const header = el('div', 'background:#3F51B5;padding:16px;border-radius:8px;margin-bottom:16px;color:white;font-size:20px;font-weight:600', 'WebView Dashboard');
+  root.appendChild(header);
+  const row = el('div', 'display:flex;flex-wrap:wrap;gap:8px');
+  for (let i = 0; i < cardCount; i++) {
+    const card = el('div', `min-width:120px;background:${COLORS[i%COLORS.length]};border-radius:8px;padding:16px;color:white`);
+    card.appendChild(el('div', 'font-size:28px;font-weight:700', String((i+1)*123)));
+    card.appendChild(el('div', 'font-size:13px;opacity:.8', 'Metric '+(i+1)));
+    row.appendChild(card);
+  }
+  root.appendChild(row);
+  const btnRow = el('div', 'margin-top:16px;display:flex;gap:8px;flex-wrap:wrap');
+  for (let i = 0; i < 6; i++) {
+    btnRow.appendChild(el('button', `background:${COLORS[i%COLORS.length]};color:white;border:none;padding:8px 16px;border-radius:6px`, 'Action '+(i+1)));
+  }
+  root.appendChild(btnRow);
+  const list = el('ul', 'list-style:none;margin-top:16px');
+  for (let i = 0; i < 30; i++) {
+    list.appendChild(el('li', `padding:10px;border-bottom:1px solid #eee;background:${i%2?'#fafafa':'#fff'}`, 'Item '+(i+1)+' — subtitle text for entry'));
+  }
+  root.appendChild(list);
+  return root;
+}
+
+// ── SYNCHRONOUS benchmark ──────────────────────────────────────────────────
+(function run() {
+  const results = { scenario: 'WV01_BasicRendering' };
+
+  // 1. Cold build time — build DOM tree N times, never attached
+  const BUILD_N = 100;
+  const buildTimes = [];
+  for (let i = 0; i < BUILD_N; i++) {
+    const t0 = performance.now();
+    buildPage(24);
+    const t1 = performance.now();
+    buildTimes.push(t1 - t0);
+  }
+  buildTimes.sort((a,b)=>a-b);
+  results.build_avg_ms  = +( buildTimes.reduce((a,b)=>a+b,0)/buildTimes.length ).toFixed(3);
+  results.build_p50_ms  = +buildTimes[Math.round(buildTimes.length*.50)].toFixed(3);
+  results.build_p90_ms  = +buildTimes[Math.round(buildTimes.length*.90)].toFixed(3);
+  results.build_p99_ms  = +buildTimes[Math.round(buildTimes.length*.99)].toFixed(3);
+  results.build_throughput_per_sec = +(1000/results.build_avg_ms).toFixed(1);
+
+  // 2. Attach and measure layout (forced reflow)
+  const page = buildPage(24);
+  document.getElementById('app').appendChild(page);
+  const REFLOW_N = 200;
+  const reflowTimes = [];
+  for (let i = 0; i < REFLOW_N; i++) {
+    const t0 = performance.now();
+    void document.body.getBoundingClientRect();
+    const t1 = performance.now();
+    reflowTimes.push(t1 - t0);
+  }
+  reflowTimes.sort((a,b)=>a-b);
+  results.reflow_avg_ms = +(reflowTimes.reduce((a,b)=>a+b,0)/reflowTimes.length).toFixed(4);
+  results.reflow_p90_ms = +reflowTimes[Math.round(reflowTimes.length*.90)].toFixed(4);
+
+  // 3. Style mutation throughput (mimic dynamic updates)
+  const cards = page.querySelectorAll('[style*="border-radius"]');
+  const STYLE_N = 500;
+  const styleTimes = [];
+  for (let i = 0; i < STYLE_N; i++) {
+    const card = cards[i % cards.length];
+    const t0 = performance.now();
+    card.style.opacity = (0.5 + (i%10)*0.05).toFixed(2);
+    void card.offsetHeight; // force style recalc
+    const t1 = performance.now();
+    styleTimes.push(t1-t0);
+  }
+  styleTimes.sort((a,b)=>a-b);
+  results.style_mutation_avg_ms = +(styleTimes.reduce((a,b)=>a+b,0)/styleTimes.length).toFixed(4);
+  results.style_mutations_per_sec = +(1000/results.style_mutation_avg_ms).toFixed(0);
+
+  // 4. DOM node count
+  results.dom_node_count = document.querySelectorAll('*').length;
+
+  // 5. Navigation timing
+  const nav = performance.getEntriesByType('navigation')[0];
+  if (nav) {
+    results.dom_content_loaded_ms = +(nav.domContentLoadedEventEnd - nav.startTime).toFixed(2);
+  }
+
+  // 6. Memory (Chrome only)
+  if (performance.memory) {
+    results.heap_used_mb  = +(performance.memory.usedJSHeapSize / 1048576).toFixed(2);
+    results.heap_total_mb = +(performance.memory.totalJSHeapSize / 1048576).toFixed(2);
+  }
+
+  results.timestamp = new Date().toISOString();
+  document.getElementById('results').textContent = JSON.stringify(results, null, 2);
+})();
+</script>
+</body>
+</html>

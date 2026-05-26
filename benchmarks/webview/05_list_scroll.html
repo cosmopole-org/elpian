@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>WV Bench 05 – List & DOM Updates</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; }
+  #list { max-height: 600px; overflow-y: auto; }
+  .item { display: flex; align-items: center; justify-content: space-between;
+          padding: 12px 16px; border-bottom: 1px solid #e0e0e0; }
+  .item:nth-child(even) { background: #f5f5f5; }
+  .badge { min-width: 28px; height: 22px; border-radius: 11px; display: inline-flex;
+           align-items: center; justify-content: center; color: white; font-size: 11px;
+           font-weight: 600; padding: 0 6px; flex-shrink: 0; }
+</style>
+</head>
+<body>
+<div id="list"></div>
+<pre id="results">RUNNING</pre>
+<script>
+'use strict';
+const COLORS = ['#4CAF50','#2196F3','#F44336','#FF9800','#9C27B0','#00BCD4','#E91E63','#607D8B'];
+const ITEM_N = 200;
+
+function buildList(n) {
+  const frag = document.createDocumentFragment();
+  for (let i = 0; i < n; i++) {
+    const div = document.createElement('div');
+    div.className = 'item';
+    div.innerHTML = `
+      <div>
+        <div style="font-weight:600;font-size:16px">List Item ${i+1}</div>
+        <div style="font-size:13px;color:#666">Subtitle for entry ${i+1} in the list</div>
+      </div>
+      <span class="badge" style="background:${COLORS[i%COLORS.length]}">${i%5+1}</span>`;
+    frag.appendChild(div);
+  }
+  return frag;
+}
+
+(function run() {
+  const results = { scenario: 'WV05_ListScroll', item_count: ITEM_N };
+
+  // 1. List build throughput
+  const BUILD_N = 30;
+  const buildTimes = [];
+  for (let i = 0; i < BUILD_N; i++) {
+    const t0 = performance.now();
+    buildList(ITEM_N);
+    const t1 = performance.now();
+    buildTimes.push(t1 - t0);
+  }
+  buildTimes.sort((a,b)=>a-b);
+  results.build_avg_ms = +(buildTimes.reduce((a,b)=>a+b,0)/buildTimes.length).toFixed(3);
+  results.build_p90_ms = +buildTimes[Math.round(buildTimes.length*.90)].toFixed(3);
+  results.build_throughput_per_sec = +(1000/results.build_avg_ms).toFixed(1);
+
+  // 2. Attach list and measure DOM paint time
+  const listEl = document.getElementById('list');
+  listEl.appendChild(buildList(ITEM_N));
+  void listEl.getBoundingClientRect(); // force layout
+
+  // 3. Programmatic scroll simulation
+  const SCROLL_N = 200;
+  const scrollTimes = [];
+  let pos = 0, dir = 1;
+  for (let i = 0; i < SCROLL_N; i++) {
+    const t0 = performance.now();
+    pos += dir * 100;
+    if (pos >= listEl.scrollHeight - listEl.clientHeight) dir = -1;
+    if (pos <= 0) dir = 1;
+    listEl.scrollTop = pos;
+    void listEl.scrollTop; // flush
+    const t1 = performance.now();
+    scrollTimes.push(t1-t0);
+  }
+  scrollTimes.sort((a,b)=>a-b);
+  results.scroll_avg_ms      = +(scrollTimes.reduce((a,b)=>a+b,0)/scrollTimes.length).toFixed(4);
+  results.scroll_p90_ms      = +scrollTimes[Math.round(scrollTimes.length*.90)].toFixed(4);
+  results.scroll_fps         = +(1000/results.scroll_avg_ms).toFixed(1);
+  results.scroll_jank_pct    = +(scrollTimes.filter(d=>d>16.67).length/scrollTimes.length*100).toFixed(1);
+  results.scroll_total       = SCROLL_N;
+
+  // 4. DOM content update throughput
+  const items = listEl.querySelectorAll('.item');
+  const UPDATE_N = 500;
+  const updateTimes = [];
+  for (let i = 0; i < UPDATE_N; i++) {
+    const idx = i % items.length;
+    const t0 = performance.now();
+    const title = items[idx].querySelector('div > div');
+    if (title) title.textContent = `Updated Item ${idx+1} [rev ${i}]`;
+    void items[idx].getBoundingClientRect();
+    const t1 = performance.now();
+    updateTimes.push(t1-t0);
+  }
+  updateTimes.sort((a,b)=>a-b);
+  results.dom_update_avg_ms   = +(updateTimes.reduce((a,b)=>a+b,0)/updateTimes.length).toFixed(4);
+  results.dom_update_p90_ms   = +updateTimes[Math.round(updateTimes.length*.90)].toFixed(4);
+  results.dom_updates_per_sec = +(1000/results.dom_update_avg_ms).toFixed(0);
+
+  // 5. Bulk item append/remove
+  const BULK_N = 50;
+  const bulkTimes = [];
+  for (let i = 0; i < BULK_N; i++) {
+    const t0 = performance.now();
+    const frag = buildList(10);
+    listEl.appendChild(frag);
+    void listEl.getBoundingClientRect();
+    // remove appended
+    for (let j = 0; j < 10; j++) listEl.removeChild(listEl.lastChild);
+    const t1 = performance.now();
+    bulkTimes.push(t1-t0);
+  }
+  bulkTimes.sort((a,b)=>a-b);
+  results.bulk_ops_avg_ms  = +(bulkTimes.reduce((a,b)=>a+b,0)/bulkTimes.length).toFixed(3);
+  results.bulk_ops_per_sec = +(1000/results.bulk_ops_avg_ms).toFixed(1);
+
+  results.dom_node_count = listEl.querySelectorAll('*').length;
+  if (performance.memory) {
+    results.heap_used_mb = +(performance.memory.usedJSHeapSize/1048576).toFixed(2);
+  }
+  results.timestamp = new Date().toISOString();
+  document.getElementById('results').textContent = JSON.stringify(results, null, 2);
+})();
+</script>
+</body>
+</html>

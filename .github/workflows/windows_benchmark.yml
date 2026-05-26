@@ -1,0 +1,108 @@
+name: Elpian Windows Benchmark
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'lib/**'
+      - 'rust/src/**'
+      - 'example/integration_test/**'
+      - 'example/test_driver/**'
+      - 'rust_builder/windows/CMakeLists.txt'
+      - '.github/workflows/windows_benchmark.yml'
+
+jobs:
+  benchmark:
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Enable Developer Mode (symlink support for Flutter)
+        shell: cmd
+        run: |
+          reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" /v "AllowDevelopmentWithoutDevLicense" /t REG_DWORD /d 1 /f
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.3'
+          channel: 'stable'
+          cache: true
+
+      - name: Setup Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: actions/cache@v4
+        with:
+          path: rust/target
+          key: ${{ runner.os }}-rust-${{ hashFiles('rust/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-rust-
+
+      - name: Cache pub packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\AppData\Local\Pub\Cache
+            example\.dart_tool
+          key: ${{ runner.os }}-pub-${{ hashFiles('example/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
+
+      - name: Flutter pub get (root package)
+        run: flutter pub get
+
+      - name: Flutter pub get (example app)
+        working-directory: example
+        run: flutter pub get
+
+      - name: Flutter doctor
+        run: flutter doctor -v
+
+      - name: Create benchmark output directory
+        run: New-Item -ItemType Directory -Force "example\benchmarks\reports"
+        shell: powershell
+
+      - name: Build Rust DLL (pre-build for faster feedback)
+        working-directory: rust
+        run: cargo build --release
+
+      - name: Run integration benchmark (flutter drive --profile)
+        working-directory: example
+        shell: powershell
+        run: |
+          flutter drive `
+            --target=integration_test/elpian_benchmark_test.dart `
+            --driver=test_driver/integration_test_driver.dart `
+            -d windows `
+            --profile `
+            --no-pub
+        timeout-minutes: 30
+
+      - name: Show benchmark results
+        if: always()
+        shell: powershell
+        run: |
+          $f = "example\benchmarks\reports\elpian_raw_results.json"
+          if (Test-Path $f) {
+            Write-Host "=== Benchmark Results ==="
+            Get-Content $f
+          } else {
+            Write-Host "Results file not found at $f"
+            Get-ChildItem "example\benchmarks" -Recurse -ErrorAction SilentlyContinue
+          }
+
+      - name: Upload benchmark results artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: elpian-windows-benchmark-${{ github.sha }}
+          path: |
+            example/benchmarks/reports/elpian_raw_results.json
+          if-no-files-found: warn
+          retention-days: 90

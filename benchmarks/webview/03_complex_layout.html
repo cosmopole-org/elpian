@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>WV Bench 03 – Complex Layout</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #fafafa; }
+  .dash { display: grid; grid-template-columns: 180px 1fr; min-height: 100vh; }
+  .topbar { background: #3F51B5; color: white; padding: 0 20px; font-size: 18px; font-weight: 600;
+            display: flex; align-items: center; height: 56px; }
+  .sidebar { background: #263238; padding: 8px; }
+  .nav-item { padding: 10px 12px; color: rgba(255,255,255,.7); border-radius: 6px;
+              font-size: 13px; margin-bottom: 4px; }
+  .nav-item.active { background: #3F51B5; color: white; }
+  .main { padding: 20px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fill,minmax(130px,1fr)); gap: 12px; margin-bottom: 20px; }
+  .stat { border-radius: 8px; padding: 16px; color: white; }
+  .stat-val { font-size: 28px; font-weight: 700; }
+  .stat-lbl { font-size: 13px; opacity:.8; }
+  table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px;
+          box-shadow: 0 2px 6px rgba(0,0,0,.1); overflow: hidden; }
+  th { background: #3F51B5; color: white; padding: 10px 12px; font-size: 13px; text-align: left; }
+  td { padding: 10px 12px; font-size: 13px; border-bottom: 1px solid #f0f0f0; }
+  tr:nth-child(even) td { background: #fafafa; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<pre id="results">RUNNING</pre>
+<script>
+'use strict';
+const COLORS = ['#4CAF50','#2196F3','#F44336','#FF9800','#9C27B0','#00BCD4','#E91E63','#607D8B'];
+
+function buildDashboard(cards, rows) {
+  const wrap = document.createElement('div');
+  // Topbar
+  const topbar = document.createElement('div');
+  topbar.className = 'topbar';
+  topbar.style.gridColumn = '1/-1';
+  topbar.textContent = 'Analytics Dashboard';
+  wrap.appendChild(topbar);
+  // Sidebar
+  const sidebar = document.createElement('div');
+  sidebar.className = 'sidebar';
+  ['Overview','Analytics','Users','Sales','Reports','Settings'].forEach((t,i) => {
+    const n = document.createElement('div');
+    n.className = 'nav-item' + (i===0?' active':'');
+    n.textContent = t;
+    sidebar.appendChild(n);
+  });
+  wrap.appendChild(sidebar);
+  // Main
+  const main = document.createElement('div');
+  main.className = 'main';
+  // Stats grid
+  const stats = document.createElement('div');
+  stats.className = 'stats';
+  for (let i = 0; i < cards; i++) {
+    const s = document.createElement('div');
+    s.className = 'stat';
+    s.style.backgroundColor = COLORS[i%COLORS.length];
+    s.innerHTML = `<div class="stat-val">${(i+1)*137}</div><div class="stat-lbl">Metric ${i+1}</div>`;
+    stats.appendChild(s);
+  }
+  main.appendChild(stats);
+  // Table
+  const table = document.createElement('table');
+  table.innerHTML = '<thead><tr>' + ['#','Name','Status','Value','Date'].map(h=>`<th>${h}</th>`).join('') + '</tr></thead>';
+  const tbody = document.createElement('tbody');
+  const statuses = ['Active','Pending','Inactive','Error'];
+  for (let i = 0; i < rows; i++) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${i+1}</td><td>Entry ${i+1}</td><td>${statuses[i%4]}</td><td>${(i+1)*17}</td><td>2026-05-${(i%28)+1}</td>`;
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  main.appendChild(table);
+  wrap.appendChild(main);
+  return wrap;
+}
+
+(function run() {
+  const results = { scenario: 'WV03_ComplexLayout' };
+
+  // 1. Cold build time
+  const BUILD_N = 50;
+  const buildTimes = [];
+  for (let i = 0; i < BUILD_N; i++) {
+    const t0 = performance.now();
+    buildDashboard(16, 60);
+    const t1 = performance.now();
+    buildTimes.push(t1 - t0);
+  }
+  buildTimes.sort((a,b)=>a-b);
+  results.build_avg_ms = +(buildTimes.reduce((a,b)=>a+b,0)/buildTimes.length).toFixed(3);
+  results.build_p50_ms = +buildTimes[Math.round(buildTimes.length*.50)].toFixed(3);
+  results.build_p90_ms = +buildTimes[Math.round(buildTimes.length*.90)].toFixed(3);
+  results.build_throughput_per_sec = +(1000/results.build_avg_ms).toFixed(1);
+
+  // 2. Attach and force reflow
+  const dash = buildDashboard(16, 60);
+  dash.className = 'dash';
+  document.getElementById('app').appendChild(dash);
+
+  const REFLOW_N = 200;
+  const reflowTimes = [];
+  for (let i = 0; i < REFLOW_N; i++) {
+    const t0 = performance.now();
+    void document.body.getBoundingClientRect();
+    const t1 = performance.now();
+    reflowTimes.push(t1-t0);
+  }
+  reflowTimes.sort((a,b)=>a-b);
+  results.reflow_avg_ms = +(reflowTimes.reduce((a,b)=>a+b,0)/reflowTimes.length).toFixed(4);
+  results.reflow_p90_ms = +reflowTimes[Math.round(reflowTimes.length*.90)].toFixed(4);
+
+  // 3. Grid re-layout (column changes)
+  const grid = dash.querySelector('.stats');
+  const variants = ['repeat(auto-fill,minmax(100px,1fr))','repeat(4,1fr)','repeat(auto-fill,minmax(180px,1fr))','repeat(3,1fr)'];
+  const reTimes = [];
+  for (let i = 0; i < 100; i++) {
+    const t0 = performance.now();
+    grid.style.gridTemplateColumns = variants[i%variants.length];
+    void grid.getBoundingClientRect();
+    const t1 = performance.now();
+    reTimes.push(t1-t0);
+  }
+  reTimes.sort((a,b)=>a-b);
+  results.relayout_avg_ms = +(reTimes.reduce((a,b)=>a+b,0)/reTimes.length).toFixed(4);
+  results.relayout_fps    = +(1000/results.relayout_avg_ms).toFixed(1);
+
+  // 4. Table row insert/remove
+  const tbody = dash.querySelector('tbody');
+  const INSERT_N = 100;
+  const insertTimes = [];
+  for (let i = 0; i < INSERT_N; i++) {
+    const t0 = performance.now();
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${i}</td><td>New ${i}</td><td>Active</td><td>${i*7}</td><td>2026-05-22</td>`;
+    tbody.insertBefore(tr, tbody.firstChild);
+    void tbody.getBoundingClientRect();
+    tbody.removeChild(tbody.firstChild);
+    const t1 = performance.now();
+    insertTimes.push(t1-t0);
+  }
+  insertTimes.sort((a,b)=>a-b);
+  results.table_row_ops_avg_ms  = +(insertTimes.reduce((a,b)=>a+b,0)/insertTimes.length).toFixed(4);
+  results.table_row_ops_per_sec = +(1000/results.table_row_ops_avg_ms).toFixed(0);
+
+  results.dom_node_count = document.querySelectorAll('*').length;
+
+  if (performance.memory) {
+    results.heap_used_mb  = +(performance.memory.usedJSHeapSize/1048576).toFixed(2);
+    results.heap_total_mb = +(performance.memory.totalJSHeapSize/1048576).toFixed(2);
+  }
+  results.timestamp = new Date().toISOString();
+  document.getElementById('results').textContent = JSON.stringify(results, null, 2);
+})();
+</script>
+</body>
+</html>
