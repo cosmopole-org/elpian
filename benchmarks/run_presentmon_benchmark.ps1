@@ -5,7 +5,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $PRESENTMON  = 'C:\Program Files\Intel\PresentMon\PresentMonConsoleApplication\PresentMon-2.4.1-x64.exe'
-$ELPIAN_EXE  = 'E:\projects\elpian\build\elpian_windows_release\elpian_ui_example.exe'
+$ELPIAN_EXE  = 'E:\projects\elpian\build\elpian_windows\elpian_ui_example.exe'
 $CHROME      = 'C:\Program Files\Google\Chrome\Application\chrome.exe'
 $WEBVIEW     = 'E:\projects\elpian\benchmarks\webview'
 $REPORTS     = 'E:\projects\elpian\benchmarks\reports\presentmon'
@@ -42,7 +42,10 @@ public class MouseSim {
     public struct POINT { public int X, Y; }
 
     const uint MD = 0x0002, MU = 0x0004, MW = 0x0800;
-    const int LW = 1280, LH = 720;  // logical layout size from main.cpp
+    // Client area is 1264x681 (window 1280x720 minus 8px borders + 31px title bar).
+    // Flutter at 100% DPI uses logical px == physical px, so coordinates are direct
+    // client pixels -- no scaling distortion.
+    const int LW = 1264, LH = 681;
 
     public static IntPtr FindFlutterWindow() {
         IntPtr found = IntPtr.Zero;
@@ -323,17 +326,18 @@ Start-Sleep -Milliseconds 500
 # ELPIAN -- 5 real scenarios with navigation and content interaction
 # ===============================================================================
 #
-# Home screen list layout (logical 1280x720, AppBar=56px, padding=16px):
+# Home screen list layout (client area 1264x681, AppBar=56px, padding=16px):
 #   Item i center-Y = 108 + i * 82   (72px card + 10px separator per slot)
-#   Item 0  QuickJS Calculator  y=108
-#   Item 1  QuickJS Whiteboard  y=190
-#   Item 2  QuickJS Runtime     y=272
-#   Item 3  AST VM              y=354
-#   Item 4  DOM+Canvas Logic    y=436
-#   Item 5  Ordinary UI         y=518
-#   Item 6  Enhanced UI         y=600
-#   Item 7  Canvas API          y=682
-#   Item 12 Landing Page        y=1092 (need list scroll ~3 notches first)
+#   Item 0  QuickJS Calculator  y=108   (fully visible)
+#   Item 1  QuickJS Whiteboard  y=190   (fully visible)
+#   Item 2  QuickJS Runtime     y=272   (fully visible)
+#   Item 3  AST VM              y=354   (fully visible)
+#   Item 4  DOM+Canvas Logic    y=436   (fully visible)
+#   Item 5  Ordinary UI         y=518   (fully visible)
+#   Item 6  Enhanced UI         y=600   (fully visible)
+#   Item 7  Canvas API          y=682   (card top y=646, only top 35px visible -- click at y=663)
+#   Item 12 Landing Page        center at y=629 when list scrolled to max
+#             (content=1088px, viewport=625px, max-scroll=463px: 1036-463+56=629)
 #
 # AppBar back button (child screens):  x=40, y=28
 
@@ -417,12 +421,14 @@ $s = $elStats['E03_OrdinaryUI']
 if ($s) { Write-Host ("  fps={0}  p99={1}ms  gpu={2}ms  frames={3}" -f $s.AvgFPS,$s.P99,$s.AvgGPUMs,$s.Frames) -ForegroundColor Green }
 else    { Write-Host "  WARN: no frame data" -ForegroundColor Yellow }
 
-# -- E04: Canvas API -- 5-tab NavigationRail (item 7, y=682) -------------------
+# -- E04: Canvas API -- 5-tab NavigationRail (item 7, card top y=646, click at y=663) ---
 Write-Host "`n[E04/5] CanvasAPI" -ForegroundColor Cyan
 $csv = Join-Path $REPORTS 'elpian_E04_CanvasAPI.csv'
 $pm  = Start-PmCapture 'elpian_ui_example.exe' $csv $EL_CAPTURE
 
-[MouseSim]::ClickAt($eHwnd, 640, 682)
+# Item 7 center (y=682) is 1px below the client bottom (681). The card top is at
+# y=646 and the visible strip is y=646-681 (35px). Click at the center of that strip.
+[MouseSim]::ClickAt($eHwnd, 640, 663)
 Start-Sleep -Milliseconds 1500
 
 # Cycle through NavigationRail tabs: Shapes(y~=120) Paths(~=192) Text(~=264) Gradients(~=336) Transforms(~=408)
@@ -449,17 +455,17 @@ else    { Write-Host "  WARN: no frame data" -ForegroundColor Yellow }
 Write-Host "`n[E05/5] LandingPage" -ForegroundColor Cyan
 $csv = Join-Path $REPORTS 'elpian_E05_LandingPage.csv'
 
-# Scroll the home list down to expose item 12 (~=1092 logical px from top).
-# Each -120 notch scrolls ~246px in Flutter (3 lines x 82px/line).
-# 4 notches ~= 984px -> item 12 appears at logical y ~= 1092-984 = 108.
+# Scroll to end of list. List content = 1088px, viewport = 625px, max-scroll = 463px.
+# 4 notches of any typical scroll speed (>120px/notch) reaches the max-scroll end.
+# At max-scroll, item 12 center sits at client y = 1036 - 463 + 56 = 629.
 Write-Host "  Scrolling home list to reveal Landing Page..." -ForegroundColor DarkGray
 1..4 | ForEach-Object { [MouseSim]::ScrollAt($eHwnd, 640, 400, -120); Start-Sleep -Milliseconds 400 }
-Start-Sleep -Milliseconds 300
+Start-Sleep -Milliseconds 400
 
 $pm = Start-PmCapture 'elpian_ui_example.exe' $csv $EL_CAPTURE
 
-# Click the Landing Page card -- after 4 notches it should be near y=200-400
-[MouseSim]::ClickAt($eHwnd, 640, 280)
+# Item 12 center is at y~=629 when list is at max scroll -- click there.
+[MouseSim]::ClickAt($eHwnd, 640, 620)
 Start-Sleep -Milliseconds 2000  # large JSON page may take longer to render
 
 # Scroll through the landing page content and wiggle
