@@ -1,0 +1,68 @@
+name: Build Windows Profile Binary
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Developer Mode
+        shell: cmd
+        run: reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" /v AllowDevelopmentWithoutDevLicense /t REG_DWORD /d 1 /f
+
+      - name: Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.38.3"
+          channel: stable
+          cache: true
+
+      - name: Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: actions/cache@v4
+        with:
+          path: rust/target
+          key: rust-${{ hashFiles('rust/Cargo.lock') }}
+
+      - name: Pub cache
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\Pub\Cache
+          key: pub-${{ hashFiles('example/pubspec.lock') }}
+
+      - name: pub get
+        run: flutter pub get
+
+      - name: pub get example
+        working-directory: example
+        run: flutter pub get
+
+      - name: Rust build
+        working-directory: rust
+        run: cargo build --release
+
+      - name: Flutter build profile (integration test target)
+        working-directory: example
+        run: flutter build windows --profile --target=integration_test/elpian_benchmark_test.dart --no-pub
+
+      - name: Zip
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "example\build\windows\x64\runner\Profile\*" -DestinationPath elpian_benchmark_profile.zip -Force
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: elpian-benchmark-profile
+          path: elpian_benchmark_profile.zip
+          retention-days: 90
