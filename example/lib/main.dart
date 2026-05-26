@@ -14,11 +14,35 @@ import 'examples/quickjs_whiteboard_example.dart';
 import 'examples/vm_example.dart';
 
 void main() {
-  runApp(const ElpianExamplesApp());
+  final appStart = DateTime.now().millisecondsSinceEpoch;
+  runApp(ElpianExamplesApp(startMs: appStart));
 }
 
-class ElpianExamplesApp extends StatelessWidget {
-  const ElpianExamplesApp({super.key});
+class ElpianExamplesApp extends StatefulWidget {
+  const ElpianExamplesApp({super.key, required this.startMs});
+
+  final int startMs;
+
+  @override
+  State<ElpianExamplesApp> createState() => _ElpianExamplesAppState();
+}
+
+class _ElpianExamplesAppState extends State<ElpianExamplesApp> {
+  @override
+  void initState() {
+    super.initState();
+
+    // Schedule a post-frame callback to capture first frame time
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final firstFrame = DateTime.now().millisecondsSinceEpoch;
+      final startupMs = firstFrame - widget.startMs;
+      // Print concise timing for automated parsing
+      // Format: STARTUP_MS:<ms>
+      // Also print human-readable line
+      print('STARTUP_MS:$startupMs');
+      print('App startup: $startupMs ms (from main to first frame)');
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
