@@ -1,4 +1,4 @@
-name: Elpian Windows Benchmark
+name: Elpian Windows - Build Integration Test Binary
 
 on:
   workflow_dispatch:
@@ -13,7 +13,7 @@ on:
       - '.github/workflows/windows_benchmark.yml'
 
 jobs:
-  build-and-benchmark:
+  build-profile-test-binary:
     runs-on: windows-latest
     timeout-minutes: 60
 
@@ -21,7 +21,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Enable Developer Mode (symlink support for Flutter)
+      - name: Enable Developer Mode
         shell: cmd
         run: |
           reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" /v "AllowDevelopmentWithoutDevLicense" /t REG_DWORD /d 1 /f
@@ -36,13 +36,12 @@ jobs:
       - name: Setup Rust (stable)
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache Rust build artifacts
+      - name: Cache Rust build
         uses: actions/cache@v4
         with:
           path: rust/target
           key: ${{ runner.os }}-rust-${{ hashFiles('rust/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-rust-
+          restore-keys: ${{ runner.os }}-rust-
 
       - name: Cache pub packages
         uses: actions/cache@v4
@@ -51,8 +50,7 @@ jobs:
             ~\AppData\Local\Pub\Cache
             example\.dart_tool
           key: ${{ runner.os }}-pub-${{ hashFiles('example/pubspec.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-pub-
+          restore-keys: ${{ runner.os }}-pub-
 
       - name: Flutter pub get
         run: flutter pub get
@@ -65,53 +63,32 @@ jobs:
         working-directory: rust
         run: cargo build --release
 
-      - name: Create benchmark output directory
-        shell: powershell
-        run: New-Item -ItemType Directory -Force "example\benchmarks\reports"
-
-      - name: Run integration benchmark (flutter drive --profile)
+      # Build the app with the integration test as entry point, in profile mode.
+      # Profile = observatory enabled (driver can connect) + real optimizations.
+      # NO benchmark is run here - just a build.
+      - name: Build integration test binary (profile)
         working-directory: example
         shell: powershell
         run: |
-          flutter drive `
-            --target=integration_test/elpian_benchmark_test.dart `
-            --driver=test_driver/integration_test_driver.dart `
-            -d windows `
+          flutter build windows `
             --profile `
+            --target=integration_test/elpian_benchmark_test.dart `
             --no-pub
-        timeout-minutes: 30
 
-      - name: Show results
-        if: always()
+      - name: Zip profile build output
         shell: powershell
         run: |
-          $f = "example\benchmarks\reports\elpian_raw_results.json"
-          if (Test-Path $f) { Get-Content $f } else { Write-Host "No results file found" }
+          $src = "example\build\windows\x64\runner\Profile"
+          $dst = "elpian_benchmark_profile.zip"
+          Compress-Archive -Path "$src\*" -DestinationPath $dst -Force
+          $sizeMB = [math]::Round((Get-Item $dst).Length / 1MB, 1)
+          Write-Host "Built: $dst ($sizeMB MB)"
+          Write-Host "Contents:"
+          Get-ChildItem $src | Select-Object Name,Length
 
-      - name: Upload benchmark results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: elpian-benchmark-results-${{ github.sha }}
-          path: example/benchmarks/reports/elpian_raw_results.json
-          if-no-files-found: warn
-          retention-days: 90
-
-      - name: Also build release app and upload
-        working-directory: example
-        shell: powershell
-        run: flutter build windows --release --no-pub
-
-      - name: Zip release build
-        shell: powershell
-        run: |
-          $src = "example\build\windows\x64\runner\Release"
-          Compress-Archive -Path "$src\*" -DestinationPath "elpian_windows_release.zip" -Force
-          Write-Host "Zipped: $((Get-Item elpian_windows_release.zip).Length / 1MB) MB"
-
-      - name: Upload Windows release app
+      - name: Upload profile binary artifact
         uses: actions/upload-artifact@v4
         with:
-          name: elpian-windows-release-${{ github.sha }}
-          path: elpian_windows_release.zip
+          name: elpian-benchmark-profile-${{ github.sha }}
+          path: elpian_benchmark_profile.zip
           retention-days: 90
