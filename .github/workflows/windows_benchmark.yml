@@ -4,13 +4,6 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths:
-      - 'lib/**'
-      - 'rust/src/**'
-      - 'example/integration_test/**'
-      - 'example/test_driver/**'
-      - 'rust_builder/windows/CMakeLists.txt'
-      - '.github/workflows/windows_benchmark.yml'
 
 jobs:
   build-profile-test-binary:
