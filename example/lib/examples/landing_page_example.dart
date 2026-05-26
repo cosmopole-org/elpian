@@ -323,6 +323,10 @@ class _LandingPageState extends State<LandingPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
+      appBar: AppBar(
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        title: const Text('Landing Page'),
+      ),
       body: _error != null
           ? Center(
               child: Text(_error!, style: const TextStyle(color: Colors.red)))

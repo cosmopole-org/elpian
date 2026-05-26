@@ -8,6 +8,10 @@ class QuickJsWhiteboardExamplePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF050A14),
+      appBar: AppBar(
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        title: const Text('QuickJS Whiteboard'),
+      ),
       body: SafeArea(
         child: ElpianVmWidget.fromCode(
           machineId: 'quickjs-whiteboard-demo',

@@ -1,0 +1,2 @@
+﻿Application,ProcessID,SwapChainAddress,PresentRuntime,SyncInterval,PresentFlags,AllowsTearing,PresentMode,CPUStartTime,FrameTime,CPUBusy,CPUWait,GPULatency,GPUTime,GPUBusy,GPUWait,DisplayLatency,DisplayedTime,AnimationError,AnimationTime,MsFlipDelay,AllInputToPhotonLatency,ClickToPhotonLatency
+chrome.exe,11380,0x239EA58FE70,DXGI,0,0,0,Composed: Flip,15.4156,2.3236,1.7331,0.5905,2.3394,0.2076,0.2023,0.0053,28.5793,16.6694,NA,15.4156,NA,NA,NA
