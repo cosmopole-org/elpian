@@ -52,8 +52,14 @@ deviations. `[ ]` = todo, `[~]` = in progress, `[x]` = done & verified.
     (was a latent correctness bug 0.5→0.25→…); opaque draws skip `withOpacity` alloc;
     `setFillStyle`/`setStrokeStyle` clear stale gradient shader; `copy()` preserves shaders
     across save/restore. Tests in `test/canvas_paint_test.dart`.
-  - Deferred: dead `setShadow*` state left intact — implementing shadows needs per-draw-path
-    visual verification (no device here); not changing behavior blind.
+  - **Session 5 (visually verified via golden PNGs):** shadows now **IMPLEMENTED** (fillRect/
+    fillCircle/fill(path) draw a blurred+offset shadow copy; fillText via `TextStyle.shadows`).
+    Also fixed a real bug class: a whole block of advertised commands was silently dropped
+    (`setFont` → text was stuck at 10px, `setTextAlign`/`setTextBaseline`/`setShadow*`/
+    `setLineDash`/`setLineDashOffset`/`setMiterLimit`/`setGlobalCompositeOperation`) — all wired
+    to state now (`setGlobalCompositeOperation` maps the full Flutter `BlendMode` set). fillText
+    color derives from the base color + globalAlpha. Verified by rendering to `build/visual/*.png`
+    and inspecting (alpha non-compounding, clearRect, gradient, shadow offset/blur, font sizing).
 
 ### Phase 5 — Flutter UI pipeline
 - [~] **D** HTML/CSS/Flutter-DSL pipeline — `D-dart-html-css-dsl.md`
@@ -86,6 +92,14 @@ deviations. `[ ]` = todo, `[~]` = in progress, `[x]` = done & verified.
 ### Phase 7 — OPTIONAL true GPU zero-copy
 - [ ] **G** wgpu + Flutter external textures — `G-gpu-zerocopy-external-textures.md` (only on explicit go-ahead)
 
+### Visual verification tooling (session 5)
+- [x] **Golden/screenshot harness** — `test/visual/visual_harness.dart` rasterizes a Canvas-draw
+  callback (`renderCanvasToPng`) and a pumped widget subtree (`captureBoundaryToPng`) to
+  `build/visual/*.png` (git-ignored), headless. Used to professionally review: Canvas2D
+  (alpha/gradient/clearRect/shadows/font), the Dart 3D renderer (lit cube+sphere), and the
+  full HTML/CSS engine path (D1/D2 stylesheet+inline merge). Note: `flutter test` uses the Ahem
+  font, so text glyphs render as solid boxes — sizes/colors/layout are still meaningful.
+
 ### Cross-cutting (run continuously)
 - [x] **X** Cross-platform compat verified (host build + `cargo build --target wasm32-unknown-unknown`) after every Rust change (A1–A5)
 - [x] **V** Golden/pixel tests added and green; 10 VM tests still green (also double-buffer test)
@@ -104,6 +118,17 @@ deviations. `[ ]` = todo, `[~]` = in progress, `[x]` = done & verified.
 > Leave a short note for the next session: what you finished, what's half-done,
 > any surprises, and the exact next step.
 
+- 2026-06-03 (session 5): **Added headless visual verification** (`test/visual/`) — render Canvas2D,
+  the Dart 3D renderer, and the full HTML/CSS engine to `build/visual/*.png` and inspect. Using it,
+  **completed C fully**: implemented drop shadows (was dead/advertised state) and wired up a whole
+  block of silently-dropped canvas commands (`setFont` etc.) — visually confirmed alpha-no-compound,
+  clearRect, gradient, shadow blur/offset, and font sizing. Visually confirmed **D1/D2** end-to-end
+  (stylesheet class + inline merge renders correctly; inline wins, sheet-only fields survive).
+  Verified the **3D** path renders a correctly-lit cube+sphere. Full suite: 69 pass / 4 fail (same
+  4 pre-existing, unrelated). **Next:** D4/D6 (now golden-verifiable but marginal), F1/F2 (native FFI/
+  web — still need a device/Linux cdylib build), A6 Val-enum, G (go-ahead). The 4 pre-existing
+  failures (`elpian_stream_widget` patchView/animate, `nextjs_integration` packed-scripts, `S5`
+  perf threshold) are worth a separate fix pass now that Flutter runs here.
 - 2026-06-03 (session 4): **Unblocked the Dart side** — installed Flutter 3.44.1/Dart 3.12.1
   in-container and confirmed prior inspection-level edits compile & analyze clean. Fixed a hard
   compile error surfaced by the newer SDK (const map keyed by `FontWeight` in `elpian_engine`).
