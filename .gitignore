@@ -29,3 +29,9 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 /build/
 /coverage/
+
+# Generated benchmark run output (written by performance_benchmark_test.dart /
+# elpian_windows_benchmark_test.dart on every run). The committed baseline lives
+# under benchmarks/reports/presentmon/.
+/benchmarks/reports/elpian_results.json
+/benchmarks/reports/elpian_windows_results.json
