@@ -28,7 +28,14 @@ use crate::bevy_scene::schema::*;
 pub struct SceneRenderer {
     pub width: u32,
     pub height: u32,
-    pub pixels: Vec<u8>, // RGBA8, length = width * height * 4
+    /// Front buffer: the last fully-rendered frame (RGBA8, len = width*height*4).
+    /// This is what readers (FFI/manager) see; the next frame renders into
+    /// `pixels_back` and the two are swapped at the end of `render_scene`, so a
+    /// pointer handed out via `get_frame_data` stays valid for the whole next
+    /// frame (double-buffering — prerequisite for the F1 no-copy path). See A5.
+    pub pixels: Vec<u8>,
+    /// Back buffer: the work-in-progress render target.
+    pixels_back: Vec<u8>,
     pub depth: Vec<f32>, // depth buffer, length = width * height
     pub elapsed_time: f32,
     /// Cache of generated primitive meshes keyed by (type, params). Mesh geometry
@@ -63,6 +70,7 @@ impl SceneRenderer {
             width,
             height,
             pixels: vec![0u8; pixel_count * 4],
+            pixels_back: vec![0u8; pixel_count * 4],
             depth: vec![f32::INFINITY; pixel_count],
             elapsed_time: 0.0,
             mesh_cache: HashMap::new(),
@@ -89,22 +97,23 @@ impl SceneRenderer {
         self.height = height;
         let pixel_count = (width * height) as usize;
         self.pixels.resize(pixel_count * 4, 0);
+        self.pixels_back.resize(pixel_count * 4, 0);
         self.depth.resize(pixel_count, f32::INFINITY);
     }
 
-    /// Clear framebuffer with a background color.
+    /// Clear the back (work-in-progress) framebuffer with a background color.
     pub fn clear(&mut self, color: [u8; 4]) {
         #[cfg(not(target_arch = "wasm32"))]
         {
             use rayon::prelude::*;
-            self.pixels
+            self.pixels_back
                 .par_chunks_exact_mut(4)
                 .for_each(|px| px.copy_from_slice(&color));
             self.depth.par_iter_mut().for_each(|d| *d = f32::INFINITY);
         }
         #[cfg(target_arch = "wasm32")]
         {
-            for px in self.pixels.chunks_exact_mut(4) {
+            for px in self.pixels_back.chunks_exact_mut(4) {
                 px.copy_from_slice(&color);
             }
             for d in self.depth.iter_mut() {
@@ -165,6 +174,11 @@ impl SceneRenderer {
         // to the serial path: each pixel has a single writer per tile and the depth
         // test resolves overlaps deterministically.
         self.rasterize_all();
+
+        // Publish the finished frame: swap back→front. Readers of `pixels` (the
+        // front buffer) now see this frame; the previous front becomes the next
+        // frame's render target. The swap is a cheap pointer exchange. See A5.
+        std::mem::swap(&mut self.pixels, &mut self.pixels_back);
     }
 
     fn find_camera(&self, nodes: &[JsonNode]) -> CameraState {
@@ -616,7 +630,8 @@ impl SceneRenderer {
         let height = self.height as usize;
 
         if width != 0 && height != 0 {
-            let pixels = &mut self.pixels;
+            // Render into the back buffer; render_scene swaps it to front afterwards.
+            let pixels = &mut self.pixels_back;
             let depth = &mut self.depth;
 
             #[cfg(not(target_arch = "wasm32"))]
