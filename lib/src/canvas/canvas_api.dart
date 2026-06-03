@@ -124,6 +124,11 @@ class CanvasCommand {
 class CanvasState {
   Paint fillPaint;
   Paint strokePaint;
+  // Base (un-alpha'd) colors. Kept separate from the Paint's live color so that
+  // applying globalAlpha each draw derives from the base instead of compounding
+  // onto the previously-dimmed color (see _getFillPaint/_getStrokePaint).
+  Color fillColor;
+  Color strokeColor;
   double lineWidth;
   StrokeCap lineCap;
   StrokeJoin lineJoin;
@@ -144,6 +149,8 @@ class CanvasState {
   CanvasState({
     Paint? fillPaint,
     Paint? strokePaint,
+    this.fillColor = Colors.black,
+    this.strokeColor = Colors.black,
     this.lineWidth = 1.0,
     this.lineCap = StrokeCap.butt,
     this.lineJoin = StrokeJoin.miter,
@@ -169,10 +176,15 @@ class CanvasState {
 
   CanvasState copy() {
     return CanvasState(
-      fillPaint: Paint()..color = fillPaint.color,
+      fillPaint: Paint()
+        ..color = fillPaint.color
+        ..shader = fillPaint.shader,
       strokePaint: Paint()
         ..color = strokePaint.color
-        ..style = strokePaint.style,
+        ..style = strokePaint.style
+        ..shader = strokePaint.shader,
+      fillColor: fillColor,
+      strokeColor: strokeColor,
       lineWidth: lineWidth,
       lineCap: lineCap,
       lineJoin: lineJoin,
@@ -588,7 +600,11 @@ class CanvasAPIExecutor {
 
   void _setFillStyle(Map<String, dynamic> params) {
     if (params.containsKey('color')) {
-      currentState.fillPaint.color = _parseColor(params['color']);
+      final color = _parseColor(params['color']);
+      currentState.fillColor = color;
+      currentState.fillPaint
+        ..color = color
+        ..shader = null;
     } else if (params.containsKey('gradientId')) {
       final gradient = gradients[params['gradientId']];
       if (gradient != null) {
@@ -599,7 +615,11 @@ class CanvasAPIExecutor {
 
   void _setStrokeStyle(Map<String, dynamic> params) {
     if (params.containsKey('color')) {
-      currentState.strokePaint.color = _parseColor(params['color']);
+      final color = _parseColor(params['color']);
+      currentState.strokeColor = color;
+      currentState.strokePaint
+        ..color = color
+        ..shader = null;
     } else if (params.containsKey('gradientId')) {
       final gradient = gradients[params['gradientId']];
       if (gradient != null) {
@@ -643,19 +663,25 @@ class CanvasAPIExecutor {
   }
 
   Paint _getFillPaint() {
+    final alpha = currentState.globalAlpha;
     return currentState.fillPaint
-      ..color =
-          currentState.fillPaint.color.withOpacity(currentState.globalAlpha)
+      // Derive from the base color every time so globalAlpha doesn't compound
+      // across draws. Skip the allocation entirely when fully opaque.
+      ..color = alpha >= 1.0
+          ? currentState.fillColor
+          : currentState.fillColor.withOpacity(alpha)
       ..blendMode = currentState.blendMode;
   }
 
   Paint _getStrokePaint() {
+    final alpha = currentState.globalAlpha;
     return currentState.strokePaint
       ..strokeWidth = currentState.lineWidth
       ..strokeCap = currentState.lineCap
       ..strokeJoin = currentState.lineJoin
-      ..color =
-          currentState.strokePaint.color.withOpacity(currentState.globalAlpha)
+      ..color = alpha >= 1.0
+          ? currentState.strokeColor
+          : currentState.strokeColor.withOpacity(alpha)
       ..blendMode = currentState.blendMode;
   }
 
