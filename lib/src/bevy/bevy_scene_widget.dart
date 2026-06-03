@@ -428,6 +428,10 @@ class _BevyScenePainter extends CustomPainter {
     required this.fit,
   });
 
+  // Reused across paints to avoid a per-frame Paint allocation (E4). Painters run
+  // sequentially on the UI thread, so sharing a single instance is safe.
+  static final Paint _blitPaint = Paint();
+
   @override
   void paint(Canvas canvas, Size size) {
     final src = Rect.fromLTWH(
@@ -436,10 +440,14 @@ class _BevyScenePainter extends CustomPainter {
       image.height.toDouble(),
     );
     final dst = _applyFit(fit, src, Offset.zero & size);
-    canvas.drawImageRect(
-      image, src, dst,
-      Paint()..filterQuality = FilterQuality.medium,
-    );
+    // The Rust frame is already rendered at (near) display resolution. Avoid the
+    // expensive mipmapped `medium` sampling: use `none` when blitting ~1:1 and
+    // bilinear `low` only when actually scaling (E4).
+    final nearOneToOne = (dst.width - src.width).abs() < 1.0 &&
+        (dst.height - src.height).abs() < 1.0;
+    _blitPaint.filterQuality =
+        nearOneToOne ? FilterQuality.none : FilterQuality.low;
+    canvas.drawImageRect(image, src, dst, _blitPaint);
   }
 
   Rect _applyFit(BoxFit fit, Rect src, Rect dst) {
