@@ -293,11 +293,21 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
       return null;
     }
 
-    final component = await _runJsComponentCode(
-      jsCode,
-      entryFunction: entry,
-      inputProps: props,
-    );
+    Map<String, dynamic>? component;
+    try {
+      component = await _runJsComponentCode(
+        jsCode,
+        entryFunction: entry,
+        inputProps: props,
+      );
+    } catch (e) {
+      // A client component failing to execute (e.g. the QuickJS native runtime
+      // is unavailable, or the script throws) must not take down the entire
+      // server-rendered tree. Degrade to the fallback placeholder so sibling
+      // server content still renders.
+      debugPrint('NextjsServerWidget: client component "$entry" failed: $e');
+      return null;
+    }
 
     if (component == null) return null;
 

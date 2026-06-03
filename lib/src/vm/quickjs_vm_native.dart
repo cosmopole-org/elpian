@@ -40,7 +40,12 @@ class QuickJsVm implements VmRuntimeClient {
 
   Future<void> _init() async {
     if (_initialized) return;
-    _runtime = getJavascriptRuntime();
+    // xhr:false disables flutter_js's fetch/XHR extension, which otherwise
+    // installs a permanent Timer.periodic event pump. Elpian's server-rendered
+    // client components communicate via the host bridge (askHost), not browser
+    // fetch/XHR, so the extension is unnecessary — and the dangling timer trips
+    // flutter_test's pending-timer guard.
+    _runtime = getJavascriptRuntime(xhr: false);
     _initialized = true;
   }
 
