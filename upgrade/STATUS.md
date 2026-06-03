@@ -12,7 +12,7 @@ deviations. `[ ]` = todo, `[~]` = in progress, `[x]` = done & verified.
 - [x] **Bench checkpoint #1** (after A1–A3) — recorded in `benchmarks/reports/optimization/`
 
 ### Phase 2 — Rust parallelism + transfer
-- [ ] **A4** `rayon` tiled parallel rasterizer (wasm-cfg-gated) — `A4-rust-parallel-rasterizer.md`
+- [x] **A4** `rayon` tiled parallel rasterizer (wasm-cfg-gated) — `A4-rust-parallel-rasterizer.md` (1.5–3× on 4 cores, byte-identical; report in `benchmarks/reports/optimization/A4-parallel-rasterizer.md`)
 - [ ] **A5** Double-buffer + `parking_lot` + `base64` crate — `A5-rust-frame-transfer-deps.md`
 - [ ] **Bench checkpoint #2** (after A4–A5)
 

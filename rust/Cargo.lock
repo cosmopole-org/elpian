@@ -179,6 +179,7 @@ dependencies = [
  "criterion",
  "glam",
  "once_cell",
+ "rayon",
  "serde",
  "serde_json",
  "wasm-bindgen",

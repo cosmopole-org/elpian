@@ -14,6 +14,12 @@ glam = { version = "0.29", features = ["serde"] }
 
 # Note: glam works natively on WASM without extra dependencies
 
+# Native targets: rayon for the tiled multithreaded rasterizer (A4). Threads are
+# unavailable on wasm32-unknown-unknown, so this is cfg-gated and the renderer
+# keeps a serial fallback under cfg(target_arch = "wasm32").
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+rayon = "1.10"
+
 # Web target (wasm-bindgen for WASM builds)
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "0.2"

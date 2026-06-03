@@ -36,6 +36,24 @@ pub struct SceneRenderer {
     /// so generating it once and reusing the `Arc` removes a large amount of trig +
     /// allocation from the hot path (esp. the particle loop). See A2.
     mesh_cache: HashMap<MeshCacheKey, Arc<Vec<Triangle>>>,
+    /// Scratch list of screen-space triangles collected during scene traversal,
+    /// then rasterized in one pass (serial on wasm, tiled-parallel on native). See A4.
+    /// Reused across frames to avoid per-frame allocation.
+    projected: Vec<ProjectedTri>,
+}
+
+/// A triangle projected to screen space, ready for the fill stage. Plain data so
+/// the parallel rasterizer can share `&[ProjectedTri]` across threads. See A4.
+#[derive(Clone, Copy)]
+struct ProjectedTri {
+    v0: Vec2,
+    v1: Vec2,
+    v2: Vec2,
+    z0: f32,
+    z1: f32,
+    z2: f32,
+    color: [f32; 3],
+    alpha: f32,
 }
 
 impl SceneRenderer {
@@ -48,6 +66,7 @@ impl SceneRenderer {
             depth: vec![f32::INFINITY; pixel_count],
             elapsed_time: 0.0,
             mesh_cache: HashMap::new(),
+            projected: Vec::new(),
         }
     }
 
@@ -75,15 +94,22 @@ impl SceneRenderer {
 
     /// Clear framebuffer with a background color.
     pub fn clear(&mut self, color: [u8; 4]) {
-        for i in 0..(self.width * self.height) as usize {
-            let idx = i * 4;
-            self.pixels[idx] = color[0];
-            self.pixels[idx + 1] = color[1];
-            self.pixels[idx + 2] = color[2];
-            self.pixels[idx + 3] = color[3];
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            use rayon::prelude::*;
+            self.pixels
+                .par_chunks_exact_mut(4)
+                .for_each(|px| px.copy_from_slice(&color));
+            self.depth.par_iter_mut().for_each(|d| *d = f32::INFINITY);
         }
-        for d in self.depth.iter_mut() {
-            *d = f32::INFINITY;
+        #[cfg(target_arch = "wasm32")]
+        {
+            for px in self.pixels.chunks_exact_mut(4) {
+                px.copy_from_slice(&color);
+            }
+            for d in self.depth.iter_mut() {
+                *d = f32::INFINITY;
+            }
         }
     }
 
@@ -128,10 +154,17 @@ impl SceneRenderer {
         let aspect = self.width as f32 / self.height.max(1) as f32;
         let view_proj = camera.build_view_projection(aspect);
 
-        // Render all world nodes
+        // Render all world nodes. Traversal projects + lights triangles into
+        // `self.projected` (in scene order); the fill stage runs afterwards.
         for node in &scene.world {
             self.render_world_node(node, &Mat4::IDENTITY, &view_proj, &camera, &lights, &env);
         }
+
+        // Fill all collected triangles in one pass. Processing them in the order
+        // they were collected (scene order) makes the parallel result byte-identical
+        // to the serial path: each pixel has a single writer per tile and the depth
+        // test resolves overlaps deterministically.
+        self.rasterize_all();
     }
 
     fn find_camera(&self, nodes: &[JsonNode]) -> CameraState {
@@ -496,16 +529,16 @@ impl SceneRenderer {
                 let s1 = self.ndc_to_screen(ndc1);
                 let s2 = self.ndc_to_screen(ndc2);
 
-                self.fill_triangle(
-                    s0,
-                    s1,
-                    s2,
-                    ndc0.z,
-                    ndc1.z,
-                    ndc2.z,
-                    &lit_color,
-                    material.alpha,
-                );
+                self.projected.push(ProjectedTri {
+                    v0: s0,
+                    v1: s1,
+                    v2: s2,
+                    z0: ndc0.z,
+                    z1: ndc1.z,
+                    z2: ndc2.z,
+                    color: lit_color,
+                    alpha: material.alpha,
+                });
             } else {
                 // Triangle crosses near plane: clip against w = w_clip_plane.
                 // Collect clip-space vertices, splitting edges that cross.
@@ -545,16 +578,16 @@ impl SceneRenderer {
                         let sb = self.ndc_to_screen(ndc_b);
                         let sc = self.ndc_to_screen(ndc_c);
 
-                        self.fill_triangle(
-                            sa,
-                            sb,
-                            sc,
-                            ndc_a.z,
-                            ndc_b.z,
-                            ndc_c.z,
-                            &lit_color,
-                            material.alpha,
-                        );
+                        self.projected.push(ProjectedTri {
+                            v0: sa,
+                            v1: sb,
+                            v2: sc,
+                            z0: ndc_a.z,
+                            z1: ndc_b.z,
+                            z2: ndc_c.z,
+                            color: lit_color,
+                            alpha: material.alpha,
+                        });
                     }
                 }
             }
@@ -568,107 +601,59 @@ impl SceneRenderer {
         )
     }
 
-    fn fill_triangle(
-        &mut self,
-        v0: Vec2,
-        v1: Vec2,
-        v2: Vec2,
-        z0: f32,
-        z1: f32,
-        z2: f32,
-        color: &[f32; 3],
-        alpha: f32,
-    ) {
-        // Bounding box
-        let min_x = v0.x.min(v1.x).min(v2.x).max(0.0) as i32;
-        let max_x = v0.x.max(v1.x).max(v2.x).min(self.width as f32 - 1.0) as i32;
-        let min_y = v0.y.min(v1.y).min(v2.y).max(0.0) as i32;
-        let max_y = v0.y.max(v1.y).max(v2.y).min(self.height as f32 - 1.0) as i32;
+    /// Fill every triangle collected in `self.projected` into the framebuffer.
+    ///
+    /// On native targets the framebuffer is split into disjoint horizontal bands
+    /// and rasterized in parallel with rayon: each band owns a contiguous slice of
+    /// `pixels`/`depth`, so threads never alias the same bytes (no locks). Each band
+    /// processes the triangles in collection (scene) order, so per-pixel depth
+    /// resolution is identical to the serial path → byte-identical output.
+    ///
+    /// On wasm (no threads) it falls back to a single serial pass.
+    fn rasterize_all(&mut self) {
+        let tris = std::mem::take(&mut self.projected);
+        let width = self.width as usize;
+        let height = self.height as usize;
 
-        let area = edge_function(v0, v1, v2);
-        if area.abs() < 0.001 {
-            return;
-        } // Degenerate triangle
-        let inv_area = 1.0 / area;
+        if width != 0 && height != 0 {
+            let pixels = &mut self.pixels;
+            let depth = &mut self.depth;
 
-        // A3: hoist the per-triangle / per-row invariants out of the inner loop.
-        // Each edge value is affine in (x, y):
-        //   edge_function(a, b, p) = (p.x - a.x) * (b.y - a.y) - (p.y - a.y) * (b.x - a.x)
-        // The (b.* - a.*) deltas are constant per triangle; the (p.y - a.y) terms are
-        // constant per scanline. We recompute the px term exactly each pixel so the
-        // arithmetic (operations + associativity) is byte-identical to the original
-        // `edge_function(...) * inv_area`, keeping golden output unchanged.
-        //
-        // Edge 0 uses a = v1, b = v2; edge 1 uses a = v2, b = v0; edge 2 uses a = v0, b = v1.
-        let e0_dy = v2.y - v1.y;
-        let e0_dx = v2.x - v1.x;
-        let e1_dy = v0.y - v2.y;
-        let e1_dx = v0.x - v2.x;
-        let e2_dy = v1.y - v0.y;
-        let e2_dx = v1.x - v0.x;
-
-        // Flat shading: color/alpha are constant per triangle, so convert to bytes
-        // (opaque path) and precompute the blend-invariant source terms once.
-        let r = (color[0].clamp(0.0, 1.0) * 255.0) as u8;
-        let g = (color[1].clamp(0.0, 1.0) * 255.0) as u8;
-        let b = (color[2].clamp(0.0, 1.0) * 255.0) as u8;
-        let a = (alpha.clamp(0.0, 1.0) * 255.0) as u8;
-        let opaque = alpha >= 1.0;
-        let src_a = alpha;
-        let one_minus_sa = 1.0 - src_a;
-        let csa_r = color[0] * src_a;
-        let csa_g = color[1] * src_a;
-        let csa_b = color[2] * src_a;
-
-        for y in min_y..=max_y {
-            let py = y as f32 + 0.5;
-            // Per-scanline edge terms: (p.y - a.y) * (b.x - a.x).
-            let py0 = (py - v1.y) * e0_dx;
-            let py1 = (py - v2.y) * e1_dx;
-            let py2 = (py - v0.y) * e2_dx;
-            let row = y as u32 * self.width;
-
-            for x in min_x..=max_x {
-                let px = x as f32 + 0.5;
-
-                let w0 = ((px - v1.x) * e0_dy - py0) * inv_area;
-                let w1 = ((px - v2.x) * e1_dy - py1) * inv_area;
-                let w2 = ((px - v0.x) * e2_dy - py2) * inv_area;
-
-                // Inside triangle?
-                if w0 >= 0.0 && w1 >= 0.0 && w2 >= 0.0 {
-                    // Interpolate depth
-                    let z = w0 * z0 + w1 * z1 + w2 * z2;
-
-                    let idx = (row + x as u32) as usize;
-
-                    // Depth test
-                    if z < self.depth[idx] {
-                        self.depth[idx] = z;
-
-                        let pidx = idx * 4;
-                        if opaque {
-                            self.pixels[pidx] = r;
-                            self.pixels[pidx + 1] = g;
-                            self.pixels[pidx + 2] = b;
-                            self.pixels[pidx + 3] = a;
-                        } else {
-                            // Alpha blending
-                            let dst_r = self.pixels[pidx] as f32 / 255.0;
-                            let dst_g = self.pixels[pidx + 1] as f32 / 255.0;
-                            let dst_b = self.pixels[pidx + 2] as f32 / 255.0;
-                            self.pixels[pidx] =
-                                ((csa_r + dst_r * one_minus_sa).clamp(0.0, 1.0) * 255.0) as u8;
-                            self.pixels[pidx + 1] =
-                                ((csa_g + dst_g * one_minus_sa).clamp(0.0, 1.0) * 255.0) as u8;
-                            self.pixels[pidx + 2] =
-                                ((csa_b + dst_b * one_minus_sa).clamp(0.0, 1.0) * 255.0) as u8;
-                            self.pixels[pidx + 3] = 255;
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                use rayon::prelude::*;
+                // Band height in rows. Larger bands amortize per-band triangle
+                // iteration; smaller bands improve load balancing. 32 is a good
+                // middle ground for typical render sizes.
+                const BAND_ROWS: usize = 32;
+                let pix_chunk = BAND_ROWS * width * 4;
+                let dep_chunk = BAND_ROWS * width;
+                pixels
+                    .par_chunks_mut(pix_chunk)
+                    .zip(depth.par_chunks_mut(dep_chunk))
+                    .enumerate()
+                    .for_each(|(band_idx, (pix_band, dep_band))| {
+                        let y_start = (band_idx * BAND_ROWS) as i32;
+                        let rows = (dep_band.len() / width) as i32;
+                        let y_end = y_start + rows;
+                        for t in &tris {
+                            fill_projected(pix_band, dep_band, width, height, y_start, y_end, t);
                         }
-                    }
+                    });
+            }
+
+            #[cfg(target_arch = "wasm32")]
+            {
+                for t in &tris {
+                    fill_projected(pixels, depth, width, height, 0, height as i32, t);
                 }
             }
         }
+
+        // Restore the (now-drained) buffer to reuse its capacity next frame.
+        let mut tris = tris;
+        tris.clear();
+        self.projected = tris;
     }
 
     /// Set a pixel directly (for UI overlay rendering).
@@ -709,6 +694,113 @@ impl Triangle {
 
 fn edge_function(a: Vec2, b: Vec2, c: Vec2) -> f32 {
     (c.x - a.x) * (b.y - a.y) - (c.y - a.y) * (b.x - a.x)
+}
+
+/// Rasterize one projected triangle into a (possibly band-local) framebuffer slice.
+///
+/// `pixels`/`depth` cover the global rows `[band_y_start, band_y_end)` only; pixel
+/// indices are computed relative to `band_y_start`. With a single full-height band
+/// (`band_y_start = 0`, `band_y_end = height`) this reduces exactly to the serial
+/// rasterizer. The per-pixel arithmetic matches the A3 hoisted form bit-for-bit, so
+/// output is byte-identical regardless of how the frame is banded. See A4.
+#[inline]
+fn fill_projected(
+    pixels: &mut [u8],
+    depth: &mut [f32],
+    width: usize,
+    height: usize,
+    band_y_start: i32,
+    band_y_end: i32,
+    t: &ProjectedTri,
+) {
+    let v0 = t.v0;
+    let v1 = t.v1;
+    let v2 = t.v2;
+
+    // Bounding box (global), then intersect the y-range with this band.
+    let min_x = v0.x.min(v1.x).min(v2.x).max(0.0) as i32;
+    let max_x = v0.x.max(v1.x).max(v2.x).min(width as f32 - 1.0) as i32;
+    let min_y_g = v0.y.min(v1.y).min(v2.y).max(0.0) as i32;
+    let max_y_g = v0.y.max(v1.y).max(v2.y).min(height as f32 - 1.0) as i32;
+    let min_y = min_y_g.max(band_y_start);
+    let max_y = max_y_g.min(band_y_end - 1);
+
+    let area = edge_function(v0, v1, v2);
+    if area.abs() < 0.001 {
+        return;
+    } // Degenerate triangle
+    let inv_area = 1.0 / area;
+
+    // Per-triangle edge deltas (see A3). Edge 0: a=v1,b=v2; edge 1: a=v2,b=v0; edge 2: a=v0,b=v1.
+    let e0_dy = v2.y - v1.y;
+    let e0_dx = v2.x - v1.x;
+    let e1_dy = v0.y - v2.y;
+    let e1_dx = v0.x - v2.x;
+    let e2_dy = v1.y - v0.y;
+    let e2_dx = v1.x - v0.x;
+
+    // Flat shading: color/alpha constant per triangle.
+    let color = t.color;
+    let alpha = t.alpha;
+    let r = (color[0].clamp(0.0, 1.0) * 255.0) as u8;
+    let g = (color[1].clamp(0.0, 1.0) * 255.0) as u8;
+    let b = (color[2].clamp(0.0, 1.0) * 255.0) as u8;
+    let a = (alpha.clamp(0.0, 1.0) * 255.0) as u8;
+    let opaque = alpha >= 1.0;
+    let src_a = alpha;
+    let one_minus_sa = 1.0 - src_a;
+    let csa_r = color[0] * src_a;
+    let csa_g = color[1] * src_a;
+    let csa_b = color[2] * src_a;
+
+    let z0 = t.z0;
+    let z1 = t.z1;
+    let z2 = t.z2;
+
+    for y in min_y..=max_y {
+        let py = y as f32 + 0.5;
+        let py0 = (py - v1.y) * e0_dx;
+        let py1 = (py - v2.y) * e1_dx;
+        let py2 = (py - v0.y) * e2_dx;
+        // Row offset relative to this band's first row.
+        let row = (y - band_y_start) as usize * width;
+
+        for x in min_x..=max_x {
+            let px = x as f32 + 0.5;
+
+            let w0 = ((px - v1.x) * e0_dy - py0) * inv_area;
+            let w1 = ((px - v2.x) * e1_dy - py1) * inv_area;
+            let w2 = ((px - v0.x) * e2_dy - py2) * inv_area;
+
+            if w0 >= 0.0 && w1 >= 0.0 && w2 >= 0.0 {
+                let z = w0 * z0 + w1 * z1 + w2 * z2;
+                let idx = row + x as usize;
+
+                if z < depth[idx] {
+                    depth[idx] = z;
+
+                    let pidx = idx * 4;
+                    if opaque {
+                        pixels[pidx] = r;
+                        pixels[pidx + 1] = g;
+                        pixels[pidx + 2] = b;
+                        pixels[pidx + 3] = a;
+                    } else {
+                        let dst_r = pixels[pidx] as f32 / 255.0;
+                        let dst_g = pixels[pidx + 1] as f32 / 255.0;
+                        let dst_b = pixels[pidx + 2] as f32 / 255.0;
+                        pixels[pidx] =
+                            ((csa_r + dst_r * one_minus_sa).clamp(0.0, 1.0) * 255.0) as u8;
+                        pixels[pidx + 1] =
+                            ((csa_g + dst_g * one_minus_sa).clamp(0.0, 1.0) * 255.0) as u8;
+                        pixels[pidx + 2] =
+                            ((csa_b + dst_b * one_minus_sa).clamp(0.0, 1.0) * 255.0) as u8;
+                        pixels[pidx + 3] = 255;
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Hashable cache key for a mesh descriptor (A2). Float params are stored as
