@@ -10,6 +10,7 @@ use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::ptr;
 
+use base64::Engine;
 use serde_json::json;
 
 use crate::bevy_scene::manager;
@@ -133,7 +134,7 @@ pub extern "C" fn elpian_bevy_get_frame_json(scene_id: *const c_char) -> *mut c_
     };
 
     // Base64 encode for safe transport across FFI
-    let encoded = base64_encode(&pixels);
+    let encoded = base64::engine::general_purpose::STANDARD.encode(&pixels);
 
     let result = json!({
         "width": width,
@@ -221,36 +222,3 @@ pub extern "C" fn elpian_bevy_get_frame_count(scene_id: *const c_char) -> u64 {
     manager::get_frame_count(&sid)
 }
 
-// ── Base64 Encoder ───────────────────────────────────────────────────
-
-const BASE64_CHARS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-fn base64_encode(data: &[u8]) -> String {
-    let mut result = String::with_capacity((data.len() + 2) / 3 * 4);
-    let chunks = data.chunks(3);
-
-    for chunk in chunks {
-        let b0 = chunk[0] as u32;
-        let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
-        let b2 = if chunk.len() > 2 { chunk[2] as u32 } else { 0 };
-
-        let triple = (b0 << 16) | (b1 << 8) | b2;
-
-        result.push(BASE64_CHARS[((triple >> 18) & 0x3F) as usize] as char);
-        result.push(BASE64_CHARS[((triple >> 12) & 0x3F) as usize] as char);
-
-        if chunk.len() > 1 {
-            result.push(BASE64_CHARS[((triple >> 6) & 0x3F) as usize] as char);
-        } else {
-            result.push('=');
-        }
-
-        if chunk.len() > 2 {
-            result.push(BASE64_CHARS[(triple & 0x3F) as usize] as char);
-        } else {
-            result.push('=');
-        }
-    }
-
-    result
-}

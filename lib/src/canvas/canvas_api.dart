@@ -241,6 +241,16 @@ class CanvasAPIExecutor {
   final Map<String, CanvasGradient> gradients = {};
   final Map<String, ui.Image> images = {};
 
+  /// Reused paint for `clearRect` (C). A `drawRect` with `BlendMode.clear`
+  /// clears the region to transparent without the offscreen layer that
+  /// `saveLayer` allocates.
+  static final Paint _clearPaint = Paint()..blendMode = BlendMode.clear;
+
+  /// Cache of parsed font strings (C). The `font` string ("16px Arial bold") is
+  /// otherwise re-split and scanned on every `fillText`/`strokeText`; only the
+  /// draw color varies per call.
+  final Map<String, _ParsedFont> _fontCache = {};
+
   CanvasState currentState = CanvasState();
   Path currentPath = Path();
 
@@ -389,16 +399,18 @@ class CanvasAPIExecutor {
         break;
 
       case CanvasCommandType.clearRect:
-        canvas.saveLayer(
+        // C: drawRect with BlendMode.clear avoids the offscreen layer that
+        // saveLayer/restore would allocate. Same result: the region is cleared
+        // to transparent.
+        canvas.drawRect(
           Rect.fromLTWH(
             _getDouble(params, 'x'),
             _getDouble(params, 'y'),
             _getDouble(params, 'width'),
             _getDouble(params, 'height'),
           ),
-          Paint()..blendMode = BlendMode.clear,
+          _clearPaint,
         );
-        canvas.restore();
         break;
 
       case CanvasCommandType.fillCircle:
@@ -559,30 +571,18 @@ class CanvasAPIExecutor {
   }
 
   TextStyle _parseTextStyle(bool fill) {
-    // Parse font string (e.g., "16px Arial")
-    final fontParts = currentState.font.split(' ');
-    double fontSize = 10;
-    String fontFamily = 'sans-serif';
-
-    for (final part in fontParts) {
-      if (part.endsWith('px')) {
-        fontSize = double.tryParse(part.replaceAll('px', '')) ?? 10;
-      } else if (!part.contains('bold') && !part.contains('italic')) {
-        fontFamily = part;
-      }
-    }
+    // Parse font string (e.g., "16px Arial") once per distinct font; only the
+    // color below varies per draw.
+    final parsed =
+        _fontCache[currentState.font] ??= _ParsedFont.parse(currentState.font);
 
     return TextStyle(
-      fontSize: fontSize,
-      fontFamily: fontFamily,
+      fontSize: parsed.size,
+      fontFamily: parsed.family,
       color:
           fill ? currentState.fillPaint.color : currentState.strokePaint.color,
-      fontWeight: currentState.font.contains('bold')
-          ? FontWeight.bold
-          : FontWeight.normal,
-      fontStyle: currentState.font.contains('italic')
-          ? FontStyle.italic
-          : FontStyle.normal,
+      fontWeight: parsed.bold ? FontWeight.bold : FontWeight.normal,
+      fontStyle: parsed.italic ? FontStyle.italic : FontStyle.normal,
     );
   }
 
@@ -710,4 +710,33 @@ class CanvasAPIExecutor {
   };
 
   StrokeJoin _parseLineJoin(String? join) => _lineJoinMap[join] ?? StrokeJoin.miter;
+}
+
+/// Parsed components of a Canvas 2D `font` string, cached per distinct string (C).
+class _ParsedFont {
+  final double size;
+  final String family;
+  final bool bold;
+  final bool italic;
+
+  const _ParsedFont(this.size, this.family, this.bold, this.italic);
+
+  factory _ParsedFont.parse(String font) {
+    final parts = font.split(' ');
+    double size = 10;
+    String family = 'sans-serif';
+    for (final part in parts) {
+      if (part.endsWith('px')) {
+        size = double.tryParse(part.replaceAll('px', '')) ?? 10;
+      } else if (!part.contains('bold') && !part.contains('italic')) {
+        family = part;
+      }
+    }
+    return _ParsedFont(
+      size,
+      family,
+      font.contains('bold'),
+      font.contains('italic'),
+    );
+  }
 }
