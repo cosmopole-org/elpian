@@ -16,6 +16,9 @@
 //! - Particle system rendering
 //! - Environment settings (ambient light, fog)
 
+use std::collections::HashMap;
+use std::sync::Arc;
+
 use glam::{Mat4, Vec2, Vec3, Vec4};
 
 use crate::bevy_scene::schema::*;
@@ -28,6 +31,11 @@ pub struct SceneRenderer {
     pub pixels: Vec<u8>, // RGBA8, length = width * height * 4
     pub depth: Vec<f32>, // depth buffer, length = width * height
     pub elapsed_time: f32,
+    /// Cache of generated primitive meshes keyed by (type, params). Mesh geometry
+    /// is invariant for a given descriptor — only the per-frame transform changes —
+    /// so generating it once and reusing the `Arc` removes a large amount of trig +
+    /// allocation from the hot path (esp. the particle loop). See A2.
+    mesh_cache: HashMap<MeshCacheKey, Arc<Vec<Triangle>>>,
 }
 
 impl SceneRenderer {
@@ -39,7 +47,22 @@ impl SceneRenderer {
             pixels: vec![0u8; pixel_count * 4],
             depth: vec![f32::INFINITY; pixel_count],
             elapsed_time: 0.0,
+            mesh_cache: HashMap::new(),
         }
+    }
+
+    /// Return the cached triangle list for a mesh descriptor, generating it on
+    /// first use. Geometry depends only on the descriptor, not the transform, so
+    /// the result is reused across frames and across particles. The returned
+    /// `Arc` clone is a cheap pointer bump (no triangle copy).
+    fn mesh_for(&mut self, mesh: &MeshType) -> Arc<Vec<Triangle>> {
+        let key = MeshCacheKey::from(mesh);
+        if let Some(m) = self.mesh_cache.get(&key) {
+            return m.clone();
+        }
+        let tris = Arc::new(generate_mesh_triangles(mesh));
+        self.mesh_cache.insert(key, tris.clone());
+        tris
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
@@ -203,7 +226,7 @@ impl SceneRenderer {
                 let local = self.compute_animated_transform(&mesh.transform, &mesh.animation);
                 let world = *parent_transform * local;
                 let material = MaterialState::from_def(&mesh.material);
-                let triangles = generate_mesh_triangles(&mesh.mesh);
+                let triangles = self.mesh_for(&mesh.mesh);
                 self.rasterize_triangles(
                     &triangles, &world, view_proj, camera, lights, &material, env,
                 );
@@ -217,7 +240,7 @@ impl SceneRenderer {
                 let local = rb.transform.to_mat4();
                 let world = *parent_transform * local;
                 let material = MaterialState::from_def(&rb.material);
-                let triangles = generate_mesh_triangles(&rb.mesh);
+                let triangles = self.mesh_for(&rb.mesh);
                 self.rasterize_triangles(
                     &triangles, &world, view_proj, camera, lights, &material, env,
                 );
@@ -382,6 +405,9 @@ impl SceneRenderer {
         let count = (particle.emission_rate * particle.lifetime).ceil() as i32;
         let count = count.min(100); // cap for performance
 
+        // All particles share one cached unit cube; only the transform differs.
+        let triangles = self.mesh_for(&MeshType::Named(MeshTypeName::Cube));
+
         for i in 0..count {
             let spawn_time = (i as f32) / particle.emission_rate;
             let age = (self.elapsed_time - spawn_time) % particle.lifetime;
@@ -398,7 +424,6 @@ impl SceneRenderer {
                 * Mat4::from_translation(offset)
                 * Mat4::from_scale(Vec3::splat(particle.size));
 
-            let triangles = generate_mesh_triangles(&MeshType::Named(MeshTypeName::Cube));
             self.rasterize_triangles(
                 &triangles,
                 &particle_world,
@@ -657,6 +682,62 @@ impl Triangle {
 
 fn edge_function(a: Vec2, b: Vec2, c: Vec2) -> f32 {
     (c.x - a.x) * (b.y - a.y) - (c.y - a.y) * (b.x - a.x)
+}
+
+/// Hashable cache key for a mesh descriptor (A2). Float params are stored as
+/// their exact IEEE-754 bit pattern (`f32::to_bits`) so identical descriptors map
+/// to the same entry and *distinct* values never collide — guaranteeing the cached
+/// geometry is byte-identical to regenerating it.
+#[derive(Clone, PartialEq, Eq, Hash)]
+enum MeshCacheKey {
+    Cube,
+    Sphere { radius: u32, subdivisions: u32 },
+    Plane { size: u32 },
+    Cylinder { radius: u32, height: u32 },
+    Cone { radius: u32, height: u32 },
+    Capsule { radius: u32, depth: u32 },
+    Torus { radius: u32, tube_radius: u32 },
+    File { path: String },
+}
+
+impl From<&MeshType> for MeshCacheKey {
+    fn from(mesh: &MeshType) -> Self {
+        match mesh {
+            MeshType::Named(MeshTypeName::Cube) => MeshCacheKey::Cube,
+            MeshType::Parameterized(param) => match param {
+                MeshTypeParam::Sphere {
+                    radius,
+                    subdivisions,
+                } => MeshCacheKey::Sphere {
+                    radius: radius.to_bits(),
+                    subdivisions: *subdivisions,
+                },
+                MeshTypeParam::Plane { size } => MeshCacheKey::Plane {
+                    size: size.to_bits(),
+                },
+                MeshTypeParam::Cylinder { radius, height } => MeshCacheKey::Cylinder {
+                    radius: radius.to_bits(),
+                    height: height.to_bits(),
+                },
+                MeshTypeParam::Cone { radius, height } => MeshCacheKey::Cone {
+                    radius: radius.to_bits(),
+                    height: height.to_bits(),
+                },
+                MeshTypeParam::Capsule { radius, depth } => MeshCacheKey::Capsule {
+                    radius: radius.to_bits(),
+                    depth: depth.to_bits(),
+                },
+                MeshTypeParam::Torus {
+                    radius,
+                    tube_radius,
+                } => MeshCacheKey::Torus {
+                    radius: radius.to_bits(),
+                    tube_radius: tube_radius.to_bits(),
+                },
+                MeshTypeParam::File { path } => MeshCacheKey::File { path: path.clone() },
+            },
+        }
+    }
 }
 
 /// Generate triangles for a mesh type.
