@@ -99,15 +99,17 @@ class CSSStylesheet {
     }
   }
   
-  /// Get computed style for an element
-  CSSStyle getComputedStyle({
+  /// Build the merged raw style map for an element (cascade order), before
+  /// parsing into a [CSSStyle]. Exposed so callers can merge further raw maps
+  /// (e.g. inline styles) and parse exactly once — see [getComputedStyle].
+  Map<String, dynamic> getComputedStyleMap({
     required String tagName,
     String? id,
     List<String>? classes,
     Map<String, dynamic>? inlineStyles,
   }) {
     final mergedStyles = <String, dynamic>{};
-    
+
     // 1. Apply tag-based rules (lowest priority)
     final tagStyles = _rules[tagName];
     if (tagStyles != null) mergedStyles.addAll(tagStyles);
@@ -125,14 +127,29 @@ class CSSStylesheet {
       final idStyles = _idRules[id];
       if (idStyles != null) mergedStyles.addAll(idStyles);
     }
-    
+
     // 4. Apply inline styles (highest priority)
     if (inlineStyles != null) {
       mergedStyles.addAll(inlineStyles);
     }
-    
-    // Parse merged styles
-    return CSSParser.parse(mergedStyles);
+
+    return mergedStyles;
+  }
+
+  /// Get computed style for an element
+  CSSStyle getComputedStyle({
+    required String tagName,
+    String? id,
+    List<String>? classes,
+    Map<String, dynamic>? inlineStyles,
+  }) {
+    // Parse is memoized in CSSParser, so repeated identical cascades are cheap.
+    return CSSParser.parse(getComputedStyleMap(
+      tagName: tagName,
+      id: id,
+      classes: classes,
+      inlineStyles: inlineStyles,
+    ));
   }
   
   /// Get style for a specific selector
@@ -260,7 +277,10 @@ class GlobalStylesheetManager {
     ));
   }
   
-  CSSStyle getComputedStyle({
+  /// Build the merged raw style map for an element (global + media-query +
+  /// inline cascade), before parsing. Lets callers merge further raw maps and
+  /// parse exactly once.
+  Map<String, dynamic> getComputedStyleMap({
     required String tagName,
     String? id,
     List<String>? classes,
@@ -269,7 +289,7 @@ class GlobalStylesheetManager {
     double? screenHeight,
   }) {
     final mergedStyles = <String, dynamic>{};
-    
+
     // Start with global styles - use the result
     final globalStyle = _globalStylesheet.getComputedStyle(
       tagName: tagName,
@@ -284,7 +304,7 @@ class GlobalStylesheetManager {
     if (globalStyle.fontWeight != null) mergedStyles['fontWeight'] = globalStyle.fontWeight;
     if (globalStyle.padding != null) mergedStyles['padding'] = globalStyle.padding;
     if (globalStyle.margin != null) mergedStyles['margin'] = globalStyle.margin;
-    
+
     // Add media query styles
     if (screenWidth != null && screenHeight != null) {
       for (final mediaQuery in _mediaQueries) {
@@ -296,13 +316,31 @@ class GlobalStylesheetManager {
         }
       }
     }
-    
+
     // Add inline styles last
     if (inlineStyles != null) {
       mergedStyles.addAll(inlineStyles);
     }
-    
-    return CSSParser.parse(mergedStyles);
+
+    return mergedStyles;
+  }
+
+  CSSStyle getComputedStyle({
+    required String tagName,
+    String? id,
+    List<String>? classes,
+    Map<String, dynamic>? inlineStyles,
+    double? screenWidth,
+    double? screenHeight,
+  }) {
+    return CSSParser.parse(getComputedStyleMap(
+      tagName: tagName,
+      id: id,
+      classes: classes,
+      inlineStyles: inlineStyles,
+      screenWidth: screenWidth,
+      screenHeight: screenHeight,
+    ));
   }
   
   void clear() {

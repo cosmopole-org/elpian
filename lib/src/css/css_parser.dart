@@ -1,8 +1,49 @@
+import 'dart:collection';
+
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import '../models/css_style.dart';
 
 class CSSParser {
+  // D1: memoize parsing. CSS is otherwise re-parsed for every element on every
+  // build (regex color/gradient/shadow scans included). The result CSSStyle is
+  // immutable and `parse` is pure, so caching keyed by the (deeply-equal) style
+  // map is safe. Bounded to avoid unbounded growth on highly dynamic styles.
+  static const int _maxCacheSize = 512;
+  static const MapEquality<String, dynamic> _mapEquality = MapEquality();
+  static final LinkedHashMap<Map<String, dynamic>, CSSStyle> _cache =
+      LinkedHashMap<Map<String, dynamic>, CSSStyle>(
+    equals: _mapEquality.equals,
+    hashCode: _mapEquality.hash,
+  );
+
+  /// Visible for testing/diagnostics.
+  static int get cacheSize => _cache.length;
+
+  /// Clear the parse cache (e.g. for tests or after a global restyle).
+  static void clearCache() => _cache.clear();
+
   static CSSStyle parse(Map<String, dynamic> styleMap) {
+    final cached = _cache[styleMap];
+    if (cached != null) {
+      // Promote to most-recently-used (LinkedHashMap keeps insertion order).
+      _cache.remove(styleMap);
+      _cache[styleMap] = cached;
+      return cached;
+    }
+
+    final style = _parseUncached(styleMap);
+
+    if (_cache.length >= _maxCacheSize) {
+      _cache.remove(_cache.keys.first); // evict least-recently-used
+    }
+    // Store a defensive copy of the key so later mutation of the caller's map
+    // cannot corrupt the cache's hashing.
+    _cache[Map<String, dynamic>.of(styleMap)] = style;
+    return style;
+  }
+
+  static CSSStyle _parseUncached(Map<String, dynamic> styleMap) {
     return CSSStyle(
       width: parseDouble(styleMap['width']),
       height: parseDouble(styleMap['height']),
