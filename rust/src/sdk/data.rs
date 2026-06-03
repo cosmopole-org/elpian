@@ -150,17 +150,17 @@ impl ValGroup {
         ValGroup::new(copied)
     }
     pub fn stringify(&self) -> String {
-        let mut result = "{".to_string();
-        let mut index = 0;
-        for (k, v) in self.data.iter() {
-            if index > 0 {
-                result = format!("{}, \"{}\": {}", result, k, v.stringify());
-            } else {
-                result = format!("{} \"{}\": {}", result, k, v.stringify());
-            }
-            index += 1;
+        // Build into a single buffer (push_str) instead of re-`format!`ing the
+        // whole accumulator each iteration, which was O(n²) in the value count.
+        // Output is byte-identical to the previous implementation.
+        let mut result = String::from("{");
+        for (index, (k, v)) in self.data.iter().enumerate() {
+            result.push_str(if index > 0 { ", \"" } else { " \"" });
+            result.push_str(k);
+            result.push_str("\": ");
+            result.push_str(&v.stringify());
         }
-        result = format!("{} }}", result);
+        result.push_str(" }");
         result
     }
 }
@@ -211,17 +211,16 @@ impl Array {
         Array::new(self.data.iter().map(|item| item.clone_data()).collect())
     }
     pub fn stringify(&self) -> String {
-        let mut result = "[".to_string();
-        let mut index = 0;
-        for v in self.data.iter() {
+        // Linear single-buffer build (was O(n²) via repeated `format!`).
+        // Output is byte-identical to the previous implementation.
+        let mut result = String::from("[");
+        for (index, v) in self.data.iter().enumerate() {
             if index > 0 {
-                result = format!("{}, {}", result, v.stringify());
-            } else {
-                result = format!("{}{}", result, v.stringify());
+                result.push_str(", ");
             }
-            index += 1;
+            result.push_str(&v.stringify());
         }
-        result = format!("{}]", result);
+        result.push(']');
         result
     }
 }

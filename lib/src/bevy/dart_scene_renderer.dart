@@ -292,14 +292,19 @@ class DartSceneRenderer {
     // Sort by depth (painter's algorithm: far to near)
     renderTris.sort((a, b) => b.depth.compareTo(a.depth));
 
-    // Draw triangles
+    // Draw triangles. B: reuse one Path + one Paint across triangles instead of
+    // allocating a fresh ui.Path and Paint per triangle each frame.
+    final path = Path();
+    final triPaint = Paint()..style = PaintingStyle.fill;
     for (final tri in renderTris) {
-      final path = Path()
+      path.reset();
+      path
         ..moveTo(tri.screenPoints[0].dx, tri.screenPoints[0].dy)
         ..lineTo(tri.screenPoints[1].dx, tri.screenPoints[1].dy)
         ..lineTo(tri.screenPoints[2].dx, tri.screenPoints[2].dy)
         ..close();
-      canvas.drawPath(path, Paint()..color = tri.color);
+      triPaint.color = tri.color;
+      canvas.drawPath(path, triPaint);
     }
   }
 

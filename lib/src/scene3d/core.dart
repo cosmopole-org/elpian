@@ -1128,11 +1128,17 @@ class ParticleEmitter {
   List<Particle> get particles => _particles;
 
   void update(double dt, Vec3 emitterPos) {
-    // Update existing particles
+    // Update existing particles. B: iterate back-to-front and swap-and-pop dead
+    // particles (O(1)) instead of removeAt (O(n) shift). Order is irrelevant —
+    // particles get depth-sorted before rendering.
     for (var i = _particles.length - 1; i >= 0; i--) {
       final p = _particles[i];
       p.life -= dt;
-      if (p.life <= 0) { _particles.removeAt(i); continue; }
+      if (p.life <= 0) {
+        _particles[i] = _particles.last;
+        _particles.removeLast();
+        continue;
+      }
       p.velocity = p.velocity + (gravity + wind) * dt;
       p.position = p.position + p.velocity * dt;
       p.rotation += p.rotationSpeed * dt;

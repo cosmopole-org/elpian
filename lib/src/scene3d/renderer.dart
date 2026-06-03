@@ -94,8 +94,12 @@ class Scene3DRenderer {
       ..style = ui.PaintingStyle.stroke
       ..strokeWidth = 1.0;
 
+    // B: reuse a single Path across triangles (reset instead of reallocating
+    // a new ui.Path per triangle each frame).
+    final path = ui.Path();
     for (final st in screenTris) {
-      final path = ui.Path()
+      path.reset();
+      path
         ..moveTo(st.pts[0].dx, st.pts[0].dy)
         ..lineTo(st.pts[1].dx, st.pts[1].dy)
         ..lineTo(st.pts[2].dx, st.pts[2].dy)
