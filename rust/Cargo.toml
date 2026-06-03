@@ -18,8 +18,22 @@ glam = { version = "0.29", features = ["serde"] }
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "0.2"
 
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "render"
+harness = false
+
 [profile.release]
 lto = true
 codegen-units = 1
-opt-level = "z"
+opt-level = 3
 strip = true
+
+# Benchmarks (Criterion) inherit release-level optimization so numbers reflect
+# the shipped configuration. See upgrade/V-verification-and-benchmarking.md.
+[profile.bench]
+lto = true
+codegen-units = 1
+opt-level = 3

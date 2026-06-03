@@ -6,7 +6,7 @@ deviations. `[ ]` = todo, `[~]` = in progress, `[x]` = done & verified.
 ## Progress
 
 ### Phase 1 — Rust core (locally verifiable)
-- [ ] **A1** Build profile `opt-level "z"→3` — `A1-rust-build-profile.md`
+- [x] **A1** Build profile `opt-level "z"→3` — `A1-rust-build-profile.md` (1.7–2.75× faster; report in `benchmarks/reports/optimization/A1-build-profile.md`)
 - [ ] **A2** Mesh-generation cache — `A2-rust-mesh-cache.md`
 - [ ] **A3** Incremental barycentric rasterizer inner loop — `A3-rust-rasterizer-inner-loop.md`
 - [ ] **Bench checkpoint #1** (after A1–A3) — record p50/throughput in `benchmarks/reports/`
@@ -42,7 +42,10 @@ deviations. `[ ]` = todo, `[~]` = in progress, `[x]` = done & verified.
 
 | Date | Change | Scene | p50 ms before | p50 ms after | Notes |
 |------|--------|-------|---------------|--------------|-------|
-| | | | | | |
+| 2026-06-03 | A1 z→3 | single_cube | 2.214 | 0.804 | 2.75× |
+| 2026-06-03 | A1 z→3 | fifty_meshes | 4.111 | 2.046 | 2.01× |
+| 2026-06-03 | A1 z→3 | fillrate_quad | 9.280 | 4.918 | 1.89× |
+| 2026-06-03 | A1 z→3 | sphere_hipoly | 8.585 | 5.115 | 1.68× |
 
 ## Session handoff notes
 
@@ -51,3 +54,10 @@ deviations. `[ ]` = todo, `[~]` = in progress, `[x]` = done & verified.
 
 - 2026-06-03: Plan authored and persisted to `upgrade/`. No code changes yet.
   Next step: implement **A1** (lowest risk, highest ROI), then bench.
+- 2026-06-03 (session 2): Working on branch `claude/affectionate-hypatia-EjllG`
+  (not the doc's original branch). **A1 done & verified** (1.7–2.75× faster).
+  **V harness landed**: `rust/tests/renderer_golden.rs` (golden FNV-1a framebuffer
+  hashes for 6 scenes + determinism test) and `rust/benches/render.rs` (Criterion,
+  6 scenes). Added `[profile.bench]` + `criterion` dev-dep. wasm target installed.
+  Next: A2 (mesh cache), then A3 (incremental rasterizer) — both must keep golden
+  hashes byte-identical.
