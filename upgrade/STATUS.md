@@ -8,8 +8,8 @@ deviations. `[ ]` = todo, `[~]` = in progress, `[x]` = done & verified.
 ### Phase 1 — Rust core (locally verifiable)
 - [x] **A1** Build profile `opt-level "z"→3` — `A1-rust-build-profile.md` (1.7–2.75× faster; report in `benchmarks/reports/optimization/A1-build-profile.md`)
 - [x] **A2** Mesh-generation cache — `A2-rust-mesh-cache.md` (byte-identical; report in `benchmarks/reports/optimization/A2-mesh-cache.md`)
-- [ ] **A3** Incremental barycentric rasterizer inner loop — `A3-rust-rasterizer-inner-loop.md`
-- [ ] **Bench checkpoint #1** (after A1–A3) — record p50/throughput in `benchmarks/reports/`
+- [x] **A3** Incremental barycentric rasterizer inner loop — `A3-rust-rasterizer-inner-loop.md` (exact hoist; LLVM already did most of it — see report)
+- [x] **Bench checkpoint #1** (after A1–A3) — recorded in `benchmarks/reports/optimization/`
 
 ### Phase 2 — Rust parallelism + transfer
 - [ ] **A4** `rayon` tiled parallel rasterizer (wasm-cfg-gated) — `A4-rust-parallel-rasterizer.md`

@@ -591,32 +591,63 @@ impl SceneRenderer {
         } // Degenerate triangle
         let inv_area = 1.0 / area;
 
-        for y in min_y..=max_y {
-            for x in min_x..=max_x {
-                let p = Vec2::new(x as f32 + 0.5, y as f32 + 0.5);
+        // A3: hoist the per-triangle / per-row invariants out of the inner loop.
+        // Each edge value is affine in (x, y):
+        //   edge_function(a, b, p) = (p.x - a.x) * (b.y - a.y) - (p.y - a.y) * (b.x - a.x)
+        // The (b.* - a.*) deltas are constant per triangle; the (p.y - a.y) terms are
+        // constant per scanline. We recompute the px term exactly each pixel so the
+        // arithmetic (operations + associativity) is byte-identical to the original
+        // `edge_function(...) * inv_area`, keeping golden output unchanged.
+        //
+        // Edge 0 uses a = v1, b = v2; edge 1 uses a = v2, b = v0; edge 2 uses a = v0, b = v1.
+        let e0_dy = v2.y - v1.y;
+        let e0_dx = v2.x - v1.x;
+        let e1_dy = v0.y - v2.y;
+        let e1_dx = v0.x - v2.x;
+        let e2_dy = v1.y - v0.y;
+        let e2_dx = v1.x - v0.x;
 
-                let w0 = edge_function(v1, v2, p) * inv_area;
-                let w1 = edge_function(v2, v0, p) * inv_area;
-                let w2 = edge_function(v0, v1, p) * inv_area;
+        // Flat shading: color/alpha are constant per triangle, so convert to bytes
+        // (opaque path) and precompute the blend-invariant source terms once.
+        let r = (color[0].clamp(0.0, 1.0) * 255.0) as u8;
+        let g = (color[1].clamp(0.0, 1.0) * 255.0) as u8;
+        let b = (color[2].clamp(0.0, 1.0) * 255.0) as u8;
+        let a = (alpha.clamp(0.0, 1.0) * 255.0) as u8;
+        let opaque = alpha >= 1.0;
+        let src_a = alpha;
+        let one_minus_sa = 1.0 - src_a;
+        let csa_r = color[0] * src_a;
+        let csa_g = color[1] * src_a;
+        let csa_b = color[2] * src_a;
+
+        for y in min_y..=max_y {
+            let py = y as f32 + 0.5;
+            // Per-scanline edge terms: (p.y - a.y) * (b.x - a.x).
+            let py0 = (py - v1.y) * e0_dx;
+            let py1 = (py - v2.y) * e1_dx;
+            let py2 = (py - v0.y) * e2_dx;
+            let row = y as u32 * self.width;
+
+            for x in min_x..=max_x {
+                let px = x as f32 + 0.5;
+
+                let w0 = ((px - v1.x) * e0_dy - py0) * inv_area;
+                let w1 = ((px - v2.x) * e1_dy - py1) * inv_area;
+                let w2 = ((px - v0.x) * e2_dy - py2) * inv_area;
 
                 // Inside triangle?
                 if w0 >= 0.0 && w1 >= 0.0 && w2 >= 0.0 {
                     // Interpolate depth
                     let z = w0 * z0 + w1 * z1 + w2 * z2;
 
-                    let idx = (y as u32 * self.width + x as u32) as usize;
+                    let idx = (row + x as u32) as usize;
 
                     // Depth test
                     if z < self.depth[idx] {
                         self.depth[idx] = z;
 
-                        let r = (color[0].clamp(0.0, 1.0) * 255.0) as u8;
-                        let g = (color[1].clamp(0.0, 1.0) * 255.0) as u8;
-                        let b = (color[2].clamp(0.0, 1.0) * 255.0) as u8;
-                        let a = (alpha.clamp(0.0, 1.0) * 255.0) as u8;
-
                         let pidx = idx * 4;
-                        if alpha >= 1.0 {
+                        if opaque {
                             self.pixels[pidx] = r;
                             self.pixels[pidx + 1] = g;
                             self.pixels[pidx + 2] = b;
@@ -626,16 +657,12 @@ impl SceneRenderer {
                             let dst_r = self.pixels[pidx] as f32 / 255.0;
                             let dst_g = self.pixels[pidx + 1] as f32 / 255.0;
                             let dst_b = self.pixels[pidx + 2] as f32 / 255.0;
-                            let src_a = alpha;
-                            self.pixels[pidx] = ((color[0] * src_a + dst_r * (1.0 - src_a))
-                                .clamp(0.0, 1.0)
-                                * 255.0) as u8;
-                            self.pixels[pidx + 1] = ((color[1] * src_a + dst_g * (1.0 - src_a))
-                                .clamp(0.0, 1.0)
-                                * 255.0) as u8;
-                            self.pixels[pidx + 2] = ((color[2] * src_a + dst_b * (1.0 - src_a))
-                                .clamp(0.0, 1.0)
-                                * 255.0) as u8;
+                            self.pixels[pidx] =
+                                ((csa_r + dst_r * one_minus_sa).clamp(0.0, 1.0) * 255.0) as u8;
+                            self.pixels[pidx + 1] =
+                                ((csa_g + dst_g * one_minus_sa).clamp(0.0, 1.0) * 255.0) as u8;
+                            self.pixels[pidx + 2] =
+                                ((csa_b + dst_b * one_minus_sa).clamp(0.0, 1.0) * 255.0) as u8;
                             self.pixels[pidx + 3] = 255;
                         }
                     }
