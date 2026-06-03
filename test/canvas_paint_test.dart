@@ -58,6 +58,63 @@ void main() {
     });
   });
 
+  group('C — previously-unhandled state setters now apply', () {
+    test('setFont / setTextAlign / setShadow* / composite op update state', () {
+      final exec = CanvasAPIExecutor()
+        ..addCommands([
+          const CanvasCommand(
+              type: CanvasCommandType.setFont,
+              params: {'font': 'bold 24px Arial'}),
+          const CanvasCommand(
+              type: CanvasCommandType.setTextAlign, params: {'align': 'center'}),
+          const CanvasCommand(
+              type: CanvasCommandType.setShadowBlur, params: {'blur': 12}),
+          const CanvasCommand(
+              type: CanvasCommandType.setShadowColor,
+              params: {'color': '#000000'}),
+          const CanvasCommand(
+              type: CanvasCommandType.setShadowOffsetX, params: {'offset': 4}),
+          const CanvasCommand(
+              type: CanvasCommandType.setShadowOffsetY, params: {'offset': 6}),
+          const CanvasCommand(
+              type: CanvasCommandType.setGlobalCompositeOperation,
+              params: {'operation': 'multiply'}),
+          const CanvasCommand(
+              type: CanvasCommandType.setLineDash,
+              params: {'segments': [4, 2]}),
+          const CanvasCommand(
+              type: CanvasCommandType.setMiterLimit, params: {'limit': 8}),
+        ]);
+
+      exec.execute(_recordingCanvas(), const Size(100, 100));
+
+      final s = exec.currentState;
+      expect(s.font, 'bold 24px Arial');
+      expect(s.textAlign, TextAlign.center);
+      expect(s.shadowBlur, 12);
+      expect(s.shadowOffsetX, 4);
+      expect(s.shadowOffsetY, 6);
+      expect(s.shadowColor.toARGB32(), 0xFF000000);
+      expect(s.blendMode, BlendMode.multiply);
+      expect(s.lineDash, [4, 2]);
+      expect(s.miterLimit, 8);
+    });
+
+    test('save/restore preserves and rolls back shadow + font state', () {
+      final exec = CanvasAPIExecutor()
+        ..addCommands([
+          const CanvasCommand(
+              type: CanvasCommandType.setShadowBlur, params: {'blur': 5}),
+          const CanvasCommand(type: CanvasCommandType.save),
+          const CanvasCommand(
+              type: CanvasCommandType.setShadowBlur, params: {'blur': 20}),
+          const CanvasCommand(type: CanvasCommandType.restore),
+        ]);
+      exec.execute(_recordingCanvas(), const Size(100, 100));
+      expect(exec.currentState.shadowBlur, 5);
+    });
+  });
+
   group('C — setFillStyle(color) clears a previously set gradient shader', () {
     test('solid color after gradient removes the shader', () {
       final exec = CanvasAPIExecutor()
