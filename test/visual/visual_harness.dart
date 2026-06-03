@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 /// Output directory for rendered PNGs (git-ignored build artifacts).
 final Directory outDir = Directory('build/visual')..createSync(recursive: true);
@@ -24,6 +25,20 @@ Future<File> renderCanvasToPng(
   final file = File('${outDir.path}/$name.png');
   file.writeAsBytesSync(bytes!.buffer.asUint8List());
   picture.dispose();
+  image.dispose();
+  return file;
+}
+
+/// Capture the rendered pixels under a [RepaintBoundary] identified by [key]
+/// and write them to a PNG. Use after pumping a widget wrapped in a
+/// RepaintBoundary with this key.
+Future<File> captureBoundaryToPng(GlobalKey key, String name) async {
+  final boundary =
+      key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+  final image = await boundary.toImage(pixelRatio: 1.0);
+  final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+  final file = File('${outDir.path}/$name.png');
+  file.writeAsBytesSync(bytes!.buffer.asUint8List());
   image.dispose();
   return file;
 }
