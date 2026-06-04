@@ -122,6 +122,55 @@ impl SceneRenderer {
         }
     }
 
+    /// Clear the back buffer with a vertical sky gradient (`top` at row 0 →
+    /// `bottom` at the last row) and reset the depth buffer. Each row is a solid
+    /// color, so the whole band shares one RGBA value (cheap to splat).
+    pub fn clear_gradient(&mut self, top: Vec3, bottom: Vec3) {
+        let width = self.width as usize;
+        let height = self.height.max(1) as usize;
+        let row_color = |y: usize| -> [u8; 4] {
+            let t = if height > 1 {
+                y as f32 / (height - 1) as f32
+            } else {
+                0.0
+            };
+            let c = top.lerp(bottom, t);
+            [
+                (c.x.clamp(0.0, 1.0) * 255.0) as u8,
+                (c.y.clamp(0.0, 1.0) * 255.0) as u8,
+                (c.z.clamp(0.0, 1.0) * 255.0) as u8,
+                255,
+            ]
+        };
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            use rayon::prelude::*;
+            self.pixels_back
+                .par_chunks_exact_mut(width * 4)
+                .enumerate()
+                .for_each(|(y, row)| {
+                    let color = row_color(y);
+                    for px in row.chunks_exact_mut(4) {
+                        px.copy_from_slice(&color);
+                    }
+                });
+            self.depth.par_iter_mut().for_each(|d| *d = f32::INFINITY);
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            for (y, row) in self.pixels_back.chunks_exact_mut(width * 4).enumerate() {
+                let color = row_color(y);
+                for px in row.chunks_exact_mut(4) {
+                    px.copy_from_slice(&color);
+                }
+            }
+            for d in self.depth.iter_mut() {
+                *d = f32::INFINITY;
+            }
+        }
+    }
+
     /// Render a complete scene from JSON definition.
     pub fn render_scene(&mut self, scene: &SceneDef, delta_time: f32) {
         self.elapsed_time += delta_time;
@@ -134,24 +183,45 @@ impl SceneRenderer {
                 if let Some(ref al) = e.ambient_light {
                     env.ambient_color = al.to_vec3();
                 }
-                env.fog_enabled = e.fog_enabled;
+                // A `fog_type` implies fog is on even when `fog_enabled` is omitted
+                // (the scene3d DSL only emits `fog_type`).
+                let linear = e
+                    .fog_type
+                    .as_deref()
+                    .map(|t| t.eq_ignore_ascii_case("linear"))
+                    .unwrap_or(false);
+                env.fog_enabled = e.fog_enabled || e.fog_type.is_some();
+                env.fog_linear = linear;
+                env.fog_near = e.fog_near.unwrap_or(0.0);
                 env.fog_distance = e.fog_distance;
                 if let Some(ref fc) = e.fog_color {
                     env.fog_color = fc.to_vec3();
                 }
+                if let (Some(top), Some(bottom)) =
+                    (e.sky_color_top.as_ref(), e.sky_color_bottom.as_ref())
+                {
+                    env.sky_gradient = Some((top.to_vec3(), bottom.to_vec3()));
+                }
             }
         }
 
-        // Determine sky/clear color from environment or skybox
+        // Determine sky/clear color from environment or skybox. A skybox color
+        // takes precedence over the gradient as an explicit override.
         let mut clear_color = [20u8, 20u8, 30u8, 255u8];
+        let mut skybox_override = false;
         for node in &scene.world {
             if let JsonNode::Skybox(sky) = node {
                 if let Some(ref c) = sky.color {
                     clear_color = c.to_rgba_u8();
+                    skybox_override = true;
                 }
             }
         }
-        self.clear(clear_color);
+        if let (Some((top, bottom)), false) = (env.sky_gradient, skybox_override) {
+            self.clear_gradient(top, bottom);
+        } else {
+            self.clear(clear_color);
+        }
 
         // Collect camera
         let camera = self.find_camera(&scene.world);
@@ -241,6 +311,7 @@ impl SceneRenderer {
                     direction,
                     color,
                     intensity,
+                    range: l.range,
                 });
             }
         }
@@ -253,6 +324,7 @@ impl SceneRenderer {
                 direction: Vec3::new(-0.5, -1.0, -0.5).normalize(),
                 color: Vec3::ONE,
                 intensity: 1.0,
+                range: None,
             });
         }
 
@@ -329,6 +401,7 @@ impl SceneRenderer {
                     roughness: 0.2,
                     emissive: Vec3::ZERO,
                     alpha: water.transparency,
+                    unlit: false,
                 };
                 let hx = water.size.x / 2.0;
                 let hz = water.size.z / 2.0;
@@ -446,6 +519,7 @@ impl SceneRenderer {
             roughness: 1.0,
             emissive: color * 0.5,
             alpha: 1.0,
+            unlit: false,
         };
 
         // Simple particle rendering: scatter small spheres based on time
@@ -827,8 +901,8 @@ enum MeshCacheKey {
     Cube,
     Sphere { radius: u32, subdivisions: u32 },
     Plane { size: u32 },
-    Cylinder { radius: u32, height: u32 },
-    Cone { radius: u32, height: u32 },
+    Cylinder { radius: u32, height: u32, segments: u32 },
+    Cone { radius: u32, height: u32, segments: u32 },
     Capsule { radius: u32, depth: u32 },
     Torus { radius: u32, tube_radius: u32 },
     File { path: String },
@@ -849,13 +923,23 @@ impl From<&MeshType> for MeshCacheKey {
                 MeshTypeParam::Plane { size } => MeshCacheKey::Plane {
                     size: size.to_bits(),
                 },
-                MeshTypeParam::Cylinder { radius, height } => MeshCacheKey::Cylinder {
+                MeshTypeParam::Cylinder {
+                    radius,
+                    height,
+                    segments,
+                } => MeshCacheKey::Cylinder {
                     radius: radius.to_bits(),
                     height: height.to_bits(),
+                    segments: *segments,
                 },
-                MeshTypeParam::Cone { radius, height } => MeshCacheKey::Cone {
+                MeshTypeParam::Cone {
+                    radius,
+                    height,
+                    segments,
+                } => MeshCacheKey::Cone {
                     radius: radius.to_bits(),
                     height: height.to_bits(),
+                    segments: *segments,
                 },
                 MeshTypeParam::Capsule { radius, depth } => MeshCacheKey::Capsule {
                     radius: radius.to_bits(),
@@ -884,8 +968,16 @@ pub fn generate_mesh_triangles(mesh_type: &MeshType) -> Vec<Triangle> {
                 subdivisions,
             } => generate_uv_sphere(*radius, (*subdivisions).max(4)),
             MeshTypeParam::Plane { size } => generate_plane(*size),
-            MeshTypeParam::Cylinder { radius, height } => generate_cylinder(*radius, *height, 16),
-            MeshTypeParam::Cone { radius, height } => generate_cone(*radius, *height, 16),
+            MeshTypeParam::Cylinder {
+                radius,
+                height,
+                segments,
+            } => generate_cylinder(*radius, *height, (*segments).max(3)),
+            MeshTypeParam::Cone {
+                radius,
+                height,
+                segments,
+            } => generate_cone(*radius, *height, (*segments).max(3)),
             MeshTypeParam::Capsule { radius, depth } => {
                 // Approximate as cylinder + two hemispheres
                 let mut tris = generate_cylinder(*radius, *depth, 16);
@@ -1181,6 +1273,8 @@ struct LightState {
     direction: Vec3,
     color: Vec3,
     intensity: f32,
+    /// Point/spot reach. `None` = unbounded (inverse-square only).
+    range: Option<f32>,
 }
 
 #[derive(Debug, Clone)]
@@ -1194,13 +1288,20 @@ struct MaterialState {
     base_color: Vec3,
     metallic: f32,
     roughness: f32,
+    /// `emissive * emissive_strength`, premultiplied at construction.
     emissive: Vec3,
     alpha: f32,
+    /// When true, skip Blinn-Phong and output `base_color + emissive` directly.
+    unlit: bool,
 }
 
 impl MaterialState {
     fn from_def(def: &MaterialDef) -> Self {
-        let alpha = def.base_color.as_ref().map(|c| c.a).unwrap_or(1.0);
+        // Explicit scalar `alpha` wins; otherwise fall back to `base_color.a`.
+        let alpha = def
+            .alpha
+            .unwrap_or_else(|| def.base_color.as_ref().map(|c| c.a).unwrap_or(1.0));
+        let strength = def.emissive_strength.unwrap_or(1.0);
         Self {
             base_color: def
                 .base_color
@@ -1213,8 +1314,10 @@ impl MaterialState {
                 .emissive
                 .as_ref()
                 .map(|c| c.to_vec3())
-                .unwrap_or(Vec3::ZERO),
+                .unwrap_or(Vec3::ZERO)
+                * strength,
             alpha,
+            unlit: def.unlit,
         }
     }
 }
@@ -1223,8 +1326,15 @@ struct EnvironmentSettings {
     ambient_color: Vec3,
     ambient_intensity: f32,
     fog_enabled: bool,
+    /// True for `fog_type:"linear"` (near→distance ramp); false uses the legacy
+    /// squared falloff over `fog_distance`.
+    fog_linear: bool,
     fog_color: Vec3,
+    fog_near: f32,
     fog_distance: f32,
+    /// Vertical sky gradient (top, bottom) used to clear the frame. `None` keeps
+    /// the flat clear color.
+    sky_gradient: Option<(Vec3, Vec3)>,
 }
 
 impl Default for EnvironmentSettings {
@@ -1233,8 +1343,11 @@ impl Default for EnvironmentSettings {
             ambient_color: Vec3::ONE,
             ambient_intensity: 0.3,
             fog_enabled: false,
+            fog_linear: false,
             fog_color: Vec3::new(0.7, 0.7, 0.8),
+            fog_near: 0.0,
             fog_distance: 100.0,
+            sky_gradient: None,
         }
     }
 }
@@ -1248,6 +1361,15 @@ fn compute_lighting(
     material: &MaterialState,
     env: &EnvironmentSettings,
 ) -> [f32; 3] {
+    // Unlit surfaces (paint markings, neon, tracers, fx) bypass shading entirely:
+    // they emit `base_color + emissive`, then fog is still applied below so distant
+    // self-lit geometry recedes into the haze like everything else.
+    if material.unlit {
+        let unlit = material.base_color + material.emissive;
+        let c = apply_fog(unlit, position, camera, env);
+        return [c.x, c.y, c.z];
+    }
+
     let n = normal.normalize();
     let view_dir = (camera.position - position).normalize();
 
@@ -1264,7 +1386,8 @@ fn compute_lighting(
                 let to_light = light.position - position;
                 let dist = to_light.length();
                 let dir = to_light / dist.max(0.001);
-                let att = 1.0 / (1.0 + 0.09 * dist + 0.032 * dist * dist);
+                let att = 1.0 / (1.0 + 0.09 * dist + 0.032 * dist * dist)
+                    * range_falloff(dist, light.range);
                 (dir, att)
             }
             LightStateType::Spot => {
@@ -1279,7 +1402,8 @@ fn compute_lighting(
                 } else {
                     0.0
                 };
-                let att = spot_att / (1.0 + 0.09 * dist + 0.032 * dist * dist);
+                let att = spot_att / (1.0 + 0.09 * dist + 0.032 * dist * dist)
+                    * range_falloff(dist, light.range);
                 (dir, att)
             }
         };
@@ -1304,16 +1428,45 @@ fn compute_lighting(
         specular_total += specular;
     }
 
-    let mut final_color = ambient + diffuse_total + specular_total + material.emissive;
-
-    // Fog
-    if env.fog_enabled {
-        let dist = (camera.position - position).length();
-        let fog_factor = (dist / env.fog_distance).clamp(0.0, 1.0);
-        final_color = final_color.lerp(env.fog_color, fog_factor * fog_factor);
-    }
-
+    let lit = ambient + diffuse_total + specular_total + material.emissive;
+    let final_color = apply_fog(lit, position, camera, env);
     [final_color.x, final_color.y, final_color.z]
+}
+
+/// Smooth point/spot-light cutoff: full strength near the source, fading to zero
+/// at `range` (windowed so geometry just past the radius doesn't pop). `None`
+/// keeps the unbounded inverse-square falloff.
+#[inline]
+fn range_falloff(dist: f32, range: Option<f32>) -> f32 {
+    match range {
+        None => 1.0,
+        Some(r) if r <= 0.0 => 1.0,
+        Some(r) => {
+            let x = (dist / r).clamp(0.0, 1.0);
+            let w = 1.0 - x * x;
+            (w * w).clamp(0.0, 1.0)
+        }
+    }
+}
+
+/// Blend a shaded color toward the fog color by distance from the camera.
+/// `linear` fog ramps from `fog_near`→`fog_distance`; otherwise a squared falloff
+/// over `fog_distance` (legacy behavior) is used. Disabled when off.
+#[inline]
+fn apply_fog(color: Vec3, position: Vec3, camera: &CameraState, env: &EnvironmentSettings) -> Vec3 {
+    if !env.fog_enabled {
+        return color;
+    }
+    let dist = (camera.position - position).length();
+    let fog_factor = if env.fog_linear {
+        let near = env.fog_near;
+        let far = env.fog_distance.max(near + 0.001);
+        ((dist - near) / (far - near)).clamp(0.0, 1.0)
+    } else {
+        let f = (dist / env.fog_distance).clamp(0.0, 1.0);
+        f * f
+    };
+    color.lerp(env.fog_color, fog_factor)
 }
 
 fn apply_easing(progress: f32, easing: &EasingType) -> f32 {
