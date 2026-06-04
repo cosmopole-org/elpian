@@ -7,6 +7,7 @@ import 'package:flutter/scheduler.dart';
 import 'bevy_scene_controller.dart';
 import 'dart_scene_renderer.dart';
 import '../models/elpian_node.dart';
+import '../scene3d/gltf/net/model_fetch.dart';
 
 /// A Flutter widget that renders a Bevy 3D scene from JSON.
 ///
@@ -145,6 +146,10 @@ class _BevySceneWidgetState extends State<BevySceneWidget>
   DartSceneRenderer? _dartRenderer;
   Map<String, dynamic>? _parsedScene;
 
+  /// Model URLs already fetched/fed to the Rust renderer, so each streamed glTF
+  /// is downloaded once and not re-requested every frame (P2 model bridge).
+  final Set<String> _requestedModels = {};
+
   static int _globalSceneCounter = 0;
   static bool _systemInitialized = false;
   static bool _ffiAvailable = false;
@@ -249,6 +254,8 @@ class _BevySceneWidgetState extends State<BevySceneWidget>
     if (success) {
       _isInitialized = true;
       widget.onSceneCreated?.call(_controller!);
+      // Stream any glTF models referenced anywhere in the scene (static + dynamic).
+      _streamModels(_parsedScene);
       _controller!.renderFrame(deltaTime: 0);
       _updateImage();
       if (widget.autoStart && !_ticker.isActive) {
@@ -297,6 +304,41 @@ class _BevySceneWidgetState extends State<BevySceneWidget>
     }
   }
 
+  /// Walk a scene fragment, collect `model3d` URLs, and stream any not-yet-fetched
+  /// glTF/GLB bytes into the Rust renderer (the host side of the model bridge).
+  /// No-op on the Dart fallback (which draws capsule placeholders) and on web/native
+  /// where the fetch helper is unavailable (errors are swallowed; capsule stands in).
+  void _streamModels(dynamic node) {
+    if (_useDartRenderer || _controller == null || node == null) return;
+    final urls = <String>{};
+    void scan(dynamic n) {
+      if (n is Map) {
+        if (n['type'] == 'model3d' && n['model'] is String) {
+          urls.add(n['model'] as String);
+        }
+        for (final v in n.values) {
+          scan(v);
+        }
+      } else if (n is List) {
+        for (final e in n) {
+          scan(e);
+        }
+      }
+    }
+
+    scan(node);
+    for (final url in urls) {
+      if (!_requestedModels.add(url)) continue; // already requested
+      fetchModelBytes(url).then((bytes) {
+        if (!mounted || _controller == null) return;
+        _controller!.feedModel(url, bytes);
+      }).catchError((_) {
+        // Allow a later retry if the fetch failed (network blip / offline).
+        _requestedModels.remove(url);
+      });
+    }
+  }
+
   void _updateImage() {
     final frame = _controller?.getFrame();
     if (frame == null || frame.isEmpty) return;
@@ -331,6 +373,9 @@ class _BevySceneWidgetState extends State<BevySceneWidget>
       if (!_useDartRenderer) {
         final json = widget.sceneJson ?? jsonEncode(widget.sceneMap);
         _controller?.updateScene(json);
+        // New entities (e.g. spawned enemies) may reference new models; scan the
+        // dynamic world each update. The static world was scanned once at load.
+        _streamModels(_parsedScene?['world']);
       }
     }
   }

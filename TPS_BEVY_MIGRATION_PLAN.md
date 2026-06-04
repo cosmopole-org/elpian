@@ -178,7 +178,18 @@ Legend: ✅ present · ⚠️ partial · ❌ missing. "Rust" = `bevy_scene` rend
   - [x] `BevySceneWidget.build` reads `scene`(+`staticWorld`/`staticKey`), `width`,
         `height`, `fps`, `interactive`, `renderScale`, `sceneKey`/`sceneId`, `fit`.
   - [x] Scene doc flows through `loadScene`→manager→`SceneDoc` (static world preserved).
-- [ ] **P5 — Rewrite the TPS example on `BevyScene`**
+- [x] **P5 — Rewrite the TPS example on `BevyScene`** ✅
+  - [x] Parameterized `tps_game_program.dart` with a single `SCENE_WIDGET` constant;
+        the 3D node emits `type: SCENE_WIDGET` (kept `renderScale:0.7`, `fps:30`,
+        `interactive:false`, the `__SCENE__` splice + `staticWorld` payload).
+  - [x] `tpsGameProgramBevy` flips that one line to `'BevyScene'` — shared logic.
+  - [x] Verified every material/mesh/env/light/model field the program emits is
+        honored by the Bevy schema (P1/P2): no DSL shims needed (`segments` aliased).
+  - [x] New page `example/lib/examples/tps_game_bevy_example.dart` (`TpsGameBevyPage`),
+        reusing `GameLoading`; A/B launcher in `main.dart` (Bevy = showcase, Impeller kept).
+  - [x] Bevy widget streams `model3d` URLs via `fetchModelBytes`→`controller.feedModel`
+        (host side of the P2 bridge), so streamed glTF characters/vehicles load on the
+        Bevy path; capsule placeholder until bytes arrive.
 - [ ] **P6 — Build (WASM+native), verify, optimize, document**
 
 ---

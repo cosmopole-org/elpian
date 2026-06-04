@@ -32,6 +32,12 @@ const String tpsGameProgram = r'''
 //  ELPIAN STRIKE FORCE — DOWNTOWN  ·  a third-person shooter in one script
 // ════════════════════════════════════════════════════════════════════════
 
+// A/B 3D backend: the 2D widget type used for the 3D layer. 'GameScene' is the
+// Flutter-Impeller pure-Dart renderer; 'BevyScene' is the Rust/Bevy software
+// renderer. `tpsGameProgramBevy` (Dart) flips this one line to switch backends —
+// every other line of the game is shared, so the two builds stay in lockstep.
+var SCENE_WIDGET = 'GameScene';
+
 // ---- Typed-value decoding (event payloads arrive as Elpian typed values) ---
 function decodeTypedValue(value) {
   if (value === null || value === undefined) return value;
@@ -1275,7 +1281,7 @@ function buildTree() {
   // updates); renderScale rasterizes the 3D layer at 70% and upscales, cutting
   // fill/overdraw on high-DPI screens. The HUD is a separate 2D layer and stays
   // crisp.
-  ch.push({ type: 'GameScene', key: 'world3d', props: { scene: '__SCENE__', width: W, height: H, fps: 30, interactive: false, renderScale: 0.7 } });
+  ch.push({ type: SCENE_WIDGET, key: 'world3d', props: { scene: '__SCENE__', width: W, height: H, fps: 30, interactive: false, renderScale: 0.7 } });
   pushHud(ch, W, H);
   if (G.state === 'playing') pushControls(ch, W, H);
   if (G.state === 'menu') pushMenu(ch, W, H);
@@ -1353,3 +1359,13 @@ render();
 askHost('setInterval', { handler: 'gameTick', delay: 33 });
 askHost('println', 'Elpian Strike Force — Downtown booted');
 ''';
+
+/// The same TPS program, but driving the **Rust/Bevy** software renderer
+/// (`BevyScene`) for the 3D layer instead of the Flutter-Impeller `GameScene`.
+/// Only the one `SCENE_WIDGET` line differs, so the gameplay, HUD, controls, AI,
+/// city builder and streamed glTF models are byte-for-byte identical — this is
+/// the A/B showcase of the migration target.
+final String tpsGameProgramBevy = tpsGameProgram.replaceFirst(
+  "var SCENE_WIDGET = 'GameScene';",
+  "var SCENE_WIDGET = 'BevyScene';",
+);
