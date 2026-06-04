@@ -9,6 +9,38 @@ rendered by the pure‑Dart `GameScene` software renderer (`lib/src/scene3d/`)._
 
 ---
 
+## 0. Implementation status
+
+| Phase | Item | Status |
+|------|------|--------|
+| 1A | Parse the static world once (`staticWorld`/`staticKey`), merge dynamic | ✅ done |
+| 1B | Bake static world‑space lit triangles once, re‑project per frame | ✅ done |
+| 1C | Throttle GameScene repaint to target fps (fps 60→30) | ✅ done |
+| 1D | Opt‑in `renderScale` offscreen downsample (game uses 0.7) | ✅ done |
+| 2E | Frustum‑cull static nodes by cached bounding sphere | ✅ done |
+| 2F | Tighten depth sort | ⬜ todo |
+| 3G | glTF skinning cache (quantized anim time) | ⬜ todo |
+| 4H | Drop redundant per‑window emissive boxes; neon as accent | ✅ done |
+| 4I | Bake point lights (now baked into static geometry) | ✅ (via 1B) |
+| 4J | Trim segment counts / prop density (bollards) | ◑ partial |
+| 4K | Fix z‑fighting decals | ⬜ todo (paths toned) |
+| 4L | Palette / dusk‑fog pass (fog 62→50) | ✅ done |
+| 5M | Perf harness + regression guards | ✅ done |
+
+**Measured:** the static‑baked + frustum‑culled path renders a 288‑mesh city
+grid **~2× faster** than the per‑frame dynamic path
+(`test/scene3d_static_perf_test.dart`) — on top of eliminating the per‑frame
+JSON re‑parse of the whole city (1A), which that benchmark doesn't even count.
+A renderer parity test (`test/scene3d_static_render_test.dart`) confirms the
+baked output matches the dynamic path within specular tolerance, and a visual
+capture harness (`example/integration_test/tps_capture_test.dart`) renders the
+in‑game and overhead shots for inspection.
+
+Commits on `claude/beautiful-galileo-G4PzB`: renderer/engine optimizations →
+visual declutter → perf harness.
+
+---
+
 ## 1. How it works today (and why it lags)
 
 The game runs **two independent loops**:
