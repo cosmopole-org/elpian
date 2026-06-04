@@ -54,6 +54,11 @@ class BevySceneWidget extends StatefulWidget {
   /// How the rendered image should fit within the widget bounds.
   final BoxFit fit;
 
+  /// Down-raster factor for the render buffer (0 < scale ≤ 1). The Rust frame is
+  /// rendered at `size * renderScale` and upscaled to fill the widget, trading
+  /// sharpness for fill-rate (parity with the scene3d `renderScale`). 1.0 = native.
+  final double renderScale;
+
   const BevySceneWidget({
     super.key,
     this.sceneJson,
@@ -68,6 +73,7 @@ class BevySceneWidget extends StatefulWidget {
     this.onSceneCreated,
     this.sceneId,
     this.fit = BoxFit.contain,
+    this.renderScale = 1.0,
   }) : assert(sceneJson != null || sceneMap != null,
             'Either sceneJson or sceneMap must be provided');
 
@@ -80,6 +86,9 @@ class BevySceneWidget extends StatefulWidget {
     final fps = (props['fps'] as num?)?.toInt() ?? 60;
     final interactive = props['interactive'] as bool? ?? true;
     final fit = _parseFit(props['fit'] as String?);
+    final renderScale =
+        ((props['renderScale'] as num?)?.toDouble() ?? 1.0).clamp(0.1, 1.0);
+    final sceneId = props['sceneKey'] as String? ?? props['sceneId'] as String?;
 
     if (sceneData is Map<String, dynamic>) {
       return BevySceneWidget(
@@ -89,6 +98,8 @@ class BevySceneWidget extends StatefulWidget {
         fps: fps,
         interactive: interactive,
         fit: fit,
+        renderScale: renderScale,
+        sceneId: sceneId,
       );
     }
 
@@ -99,6 +110,8 @@ class BevySceneWidget extends StatefulWidget {
       fps: fps,
       interactive: interactive,
       fit: fit,
+      renderScale: renderScale,
+      sceneId: sceneId,
     );
   }
 
@@ -199,11 +212,15 @@ class _BevySceneWidgetState extends State<BevySceneWidget>
       return;
     }
 
-    // FFI path
+    // FFI path. Apply renderScale so the buffer is rendered smaller and upscaled
+    // to fill the widget (cheaper fill-rate), matching the scene3d down-raster.
     final renderBox = context.findRenderObject() as RenderBox?;
     final size = renderBox?.size ?? const Size(512, 512);
-    final renderWidth = (widget.width ?? size.width).toInt().clamp(1, 4096);
-    final renderHeight = (widget.height ?? size.height).toInt().clamp(1, 4096);
+    final scale = widget.renderScale.clamp(0.1, 1.0);
+    final renderWidth =
+        ((widget.width ?? size.width) * scale).round().clamp(1, 4096);
+    final renderHeight =
+        ((widget.height ?? size.height) * scale).round().clamp(1, 4096);
 
     final id = widget.sceneId ?? 'bevy_scene_${_globalSceneCounter++}';
     _controller = BevySceneController(sceneId: id);
@@ -251,6 +268,17 @@ class _BevySceneWidgetState extends State<BevySceneWidget>
 
   void _onTick(Duration elapsed) {
     if (!_isInitialized || !mounted) return;
+
+    // Throttle to the target fps: the ticker fires every vsync, but we only
+    // render once per frame interval (e.g. 30fps → ~33ms), so a non-60 fps cap
+    // actually reduces CPU instead of rendering every vsync.
+    if (_lastFrameTime != Duration.zero && widget.fps > 0) {
+      final sinceRender =
+          (elapsed - _lastFrameTime).inMicroseconds / 1000000.0;
+      final frameInterval = 1.0 / widget.fps;
+      // 0.9 slack avoids dropping a frame when vsync lands just shy of the mark.
+      if (sinceRender < frameInterval * 0.9) return;
+    }
 
     final deltaTime = _lastFrameTime == Duration.zero
         ? 1.0 / widget.fps

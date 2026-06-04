@@ -98,9 +98,9 @@ Legend: ✅ present · ⚠️ partial · ❌ missing. "Rust" = `bevy_scene` rend
 | CPU skeletal skinning + clip sampling | ✅ | ✅ *(P2)* | ❌ | P2 |
 | Model `tint` / per‑node emissive | ✅ | ✅ *(P2)* | ⚠️ *(P2: tint on placeholder)* | P2 |
 | Model embedded **texture images** (PNG/JPEG) | ✅ | ❌ *(deferred: needs image decoder)* | ❌ | P2+ |
-| Static‑world bake/cache (`staticKey`) | ✅ | ❌ | ❌ | P3 |
-| `renderScale` down‑raster | ✅ | ⚠️ (fixed buffer size) | ⚠️ | P3 |
-| fps throttle / non‑interactive overlay | ✅ | ⚠️ | ⚠️ | P3/P4 |
+| Static‑world bake/cache (`staticKey`) | ✅ | ✅ *(P3: manager cache)* | n/a | P3 |
+| `renderScale` down‑raster | ✅ | ✅ *(P3: widget buffer scale)* | ⚠️ | P3 |
+| fps throttle / non‑interactive overlay | ✅ | ✅ *(P3: ticker throttle)* | ✅ | P3/P4 |
 | Host viewport env read | ✅ (JS) | n/a (widget) | n/a | P4 |
 
 ---
@@ -163,8 +163,21 @@ Legend: ✅ present · ⚠️ partial · ❌ missing. "Rust" = `bevy_scene` rend
   - [x] Dart fallback: `model3d` draws a tinted capsule placeholder (full glTF in the fallback
         deferred — the Rust path is the real implementation).
   - [ ] *Deferred:* embedded **texture images** (PNG/JPEG) — needs a wasm‑safe image decoder.
-- [ ] **P3 — Static‑world bake/cache, renderScale & frame splicing**
-- [ ] **P4 — Widget/registry, viewport & overlay wiring for the Bevy path**
+- [x] **P3 — Static‑world bake/cache, renderScale & frame splicing** ✅
+  - [x] Manager bakes `staticWorld` once (keyed by `staticKey`), splices the dynamic
+        `world` each frame via `renderer.render_split` (`rust/tests/static_world.rs`).
+  - [x] `renderScale` down‑raster: widget renders the FFI buffer at `size*renderScale`,
+        upscaled to fill (parity with scene3d). `BevySceneWidget.build` reads `renderScale`.
+  - [x] fps throttle: the render ticker only renders once per `1/fps` interval (so a
+        non‑60 cap actually saves CPU); `interactive:false` already disables gestures.
+  - [x] Off‑screen geometry is rejected at the fill stage (bbox clamp) + native rayon
+        tiled rasterizer retained (broad‑phase frustum cull left as a future tuning).
+- [x] **P4 — Widget/registry, viewport & overlay wiring for the Bevy path** ✅
+  - [x] `BevyScene`/`Bevy3D`/`Scene3D` registered → `BevySceneWidget.build`
+        (`lib/src/core/elpian_engine.dart`).
+  - [x] `BevySceneWidget.build` reads `scene`(+`staticWorld`/`staticKey`), `width`,
+        `height`, `fps`, `interactive`, `renderScale`, `sceneKey`/`sceneId`, `fit`.
+  - [x] Scene doc flows through `loadScene`→manager→`SceneDoc` (static world preserved).
 - [ ] **P5 — Rewrite the TPS example on `BevyScene`**
 - [ ] **P6 — Build (WASM+native), verify, optimize, document**
 
