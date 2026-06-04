@@ -55,6 +55,9 @@ export 'src/scene3d/core.dart';
 export 'src/scene3d/renderer.dart';
 export 'src/scene3d/scene_parser.dart';
 export 'src/scene3d/game_scene_widget.dart';
+// glTF 2.0 / GLB model loading + skeletal animation (real rigged characters).
+export 'src/scene3d/gltf/gltf_model.dart';
+export 'src/scene3d/gltf/model_cache.dart';
 
 // Widgets - Core
 export 'src/widgets/elpian_container.dart';

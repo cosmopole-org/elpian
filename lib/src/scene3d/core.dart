@@ -197,6 +197,18 @@ class Mat4 {
     return Quaternion.fromAxisAngle(axis, angle).toMat4();
   }
 
+  /// Build from 16 column-major values (the layout used by glTF `node.matrix`
+  /// and `inverseBindMatrices`, and by this engine's internal storage). No
+  /// transpose is applied — element `i` maps directly to column `i ~/ 4`,
+  /// row `i % 4`.
+  factory Mat4.fromColumnMajor(List<double> v) {
+    final m = Float64List(16);
+    for (var i = 0; i < 16 && i < v.length; i++) {
+      m[i] = v[i];
+    }
+    return Mat4._(m);
+  }
+
   factory Mat4.fromRows(Vec3 r0, Vec3 r1, Vec3 r2) {
     final m = Float64List(16);
     m[0] = r0.x; m[4] = r0.y; m[8] = r0.z;

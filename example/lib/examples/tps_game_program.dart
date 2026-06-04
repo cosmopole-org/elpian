@@ -5,8 +5,13 @@
 /// on-screen touch controls. It drives Elpian's renderer through
 /// `askHost('render', ...)` and runs its frame loop via `askHost('setInterval')`.
 ///
-/// Only foundational, reusable capabilities live in the Dart/Elpian layer
-/// (the `GameScene` 3D widget and a geometry cache in the software renderer).
+/// Only foundational, reusable capabilities live in the Dart/Elpian layer:
+/// the `GameScene` 3D widget, the geometry cache in the software renderer, and
+/// the glTF 2.0 / GLB pipeline (streaming model loader, CPU skeletal-animation
+/// skinning, and textured `drawVertices` batching). The player and enemies are
+/// real rigged glTF characters streamed from the Khronos sample-asset CDN and
+/// animated with their skeletal walk cycles — see `addPlayerModel` /
+/// `addEnemyModel` and the `model3d` scene node they emit.
 library;
 
 const String tpsGameProgram = r'''
@@ -76,6 +81,23 @@ function readViewport() {
   }
 }
 
+// ---- Character models -----------------------------------------------------
+// Real, rigged glTF 2.0 / GLB characters streamed over the internet from the
+// Khronos sample-asset CDN (CORS-enabled). Elpian's renderer downloads, parses,
+// skins and animates them on the fly; until a model arrives a capsule
+// placeholder stands in. CesiumMan is a textured walking human (the player);
+// RiggedFigure is a lighter articulated humanoid (enemies). Both ship with a
+// skeletal walk-cycle clip, so limbs, arms and body move like a real person.
+var GLTF_BASE = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/';
+var MODEL_PLAYER = GLTF_BASE + 'CesiumMan/glTF-Binary/CesiumMan.glb';
+var MODEL_GRUNT = GLTF_BASE + 'RiggedFigure/glTF-Binary/RiggedFigure.glb';
+var MODEL_HEAVY = GLTF_BASE + 'RiggedFigure/glTF-Binary/RiggedFigure.glb';
+// Per-model tuning: uniform scale + yaw offset (deg) so the rig faces its
+// travel direction in Elpian's -Z-forward, +Y-up world.
+var PLAYER_SCALE = 1.12, PLAYER_YAW = 180;
+var GRUNT_SCALE = 1.15, GRUNT_YAW = 180;
+var HEAVY_SCALE = 1.62, HEAVY_YAW = 180;
+
 // ════════════════════════════════════════════════════════════════════════
 //  GAME STATE
 // ════════════════════════════════════════════════════════════════════════
@@ -86,7 +108,7 @@ function newGame() {
     state: 'menu',
     time: 0,
     wave: 0, kills: 0, score: 0,
-    player: { x: 0, z: 8, y: 0, vy: 0, yaw: 0, health: 100, maxHealth: 100, grounded: true, hurtT: 0 },
+    player: { x: 0, z: 8, y: 0, vy: 0, yaw: 0, health: 100, maxHealth: 100, grounded: true, hurtT: 0, animTime: 0 },
     cam: { yaw: 0.5, pitch: -0.22, recoil: 0 },
     weapon: { mag: MAG_SIZE, reserve: RESERVE_START, reloading: false, reloadT: 0, cool: 0 },
     input: { joyActive: false, jx: 0, jz: 0, jmag: 0, jdx: 0, jdy: 0, firing: false },
@@ -256,7 +278,7 @@ function spawnEnemy() {
   var ex = Math.cos(ang) * (ARENA - 2.5), ez = Math.sin(ang) * (ARENA - 2.5);
   var heavy = (G.wave >= 3 && Math.random() < 0.32);
   G.enemies.push({
-    x: ex, z: ez, y: 0, yaw: 0,
+    x: ex, z: ez, y: 0, yaw: 0, animTime: rand(0, 2),
     health: heavy ? 170 : 80, maxHealth: heavy ? 170 : 80, alive: true, flash: 0, dying: 0,
     speed: heavy ? 2.5 : 3.5, attackRange: heavy ? 6 : 9, viewRange: 30,
     fireT: rand(0.6, 1.8), fireRate: heavy ? 1.5 : 2.0, projSpeed: heavy ? 13 : 11,
@@ -289,6 +311,8 @@ function updateEnemies() {
       resolveObstacles(e, 0.55);
       e.x = clamp(e.x, -ARENA + 1, ARENA - 1);
       e.z = clamp(e.z, -ARENA + 1, ARENA - 1);
+      // Drive the skeletal walk cycle while the enemy is on the move.
+      e.animTime += DT * (1.0 + e.speed * 0.16);
     }
     e.fireT -= DT;
     if (G.state === 'playing' && d < e.viewRange && e.fireT <= 0 && hasLineOfSight(e, p)) {
@@ -370,11 +394,16 @@ function updatePlayer() {
   var mx = rgtx * inp.jx + fwdx * inp.jz;
   var mz = rgtz * inp.jx + fwdz * inp.jz;
   var ml = Math.sqrt(mx * mx + mz * mz);
+  var movingNow = false;
   if (ml > 0.001) {
     mx /= ml; mz /= ml;
     var spd = MOVE_SPEED * Math.min(1, inp.jmag);
     p.x += mx * spd * DT; p.z += mz * spd * DT;
+    movingNow = inp.jmag > 0.06;
   }
+  // Advance the skeletal walk clip only while moving; freeze to a planted
+  // stance when idle so the feet don't slide.
+  p.animTime += DT * (movingNow ? (1.1 + Math.min(1, inp.jmag) * 0.7) : 0.0);
   p.yaw = c.yaw;
   p.x = clamp(p.x, -ARENA + 0.7, ARENA - 0.7);
   p.z = clamp(p.z, -ARENA + 0.7, ARENA - 0.7);
@@ -443,34 +472,63 @@ function matC(c, o) {
 }
 function mixHurt(c, h) { if (h <= 0) return c; return col(lerp(c.r, 1, h), lerp(c.g, 0.3, h), lerp(c.b, 0.3, h)); }
 
+// Emit a real rigged glTF character node. The renderer streams/caches the
+// model, samples its skeletal walk clip at `animTime`, skins the mesh on the
+// CPU and draws it textured + lit. `yaw` is the entity's facing (radians);
+// `yawOff` rotates the rig to face its travel direction.
+function modelNode(url, x, y, z, yaw, animTime, scale, yawOff, opts) {
+  opts = opts || {};
+  var n = {
+    type: 'model3d',
+    model: url,
+    anim_time: animTime,
+    transform: {
+      position: vec(x, y, z),
+      rotation: vec(0, deg(yaw) + (yawOff || 0), 0),
+      scale: vec(scale, scale, scale)
+    }
+  };
+  if (opts.anim !== undefined) n.animation = opts.anim;
+  if (opts.tint) n.tint = opts.tint;
+  if (opts.emissive) { n.emissive = opts.emissive; n.emissive_strength = opts.estr || 1.0; }
+  return n;
+}
+
+// A held weapon prop, parented to the character's right side and aimed along
+// its facing. (The glTF rigs have no gun, so we attach one procedurally.)
+function addWeaponProp(w, x, y, z, yaw) {
+  var ch = [];
+  ch.push(box(vec(0, 0, -0.42), vec(0.12, 0.12, 0.72), matC(col(0.08, 0.09, 0.11), { roughness: 0.4, metallic: 0.6 })));
+  ch.push(box(vec(0, 0, -0.88), vec(0.10, 0.10, 0.18), matC(col(0.05, 0.05, 0.06), {})));
+  ch.push(box(vec(0, -0.13, -0.06), vec(0.08, 0.18, 0.12), matC(col(0.10, 0.10, 0.13), { roughness: 0.5 })));
+  var rgtx = Math.cos(yaw), rgtz = Math.sin(yaw), fwx = Math.sin(yaw), fwz = -Math.cos(yaw);
+  var gx = x + rgtx * 0.32 + fwx * 0.14;
+  var gz = z + rgtz * 0.32 + fwz * 0.14;
+  w.push({ type: 'group', transform: { position: vec(gx, y + 1.15, gz), rotation: vec(0, deg(yaw), 0), scale: vec(1, 1, 1) }, children: ch });
+}
+
 function addPlayerModel(w) {
   var p = G.player;
-  var hurt = p.hurtT > 0 ? 0.45 : 0;
-  var team = col(0.18, 0.45, 0.85);
-  var skin = col(0.85, 0.68, 0.55);
-  var dark = col(0.12, 0.13, 0.16);
-  var ch = [];
-  ch.push(box(vec(0, 0.5, 0), vec(0.55, 1.0, 0.36), matC(dark, { roughness: 0.6 })));
-  ch.push(box(vec(0, 1.25, 0), vec(0.62, 0.72, 0.4), matC(mixHurt(team, hurt), { roughness: 0.5, emissive: col(0.05, 0.12, 0.25), estr: 0.4 })));
-  ch.push(box(vec(0, 1.78, 0), vec(0.32, 0.32, 0.32), matC(skin, { roughness: 0.6 })));
-  ch.push(box(vec(0.34, 1.30, -0.05), vec(0.16, 0.16, 0.16), matC(team, { roughness: 0.5 })));
-  ch.push(box(vec(0.30, 1.18, -0.45), vec(0.12, 0.12, 0.8), matC(col(0.08, 0.09, 0.11), { roughness: 0.4, metallic: 0.6 })));
-  ch.push(box(vec(0.30, 1.18, -0.92), vec(0.10, 0.10, 0.18), matC(col(0.05, 0.05, 0.06), {})));
-  w.push({ type: 'group', transform: { position: vec(p.x, p.y, p.z), rotation: vec(0, deg(p.yaw), 0), scale: vec(1, 1, 1) }, children: ch });
+  var opts = {};
+  if (p.hurtT > 0) { var h = clamp(p.hurtT / 0.5, 0, 1); opts.emissive = col(0.7 * h, 0.04, 0.04); opts.estr = 2.2; }
+  w.push(modelNode(MODEL_PLAYER, p.x, p.y, p.z, p.yaw, p.animTime, PLAYER_SCALE, PLAYER_YAW, opts));
+  addWeaponProp(w, p.x, p.y, p.z, p.yaw);
 }
 
 function addEnemyModel(w, e) {
-  var t = 1, topple = 0;
-  if (!e.alive) { var k = clamp(e.dying / 0.5, 0, 1); t = Math.max(0.06, k); topple = (1 - k) * 82; }
-  var body = e.type === 'heavy' ? col(0.5, 0.12, 0.5) : col(0.72, 0.16, 0.16);
-  if (e.flash > 0) body = col(1, 0.92, 0.92);
-  var glow = e.type === 'heavy' ? col(0.22, 0, 0.22) : col(0.22, 0, 0);
-  var ch = [];
-  ch.push(box(vec(0, 0.5, 0), vec(0.5, 1.0, 0.34), matC(col(0.10, 0.08, 0.08), {})));
-  ch.push(box(vec(0, 1.2, 0), vec(0.66, 0.72, 0.42), matC(body, { roughness: 0.5, emissive: glow, estr: 0.5 })));
-  ch.push(box(vec(0, 1.74, 0), vec(0.34, 0.32, 0.34), matC(col(0.12, 0.1, 0.1), {})));
-  ch.push(box(vec(0, 1.74, 0.18), vec(0.26, 0.08, 0.05), matC(col(1, 0.3, 0.1), { unlit: true, emissive: col(1, 0.2, 0.05), estr: 2 })));
-  w.push({ type: 'group', transform: { position: vec(e.x, e.y, e.z), rotation: vec(topple, deg(e.yaw), 0), scale: vec(t, t, t) }, children: ch });
+  var heavy = e.type === 'heavy';
+  var sc = heavy ? HEAVY_SCALE : GRUNT_SCALE;
+  var topple = 0;
+  if (!e.alive) { var k = clamp(e.dying / 0.5, 0, 1); sc *= Math.max(0.2, k); topple = (1 - k) * 82; }
+  var opts = { tint: heavy ? col(0.72, 0.45, 1.0) : col(1.0, 0.55, 0.5) };
+  if (e.flash > 0) { opts.emissive = col(0.95, 0.92, 0.92); opts.estr = 2.0; }
+  else { opts.emissive = heavy ? col(0.20, 0.0, 0.24) : col(0.22, 0.0, 0.0); opts.estr = 0.55; }
+  var url = heavy ? MODEL_HEAVY : MODEL_GRUNT;
+  var yawOff = heavy ? HEAVY_YAW : GRUNT_YAW;
+  var n = modelNode(url, e.x, e.y, e.z, e.yaw, e.animTime, sc, yawOff, opts);
+  // Topple backwards while dying (rotate about X, keep facing + rig offset).
+  n.transform.rotation = vec(topple, deg(e.yaw) + yawOff, 0);
+  w.push(n);
   if (e.alive) {
     var frac = clamp(e.health / e.maxHealth, 0, 1);
     w.push(box(vec(e.x, 2.4, e.z), vec(1.0, 0.10, 0.06), matC(col(0.08, 0.08, 0.08), { unlit: true })));
@@ -535,7 +593,9 @@ function buildScene() {
     w.push(box(vec(o.x, o.sy / 2, o.z), vec(o.sx, o.sy, o.sz), matC(o.color, { roughness: 0.85 })));
   }
 
-  if (G.state !== 'menu') addPlayerModel(w);
+  // Always render the player rig (even on the menu) so its model streams in
+  // and is posed/ready the moment combat begins.
+  addPlayerModel(w);
   for (var i = 0; i < G.enemies.length; i++) addEnemyModel(w, G.enemies[i]);
 
   for (var i = 0; i < G.ebullets.length; i++) {

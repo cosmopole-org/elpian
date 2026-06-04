@@ -48,6 +48,8 @@ class SceneParser {
           lights.add(_parseLight(item));
           break;
         case 'mesh3d':
+        case 'model3d':
+        case 'gltf':
         case 'group':
         case 'particles':
         case 'text3d':
@@ -242,6 +244,22 @@ class SceneParser {
           .toList();
     }
 
+    // Parse glTF model reference + playback state (model3d / gltf nodes).
+    String? gltfUrl;
+    Map<String, dynamic>? extra = json['extra'] as Map<String, dynamic>?;
+    if (type == 'model3d' || type == 'gltf') {
+      gltfUrl = (json['model'] ?? json['url'] ?? json['gltf'] ?? json['src'])
+          ?.toString();
+      extra = <String, dynamic>{
+        if (extra != null) ...extra,
+        'animation': json['animation'] ?? json['anim'],
+        'anim_time': json['anim_time'] ?? json['time'],
+        'tint': json['tint'],
+        'emissive': json['emissive'],
+        'emissive_strength': json['emissive_strength'],
+      };
+    }
+
     return SceneNode(
       type: type,
       id: json['id'] as String?,
@@ -259,7 +277,8 @@ class SceneParser {
       rigidBody: rigidBody,
       text: json['text'] as String?,
       textSize: (json['text_size'] as num?)?.toDouble(),
-      extra: json['extra'] as Map<String, dynamic>?,
+      gltfUrl: gltfUrl,
+      extra: extra,
     );
   }
 

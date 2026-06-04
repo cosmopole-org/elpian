@@ -6,24 +6,46 @@
 library;
 
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart' show Color;
 import 'core.dart';
+import 'gltf/gltf_model.dart';
+import 'gltf/model_cache.dart';
 
 // ════════════════════════════════════════════════════════════════════
-//  PROJECTED TRIANGLE (screen-space)
+//  PROJECTED PRIMITIVES (screen-space)
 // ════════════════════════════════════════════════════════════════════
 
-class _ScreenTri {
+/// Anything that can be depth-sorted into the painter's-algorithm draw list.
+abstract class _Drawable {
+  double get depth;
+}
+
+class _ScreenTri implements _Drawable {
   final List<ui.Offset> pts;
   final Color color;
+  @override
   final double depth;
   final bool isWireframe;
   final Color? wireColor;
 
   _ScreenTri(this.pts, this.color, this.depth,
       {this.isWireframe = false, this.wireColor});
+}
+
+/// A batched, pre-sorted set of triangles from a single glTF primitive,
+/// drawn in one [ui.Canvas.drawVertices] call. Carries an optional image
+/// shader for texturing; per-vertex colours supply lighting (multiplied with
+/// the texture via [ui.BlendMode.modulate]).
+class _ModelBatch implements _Drawable {
+  final ui.Vertices vertices;
+  final ui.ImageShader? shader;
+  @override
+  final double depth;
+
+  _ModelBatch(this.vertices, this.shader, this.depth);
 }
 
 class _ScreenParticle {
@@ -75,29 +97,42 @@ class Scene3DRenderer {
     final vp = proj * view;
 
     final screenTris = <_ScreenTri>[];
+    final screenBatches = <_ModelBatch>[];
     final screenParticles = <_ScreenParticle>[];
 
     // Process all scene nodes
     _processNodes(
       nodes, Mat4.identity(), vp, view, size,
       camera, environment, lights,
-      screenTris, screenParticles,
+      screenTris, screenBatches, screenParticles,
     );
 
-    // Sort back-to-front (painter's algorithm)
-    screenTris.sort((a, b) => b.depth.compareTo(a.depth));
+    // Merge primitive triangles and model batches, then sort back-to-front
+    // (painter's algorithm) so glTF characters interleave correctly with the
+    // procedural world geometry.
+    final drawables = <_Drawable>[...screenTris, ...screenBatches];
+    drawables.sort((a, b) => b.depth.compareTo(a.depth));
     screenParticles.sort((a, b) => b.depth.compareTo(a.depth));
 
-    // Draw triangles
     final triPaint = ui.Paint()..style = ui.PaintingStyle.fill;
     final wirePaint = ui.Paint()
       ..style = ui.PaintingStyle.stroke
       ..strokeWidth = 1.0;
+    // Reusable paint for model batches (shader swapped per textured batch).
+    final batchPaint = ui.Paint()
+      ..style = ui.PaintingStyle.fill
+      ..color = const Color(0xFFFFFFFF);
 
     // B: reuse a single Path across triangles (reset instead of reallocating
     // a new ui.Path per triangle each frame).
     final path = ui.Path();
-    for (final st in screenTris) {
+    for (final d in drawables) {
+      if (d is _ModelBatch) {
+        batchPaint.shader = d.shader;
+        canvas.drawVertices(d.vertices, ui.BlendMode.modulate, batchPaint);
+        continue;
+      }
+      final st = d as _ScreenTri;
       path.reset();
       path
         ..moveTo(st.pts[0].dx, st.pts[0].dy)
@@ -145,6 +180,7 @@ class Scene3DRenderer {
     Environment3D environment,
     List<Light3D> lights,
     List<_ScreenTri> screenTris,
+    List<_ModelBatch> screenBatches,
     List<_ScreenParticle> screenParticles,
   ) {
     for (final node in nodes) {
@@ -175,6 +211,13 @@ class Scene3DRenderer {
             camera, environment, lights, screenTris,
           );
           break;
+        case 'model3d':
+        case 'gltf':
+          _renderModel(
+            node, worldXform, vp, size,
+            camera, environment, lights, screenTris, screenBatches,
+          );
+          break;
         case 'particles':
           _renderParticles(
             node, worldXform, vp, size, camera, screenParticles,
@@ -187,7 +230,7 @@ class Scene3DRenderer {
         _processNodes(
           node.children, worldXform, vp, view, size,
           camera, environment, lights,
-          screenTris, screenParticles,
+          screenTris, screenBatches, screenParticles,
         );
       }
     }
@@ -207,8 +250,26 @@ class Scene3DRenderer {
     // Generate or use cached mesh
     final mesh = node.mesh ?? _generateMesh(node.meshType, node.meshParams);
     if (mesh == null) return;
-
     final mat = node.material ?? const Material3D();
+    _emitMeshTris(
+      mesh, mat, worldXform, vp, size, camera, environment, lights, screenTris,
+    );
+  }
+
+  /// Transforms, lights, clips and projects a [Mesh]'s triangles into
+  /// [screenTris]. Shared by procedural [SceneNode]s and the loading
+  /// placeholder drawn while a glTF model streams in.
+  void _emitMeshTris(
+    Mesh mesh,
+    Material3D mat,
+    Mat4 worldXform,
+    Mat4 vp,
+    ui.Size size,
+    Camera3D camera,
+    Environment3D environment,
+    List<Light3D> lights,
+    List<_ScreenTri> screenTris,
+  ) {
     final nearPlane = camera.near;
 
     for (final tri in mesh.triangles) {
@@ -305,6 +366,336 @@ class Scene3DRenderer {
         ));
       }
     }
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  //  GLTF MODEL RENDERING (skinned, animated, textured)
+  // ════════════════════════════════════════════════════════════════════
+
+  /// Renders a `model3d`/`gltf` node. Streams the model in via
+  /// [GltfModelCache]; until it is ready a capsule placeholder is drawn so the
+  /// character is never invisible. Once loaded, the requested animation clip is
+  /// sampled at the node's time, the skeleton is posed, vertices are skinned on
+  /// the CPU, lit and projected, then each primitive is emitted as one batched
+  /// [ui.Canvas.drawVertices] call.
+  void _renderModel(
+    SceneNode node,
+    Mat4 worldXform,
+    Mat4 vp,
+    ui.Size size,
+    Camera3D camera,
+    Environment3D environment,
+    List<Light3D> lights,
+    List<_ScreenTri> screenTris,
+    List<_ModelBatch> screenBatches,
+  ) {
+    final url = node.gltfUrl;
+    if (url == null) return;
+    final model = GltfModelCache.instance.get(url);
+
+    if (model == null) {
+      // Loading (or failed): draw a subtle capsule placeholder.
+      final placeholder = _generateMesh('Capsule', const {
+        'radius': 0.45,
+        'height': 1.0,
+        'segments': 10,
+      });
+      if (placeholder != null) {
+        _emitMeshTris(
+          placeholder,
+          const Material3D(baseColor: Vec3(0.3, 0.34, 0.42), roughness: 0.8),
+          worldXform * Mat4.translation(const Vec3(0, 0.5, 0)),
+          vp, size, camera, environment, lights, screenTris,
+        );
+      }
+      return;
+    }
+
+    final extra = node.extra ?? const <String, dynamic>{};
+    final animName = extra['animation'] as String?;
+    final animIdx = model.resolveAnimation(animName);
+    final time = (extra['anim_time'] as num?)?.toDouble() ?? _elapsed;
+
+    final tint = _vec3From(extra['tint']) ?? Vec3.one;
+    final emissiveOverride = _vec3From(extra['emissive']);
+    final emissiveStrength = (extra['emissive_strength'] as num?)?.toDouble() ?? 1.0;
+
+    final globals = model.computeGlobalTransforms(animIdx, time);
+
+    for (var ni = 0; ni < model.nodes.length; ni++) {
+      final meshIdx = model.nodes[ni].mesh;
+      if (meshIdx == null || meshIdx >= model.meshes.length) continue;
+
+      final skinIdx = model.nodes[ni].skin;
+      List<Mat4>? jointMats;
+      if (skinIdx != null && skinIdx < model.skins.length) {
+        final skin = model.skins[skinIdx];
+        jointMats = List<Mat4>.generate(
+          skin.joints.length,
+          (k) => globals[skin.joints[k]] * skin.inverseBind[k],
+          growable: false,
+        );
+      }
+      final modelMat = worldXform * globals[ni];
+
+      for (final prim in model.meshes[meshIdx]) {
+        _emitPrimitive(
+          prim, model, jointMats, worldXform, modelMat,
+          vp, size, camera, environment, lights,
+          tint, emissiveOverride, emissiveStrength, screenBatches,
+        );
+      }
+    }
+  }
+
+  void _emitPrimitive(
+    GltfPrimitive prim,
+    GltfModel model,
+    List<Mat4>? jointMats,
+    Mat4 worldXform,
+    Mat4 modelMat,
+    Mat4 vp,
+    ui.Size size,
+    Camera3D camera,
+    Environment3D environment,
+    List<Light3D> lights,
+    Vec3 tint,
+    Vec3? emissiveOverride,
+    double emissiveStrength,
+    List<_ModelBatch> screenBatches,
+  ) {
+    final vcount = prim.vertexCount;
+    if (vcount == 0) return;
+
+    // Resolve material → engine Material3D for lighting (texture handled by
+    // the per-batch shader; baseColor here is the glTF baseColorFactor × tint).
+    final gmat = (prim.material != null && prim.material! < model.materials.length)
+        ? model.materials[prim.material!]
+        : const GltfMaterial();
+    final litMat = Material3D(
+      baseColor: gmat.baseColor.scale(tint),
+      metallic: gmat.metallic,
+      roughness: gmat.roughness,
+      emissive: emissiveOverride ?? gmat.emissive,
+      emissiveStrength: emissiveOverride != null ? emissiveStrength : 1.0,
+      doubleSided: gmat.doubleSided,
+    );
+
+    GltfTexture? texture;
+    if (gmat.baseColorTexture != null &&
+        gmat.baseColorTexture! < model.textures.length &&
+        prim.uvs != null) {
+      texture = model.textures[gmat.baseColorTexture!];
+    }
+    final texW = texture?.width ?? 1.0;
+    final texH = texture?.height ?? 1.0;
+
+    final pos = prim.positions;
+    final nrm = prim.normals;
+    final uvs = prim.uvs;
+    final skinned = prim.skinned && jointMats != null;
+    final hasNormals = nrm != null;
+
+    // Per-vertex scratch (one allocation pass over the primitive).
+    final worldPos = List<Vec3>.filled(vcount, Vec3.zero);
+    final screen = List<ui.Offset>.filled(vcount, ui.Offset.zero);
+    final ndcZ = Float32List(vcount);
+    final visible = List<bool>.filled(vcount, false);
+    final litColor = hasNormals ? List<Vec3>.filled(vcount, Vec3.zero) : null;
+    final nearPlane = camera.near;
+
+    for (var v = 0; v < vcount; v++) {
+      final px = pos[v * 3], py = pos[v * 3 + 1], pz = pos[v * 3 + 2];
+      final Vec3 wp;
+      if (skinned) {
+        final sp = _skinPoint(jointMats!, prim.joints!, prim.weights!, v, px, py, pz);
+        wp = worldXform.transformPoint(sp);
+      } else {
+        wp = modelMat.transformPoint(Vec3(px, py, pz));
+      }
+      worldPos[v] = wp;
+
+      if (hasNormals) {
+        final nx = nrm[v * 3], ny = nrm[v * 3 + 1], nz = nrm[v * 3 + 2];
+        Vec3 wn;
+        if (skinned) {
+          final sn = _skinNormal(jointMats!, prim.joints!, prim.weights!, v, nx, ny, nz);
+          wn = worldXform.transformDir(sn).normalized;
+        } else {
+          wn = modelMat.transformDir(Vec3(nx, ny, nz)).normalized;
+        }
+        final uv = uvs != null ? Vec2(uvs[v * 2], uvs[v * 2 + 1]) : Vec2.zero;
+        litColor![v] = _fogged(
+          _computeLighting(wp, wn, uv, litMat, environment, lights, camera.position),
+          wp, camera, environment,
+        );
+      }
+
+      final clip = vp.transformVec4(wp);
+      if (clip.w <= nearPlane) {
+        visible[v] = false;
+        continue;
+      }
+      final ndc = clip.perspectiveDivide();
+      if (ndc.x < -1.6 || ndc.x > 1.6 || ndc.y < -1.6 || ndc.y > 1.6) {
+        visible[v] = false;
+        continue;
+      }
+      screen[v] = ui.Offset(
+        (ndc.x * 0.5 + 0.5) * size.width,
+        (0.5 - ndc.y * 0.5) * size.height,
+      );
+      ndcZ[v] = ndc.z;
+      visible[v] = true;
+    }
+
+    final triCount = prim.triangleCount;
+    final indices = prim.indices;
+
+    // Collect visible triangles so they can be depth-sorted within the batch
+    // (no per-pixel z-buffer — painter's order inside one drawVertices call).
+    final tris = <_PrimTri>[];
+    for (var t = 0; t < triCount; t++) {
+      final i0 = indices != null ? indices[t * 3] : t * 3;
+      final i1 = indices != null ? indices[t * 3 + 1] : t * 3 + 1;
+      final i2 = indices != null ? indices[t * 3 + 2] : t * 3 + 2;
+      if (!visible[i0] || !visible[i1] || !visible[i2]) continue;
+
+      final s0 = screen[i0], s1 = screen[i1], s2 = screen[i2];
+      final cross = (s1.dx - s0.dx) * (s2.dy - s0.dy) -
+          (s1.dy - s0.dy) * (s2.dx - s0.dx);
+      if (cross > 0 && !gmat.doubleSided) continue;
+
+      Color c0, c1, c2;
+      if (hasNormals) {
+        final lc = litColor!; // non-null whenever hasNormals
+        c0 = _toColor(lc[i0]);
+        c1 = _toColor(lc[i1]);
+        c2 = _toColor(lc[i2]);
+      } else {
+        // Flat shading: derive a face normal from world positions.
+        final wp0 = worldPos[i0], wp1 = worldPos[i1], wp2 = worldPos[i2];
+        final fn = (wp1 - wp0).cross(wp2 - wp0).normalized;
+        final lit = _fogged(
+          _computeLighting(
+              (wp0 + wp1 + wp2) / 3.0, fn, Vec2.zero, litMat, environment, lights, camera.position),
+          (wp0 + wp1 + wp2) / 3.0, camera, environment,
+        );
+        c0 = c1 = c2 = _toColor(lit);
+      }
+
+      final depth = (ndcZ[i0] + ndcZ[i1] + ndcZ[i2]) / 3.0;
+      tris.add(_PrimTri(s0, s1, s2, c0, c1, c2,
+          texture != null
+              ? ui.Offset(uvs![i0 * 2] * texW, uvs[i0 * 2 + 1] * texH)
+              : ui.Offset.zero,
+          texture != null
+              ? ui.Offset(uvs![i1 * 2] * texW, uvs[i1 * 2 + 1] * texH)
+              : ui.Offset.zero,
+          texture != null
+              ? ui.Offset(uvs![i2 * 2] * texW, uvs[i2 * 2 + 1] * texH)
+              : ui.Offset.zero,
+          depth));
+    }
+
+    if (tris.isEmpty) return;
+    tris.sort((a, b) => b.depth.compareTo(a.depth));
+
+    final n = tris.length * 3;
+    final positions = List<ui.Offset>.filled(n, ui.Offset.zero, growable: false);
+    final colors = List<Color>.filled(n, const Color(0xFFFFFFFF), growable: false);
+    final texCoords = texture != null
+        ? List<ui.Offset>.filled(n, ui.Offset.zero, growable: false)
+        : null;
+    var avgDepth = 0.0;
+    for (var i = 0; i < tris.length; i++) {
+      final t = tris[i];
+      final b = i * 3;
+      positions[b] = t.s0;
+      positions[b + 1] = t.s1;
+      positions[b + 2] = t.s2;
+      colors[b] = t.c0;
+      colors[b + 1] = t.c1;
+      colors[b + 2] = t.c2;
+      if (texCoords != null) {
+        texCoords[b] = t.uv0;
+        texCoords[b + 1] = t.uv1;
+        texCoords[b + 2] = t.uv2;
+      }
+      avgDepth += t.depth;
+    }
+    avgDepth /= tris.length;
+
+    final vertices = ui.Vertices(
+      ui.VertexMode.triangles,
+      positions,
+      colors: colors,
+      textureCoordinates: texCoords,
+    );
+    screenBatches.add(_ModelBatch(vertices, texture?.shader, avgDepth));
+  }
+
+  /// Linear-blend skin a position. Reads joint matrices directly (no [Vec3]
+  /// allocation per bone) for speed in the per-vertex hot loop.
+  static Vec3 _skinPoint(List<Mat4> jm, Uint16List joints, Float32List weights,
+      int v, double px, double py, double pz) {
+    var x = 0.0, y = 0.0, z = 0.0;
+    final b = v * 4;
+    for (var w = 0; w < 4; w++) {
+      final wt = weights[b + w];
+      if (wt == 0) continue;
+      final m = jm[joints[b + w]].m;
+      x += wt * (m[0] * px + m[4] * py + m[8] * pz + m[12]);
+      y += wt * (m[1] * px + m[5] * py + m[9] * pz + m[13]);
+      z += wt * (m[2] * px + m[6] * py + m[10] * pz + m[14]);
+    }
+    return Vec3(x, y, z);
+  }
+
+  static Vec3 _skinNormal(List<Mat4> jm, Uint16List joints, Float32List weights,
+      int v, double nx, double ny, double nz) {
+    var x = 0.0, y = 0.0, z = 0.0;
+    final b = v * 4;
+    for (var w = 0; w < 4; w++) {
+      final wt = weights[b + w];
+      if (wt == 0) continue;
+      final m = jm[joints[b + w]].m;
+      x += wt * (m[0] * nx + m[4] * ny + m[8] * nz);
+      y += wt * (m[1] * nx + m[5] * ny + m[9] * nz);
+      z += wt * (m[2] * nx + m[6] * ny + m[10] * nz);
+    }
+    return Vec3(x, y, z);
+  }
+
+  Vec3 _fogged(Vec3 color, Vec3 worldPos, Camera3D camera, Environment3D env) {
+    final dist = (worldPos - camera.position).length;
+    final f = env.fogFactor(dist);
+    if (f >= 1.0) return color;
+    return Vec3(
+      color.x * f + env.fogColor.x * (1 - f),
+      color.y * f + env.fogColor.y * (1 - f),
+      color.z * f + env.fogColor.z * (1 - f),
+    );
+  }
+
+  static Color _toColor(Vec3 c) => Color.fromARGB(
+        255,
+        (c.x * 255).round().clamp(0, 255),
+        (c.y * 255).round().clamp(0, 255),
+        (c.z * 255).round().clamp(0, 255),
+      );
+
+  static Vec3? _vec3From(dynamic v) {
+    if (v is Map) {
+      double c(Object? a, Object? b) =>
+          (a as num?)?.toDouble() ?? (b as num?)?.toDouble() ?? 0.0;
+      return Vec3(
+        c(v['r'], v['x']),
+        c(v['g'], v['y']),
+        c(v['b'], v['z']),
+      );
+    }
+    return null;
   }
 
   Vec3 _computeLighting(
@@ -570,6 +961,18 @@ class _ClippedResult {
   final List<Vec4> verts;
   final List<Vec3> colors;
   _ClippedResult(this.verts, this.colors);
+}
+
+/// A projected, lit glTF triangle awaiting batch assembly. Holds screen-space
+/// positions, per-vertex colours (lighting), texture coordinates (in texel
+/// space) and an average NDC depth for within-batch painter sorting.
+class _PrimTri {
+  final ui.Offset s0, s1, s2;
+  final Color c0, c1, c2;
+  final ui.Offset uv0, uv1, uv2;
+  final double depth;
+  _PrimTri(this.s0, this.s1, this.s2, this.c0, this.c1, this.c2, this.uv0,
+      this.uv1, this.uv2, this.depth);
 }
 
 Color _vec3ToColor(Vec3 c) => Color.fromARGB(
