@@ -190,7 +190,15 @@ Legend: ✅ present · ⚠️ partial · ❌ missing. "Rust" = `bevy_scene` rend
   - [x] Bevy widget streams `model3d` URLs via `fetchModelBytes`→`controller.feedModel`
         (host side of the P2 bridge), so streamed glTF characters/vehicles load on the
         Bevy path; capsule placeholder until bytes arrive.
-- [ ] **P6 — Build (WASM+native), verify, optimize, document**
+- [x] **P6 — Build (WASM+native), verify, optimize, document** ✅ *(native+tests+docs; WASM build deferred to CI — target not installed in this sandbox)*
+  - [x] `cargo build --release` (shipped LTO config) clean; `cargo build` clean.
+  - [x] `cargo test` all green: feature_parity (9), gltf_skinning (4), static_world (2),
+        renderer_golden (golden stable), vm_ast_integration (10), double_buffer.
+  - [x] Docs: `3D_GRAPHICS.md` (Bevy parity note on materials/textures + Rust glTF note),
+        `README.md` (two-backend / A/B TPS note); this plan's matrix updated.
+  - [ ] *Deferred to CI/user:* WASM build (`wasm32-unknown-unknown` not installed here),
+        `flutter analyze`/`flutter test` (Flutter not in sandbox), embedded glTF image
+        textures on the Rust path, and a full downtown perf profile on the Bevy path.
 
 ---
 

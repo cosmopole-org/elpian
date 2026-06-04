@@ -249,6 +249,13 @@ Mesh primitives: **Box**, **Sphere**, **Plane**, **Cylinder**, **Capsule**, **To
 Materials: PBR with color, metallic, roughness
 Lighting: Point, Directional, Spot with shadows
 
+**Two 3D backends.** The same scene JSON runs on either the Flutter-Impeller
+`GameScene` renderer or the Rust/Bevy `BevyScene` software renderer (native FFI /
+WASM, with a pure-Dart fallback). The example app's third-person shooter is
+playable on both from an A/B launcher — see `example/lib/examples/` and the
+`TPS_BEVY_MIGRATION_PLAN.md` for the parity work (materials, environment, lights,
+procedural textures, static-world caching, and streamed glTF/GLB skeletal models).
+
 ### VM-Driven UI
 
 #### QuickJS runtime sample (`ElpianRuntime.quickJs`)
