@@ -1351,6 +1351,15 @@ class SceneNode {
   String? gltfUrl;
   Map<String, dynamic>? extra;
 
+  /// Marks geometry that never moves and is lit by unchanging lights (e.g. a
+  /// pre-built static world). The renderer may bake and cache its world-space
+  /// lit triangles once and only re-project them each frame. See [renderCache].
+  bool isStatic;
+
+  /// Opaque per-node cache owned by the renderer (baked static geometry).
+  /// Stored here so it persists across frames for reused [SceneNode] instances.
+  Object? renderCache;
+
   SceneNode({
     required this.type,
     this.id,
@@ -1373,6 +1382,7 @@ class SceneNode {
     this.textSize,
     this.gltfUrl,
     this.extra,
+    this.isStatic = false,
   }) : children = children ?? [];
 
   // Cache the composed local transform. position/rotation/scale are immutable

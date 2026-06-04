@@ -1095,14 +1095,20 @@ function buildDynamicWorld() {
   return w;
 }
 
-// Build the full scene JSON. The huge static city is spliced in from its
-// pre-serialized fragment, so only the moving entities are encoded each frame.
+// Version tag for the static city. The renderer parses + bakes `staticWorld`
+// once and caches it under this key; only bump it if the city geometry changes.
+var CITY_VERSION = 'downtown-v1';
+
+// Build the full scene JSON. The huge static city is shipped under `staticWorld`
+// (parsed + baked exactly once, keyed by `staticKey`) while only the moving
+// entities are encoded into `world` each frame.
 function buildSceneJson() {
   var dyn = buildDynamicWorld();
   var parts = [];
   for (var i = 0; i < dyn.length; i++) parts.push(JSON.stringify(dyn[i]));
   var dynJson = parts.join(',');
-  return '{"world":[' + CITY_FRAGMENT + (dynJson ? ',' + dynJson : '') + ']}';
+  return '{"staticKey":"' + CITY_VERSION + '","staticWorld":[' + CITY_FRAGMENT +
+    '],"world":[' + dynJson + ']}';
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -1268,7 +1274,11 @@ function buildTree() {
   readViewport();
   var W = VP.w, H = VP.h;
   var ch = [];
-  ch.push({ type: 'GameScene', key: 'world3d', props: { scene: '__SCENE__', width: W, height: H, fps: 60, interactive: false } });
+  // fps 30 matches the game tick (no point rasterizing faster than the data
+  // updates); renderScale rasterizes the 3D layer at 70% and upscales, cutting
+  // fill/overdraw on high-DPI screens. The HUD is a separate 2D layer and stays
+  // crisp.
+  ch.push({ type: 'GameScene', key: 'world3d', props: { scene: '__SCENE__', width: W, height: H, fps: 30, interactive: false, renderScale: 0.7 } });
   pushHud(ch, W, H);
   if (G.state === 'playing') pushControls(ch, W, H);
   if (G.state === 'menu') pushMenu(ch, W, H);

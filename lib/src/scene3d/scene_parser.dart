@@ -25,7 +25,12 @@ class ParsedScene {
 /// Parses a JSON map into a [ParsedScene].
 class SceneParser {
   /// Parse the top-level scene JSON.
-  static ParsedScene parse(Map<String, dynamic> json) {
+  ///
+  /// When [ensureLight] is false, no fallback directional light is injected if
+  /// the world declares none. This lets a dynamic sub-scene be parsed and then
+  /// merged with a separately-parsed (and cached) static scene that already
+  /// carries the lights, without doubling up the fallback light.
+  static ParsedScene parse(Map<String, dynamic> json, {bool ensureLight = true}) {
     final world = json['world'] as List<dynamic>? ?? [];
 
     var camera = Camera3D();
@@ -59,7 +64,7 @@ class SceneParser {
     }
 
     // Ensure at least one directional light exists
-    if (lights.isEmpty) {
+    if (ensureLight && lights.isEmpty) {
       lights.add(const Light3D(
         type: LightType.directional,
         direction: Vec3(0.5, -1.0, 0.3),
@@ -279,6 +284,7 @@ class SceneParser {
       textSize: (json['text_size'] as num?)?.toDouble(),
       gltfUrl: gltfUrl,
       extra: extra,
+      isStatic: json['static'] as bool? ?? false,
     );
   }
 
