@@ -272,6 +272,7 @@ class _EventEnabledWidgetState extends State<EventEnabledWidget> {
       'pointerdown',
       'pointerup',
       'pointermove',
+      'pointercancel',
       'pointerenter',
       'pointerexit',
       'pointerhover',
@@ -286,6 +287,22 @@ class _EventEnabledWidgetState extends State<EventEnabledWidget> {
             : null,
         onPointerMove: events.containsKey('pointermove')
             ? (details) => _dispatcher.dispatchPointerMove(_elementId, details)
+            : null,
+        // The OS can cancel a pointer stream (e.g. a system gesture or the
+        // pointer being taken over) without ever firing `up`. Surface it so a
+        // consumer like a joystick still resets instead of staying "held".
+        onPointerCancel: events.containsKey('pointercancel')
+            ? (details) => _dispatcher.dispatchEvent(
+                  ElpianPointerEvent(
+                    type: 'pointercancel',
+                    eventType: ElpianEventType.pointerCancel,
+                    target: _elementId,
+                    position: details.position,
+                    localPosition: details.localPosition,
+                    pointerId: details.pointer,
+                  ),
+                  _elementId,
+                )
             : null,
         child: result,
       );

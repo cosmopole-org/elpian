@@ -122,7 +122,7 @@ function newGame() {
     player: { x: 0, z: 8, y: 0, vy: 0, yaw: 0, health: 100, maxHealth: 100, grounded: true, hurtT: 0, animTime: 0 },
     cam: { yaw: 0.5, pitch: -0.22, recoil: 0 },
     weapon: { mag: MAG_SIZE, reserve: RESERVE_START, reloading: false, reloadT: 0, cool: 0 },
-    input: { joyActive: false, jx: 0, jz: 0, jmag: 0, jdx: 0, jdy: 0, firing: false },
+    input: { joyActive: false, jx: 0, jz: 0, jmag: 0, jdx: 0, jdy: 0, firing: false, joyPointer: -1 },
     enemies: [],
     ebullets: [],
     fx: [],
@@ -745,8 +745,14 @@ function pushControls(ch, W, H) {
     { type: 'Container', style: { width: JOY, height: JOY, backgroundColor: 'rgba(20,28,40,0.40)', borderRadius: JOY, borderColor: 'rgba(140,180,220,0.5)', borderWidth: 2 } },
     pos(tx - THUMB / 2, ty - THUMB / 2, null, null, { type: 'Container', style: { width: THUMB, height: THUMB, backgroundColor: 'rgba(120,200,255,0.55)', borderRadius: THUMB, borderColor: 'rgba(220,240,255,0.85)', borderWidth: 2 } })
   ];
+  // Driven by raw POINTER events (not drag/pan): a Listener stays out of the
+  // gesture arena, so it reliably receives pointerup/pointercancel even when the
+  // pointer leaves the pad or another recogniser is active. That guarantees the
+  // stick recentres and the character halts the instant the finger lifts —
+  // pan's onPanEnd was being dropped in the per-frame rebuild, leaving it stuck.
   ch.push(pos(24, null, null, 28, {
-    type: 'Container', key: 'joyPad', style: { width: JOY, height: JOY }, events: { dragstart: 'onMoveStart', drag: 'onMove', dragend: 'onMoveEnd' },
+    type: 'Container', key: 'joyPad', style: { width: JOY, height: JOY },
+    events: { pointerdown: 'onMoveStart', pointermove: 'onMove', pointerup: 'onMoveEnd', pointercancel: 'onMoveEnd' },
     children: [{ type: 'Stack', style: { width: JOY, height: JOY }, children: ring }]
   }));
 
@@ -818,9 +824,25 @@ function updateJoy(ev) {
   G.input.jx = vx / JOY_HALF; G.input.jz = -vy / JOY_HALF; G.input.jmag = mag / JOY_HALF;
   G.input.joyActive = true;
 }
-function onMoveStart(input) { updateJoy(decodeEvent(input)); }
-function onMove(input) { updateJoy(decodeEvent(input)); }
-function onMoveEnd(input) { G.input.joyActive = false; G.input.jx = 0; G.input.jz = 0; G.input.jmag = 0; G.input.jdx = 0; G.input.jdy = 0; }
+// Only the finger that grabbed the pad steers it: remember its pointer id so a
+// second touch (e.g. the fire hand sliding over the pad) can't hijack or, worse,
+// fail to release the stick.
+function joyOwnsEvent(ev) {
+  if (!G.input.joyActive) return true;
+  if (!ev || ev.pointerId === undefined || ev.pointerId === null) return true;
+  return ev.pointerId === G.input.joyPointer;
+}
+function resetJoy() {
+  G.input.joyActive = false; G.input.jx = 0; G.input.jz = 0; G.input.jmag = 0;
+  G.input.jdx = 0; G.input.jdy = 0; G.input.joyPointer = -1;
+}
+function onMoveStart(input) {
+  var ev = decodeEvent(input);
+  G.input.joyPointer = (ev && ev.pointerId !== undefined && ev.pointerId !== null) ? ev.pointerId : -1;
+  updateJoy(ev);
+}
+function onMove(input) { var ev = decodeEvent(input); if (joyOwnsEvent(ev)) updateJoy(ev); }
+function onMoveEnd(input) { var ev = decodeEvent(input); if (joyOwnsEvent(ev)) resetJoy(); }
 
 function onLookStart(input) {}
 function onLook(input) {
