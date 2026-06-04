@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -146,9 +147,19 @@ class _BevySceneWidgetState extends State<BevySceneWidget>
   DartSceneRenderer? _dartRenderer;
   Map<String, dynamic>? _parsedScene;
 
-  /// Model URLs already fetched/fed to the Rust renderer, so each streamed glTF
-  /// is downloaded once and not re-requested every frame (P2 model bridge).
-  final Set<String> _requestedModels = {};
+  /// Model-streaming bridge state (P2). Each streamed glTF is downloaded once,
+  /// then fed into the renderer and retried until the feed succeeds — the Rust
+  /// scene (notably the WASM module on web) may not be ready the instant the
+  /// first bytes arrive, so a fire-and-forget feed could leave a model stuck on
+  /// its capsule placeholder forever.
+  ///
+  /// - [_fetchingModels]: URLs with an in-flight download (dedupes fetches).
+  /// - [_modelBytes]: downloaded bytes whose feed has not yet been accepted,
+  ///   kept so a later frame can re-feed without re-downloading.
+  /// - [_fedModels]: URLs the renderer has decoded — done, never touched again.
+  final Set<String> _fetchingModels = {};
+  final Map<String, Uint8List> _modelBytes = {};
+  final Set<String> _fedModels = {};
 
   static int _globalSceneCounter = 0;
   static bool _systemInitialized = false;
@@ -222,10 +233,17 @@ class _BevySceneWidgetState extends State<BevySceneWidget>
     final renderBox = context.findRenderObject() as RenderBox?;
     final size = renderBox?.size ?? const Size(512, 512);
     final scale = widget.renderScale.clamp(0.1, 1.0);
+    // Render the software buffer at physical-pixel resolution so it matches the
+    // display instead of being upscaled from logical size (the GPU-rasterized
+    // scene3d path is implicitly full-DPR, so a logical-size buffer here looks
+    // blurry by comparison on any retina/high-DPI screen). The DPR contribution
+    // is capped so the CPU rasterizer cost stays bounded on 3x/4x panels.
+    final dpr =
+        (MediaQuery.maybeOf(context)?.devicePixelRatio ?? 1.0).clamp(1.0, 2.0);
     final renderWidth =
-        ((widget.width ?? size.width) * scale).round().clamp(1, 4096);
+        ((widget.width ?? size.width) * scale * dpr).round().clamp(1, 4096);
     final renderHeight =
-        ((widget.height ?? size.height) * scale).round().clamp(1, 4096);
+        ((widget.height ?? size.height) * scale * dpr).round().clamp(1, 4096);
 
     final id = widget.sceneId ?? 'bevy_scene_${_globalSceneCounter++}';
     _controller = BevySceneController(sceneId: id);
@@ -304,10 +322,12 @@ class _BevySceneWidgetState extends State<BevySceneWidget>
     }
   }
 
-  /// Walk a scene fragment, collect `model3d` URLs, and stream any not-yet-fetched
+  /// Walk a scene fragment, collect `model3d` URLs, and stream any not-yet-fed
   /// glTF/GLB bytes into the Rust renderer (the host side of the model bridge).
-  /// No-op on the Dart fallback (which draws capsule placeholders) and on web/native
-  /// where the fetch helper is unavailable (errors are swallowed; capsule stands in).
+  /// Downloads are deduped and feeds are retried until accepted, so a model is
+  /// never permanently stuck on its capsule placeholder after a transient
+  /// fetch/feed failure. No-op on the Dart fallback (which draws capsule
+  /// placeholders) — there is nothing to feed.
   void _streamModels(dynamic node) {
     if (_useDartRenderer || _controller == null || node == null) return;
     final urls = <String>{};
@@ -328,13 +348,36 @@ class _BevySceneWidgetState extends State<BevySceneWidget>
 
     scan(node);
     for (final url in urls) {
-      if (!_requestedModels.add(url)) continue; // already requested
+      if (_fedModels.contains(url)) continue; // already decoded by the renderer
+
+      // Bytes already downloaded but not yet accepted: re-feed them now (the
+      // renderer may have become ready since the last attempt). This runs every
+      // frame `_streamModels` is called, so a transiently-rejected model recovers
+      // on a later tick without re-downloading.
+      final cached = _modelBytes[url];
+      if (cached != null) {
+        if (_controller!.feedModel(url, cached)) {
+          _fedModels.add(url);
+          _modelBytes.remove(url);
+        }
+        continue;
+      }
+
+      if (!_fetchingModels.add(url)) continue; // download already in flight
       fetchModelBytes(url).then((bytes) {
+        _fetchingModels.remove(url);
         if (!mounted || _controller == null) return;
-        _controller!.feedModel(url, bytes);
+        if (_controller!.feedModel(url, bytes)) {
+          _fedModels.add(url);
+        } else {
+          // Renderer not ready yet (e.g. WASM still initializing): keep the
+          // bytes and retry feeding on a later frame instead of dropping the
+          // model and showing its capsule placeholder forever.
+          _modelBytes[url] = bytes;
+        }
       }).catchError((_) {
         // Allow a later retry if the fetch failed (network blip / offline).
-        _requestedModels.remove(url);
+        _fetchingModels.remove(url);
       });
     }
   }

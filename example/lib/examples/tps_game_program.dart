@@ -1278,10 +1278,11 @@ function buildTree() {
   var W = VP.w, H = VP.h;
   var ch = [];
   // fps 30 matches the game tick (no point rasterizing faster than the data
-  // updates); renderScale rasterizes the 3D layer at 70% and upscales, cutting
-  // fill/overdraw on high-DPI screens. The HUD is a separate 2D layer and stays
-  // crisp.
-  ch.push({ type: SCENE_WIDGET, key: 'world3d', props: { scene: '__SCENE__', width: W, height: H, fps: 30, interactive: false, renderScale: 0.7 } });
+  // updates). renderScale 1.0 rasterizes the 3D layer at full resolution; the
+  // BevyScene widget additionally renders at the device pixel ratio so the
+  // software buffer matches the display (crisp on high-DPI screens) rather than
+  // being upscaled from logical size. The HUD is a separate 2D layer.
+  ch.push({ type: SCENE_WIDGET, key: 'world3d', props: { scene: '__SCENE__', width: W, height: H, fps: 30, interactive: false, renderScale: 1.0 } });
   pushHud(ch, W, H);
   if (G.state === 'playing') pushControls(ch, W, H);
   if (G.state === 'menu') pushMenu(ch, W, H);
