@@ -797,7 +797,7 @@ function cityPark() {
   buildFountain(0, 0);
   // Park trees (kept clear of the fountain + paths).
   var spots = [[-6, -6], [6, -6], [-6, 6], [6, 6], [-7.5, 0.5], [7.5, -0.5], [0.5, -7.5], [-0.5, 7.5]];
-  for (var i = 0; i < spots.length; i++) buildTree(spots[i][0], spots[i][1], srange(0.85, 1.25));
+  for (var i = 0; i < spots.length; i++) buildParkTree(spots[i][0], spots[i][1], srange(0.85, 1.25));
   // Park benches facing the fountain + ornamental lamps at the corners.
   buildBench(-3.2, -3.2, 45); buildBench(3.2, -3.2, -45);
   buildBench(-3.2, 3.2, 135); buildBench(3.2, 3.2, -135);
@@ -817,7 +817,7 @@ function buildFountain(cx, cz) {
   obBox(cx, cz, 4.0, 1.5, 4.0);
 }
 
-function buildTree(x, z, s) {
+function buildParkTree(x, z, s) {
   cnPush(cyl(vec(x, 0.9 * s, z), 0.16 * s, 1.8 * s, null, mTrunk(), 8));
   var g0 = srand(), g1 = srand();
   cnPush(sph(vec(x, 2.0 * s, z), 0.95 * s, mLeaf(g0), 10));
