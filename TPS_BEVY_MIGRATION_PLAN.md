@@ -124,11 +124,13 @@ Legend: ✅ present · ⚠️ partial · ❌ missing. "Rust" = `bevy_scene` rend
 - **Don't fork the game logic.** Re‑use the existing QuickJS program; only the 3D **node type**
   (`GameScene` → `BevyScene`) and any schema‑field shims change. Gameplay, HUD, controls,
   AI, city builder stay byte‑for‑byte where possible.
-- **Open question for the user (resolve before P2):** _Is full in‑Rust glTF streaming required
-  on **web**, or is it acceptable for web to use the Dart fallback's existing glTF pipeline while
-  native/desktop uses the new Rust pipeline?_ This materially changes P2 size. Default assumption
-  if unanswered: **implement the Rust GLB pipeline for native, bridge fetch through JS for WASM,
-  and keep the Dart fallback's glTF as the web safety net.**
+- **DECIDED (user, 2026‑06‑04):** **Full Rust everywhere via JS‑bridge.** P2 implements the GLB +
+  skeletal‑skinning pipeline in Rust for *all* platforms; on **web/WASM**, model downloads are
+  bridged through the **JS host** (`askHost`/FFI callback) and fed back into Rust to decode/cache.
+  The Dart‑fallback glTF remains only as a last‑resort safety net when the WASM module is absent.
+- **DECIDED (user, 2026‑06‑04):** **Keep both TPS variants with an A/B toggle.** The Bevy TPS
+  becomes the showcase, but the original Impeller `GameScene` TPS stays selectable for visual A/B
+  comparison (kept until P6 confirms parity; do not delete it).
 
 ---
 
