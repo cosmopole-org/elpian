@@ -21,6 +21,7 @@ use std::sync::Arc;
 
 use glam::{Mat4, Vec2, Vec3, Vec4};
 
+use crate::bevy_scene::gltf::{self, GltfModel};
 use crate::bevy_scene::schema::*;
 
 // ── Renderer Core ────────────────────────────────────────────────────
@@ -47,6 +48,10 @@ pub struct SceneRenderer {
     /// then rasterized in one pass (serial on wasm, tiled-parallel on native). See A4.
     /// Reused across frames to avoid per-frame allocation.
     projected: Vec<ProjectedTri>,
+    /// Decoded glTF/GLB models keyed by URL. Populated out-of-band via
+    /// `load_model_bytes` (FFI feed / host bridge); `model3d` nodes look up their
+    /// posed geometry here, falling back to a capsule placeholder when absent.
+    models: HashMap<String, Arc<GltfModel>>,
 }
 
 /// A triangle projected to screen space, ready for the fill stage. Plain data so
@@ -96,7 +101,26 @@ impl SceneRenderer {
             elapsed_time: 0.0,
             mesh_cache: HashMap::new(),
             projected: Vec::new(),
+            models: HashMap::new(),
         }
+    }
+
+    /// Decode and cache a streamed model's bytes (GLB or embedded-buffer glTF),
+    /// keyed by its URL. Returns true if the bytes parsed into a usable model.
+    /// Idempotent: re-feeding the same URL replaces the cached model.
+    pub fn load_model_bytes(&mut self, url: String, bytes: &[u8]) -> bool {
+        match gltf::parse_model(bytes) {
+            Some(model) => {
+                self.models.insert(url, Arc::new(model));
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Whether a decoded model is cached for `url`.
+    pub fn has_model(&self, url: &str) -> bool {
+        self.models.contains_key(url)
     }
 
     /// Return the cached triangle list for a mesh descriptor, generating it on
@@ -376,6 +400,15 @@ impl SceneRenderer {
                     self.render_world_node(child, &world, view_proj, camera, lights, env);
                 }
             }
+            JsonNode::Model3D(model) => {
+                let local = model.transform.to_mat4();
+                let world = *parent_transform * local;
+                self.render_model(model, &world, view_proj, camera, lights, env);
+
+                for child in &model.children {
+                    self.render_world_node(child, &world, view_proj, camera, lights, env);
+                }
+            }
             JsonNode::RigidBody(rb) => {
                 let local = rb.transform.to_mat4();
                 let world = *parent_transform * local;
@@ -575,6 +608,86 @@ impl SceneRenderer {
             self.rasterize_triangles(
                 &triangles,
                 &particle_world,
+                view_proj,
+                camera,
+                lights,
+                &material,
+                env,
+            );
+        }
+    }
+
+    /// Render a streamed glTF `model3d` node. When the model bytes have been fed
+    /// into the cache, the model is posed for its animation clip + `anim_time` and
+    /// drawn skinned/tinted/lit. Until then a tinted capsule placeholder stands in
+    /// so gameplay never blocks on a download (parity with the scene3d behavior).
+    fn render_model(
+        &mut self,
+        model: &Model3DNode,
+        world: &Mat4,
+        view_proj: &Mat4,
+        camera: &CameraState,
+        lights: &[LightState],
+        env: &EnvironmentSettings,
+    ) {
+        let tint = model.tint.as_ref().map(|c| c.to_vec3()).unwrap_or(Vec3::ONE);
+        let node_emissive = model
+            .emissive
+            .as_ref()
+            .map(|c| c.to_vec3())
+            .unwrap_or(Vec3::ZERO);
+        let strength = model.emissive_strength.unwrap_or(1.0);
+
+        let Some(gltf_model) = self.models.get(&model.model).cloned() else {
+            // Placeholder: a tinted capsule at the node transform.
+            let material = MaterialState {
+                base_color: tint * Vec3::new(0.6, 0.6, 0.65),
+                metallic: 0.0,
+                roughness: 0.8,
+                emissive: node_emissive * strength,
+                alpha: 1.0,
+                unlit: false,
+                texture: TextureKind::None,
+                texture_color2: Vec3::ZERO,
+                texture_scale: 1.0,
+            };
+            let triangles = self.mesh_for(&MeshType::Parameterized(MeshTypeParam::Capsule {
+                radius: 0.4,
+                depth: 1.0,
+            }));
+            self.rasterize_triangles(&triangles, world, view_proj, camera, lights, &material, env);
+            return;
+        };
+
+        // Resolve the animation clip: explicit name/index, else the first clip.
+        let anim = match &model.animation {
+            Some(StringOrIndex::Index(i)) => Some(*i as usize),
+            Some(StringOrIndex::Name(n)) => gltf_model.animation_index_by_name(n),
+            None => {
+                if gltf_model.animation_count() > 0 {
+                    Some(0)
+                } else {
+                    None
+                }
+            }
+        };
+
+        let posed = gltf_model.pose(anim, model.anim_time);
+        for prim in &posed {
+            let material = MaterialState {
+                base_color: prim.base_color * tint,
+                metallic: 0.0,
+                roughness: 0.6,
+                emissive: (prim.emissive + node_emissive) * strength,
+                alpha: 1.0,
+                unlit: false,
+                texture: TextureKind::None,
+                texture_color2: Vec3::ZERO,
+                texture_scale: 1.0,
+            };
+            self.rasterize_triangles(
+                &prim.triangles,
+                world,
                 view_proj,
                 camera,
                 lights,

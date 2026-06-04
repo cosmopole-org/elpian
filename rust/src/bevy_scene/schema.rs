@@ -35,6 +35,8 @@ pub enum JsonNode {
     // 3D World Elements
     #[serde(rename = "mesh3d")]
     Mesh3D(Mesh3DNode),
+    #[serde(rename = "model3d", alias = "gltf")]
+    Model3D(Model3DNode),
     #[serde(rename = "light")]
     Light(LightNode),
     #[serde(rename = "camera")]
@@ -121,6 +123,42 @@ pub struct Mesh3DNode {
     pub animation: Option<AnimationDef>,
     #[serde(default)]
     pub children: Vec<JsonNode>,
+}
+
+/// A streamed glTF/GLB model node (parity with scene3d's `model3d`). The model
+/// bytes are supplied out-of-band (FFI feed / host bridge) and looked up by `model`
+/// URL; until they resolve, the renderer draws a tinted capsule placeholder.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Model3DNode {
+    #[serde(default)]
+    pub id: Option<String>,
+    /// Model URL/key used to look up the decoded glTF in the model cache.
+    pub model: String,
+    /// Playback time (seconds) used to sample the animation clip.
+    #[serde(default)]
+    pub anim_time: f32,
+    /// Clip selector: a name (string) or an index (number). `None` = first clip.
+    #[serde(default)]
+    pub animation: Option<StringOrIndex>,
+    /// Multiplicative tint applied to the model's base color.
+    #[serde(default)]
+    pub tint: Option<ColorDef>,
+    #[serde(default)]
+    pub emissive: Option<ColorDef>,
+    #[serde(default)]
+    pub emissive_strength: Option<f32>,
+    #[serde(default)]
+    pub transform: TransformDef,
+    #[serde(default)]
+    pub children: Vec<JsonNode>,
+}
+
+/// An animation clip selector accepted as either a clip name or a numeric index.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum StringOrIndex {
+    Index(u32),
+    Name(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
