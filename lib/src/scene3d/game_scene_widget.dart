@@ -6,6 +6,7 @@ library;
 
 import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -45,6 +46,12 @@ class GameSceneWidget extends StatefulWidget {
   /// Stable key to prevent reparsing when scene JSON is structurally unchanged.
   final String? sceneKey;
 
+  /// Resolution scale for the 3D layer (0..1]. Values < 1 rasterize the scene
+  /// into a smaller offscreen image that is then upscaled to fill the widget,
+  /// trading sharpness for far less fill/overdraw — a large win for the CPU
+  /// painter on high-DPI screens. 1.0 renders at native resolution.
+  final double renderScale;
+
   const GameSceneWidget({
     super.key,
     this.sceneJson,
@@ -55,6 +62,7 @@ class GameSceneWidget extends StatefulWidget {
     this.backgroundColor = const Color(0xFF141420),
     this.onFrameRendered,
     this.sceneKey,
+    this.renderScale = 1.0,
   }) : assert(sceneJson != null || sceneMap != null,
             'Either sceneJson or sceneMap must be provided');
 
@@ -67,6 +75,7 @@ class GameSceneWidget extends StatefulWidget {
     final width = (props['width'] as num?)?.toDouble();
     final height = (props['height'] as num?)?.toDouble();
     final sceneKey = props['sceneKey']?.toString();
+    final renderScale = (props['renderScale'] as num?)?.toDouble() ?? 1.0;
 
     Widget scene;
     if (sceneData is Map<String, dynamic>) {
@@ -75,6 +84,7 @@ class GameSceneWidget extends StatefulWidget {
         fps: fps,
         interactive: interactive,
         sceneKey: sceneKey,
+        renderScale: renderScale,
       );
     } else {
       scene = GameSceneWidget(
@@ -82,6 +92,7 @@ class GameSceneWidget extends StatefulWidget {
         fps: fps,
         interactive: interactive,
         sceneKey: sceneKey,
+        renderScale: renderScale,
       );
     }
 
@@ -102,6 +113,17 @@ class _GameSceneWidgetState extends State<GameSceneWidget>
   late final Scene3DRenderer _renderer;
   late ParsedScene _scene;
   Duration _lastFrameTime = Duration.zero;
+
+  // Repaint throttle: the ticker fires at display refresh, but we only need to
+  // re-rasterize at the target fps. Accumulate elapsed time and repaint when a
+  // frame interval has passed.
+  double _repaintAccum = 0;
+
+  // Cached static sub-scene (parsed once, reused every frame). The game ships a
+  // huge unchanging world under `staticWorld` keyed by `staticKey`; only the
+  // small dynamic `world` is re-parsed per frame and merged in.
+  ParsedScene? _staticScene;
+  String? _staticKey;
 
   // Camera interaction state
   Offset _lastPointerPos = Offset.zero;
@@ -134,7 +156,38 @@ class _GameSceneWidgetState extends State<GameSceneWidget>
     } catch (_) {
       json = {'world': []};
     }
-    _scene = SceneParser.parse(json);
+
+    // Parse (and cache) the static world once, keyed by `staticKey`. Marking
+    // its nodes `isStatic` lets the renderer bake their world-space lit
+    // geometry and only re-project it each frame.
+    final staticWorld = json['staticWorld'];
+    if (staticWorld is List) {
+      final key = json['staticKey']?.toString();
+      if (_staticScene == null || key != _staticKey) {
+        final parsed = SceneParser.parse({'world': staticWorld});
+        for (final n in parsed.nodes) {
+          _markStatic(n);
+        }
+        _staticScene = parsed;
+        _staticKey = key;
+      }
+    } else {
+      _staticScene = null;
+      _staticKey = null;
+    }
+
+    if (_staticScene == null) {
+      _scene = SceneParser.parse(json);
+    } else {
+      // Only the dynamic `world` is parsed each frame; merge with cached static.
+      final dyn = SceneParser.parse(json, ensureLight: false);
+      _scene = ParsedScene(
+        camera: dyn.camera,
+        environment: _staticScene!.environment,
+        lights: <Light3D>[..._staticScene!.lights, ...dyn.lights],
+        nodes: <SceneNode>[..._staticScene!.nodes, ...dyn.nodes],
+      );
+    }
 
     // Initialize orbit from camera position
     if (!_orbitInitialized) {
@@ -150,6 +203,15 @@ class _GameSceneWidgetState extends State<GameSceneWidget>
     }
   }
 
+  /// Recursively flag a parsed static node (and its children) so the renderer
+  /// bakes and caches its world-space lit geometry.
+  static void _markStatic(SceneNode node) {
+    node.isStatic = true;
+    for (final c in node.children) {
+      _markStatic(c);
+    }
+  }
+
   void _onTick(Duration elapsed) {
     if (!mounted) return;
 
@@ -160,6 +222,14 @@ class _GameSceneWidgetState extends State<GameSceneWidget>
     final cappedDt = dt.clamp(0.0, 0.1);
 
     _renderer.advanceTime(cappedDt);
+
+    // Throttle re-rasterization to the target fps even though the ticker fires
+    // at display refresh — avoids redundantly re-drawing the whole scene.
+    final interval = widget.fps > 0 ? 1.0 / widget.fps : 0.0;
+    _repaintAccum += cappedDt;
+    if (_repaintAccum + 1e-6 < interval) return;
+    _repaintAccum = 0;
+
     setState(() {});
     widget.onFrameRendered?.call();
   }
@@ -217,6 +287,7 @@ class _GameSceneWidgetState extends State<GameSceneWidget>
       painter: _GameScenePainter(
         renderer: _renderer,
         scene: _scene,
+        renderScale: widget.renderScale.clamp(0.1, 1.0),
       ),
       size: Size.infinite,
     );
@@ -242,14 +313,44 @@ class _GameSceneWidgetState extends State<GameSceneWidget>
 class _GameScenePainter extends CustomPainter {
   final Scene3DRenderer renderer;
   final ParsedScene scene;
+  final double renderScale;
 
   const _GameScenePainter({
     required this.renderer,
     required this.scene,
+    this.renderScale = 1.0,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (renderScale >= 0.999 || size.isEmpty) {
+      _renderTo(canvas, size);
+      return;
+    }
+
+    // Rasterize the 3D layer into a smaller offscreen image, then upscale it to
+    // fill the widget. This cuts fill/overdraw cost roughly by renderScale².
+    final rw = math.max(1, (size.width * renderScale).round());
+    final rh = math.max(1, (size.height * renderScale).round());
+    final recorder = ui.PictureRecorder();
+    final inner = Canvas(recorder);
+    _renderTo(inner, Size(rw.toDouble(), rh.toDouble()));
+    final picture = recorder.endRecording();
+    final image = picture.toImageSync(rw, rh);
+    final paint = Paint()
+      ..filterQuality = FilterQuality.low
+      ..isAntiAlias = false;
+    canvas.drawImageRect(
+      image,
+      Rect.fromLTWH(0, 0, rw.toDouble(), rh.toDouble()),
+      Offset.zero & size,
+      paint,
+    );
+    image.dispose();
+    picture.dispose();
+  }
+
+  void _renderTo(Canvas canvas, Size size) {
     renderer.render(
       canvas,
       size,

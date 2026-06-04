@@ -732,7 +732,7 @@ function cityEnvironment() {
     type: 'environment',
     ambient_light: { r: 0.30, g: 0.33, b: 0.43 }, ambient_intensity: 0.55,
     sky_color_top: { r: 0.035, g: 0.055, b: 0.135 }, sky_color_bottom: { r: 0.58, g: 0.42, b: 0.30 },
-    fog_type: 'linear', fog_color: { r: 0.34, g: 0.33, b: 0.40 }, fog_near: 24, fog_distance: 62
+    fog_type: 'linear', fog_color: { r: 0.34, g: 0.33, b: 0.40 }, fog_near: 22, fog_distance: 50
   });
   // Warm low dusk sun + cool sky fill.
   cnPush({ type: 'light', light_type: 'Directional', color: { r: 1.0, g: 0.82, b: 0.58 }, intensity: 1.4, transform: { rotation: { x: -28, y: 40, z: 0 } } });
@@ -789,10 +789,12 @@ function cityRoadMarkings() {
 function cityPark() {
   // Grass lawn (raised slightly above the asphalt).
   cnPush(box(vec(0, 0.08, 0), vec(PARK * 2 - 0.4, 0.14, PARK * 2 - 0.4), mGrass()));
-  // Diagonal foot-path crossing the lawn.
-  var pth = matC(col(0.55, 0.52, 0.46), { roughness: 0.9 });
-  cnPush(box(vec(0, 0.16, 0), vec(PARK * 2 - 1, 0.06, 2.0), pth));
-  cnPush(box(vec(0, 0.16, 0), vec(2.0, 0.06, PARK * 2 - 1), pth));
+  // Cross foot-paths to the fountain. Toned-down, noise-flecked stone so the
+  // long strips read as paving receding to the centre rather than a stark
+  // flat slab dominating the spawn view.
+  var pth = matC(col(0.30, 0.29, 0.27), { roughness: 0.95, tex: 'noise', tex2: col(0.25, 0.24, 0.22), texScale: 18 });
+  cnPush(box(vec(0, 0.15, 0), vec(PARK * 2 - 1, 0.06, 1.7), pth));
+  cnPush(box(vec(0, 0.15, 0), vec(1.7, 0.06, PARK * 2 - 1), pth));
 
   buildFountain(0, 0);
   // Park trees (kept clear of the fountain + paths).
@@ -961,19 +963,14 @@ function buildBuilding(cx, cz, w, d, h, fi) {
   if (Math.abs(cx) >= Math.abs(cz)) fzs = 0; else fxs = 0;
   var ax = cx + fxs * (w / 2), az = cz + fzs * (d / 2);
 
-  // Storefront awning + neon sign band.
-  cnPush(box(vec(ax + fxs * 0.45, 2.5, az + fzs * 0.45), vec(fxs !== 0 ? 0.9 : w * 0.55, 0.14, fzs !== 0 ? 0.9 : d * 0.55), neon(col(0.75, 0.18, 0.18), 0.9)));
-  cnPush(box(vec(ax + fxs * 0.12, 3.7, az + fzs * 0.12), vec(fxs !== 0 ? 0.2 : w * 0.6, 0.95, fzs !== 0 ? 0.2 : d * 0.6), neon(spick(NEONS), 2.0)));
-  // Lit windows glowing on the plaza-facing wall.
-  for (var wi = 0; wi < 4; wi++) {
-    var yy = 5 + wi * 2.6;
-    if (yy > h - 1) break;
-    if (srand() < 0.35) continue;       // some windows are dark
-    var jit = (fxs !== 0) ? srange(-d * 0.32, d * 0.32) : srange(-w * 0.32, w * 0.32);
-    cnPush(box(
-      vec(ax + fxs * 0.05 + (fxs !== 0 ? 0 : jit), yy, az + fzs * 0.05 + (fzs !== 0 ? 0 : jit)),
-      vec(fxs !== 0 ? 0.12 : 0.95, 0.75, fzs !== 0 ? 0.12 : 0.95),
-      neon(col(1.0, 0.84, 0.52), 1.3)));
+  // Storefront: a matte canopy plus — on roughly half the buildings — a single
+  // neon sign accent. The facade's windowed checkerboard texture already reads
+  // as a lit grid, so no extra per-window emissive boxes are stacked on top
+  // (that was visual noise + emissive overdraw); neon now reads as deliberate
+  // punctuation along the skyline rather than a wall of glow.
+  cnPush(box(vec(ax + fxs * 0.45, 2.5, az + fzs * 0.45), vec(fxs !== 0 ? 0.9 : w * 0.55, 0.16, fzs !== 0 ? 0.9 : d * 0.55), matC(col(0.11, 0.12, 0.15), { roughness: 0.6 })));
+  if (srand() < 0.5) {
+    cnPush(box(vec(ax + fxs * 0.12, 3.7, az + fzs * 0.12), vec(fxs !== 0 ? 0.18 : w * 0.5, 0.8, fzs !== 0 ? 0.18 : d * 0.5), neon(spick(NEONS), 1.7)));
   }
 }
 
@@ -1013,7 +1010,7 @@ function cityProps() {
   buildHydrant(-12.6, -6); buildHydrant(12.6, 6); buildHydrant(6, -12.6); buildHydrant(-6, 12.6);
   buildTrashCan(-12.4, 3); buildTrashCan(12.4, -3); buildTrashCan(3, 12.4); buildTrashCan(-3, -12.4);
   buildPlanter(-12.6, -2); buildPlanter(12.6, 2); buildPlanter(-2, 12.6); buildPlanter(2, -12.6);
-  for (var b = -9; b <= 9; b += 3) {
+  for (var b = -9; b <= 9; b += 4.5) {
     buildBollard(b, -10.7); buildBollard(b, 10.7);
     buildBollard(-10.7, b); buildBollard(10.7, b);
   }
@@ -1095,14 +1092,20 @@ function buildDynamicWorld() {
   return w;
 }
 
-// Build the full scene JSON. The huge static city is spliced in from its
-// pre-serialized fragment, so only the moving entities are encoded each frame.
+// Version tag for the static city. The renderer parses + bakes `staticWorld`
+// once and caches it under this key; only bump it if the city geometry changes.
+var CITY_VERSION = 'downtown-v1';
+
+// Build the full scene JSON. The huge static city is shipped under `staticWorld`
+// (parsed + baked exactly once, keyed by `staticKey`) while only the moving
+// entities are encoded into `world` each frame.
 function buildSceneJson() {
   var dyn = buildDynamicWorld();
   var parts = [];
   for (var i = 0; i < dyn.length; i++) parts.push(JSON.stringify(dyn[i]));
   var dynJson = parts.join(',');
-  return '{"world":[' + CITY_FRAGMENT + (dynJson ? ',' + dynJson : '') + ']}';
+  return '{"staticKey":"' + CITY_VERSION + '","staticWorld":[' + CITY_FRAGMENT +
+    '],"world":[' + dynJson + ']}';
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -1268,7 +1271,11 @@ function buildTree() {
   readViewport();
   var W = VP.w, H = VP.h;
   var ch = [];
-  ch.push({ type: 'GameScene', key: 'world3d', props: { scene: '__SCENE__', width: W, height: H, fps: 60, interactive: false } });
+  // fps 30 matches the game tick (no point rasterizing faster than the data
+  // updates); renderScale rasterizes the 3D layer at 70% and upscales, cutting
+  // fill/overdraw on high-DPI screens. The HUD is a separate 2D layer and stays
+  // crisp.
+  ch.push({ type: 'GameScene', key: 'world3d', props: { scene: '__SCENE__', width: W, height: H, fps: 30, interactive: false, renderScale: 0.7 } });
   pushHud(ch, W, H);
   if (G.state === 'playing') pushControls(ch, W, H);
   if (G.state === 'menu') pushMenu(ch, W, H);

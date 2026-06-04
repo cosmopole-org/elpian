@@ -63,8 +63,65 @@ class _ScreenParticle {
 //  SCENE 3D RENDERER
 // ════════════════════════════════════════════════════════════════════
 
+/// Baked world-space geometry for a `static` node: triangles already
+/// transformed to world space and lit by the (unchanging) lights, plus a
+/// bounding sphere for frustum culling. Computed once and reused every frame —
+/// only re-projection (which depends on the moving camera) happens per frame.
+class _StaticMesh {
+  final List<Vec3> pos; // 3 world positions per triangle (flattened)
+  final List<Vec3> col; // 3 lit colours per triangle (flattened, pre-fog)
+  final Vec3 center;
+  final double radius;
+  _StaticMesh(this.pos, this.col, this.center, this.radius);
+}
+
+/// Six view-frustum planes (a·x+b·y+c·z+d), extracted from a view-projection
+/// matrix (Gribb–Hartmann). A point is inside when every plane yields ≥ 0.
+class _Frustum {
+  final Float64List planes; // 6 × (a,b,c,d), normalized
+  _Frustum(this.planes);
+
+  factory _Frustum.fromVp(Mat4 vp) {
+    final m = vp.m; // column-major
+    // Rows of vp: rowR = (m[R], m[R+4], m[R+8], m[R+12]).
+    final p = Float64List(24);
+    void set(int idx, double a, double b, double c, double d) {
+      final len = math.sqrt(a * a + b * b + c * c);
+      final inv = len > 1e-9 ? 1.0 / len : 1.0;
+      p[idx] = a * inv;
+      p[idx + 1] = b * inv;
+      p[idx + 2] = c * inv;
+      p[idx + 3] = d * inv;
+    }
+
+    final r0a = m[0], r0b = m[4], r0c = m[8], r0d = m[12];
+    final r1a = m[1], r1b = m[5], r1c = m[9], r1d = m[13];
+    final r2a = m[2], r2b = m[6], r2c = m[10], r2d = m[14];
+    final r3a = m[3], r3b = m[7], r3c = m[11], r3d = m[15];
+    set(0, r3a + r0a, r3b + r0b, r3c + r0c, r3d + r0d); // left
+    set(4, r3a - r0a, r3b - r0b, r3c - r0c, r3d - r0d); // right
+    set(8, r3a + r1a, r3b + r1b, r3c + r1c, r3d + r1d); // bottom
+    set(12, r3a - r1a, r3b - r1b, r3c - r1c, r3d - r1d); // top
+    set(16, r3a + r2a, r3b + r2b, r3c + r2c, r3d + r2d); // near
+    set(20, r3a - r2a, r3b - r2b, r3c - r2c, r3d - r2d); // far
+    return _Frustum(p);
+  }
+
+  /// True if the sphere lies entirely outside the frustum (safe to skip).
+  bool sphereOutside(Vec3 c, double r) {
+    for (var k = 0; k < 24; k += 4) {
+      final d = planes[k] * c.x + planes[k + 1] * c.y + planes[k + 2] * c.z + planes[k + 3];
+      if (d < -r) return true;
+    }
+    return false;
+  }
+}
+
 class Scene3DRenderer {
   double _elapsed = 0;
+
+  /// View frustum for the current frame, used to cull static nodes.
+  _Frustum? _frustum;
 
   double get elapsed => _elapsed;
 
@@ -95,6 +152,7 @@ class Scene3DRenderer {
     final view = camera.viewMatrix();
     final proj = camera.projectionMatrix(aspect);
     final vp = proj * view;
+    _frustum = _Frustum.fromVp(vp);
 
     final screenTris = <_ScreenTri>[];
     final screenBatches = <_ModelBatch>[];
@@ -247,13 +305,84 @@ class Scene3DRenderer {
     List<Light3D> lights,
     List<_ScreenTri> screenTris,
   ) {
+    final mat = node.material ?? const Material3D();
+
+    // Static fast path: bake world-space lit geometry once, then each frame
+    // frustum-cull the whole node and only re-project its triangles.
+    if (node.isStatic) {
+      var baked = node.renderCache as _StaticMesh?;
+      if (baked == null) {
+        final mesh = node.mesh ?? _generateMesh(node.meshType, node.meshParams);
+        if (mesh == null) return;
+        baked = _bakeStatic(mesh, mat, worldXform, environment, lights);
+        node.renderCache = baked;
+      }
+      if (_frustum != null && _frustum!.sphereOutside(baked.center, baked.radius)) {
+        return;
+      }
+      for (var i = 0; i < baked.pos.length; i += 3) {
+        _projectTri(
+          baked.pos[i], baked.pos[i + 1], baked.pos[i + 2],
+          baked.col[i], baked.col[i + 1], baked.col[i + 2],
+          mat, vp, size, camera, environment, screenTris,
+        );
+      }
+      return;
+    }
+
     // Generate or use cached mesh
     final mesh = node.mesh ?? _generateMesh(node.meshType, node.meshParams);
     if (mesh == null) return;
-    final mat = node.material ?? const Material3D();
     _emitMeshTris(
       mesh, mat, worldXform, vp, size, camera, environment, lights, screenTris,
     );
+  }
+
+  /// Bakes a mesh's triangles into world space with per-vertex lighting applied
+  /// (specular omitted — it is view-dependent and negligible for the
+  /// high-roughness static world). Reused every frame; see [_StaticMesh].
+  _StaticMesh _bakeStatic(
+    Mesh mesh,
+    Material3D mat,
+    Mat4 worldXform,
+    Environment3D environment,
+    List<Light3D> lights,
+  ) {
+    final pos = <Vec3>[];
+    final col = <Vec3>[];
+    var sx = 0.0, sy = 0.0, sz = 0.0;
+    for (final tri in mesh.triangles) {
+      final wp0 = worldXform.transformPoint(tri.v0.position);
+      final wp1 = worldXform.transformPoint(tri.v1.position);
+      final wp2 = worldXform.transformPoint(tri.v2.position);
+      final wn0 = worldXform.transformDir(tri.v0.normal).normalized;
+      final wn1 = worldXform.transformDir(tri.v1.normal).normalized;
+      final wn2 = worldXform.transformDir(tri.v2.normal).normalized;
+      col.add(_computeLighting(
+          wp0, wn0, tri.v0.uv, mat, environment, lights, wp0, includeSpecular: false));
+      col.add(_computeLighting(
+          wp1, wn1, tri.v1.uv, mat, environment, lights, wp1, includeSpecular: false));
+      col.add(_computeLighting(
+          wp2, wn2, tri.v2.uv, mat, environment, lights, wp2, includeSpecular: false));
+      pos.add(wp0);
+      pos.add(wp1);
+      pos.add(wp2);
+      sx += wp0.x + wp1.x + wp2.x;
+      sy += wp0.y + wp1.y + wp2.y;
+      sz += wp0.z + wp1.z + wp2.z;
+    }
+    if (pos.isEmpty) {
+      return _StaticMesh(pos, col, Vec3.zero, 0);
+    }
+    final n = pos.length;
+    final center = Vec3(sx / n, sy / n, sz / n);
+    var r2 = 0.0;
+    for (final wp in pos) {
+      final dx = wp.x - center.x, dy = wp.y - center.y, dz = wp.z - center.z;
+      final d = dx * dx + dy * dy + dz * dz;
+      if (d > r2) r2 = d;
+    }
+    return _StaticMesh(pos, col, center, math.sqrt(r2));
   }
 
   /// Transforms, lights, clips and projects a [Mesh]'s triangles into
@@ -270,8 +399,6 @@ class Scene3DRenderer {
     List<Light3D> lights,
     List<_ScreenTri> screenTris,
   ) {
-    final nearPlane = camera.near;
-
     for (final tri in mesh.triangles) {
       // Transform vertices to world space
       final wp0 = worldXform.transformPoint(tri.v0.position);
@@ -288,83 +415,104 @@ class Scene3DRenderer {
       final c1 = _computeLighting(wp1, wn1, tri.v1.uv, mat, environment, lights, camera.position);
       final c2 = _computeLighting(wp2, wn2, tri.v2.uv, mat, environment, lights, camera.position);
 
-      // Project to clip space
-      final clip0 = vp.transformVec4(wp0);
-      final clip1 = vp.transformVec4(wp1);
-      final clip2 = vp.transformVec4(wp2);
+      _projectTri(
+        wp0, wp1, wp2, c0, c1, c2,
+        mat, vp, size, camera, environment, screenTris,
+      );
+    }
+  }
 
-      // Near-plane clipping: collect vertices with their w values
-      final clipVerts = [clip0, clip1, clip2];
-      final colors = [c0, c1, c2];
-      final clipped = _clipNearPlane(clipVerts, colors, nearPlane);
-      if (clipped == null || clipped.verts.isEmpty) continue;
+  /// Clips (near plane), perspective-divides, back-face culls, fogs and emits a
+  /// single world-space triangle with per-vertex colours. Shared by the dynamic
+  /// mesh path ([_emitMeshTris]) and the baked static path ([_renderMesh]).
+  void _projectTri(
+    Vec3 wp0, Vec3 wp1, Vec3 wp2,
+    Vec3 c0, Vec3 c1, Vec3 c2,
+    Material3D mat,
+    Mat4 vp,
+    ui.Size size,
+    Camera3D camera,
+    Environment3D environment,
+    List<_ScreenTri> screenTris,
+  ) {
+    final nearPlane = camera.near;
 
-      // Perspective divide and screen mapping for clipped triangles
-      for (var i = 0; i < clipped.verts.length - 2; i++) {
-        final cvs = [clipped.verts[0], clipped.verts[i + 1], clipped.verts[i + 2]];
-        final cls = [clipped.colors[0], clipped.colors[i + 1], clipped.colors[i + 2]];
+    // Project to clip space
+    final clip0 = vp.transformVec4(wp0);
+    final clip1 = vp.transformVec4(wp1);
+    final clip2 = vp.transformVec4(wp2);
 
-        final screenPts = <ui.Offset>[];
-        var avgDepth = 0.0;
-        var allVisible = true;
+    // Near-plane clipping: collect vertices with their w values
+    final clipVerts = [clip0, clip1, clip2];
+    final colors = [c0, c1, c2];
+    final clipped = _clipNearPlane(clipVerts, colors, nearPlane);
+    if (clipped == null || clipped.verts.isEmpty) return;
 
-        for (final cv in cvs) {
-          if (cv.w <= 0.0001) {
-            allVisible = false;
-            break;
-          }
-          final ndc = cv.perspectiveDivide();
-          // Frustum cull (loose)
-          if (ndc.x < -1.5 || ndc.x > 1.5 || ndc.y < -1.5 || ndc.y > 1.5) {
-            allVisible = false;
-            break;
-          }
-          screenPts.add(ui.Offset(
-            (ndc.x * 0.5 + 0.5) * size.width,
-            (0.5 - ndc.y * 0.5) * size.height,
-          ));
-          avgDepth += ndc.z;
+    // Perspective divide and screen mapping for clipped triangles
+    for (var i = 0; i < clipped.verts.length - 2; i++) {
+      final cvs = [clipped.verts[0], clipped.verts[i + 1], clipped.verts[i + 2]];
+      final cls = [clipped.colors[0], clipped.colors[i + 1], clipped.colors[i + 2]];
+
+      final screenPts = <ui.Offset>[];
+      var avgDepth = 0.0;
+      var allVisible = true;
+
+      for (final cv in cvs) {
+        if (cv.w <= 0.0001) {
+          allVisible = false;
+          break;
         }
-
-        if (!allVisible || screenPts.length < 3) continue;
-        avgDepth /= 3.0;
-
-        // Back-face culling (unless double-sided)
-        final edge1 = screenPts[1] - screenPts[0];
-        final edge2 = screenPts[2] - screenPts[0];
-        final cross = edge1.dx * edge2.dy - edge1.dy * edge2.dx;
-        if (cross > 0 && !mat.doubleSided) continue;
-
-        // Average vertex colors
-        final avgR = (cls[0].x + cls[1].x + cls[2].x) / 3.0;
-        final avgG = (cls[0].y + cls[1].y + cls[2].y) / 3.0;
-        final avgB = (cls[0].z + cls[1].z + cls[2].z) / 3.0;
-
-        // Apply fog
-        final triCenter = (wp0 + wp1 + wp2) / 3.0;
-        final dist = (triCenter - camera.position).length;
-        final fogF = environment.fogFactor(dist);
-
-        final finalR = avgR * fogF + environment.fogColor.x * (1 - fogF);
-        final finalG = avgG * fogF + environment.fogColor.y * (1 - fogF);
-        final finalB = avgB * fogF + environment.fogColor.z * (1 - fogF);
-
-        final alpha = mat.alphaMode == AlphaMode.blend ? mat.alpha : 1.0;
-        if (mat.alphaMode == AlphaMode.cutoff && mat.alpha < mat.alphaCutoff) continue;
-
-        final color = Color.fromARGB(
-          (alpha * 255).round().clamp(0, 255),
-          (finalR * 255).round().clamp(0, 255),
-          (finalG * 255).round().clamp(0, 255),
-          (finalB * 255).round().clamp(0, 255),
-        );
-
-        screenTris.add(_ScreenTri(
-          screenPts, color, avgDepth,
-          isWireframe: mat.wireframe,
-          wireColor: mat.wireframe ? color : null,
+        final ndc = cv.perspectiveDivide();
+        // Frustum cull (loose)
+        if (ndc.x < -1.5 || ndc.x > 1.5 || ndc.y < -1.5 || ndc.y > 1.5) {
+          allVisible = false;
+          break;
+        }
+        screenPts.add(ui.Offset(
+          (ndc.x * 0.5 + 0.5) * size.width,
+          (0.5 - ndc.y * 0.5) * size.height,
         ));
+        avgDepth += ndc.z;
       }
+
+      if (!allVisible || screenPts.length < 3) continue;
+      avgDepth /= 3.0;
+
+      // Back-face culling (unless double-sided)
+      final edge1 = screenPts[1] - screenPts[0];
+      final edge2 = screenPts[2] - screenPts[0];
+      final cross = edge1.dx * edge2.dy - edge1.dy * edge2.dx;
+      if (cross > 0 && !mat.doubleSided) continue;
+
+      // Average vertex colors
+      final avgR = (cls[0].x + cls[1].x + cls[2].x) / 3.0;
+      final avgG = (cls[0].y + cls[1].y + cls[2].y) / 3.0;
+      final avgB = (cls[0].z + cls[1].z + cls[2].z) / 3.0;
+
+      // Apply fog
+      final triCenter = (wp0 + wp1 + wp2) / 3.0;
+      final dist = (triCenter - camera.position).length;
+      final fogF = environment.fogFactor(dist);
+
+      final finalR = avgR * fogF + environment.fogColor.x * (1 - fogF);
+      final finalG = avgG * fogF + environment.fogColor.y * (1 - fogF);
+      final finalB = avgB * fogF + environment.fogColor.z * (1 - fogF);
+
+      final alpha = mat.alphaMode == AlphaMode.blend ? mat.alpha : 1.0;
+      if (mat.alphaMode == AlphaMode.cutoff && mat.alpha < mat.alphaCutoff) continue;
+
+      final color = Color.fromARGB(
+        (alpha * 255).round().clamp(0, 255),
+        (finalR * 255).round().clamp(0, 255),
+        (finalG * 255).round().clamp(0, 255),
+        (finalB * 255).round().clamp(0, 255),
+      );
+
+      screenTris.add(_ScreenTri(
+        screenPts, color, avgDepth,
+        isWireframe: mat.wireframe,
+        wireColor: mat.wireframe ? color : null,
+      ));
     }
   }
 
@@ -705,14 +853,15 @@ class Scene3DRenderer {
     Material3D mat,
     Environment3D env,
     List<Light3D> lights,
-    Vec3 cameraPos,
-  ) {
+    Vec3 cameraPos, {
+    bool includeSpecular = true,
+  }) {
     if (mat.unlit) {
       return mat.sampleTexture(uv) + mat.emissive * mat.emissiveStrength;
     }
 
     final baseColor = mat.sampleTexture(uv);
-    final viewDir = (cameraPos - worldPos).normalized;
+    final viewDir = includeSpecular ? (cameraPos - worldPos).normalized : Vec3.zero;
 
     // Ambient
     var result = baseColor.scale(env.ambientColor) * env.ambientIntensity;
@@ -747,15 +896,18 @@ class Scene3DRenderer {
 
       // Diffuse (Lambertian)
       final diffuse = baseColor.scale(lightColor) * nDotL;
+      result = result + diffuse;
 
-      // Specular (Blinn-Phong with roughness)
-      final halfV = (lightDir + viewDir).normalized;
-      final nDotH = worldNormal.dot(halfV).clamp(0.0, 1.0);
-      final shininess = (1.0 - mat.roughness) * 128.0 + 2.0;
-      final specStrength = mat.metallic * 0.8 + 0.2;
-      final specular = lightColor * (math.pow(nDotH, shininess) * specStrength * nDotL);
-
-      result = result + diffuse + specular;
+      // Specular (Blinn-Phong with roughness) — view-dependent, so skipped for
+      // baked static geometry.
+      if (includeSpecular) {
+        final halfV = (lightDir + viewDir).normalized;
+        final nDotH = worldNormal.dot(halfV).clamp(0.0, 1.0);
+        final shininess = (1.0 - mat.roughness) * 128.0 + 2.0;
+        final specStrength = mat.metallic * 0.8 + 0.2;
+        final specular = lightColor * (math.pow(nDotH, shininess) * specStrength * nDotL);
+        result = result + specular;
+      }
     }
 
     // Emissive
