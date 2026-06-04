@@ -84,16 +84,16 @@ Legend: ✅ present · ⚠️ partial · ❌ missing. "Rust" = `bevy_scene` rend
 | Feature | ref (`scene3d`) | Rust (`bevy_scene`) | Dart‑fb | Action phase |
 |---|:--:|:--:|:--:|:--:|
 | Cube/Sphere/Plane/Cylinder/Cone | ✅ | ✅ | ✅ | — |
-| Mesh `segments`/`subdivisions` parity | ✅ | ⚠️ (fixed 16) | ⚠️ | P1 |
+| Mesh `segments`/`subdivisions` parity | ✅ | ✅ *(P1)* | ⚠️ | P1 |
 | Material emissive | ✅ | ✅ | ✅ | — |
-| Material `emissive_strength` | ✅ | ❌ | ❌ | P1 |
-| Material `unlit` | ✅ | ❌ | ❌ | P1 |
-| Scalar `alpha` + `alpha_mode:"blend"` | ✅ | ⚠️ (alpha from base_color.a) | ⚠️ | P1 |
-| Procedural texture noise/checkerboard | ✅ | ❌ | ❌ | P1 |
-| `texture_color2`, `texture_scale` | ✅ | ❌ | ❌ | P1 |
-| Sky gradient `sky_color_top/bottom` | ✅ | ❌ (flat clear) | ❌ | P1 |
-| `fog_type:"linear"`, `fog_near` | ✅ | ⚠️ (sq‑falloff, no near) | ⚠️ | P1 |
-| Point light `range` attenuation | ✅ | ❌ | ❌ | P1 |
+| Material `emissive_strength` | ✅ | ✅ *(P1)* | ❌ | P1 |
+| Material `unlit` | ✅ | ✅ *(P1)* | ❌ | P1 |
+| Scalar `alpha` + `alpha_mode:"blend"` | ✅ | ✅ *(P1)* | ⚠️ | P1 |
+| Procedural texture noise/checkerboard | ✅ | ❌ *(P1 follow‑up: needs mesh‑UV plumbing)* | ❌ | P1 |
+| `texture_color2`, `texture_scale` | ✅ | ⚠️ (parsed, not yet sampled) | ❌ | P1 |
+| Sky gradient `sky_color_top/bottom` | ✅ | ✅ *(P1)* | ❌ | P1 |
+| `fog_type:"linear"`, `fog_near` | ✅ | ✅ *(P1)* | ⚠️ | P1 |
+| Point light `range` attenuation | ✅ | ✅ *(P1)* | ❌ | P1 |
 | `model3d` glTF/GLB streaming | ✅ | ❌ | ❌ | P2 |
 | CPU skeletal skinning + clip sampling | ✅ | ❌ | ❌ | P2 |
 | Model `tint` / per‑node emissive | ✅ | ❌ | ❌ | P2 |
@@ -137,7 +137,15 @@ Legend: ✅ present · ⚠️ partial · ❌ missing. "Rust" = `bevy_scene` rend
 ## 4. Status board
 
 - [x] **P0 — Analysis, gap matrix & this plan** ✅ *(done)*
-- [ ] **P1 — Material, environment, light & mesh parity (Rust + Dart‑fb)**
+- [ ] **P1 — Material, environment, light & mesh parity (Rust + Dart‑fb)** — *Rust core done*
+  - [x] Rust schema: `emissive_strength`, `unlit`, scalar `alpha`, lowercase `alpha_mode`,
+        `texture*` (parsed), sky gradient, `fog_type`/`fog_near`, light `range`, `segments`.
+  - [x] Rust renderer: unlit bypass, emissive strength, alpha blend, sky‑gradient clear,
+        linear fog + near, point‑light range falloff, segment tessellation.
+  - [x] Rust tests: `rust/tests/feature_parity.rs` (7 behavioral tests) + golden stable.
+  - [ ] Rust renderer: **procedural texture sampling** (noise/checkerboard) — needs per‑vertex
+        UVs added to mesh generators + `Triangle`; sample at vertex/centroid like scene3d.
+  - [ ] Dart fallback (`dart_scene_renderer.dart`): mirror all the above for the web safety net.
 - [ ] **P2 — `model3d` glTF/GLB streaming + skeletal skinning (Rust + bridge)**
 - [ ] **P3 — Static‑world bake/cache, renderScale & frame splicing**
 - [ ] **P4 — Widget/registry, viewport & overlay wiring for the Bevy path**

@@ -132,6 +132,10 @@ pub struct LightNode {
     pub color: Option<ColorDef>,
     #[serde(default)]
     pub intensity: Option<f32>,
+    /// Effective reach of a point/spot light. Past this distance the light
+    /// contributes nothing (parity with scene3d's point-light `range`).
+    #[serde(default)]
+    pub range: Option<f32>,
     #[serde(default)]
     pub transform: TransformDef,
     #[serde(default)]
@@ -281,10 +285,22 @@ pub struct EnvironmentNode {
     pub ambient_intensity: f32,
     #[serde(default)]
     pub fog_enabled: bool,
+    /// Fog falloff model: `"linear"` (near→distance ramp) — when present, fog is
+    /// implicitly enabled even if `fog_enabled` is omitted.
+    #[serde(default)]
+    pub fog_type: Option<String>,
     #[serde(default)]
     pub fog_color: Option<ColorDef>,
+    /// Distance at which linear fog begins (no fog closer than this).
+    #[serde(default)]
+    pub fog_near: Option<f32>,
     #[serde(default = "default_fog_distance")]
     pub fog_distance: f32,
+    /// Vertical sky gradient endpoints used to clear the framebuffer.
+    #[serde(default)]
+    pub sky_color_top: Option<ColorDef>,
+    #[serde(default)]
+    pub sky_color_bottom: Option<ColorDef>,
 }
 
 fn default_ambient_intensity() -> f32 {
@@ -475,7 +491,9 @@ pub enum MeshTypeParam {
     Sphere {
         #[serde(default = "default_one")]
         radius: f32,
-        #[serde(default = "default_subdivisions")]
+        // `segments` is the scene3d/glTF spelling; accept it as an alias so the
+        // same DSL drives both renderers.
+        #[serde(default = "default_subdivisions", alias = "segments")]
         subdivisions: u32,
     },
     Plane {
@@ -493,12 +511,16 @@ pub enum MeshTypeParam {
         radius: f32,
         #[serde(default = "default_one")]
         height: f32,
+        #[serde(default = "default_radial_segments")]
+        segments: u32,
     },
     Cone {
         #[serde(default = "default_half")]
         radius: f32,
         #[serde(default = "default_one")]
         height: f32,
+        #[serde(default = "default_radial_segments")]
+        segments: u32,
     },
     Torus {
         #[serde(default = "default_one")]
@@ -512,6 +534,9 @@ pub enum MeshTypeParam {
 }
 
 fn default_subdivisions() -> u32 {
+    16
+}
+fn default_radial_segments() -> u32 {
     16
 }
 fn default_half() -> f32 {
@@ -531,6 +556,10 @@ pub struct MaterialDef {
     pub base_color_texture: Option<String>,
     #[serde(default)]
     pub emissive: Option<ColorDef>,
+    /// Multiplier applied to `emissive` (parity with the scene3d renderer's
+    /// `emissive_strength`). Lets neon / glow surfaces push past 1.0.
+    #[serde(default)]
+    pub emissive_strength: Option<f32>,
     #[serde(default)]
     pub metallic: Option<f32>,
     #[serde(default)]
@@ -539,14 +568,33 @@ pub struct MaterialDef {
     pub normal_map_texture: Option<String>,
     #[serde(default)]
     pub alpha_mode: Option<AlphaMode>,
+    /// Explicit scalar opacity (0..1). Takes precedence over `base_color.a`.
+    #[serde(default)]
+    pub alpha: Option<f32>,
     #[serde(default)]
     pub double_sided: bool,
+    /// Skip lighting and output `base_color*texture (+ emissive)` directly —
+    /// used for paint markings, neon, tracers and other self-lit surfaces.
+    #[serde(default)]
+    pub unlit: bool,
+    /// Procedural texture kind: `"noise" | "checkerboard" | "stripes" | "gradient"`.
+    #[serde(default)]
+    pub texture: Option<String>,
+    /// Secondary color the procedural texture blends toward.
+    #[serde(default)]
+    pub texture_color2: Option<ColorDef>,
+    /// UV scale (tiling) for the procedural texture.
+    #[serde(default)]
+    pub texture_scale: Option<f32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AlphaMode {
+    #[serde(alias = "opaque", alias = "OPAQUE")]
     Opaque,
+    #[serde(alias = "mask", alias = "MASK")]
     Mask,
+    #[serde(alias = "blend", alias = "BLEND")]
     Blend,
 }
 
