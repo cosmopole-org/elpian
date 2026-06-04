@@ -112,9 +112,11 @@ var RELOAD_TIME = 1.15;
 var BULLET_RANGE = 64;
 var BULLET_DMG = 26;
 var LOOK_SENS_X = 0.0066, LOOK_SENS_Y = 0.0055;
-// How fast (rad/s) the camera yaw swings to follow the joystick travel
-// direction, so the view + gun automatically aim where the player is heading.
-var CAM_FOLLOW_RATE = 7.0;
+// Radial dead-zone (fraction of full stick travel). Input below this is treated
+// as zero so a resting / barely-touched thumb never makes the player creep or
+// jitter; the remaining travel [JOY_DEAD..1] is rescaled to a clean 0..1
+// response (a "scaled radial" dead-zone — the standard for analog sticks).
+var JOY_DEAD = 0.18;
 var JOY = 132, JOY_HALF = 66, THUMB = 56;
 
 // ---- Viewport (read from host environment) --------------------------------
@@ -432,24 +434,37 @@ function hurtPlayer(dmg) {
 
 function updatePlayer() {
   var p = G.player, inp = G.input, c = G.cam, w = G.weapon;
-  // Single-stick steering. The joystick maps to an ABSOLUTE world heading
-  // (up = forward / world -Z, right = world +X), independent of where the
-  // camera is currently pointing. The camera then yaws to FOLLOW that heading,
-  // so the direction you push == the way the player runs == where the camera
-  // looks == the gun's aim.
-  var mx = inp.jx;    // stick right -> world +X
-  var mz = -inp.jz;   // stick up    -> world -Z (forward, into the city)
-  var ml = Math.sqrt(mx * mx + mz * mz);
-  var movingNow = false;
-  if (ml > 0.001) {
-    mx /= ml; mz /= ml;
-    var spd = MOVE_SPEED * Math.min(1, inp.jmag);
-    p.x += mx * spd * DT; p.z += mz * spd * DT;
-    movingNow = inp.jmag > 0.06;
-    var targetYaw = Math.atan2(mx, -mz);
-    c.yaw = approachAngle(c.yaw, targetYaw, CAM_FOLLOW_RATE * Math.min(1, inp.jmag) * DT);
+  // CAMERA-RELATIVE STRAFE MOVEMENT (the standard third-person shooter model).
+  //
+  // The left stick is read as a single radial vector and passed through a
+  // SCALED RADIAL dead-zone: anything inside JOY_DEAD is ignored (no idle
+  // drift), and the rest of the travel is rescaled to a smooth 0..1 throttle.
+  // Its DIRECTION is then interpreted RELATIVE TO THE CAMERA, not the world:
+  // pushing up runs the way the camera faces, pushing right strafes to
+  // screen-right. The camera is turned ONLY by the look pad, so movement and
+  // aiming never fight over the yaw (the old code had the move step yank the
+  // yaw toward an absolute-world heading every frame, which is what made the
+  // character lurch and spin unpredictably).
+  var mag = inp.jmag;                 // radial magnitude of (jx, jz), 0..1
+  var t = 0;                          // dead-zone-corrected throttle, 0..1
+  if (mag > JOY_DEAD) {
+    t = Math.min(1, (mag - JOY_DEAD) / (1 - JOY_DEAD));
+    var nx = inp.jx / mag, nz = inp.jz / mag;   // unit stick direction
+    // Camera basis projected onto the ground plane (yaw only — looking up or
+    // down must not change how fast or where you walk).
+    var sy = Math.sin(c.yaw), cy = Math.cos(c.yaw);
+    var fwdX = sy, fwdZ = -cy;        // camera forward (stick up)
+    var rgtX = cy, rgtZ = sy;         // camera right   (stick right)
+    var dx = rgtX * nx + fwdX * nz;
+    var dz = rgtZ * nx + fwdZ * nz;
+    var spd = MOVE_SPEED * t;
+    p.x += dx * spd * DT; p.z += dz * spd * DT;
   }
-  p.animTime += DT * (movingNow ? (1.1 + Math.min(1, inp.jmag) * 0.7) : 0.0);
+  var movingNow = t > 0.02;
+  p.animTime += DT * (movingNow ? (1.1 + t * 0.7) : 0.0);
+  // Combat stance: the body always faces where the camera (and therefore the
+  // gun) is aiming, so a shot lines up with the fixed centre crosshair. The
+  // player turns by aiming with the look pad.
   p.yaw = c.yaw;
   p.x = clamp(p.x, -PLAY + 0.7, PLAY - 0.7);
   p.z = clamp(p.z, -PLAY + 0.7, PLAY - 0.7);
@@ -1249,8 +1264,8 @@ function pushMenu(ch, W, H) {
   ch.push(fullRow(H * 0.16 + 58, text('STRIKE FORCE', '#eaf2ff', 26, 'bold', { letter: 6 })));
   ch.push(fullRow(H * 0.16 + 92, text('· DOWNTOWN ·', '#ffae6b', 14, 'bold', { letter: 5 })));
   ch.push(fullRow(H * 0.40, text('Hold the city square against the waves', '#7f93b3', 13, 'bold')));
-  ch.push(fullRow(H * 0.47, text('LEFT STICK move + auto-aim camera', '#9fb4d6', 13, 'bold')));
-  ch.push(fullRow(H * 0.47 + 22, text('RIGHT DRAG optional free look', '#7f93b3', 12, 'bold')));
+  ch.push(fullRow(H * 0.47, text('LEFT STICK move (relative to camera)', '#9fb4d6', 13, 'bold')));
+  ch.push(fullRow(H * 0.47 + 22, text('RIGHT DRAG aim & turn', '#7f93b3', 12, 'bold')));
   ch.push(fullRow(H * 0.51, text('FIRE to shoot    use cover    survive', '#9fb4d6', 13, 'bold')));
   ch.push(fullRow(H * 0.64, container(230, 66, 'rgba(50,140,90,0.9)', 16, {
     borderColor: '#bdf3d0', borderWidth: 2, key: 'startBtn', events: { tap: 'onStart' },
