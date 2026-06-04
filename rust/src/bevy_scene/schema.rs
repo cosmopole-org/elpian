@@ -17,6 +17,23 @@ pub struct SceneDef {
     pub world: Vec<JsonNode>,
 }
 
+/// The full scene document emitted by the game: a baked `staticWorld` (keyed by
+/// `staticKey`, sent once and reused) plus the per-frame dynamic `world`. The
+/// manager caches the parsed static world by key and only re-parses `world` each
+/// tick (P3 frame splicing). `SceneDef` alone drops the static fields, so this is
+/// the type used at the create/update boundary.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct SceneDoc {
+    #[serde(default, rename = "staticKey")]
+    pub static_key: Option<String>,
+    #[serde(default, rename = "staticWorld")]
+    pub static_world: Vec<JsonNode>,
+    #[serde(default)]
+    pub world: Vec<JsonNode>,
+    #[serde(default)]
+    pub ui: Vec<JsonNode>,
+}
+
 // ── Node Types ───────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

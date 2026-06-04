@@ -216,13 +216,27 @@ impl SceneRenderer {
         }
     }
 
-    /// Render a complete scene from JSON definition.
+    /// Render a complete scene from JSON definition (no static-world split).
     pub fn render_scene(&mut self, scene: &SceneDef, delta_time: f32) {
+        self.render_split(&[], &scene.world, delta_time);
+    }
+
+    /// Render a frame from a **baked static** node set plus a per-frame **dynamic**
+    /// node set (P3 frame splicing). The static nodes (the baked city) are parsed
+    /// once by the manager and reused every frame; only the small dynamic `world`
+    /// (camera, player, enemies, fx) is re-parsed per tick. Both sets are scanned
+    /// for camera/lights/environment and rendered static-first then dynamic.
+    pub fn render_split(
+        &mut self,
+        static_nodes: &[JsonNode],
+        dynamic_nodes: &[JsonNode],
+        delta_time: f32,
+    ) {
         self.elapsed_time += delta_time;
 
-        // Collect environment settings
+        // Collect environment settings (from either node set).
         let mut env = EnvironmentSettings::default();
-        for node in &scene.world {
+        for node in static_nodes.iter().chain(dynamic_nodes.iter()) {
             if let JsonNode::Environment(e) = node {
                 env.ambient_intensity = e.ambient_intensity;
                 if let Some(ref al) = e.ambient_light {
@@ -254,7 +268,7 @@ impl SceneRenderer {
         // takes precedence over the gradient as an explicit override.
         let mut clear_color = [20u8, 20u8, 30u8, 255u8];
         let mut skybox_override = false;
-        for node in &scene.world {
+        for node in static_nodes.iter().chain(dynamic_nodes.iter()) {
             if let JsonNode::Skybox(sky) = node {
                 if let Some(ref c) = sky.color {
                     clear_color = c.to_rgba_u8();
@@ -268,19 +282,18 @@ impl SceneRenderer {
             self.clear(clear_color);
         }
 
-        // Collect camera
-        let camera = self.find_camera(&scene.world);
-
-        // Collect lights
-        let lights = self.collect_lights(&scene.world);
+        // Collect camera + lights (scanning both node sets).
+        let camera = self.find_camera(static_nodes.iter().chain(dynamic_nodes.iter()));
+        let lights = self.collect_lights(static_nodes.iter().chain(dynamic_nodes.iter()));
 
         // Build view-projection matrix
         let aspect = self.width as f32 / self.height.max(1) as f32;
         let view_proj = camera.build_view_projection(aspect);
 
-        // Render all world nodes. Traversal projects + lights triangles into
-        // `self.projected` (in scene order); the fill stage runs afterwards.
-        for node in &scene.world {
+        // Render static geometry first, then the dynamic overlay. Traversal projects
+        // + lights triangles into `self.projected` (in scene order); the fill stage
+        // runs afterwards and the depth buffer resolves overlaps deterministically.
+        for node in static_nodes.iter().chain(dynamic_nodes.iter()) {
             self.render_world_node(node, &Mat4::IDENTITY, &view_proj, &camera, &lights, &env);
         }
 
@@ -296,7 +309,7 @@ impl SceneRenderer {
         std::mem::swap(&mut self.pixels, &mut self.pixels_back);
     }
 
-    fn find_camera(&self, nodes: &[JsonNode]) -> CameraState {
+    fn find_camera<'a>(&self, nodes: impl Iterator<Item = &'a JsonNode>) -> CameraState {
         for node in nodes {
             if let JsonNode::Camera(cam) = node {
                 let transform = cam.transform.to_mat4();
@@ -336,7 +349,7 @@ impl SceneRenderer {
         }
     }
 
-    fn collect_lights(&self, nodes: &[JsonNode]) -> Vec<LightState> {
+    fn collect_lights<'a>(&self, nodes: impl Iterator<Item = &'a JsonNode>) -> Vec<LightState> {
         let mut lights = Vec::new();
         for node in nodes {
             if let JsonNode::Light(l) = node {
