@@ -166,7 +166,11 @@ class Mat4 {
 
 class _Triangle {
   final Vec3 v0, v1, v2, normal;
-  const _Triangle(this.v0, this.v1, this.v2, this.normal);
+  // Per-vertex UVs (parity with scene3d). Used to sample procedural textures at
+  // the triangle centroid in this flat-shaded fallback.
+  final Offset uv0, uv1, uv2;
+  const _Triangle(this.v0, this.v1, this.v2, this.normal,
+      {this.uv0 = Offset.zero, this.uv1 = Offset.zero, this.uv2 = Offset.zero});
 
   static _Triangle fromVertices(Vec3 v0, Vec3 v1, Vec3 v2) {
     final n = (v1 - v0).cross(v2 - v0).normalized;
@@ -197,12 +201,38 @@ class _Light {
   final Vec3 direction;
   final Vec3 color;
   final double intensity;
+  /// Point/spot reach; `null` = unbounded inverse-square only.
+  final double? range;
   const _Light({
     required this.type,
     required this.position,
     required this.direction,
     required this.color,
     required this.intensity,
+    this.range,
+  });
+}
+
+/// Environment shading params (sky gradient, fog, ambient) collected per frame.
+class _Environment {
+  final Vec3 ambientColor;
+  final double ambientIntensity;
+  final bool fogEnabled;
+  final bool fogLinear;
+  final Vec3 fogColor;
+  final double fogNear;
+  final double fogDistance;
+  /// (top, bottom) sky gradient used to clear the frame; null = flat clear.
+  final (Vec3, Vec3)? skyGradient;
+  const _Environment({
+    this.ambientColor = const Vec3(1, 1, 1),
+    this.ambientIntensity = 0.3,
+    this.fogEnabled = false,
+    this.fogLinear = false,
+    this.fogColor = const Vec3(0.7, 0.7, 0.8),
+    this.fogNear = 0.0,
+    this.fogDistance = 100.0,
+    this.skyGradient,
   });
 }
 
@@ -233,23 +263,25 @@ class DartSceneRenderer {
 
     final world = scene['world'] as List<dynamic>? ?? [];
 
-    // Collect environment
-    var ambientColor = const Vec3(1, 1, 1);
-    var ambientIntensity = 0.3;
-    for (final node in world) {
-      if (node['type'] == 'environment') {
-        ambientIntensity = (node['ambient_intensity'] as num?)?.toDouble() ?? 0.3;
-        if (node['ambient_light'] != null) {
-          ambientColor = _parseColor3(node['ambient_light']);
-        }
-      }
-    }
+    // Collect environment (ambient, fog, sky gradient).
+    final env = _collectEnvironment(world);
 
-    // Clear background
-    canvas.drawRect(
-      Offset.zero & size,
-      Paint()..color = const Color(0xFF14141E),
-    );
+    // Clear background: vertical sky gradient when provided, else flat color.
+    if (env.skyGradient != null) {
+      final (top, bottom) = env.skyGradient!;
+      final paint = Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [_vecToColor(top), _vecToColor(bottom)],
+        ).createShader(Offset.zero & size);
+      canvas.drawRect(Offset.zero & size, paint);
+    } else {
+      canvas.drawRect(
+        Offset.zero & size,
+        Paint()..color = const Color(0xFF14141E),
+      );
+    }
 
     // Collect camera
     final camera = _findCamera(world);
@@ -282,8 +314,7 @@ class DartSceneRenderer {
         viewProj,
         camera,
         lights,
-        ambientColor,
-        ambientIntensity,
+        env,
         size,
         renderTris,
       );
@@ -355,6 +386,7 @@ class DartSceneRenderer {
           direction: dir,
           color: node['color'] != null ? _parseColor3(node['color']) : const Vec3(1, 1, 1),
           intensity: (node['intensity'] as num?)?.toDouble() ?? 1.0,
+          range: (node['range'] as num?)?.toDouble(),
         ));
       }
     }
@@ -370,14 +402,49 @@ class DartSceneRenderer {
     return lights;
   }
 
+  /// Collect environment shading params: ambient, fog (with `fog_type:"linear"`
+  /// + `fog_near`), and the vertical sky gradient. Mirrors the Rust renderer.
+  _Environment _collectEnvironment(List<dynamic> nodes) {
+    for (final node in nodes) {
+      if (node['type'] == 'environment') {
+        final fogType = node['fog_type'] as String?;
+        final fogLinear = fogType != null && fogType.toLowerCase() == 'linear';
+        // A `fog_type` implies fog is on even when `fog_enabled` is omitted.
+        final fogEnabled = (node['fog_enabled'] as bool? ?? false) || fogType != null;
+        (Vec3, Vec3)? sky;
+        if (node['sky_color_top'] != null && node['sky_color_bottom'] != null) {
+          sky = (_parseColor3(node['sky_color_top']), _parseColor3(node['sky_color_bottom']));
+        }
+        return _Environment(
+          ambientColor:
+              node['ambient_light'] != null ? _parseColor3(node['ambient_light']) : const Vec3(1, 1, 1),
+          ambientIntensity: (node['ambient_intensity'] as num?)?.toDouble() ?? 0.3,
+          fogEnabled: fogEnabled,
+          fogLinear: fogLinear,
+          fogColor: node['fog_color'] != null ? _parseColor3(node['fog_color']) : const Vec3(0.7, 0.7, 0.8),
+          fogNear: (node['fog_near'] as num?)?.toDouble() ?? 0.0,
+          fogDistance: (node['fog_distance'] as num?)?.toDouble() ?? 100.0,
+          skyGradient: sky,
+        );
+      }
+    }
+    return const _Environment();
+  }
+
+  Color _vecToColor(Vec3 c) => Color.fromARGB(
+        255,
+        (c.x.clamp(0.0, 1.0) * 255).round(),
+        (c.y.clamp(0.0, 1.0) * 255).round(),
+        (c.z.clamp(0.0, 1.0) * 255).round(),
+      );
+
   void _collectRenderTriangles(
     Map<String, dynamic> node,
     Mat4 parentTransform,
     Mat4 viewProj,
     _Camera camera,
     List<_Light> lights,
-    Vec3 ambientColor,
-    double ambientIntensity,
+    _Environment env,
     Size screenSize,
     List<_RenderTriangle> out,
   ) {
@@ -399,8 +466,7 @@ class DartSceneRenderer {
 
       for (final tri in triangles) {
         _projectAndAddTriangle(
-          tri, world, mvp, camera, lights, material,
-          ambientColor, ambientIntensity, screenSize, out,
+          tri, world, mvp, camera, lights, material, env, screenSize, out,
         );
       }
 
@@ -409,7 +475,7 @@ class DartSceneRenderer {
       for (final child in children) {
         _collectRenderTriangles(
           child as Map<String, dynamic>, world, viewProj, camera,
-          lights, ambientColor, ambientIntensity, screenSize, out,
+          lights, env, screenSize, out,
         );
       }
     } else if (type == 'group') {
@@ -420,7 +486,7 @@ class DartSceneRenderer {
       for (final child in children) {
         _collectRenderTriangles(
           child as Map<String, dynamic>, world, viewProj, camera,
-          lights, ambientColor, ambientIntensity, screenSize, out,
+          lights, env, screenSize, out,
         );
       }
     }
@@ -434,8 +500,7 @@ class DartSceneRenderer {
     _Camera camera,
     List<_Light> lights,
     _MaterialDef material,
-    Vec3 ambientColor,
-    double ambientIntensity,
+    _Environment env,
     Size screenSize,
     List<_RenderTriangle> out,
   ) {
@@ -464,9 +529,13 @@ class DartSceneRenderer {
       (w0.y + w1.y + w2.y) / 3,
       (w0.z + w1.z + w2.z) / 3,
     );
+    // Procedural texture sampled at the centroid UV (flat-shaded fallback).
+    final centroidUv = Offset(
+      (tri.uv0.dx + tri.uv1.dx + tri.uv2.dx) / 3.0,
+      (tri.uv0.dy + tri.uv1.dy + tri.uv2.dy) / 3.0,
+    );
     final color = _computeLighting(
-      center, worldNormal, camera, lights, material,
-      ambientColor, ambientIntensity,
+      center, worldNormal, camera, lights, material, env, centroidUv,
     );
 
     // Clip and project
@@ -531,52 +600,84 @@ class DartSceneRenderer {
   Color _computeLighting(
     Vec3 position, Vec3 normal, _Camera camera,
     List<_Light> lights, _MaterialDef material,
-    Vec3 ambientColor, double ambientIntensity,
+    _Environment env, Offset uv,
   ) {
-    final n = normal.normalized;
-    final viewDir = (camera.position - position).normalized;
+    // Effective albedo: procedural texture sample (or flat base color).
+    final albedo = material.sampleTexture(uv);
+    // Emissive scaled by emissive_strength (lets neon/glow push past 1.0).
+    final emissive = material.emissive * material.emissiveStrength;
 
-    // Ambient
-    var r = ambientColor.x * ambientIntensity * material.baseColor.x;
-    var g = ambientColor.y * ambientIntensity * material.baseColor.y;
-    var b = ambientColor.z * ambientIntensity * material.baseColor.z;
+    double r, g, b;
 
-    for (final light in lights) {
-      Vec3 lightDir;
-      double attenuation;
+    if (material.unlit) {
+      // Self-lit surfaces (paint, neon, tracers) bypass shading.
+      r = albedo.x + emissive.x;
+      g = albedo.y + emissive.y;
+      b = albedo.z + emissive.z;
+    } else {
+      final n = normal.normalized;
+      final viewDir = (camera.position - position).normalized;
 
-      if (light.type == 'Directional') {
-        lightDir = (-light.direction).normalized;
-        attenuation = 1.0;
-      } else {
-        // Point / Spot
-        final toLight = light.position - position;
-        final dist = toLight.length;
-        lightDir = toLight / dist.clamp(0.001, double.infinity);
-        attenuation = 1.0 / (1.0 + 0.09 * dist + 0.032 * dist * dist);
+      // Ambient
+      r = env.ambientColor.x * env.ambientIntensity * albedo.x;
+      g = env.ambientColor.y * env.ambientIntensity * albedo.y;
+      b = env.ambientColor.z * env.ambientIntensity * albedo.z;
+
+      for (final light in lights) {
+        Vec3 lightDir;
+        double attenuation;
+
+        if (light.type == 'Directional') {
+          lightDir = (-light.direction).normalized;
+          attenuation = 1.0;
+        } else {
+          // Point / Spot
+          final toLight = light.position - position;
+          final dist = toLight.length;
+          lightDir = toLight / dist.clamp(0.001, double.infinity);
+          attenuation = 1.0 /
+              (1.0 + 0.09 * dist + 0.032 * dist * dist) *
+              _rangeFalloff(dist, light.range);
+        }
+
+        // Diffuse
+        final nDotL = n.dot(lightDir).clamp(0.0, 1.0);
+        r += albedo.x * light.color.x * light.intensity * nDotL * attenuation;
+        g += albedo.y * light.color.y * light.intensity * nDotL * attenuation;
+        b += albedo.z * light.color.z * light.intensity * nDotL * attenuation;
+
+        // Specular (Blinn-Phong)
+        final halfVec = (lightDir + viewDir).normalized;
+        final nDotH = n.dot(halfVec).clamp(0.0, 1.0);
+        final shininess = ((1.0 - material.roughness) * 128.0).clamp(1.0, 128.0);
+        final specStrength = material.metallic > 0 ? material.metallic * 0.8 : 0.04;
+        final spec = math.pow(nDotH, shininess) * specStrength * attenuation * light.intensity;
+        r += light.color.x * spec;
+        g += light.color.y * spec;
+        b += light.color.z * spec;
       }
 
-      // Diffuse
-      final nDotL = n.dot(lightDir).clamp(0.0, 1.0);
-      r += material.baseColor.x * light.color.x * light.intensity * nDotL * attenuation;
-      g += material.baseColor.y * light.color.y * light.intensity * nDotL * attenuation;
-      b += material.baseColor.z * light.color.z * light.intensity * nDotL * attenuation;
-
-      // Specular (Blinn-Phong)
-      final halfVec = (lightDir + viewDir).normalized;
-      final nDotH = n.dot(halfVec).clamp(0.0, 1.0);
-      final shininess = ((1.0 - material.roughness) * 128.0).clamp(1.0, 128.0);
-      final specStrength = material.metallic > 0 ? material.metallic * 0.8 : 0.04;
-      final spec = math.pow(nDotH, shininess) * specStrength * attenuation * light.intensity;
-      r += light.color.x * spec;
-      g += light.color.y * spec;
-      b += light.color.z * spec;
+      // Emissive
+      r += emissive.x;
+      g += emissive.y;
+      b += emissive.z;
     }
 
-    // Emissive
-    r += material.emissive.x;
-    g += material.emissive.y;
-    b += material.emissive.z;
+    // Fog: blend toward the fog color by distance from the camera.
+    if (env.fogEnabled) {
+      final dist = (camera.position - position).length;
+      double fogFactor;
+      if (env.fogLinear) {
+        final far = math.max(env.fogDistance, env.fogNear + 0.001);
+        fogFactor = ((dist - env.fogNear) / (far - env.fogNear)).clamp(0.0, 1.0);
+      } else {
+        final f = (dist / env.fogDistance).clamp(0.0, 1.0);
+        fogFactor = f * f;
+      }
+      r = r + (env.fogColor.x - r) * fogFactor;
+      g = g + (env.fogColor.y - g) * fogFactor;
+      b = b + (env.fogColor.z - b) * fogFactor;
+    }
 
     return Color.fromARGB(
       (material.alpha * 255).round().clamp(0, 255),
@@ -584,6 +685,16 @@ class DartSceneRenderer {
       (g * 255).round().clamp(0, 255),
       (b * 255).round().clamp(0, 255),
     );
+  }
+
+  /// Smooth point/spot-light cutoff (parity with the Rust `range_falloff`):
+  /// full strength near the source, fading to zero at `range`. `null` keeps the
+  /// unbounded inverse-square falloff.
+  double _rangeFalloff(double dist, double? range) {
+    if (range == null || range <= 0.0) return 1.0;
+    final x = (dist / range).clamp(0.0, 1.0);
+    final w = 1.0 - x * x;
+    return (w * w).clamp(0.0, 1.0);
   }
 
   Mat4 _applyAnimation(Mat4 base, Map<String, dynamic> anim) {
@@ -678,7 +789,8 @@ class DartSceneRenderer {
         case 'Cube': return _generateCube(1.0);
         case 'Sphere':
           final r = (mesh['radius'] as num?)?.toDouble() ?? 1.0;
-          final sub = (mesh['subdivisions'] as num?)?.toInt() ?? 16;
+          // `segments` is the scene3d spelling; accept it as an alias.
+          final sub = ((mesh['subdivisions'] ?? mesh['segments']) as num?)?.toInt() ?? 16;
           return _generateSphere(r, sub.clamp(4, 32));
         case 'Plane':
           final s = (mesh['size'] as num?)?.toDouble() ?? 1.0;
@@ -686,11 +798,13 @@ class DartSceneRenderer {
         case 'Cylinder':
           final r = (mesh['radius'] as num?)?.toDouble() ?? 0.5;
           final h = (mesh['height'] as num?)?.toDouble() ?? 1.0;
-          return _generateCylinder(r, h, 16);
+          final seg = (mesh['segments'] as num?)?.toInt() ?? 16;
+          return _generateCylinder(r, h, seg.clamp(3, 64));
         case 'Cone':
           final r = (mesh['radius'] as num?)?.toDouble() ?? 0.5;
           final h = (mesh['height'] as num?)?.toDouble() ?? 1.0;
-          return _generateCone(r, h, 16);
+          final seg = (mesh['segments'] as num?)?.toInt() ?? 16;
+          return _generateCone(r, h, seg.clamp(3, 64));
         case 'Torus':
           final r = (mesh['radius'] as num?)?.toDouble() ?? 1.0;
           final tr = (mesh['tube_radius'] as num?)?.toDouble() ?? 0.25;
@@ -721,11 +835,13 @@ class DartSceneRenderer {
       const Vec3(0,0,1), const Vec3(0,0,-1), const Vec3(0,1,0),
       const Vec3(0,-1,0), const Vec3(1,0,0), const Vec3(-1,0,0),
     ];
+    // Per-corner UVs, matching scene3d's cube layout.
+    const uv = [Offset(0, 1), Offset(1, 1), Offset(1, 0), Offset(0, 0)];
     final tris = <_Triangle>[];
     for (var f = 0; f < 6; f++) {
       final b = f * 4;
-      tris.add(_Triangle(v[b], v[b+1], v[b+2], n[f]));
-      tris.add(_Triangle(v[b], v[b+2], v[b+3], n[f]));
+      tris.add(_Triangle(v[b], v[b+1], v[b+2], n[f], uv0: uv[0], uv1: uv[1], uv2: uv[2]));
+      tris.add(_Triangle(v[b], v[b+2], v[b+3], n[f], uv0: uv[0], uv1: uv[2], uv2: uv[3]));
     }
     return tris;
   }
@@ -742,8 +858,12 @@ class DartSceneRenderer {
         final v1 = _spherePoint(radius, theta2, phi1);
         final v2 = _spherePoint(radius, theta2, phi2);
         final v3 = _spherePoint(radius, theta1, phi2);
-        if (i != 0) tris.add(_Triangle(v0, v1, v2, v0.normalized));
-        if (i != segments - 1) tris.add(_Triangle(v0, v2, v3, v0.normalized));
+        final u0 = Offset(j / segments, i / segments);
+        final u1 = Offset(j / segments, (i + 1) / segments);
+        final u2 = Offset((j + 1) / segments, (i + 1) / segments);
+        final u3 = Offset((j + 1) / segments, i / segments);
+        if (i != 0) tris.add(_Triangle(v0, v1, v2, v0.normalized, uv0: u0, uv1: u1, uv2: u2));
+        if (i != segments - 1) tris.add(_Triangle(v0, v2, v3, v0.normalized, uv0: u0, uv1: u2, uv2: u3));
       }
     }
     return tris;
@@ -757,9 +877,10 @@ class DartSceneRenderer {
 
   List<_Triangle> _generatePlane(double size) {
     final h = size / 2;
+    const u0 = Offset(0, 0), u1 = Offset(1, 0), u2 = Offset(1, 1), u3 = Offset(0, 1);
     return [
-      _Triangle(Vec3(-h,0,-h), Vec3(h,0,-h), Vec3(h,0,h), Vec3.up),
-      _Triangle(Vec3(-h,0,-h), Vec3(h,0,h), Vec3(-h,0,h), Vec3.up),
+      _Triangle(Vec3(-h,0,-h), Vec3(h,0,-h), Vec3(h,0,h), Vec3.up, uv0: u0, uv1: u1, uv2: u2),
+      _Triangle(Vec3(-h,0,-h), Vec3(h,0,h), Vec3(-h,0,h), Vec3.up, uv0: u0, uv1: u2, uv2: u3),
     ];
   }
 
@@ -772,8 +893,11 @@ class DartSceneRenderer {
       final x1 = radius * math.cos(a1), z1 = radius * math.sin(a1);
       final x2 = radius * math.cos(a2), z2 = radius * math.sin(a2);
       final n = Vec3((x1+x2)/2, 0, (z1+z2)/2).normalized;
-      tris.add(_Triangle(Vec3(x1,-hh,z1), Vec3(x2,-hh,z2), Vec3(x2,hh,z2), n));
-      tris.add(_Triangle(Vec3(x1,-hh,z1), Vec3(x2,hh,z2), Vec3(x1,hh,z1), n));
+      final uLo = i / segments, uHi = (i + 1) / segments;
+      tris.add(_Triangle(Vec3(x1,-hh,z1), Vec3(x2,-hh,z2), Vec3(x2,hh,z2), n,
+          uv0: Offset(uLo, 0), uv1: Offset(uHi, 0), uv2: Offset(uHi, 1)));
+      tris.add(_Triangle(Vec3(x1,-hh,z1), Vec3(x2,hh,z2), Vec3(x1,hh,z1), n,
+          uv0: Offset(uLo, 0), uv1: Offset(uHi, 1), uv2: Offset(uLo, 1)));
       tris.add(_Triangle(Vec3(0,hh,0), Vec3(x1,hh,z1), Vec3(x2,hh,z2), Vec3.up));
       tris.add(_Triangle(Vec3(0,-hh,0), Vec3(x2,-hh,z2), Vec3(x1,-hh,z1), const Vec3(0,-1,0)));
     }
@@ -860,12 +984,21 @@ class DartSceneRenderer {
   _MaterialDef _parseMaterial(dynamic m) {
     if (m == null) return _MaterialDef.defaultMat;
     if (m is Map) {
+      // Explicit scalar `alpha` wins; otherwise fall back to `base_color.a`.
+      final baseA = m['base_color'] != null ? (m['base_color']['a'] as num?)?.toDouble() ?? 1.0 : 1.0;
       return _MaterialDef(
         baseColor: m['base_color'] != null ? _parseColor3(m['base_color']) : const Vec3(0.8, 0.8, 0.8),
         metallic: (m['metallic'] as num?)?.toDouble() ?? 0.0,
         roughness: (m['roughness'] as num?)?.toDouble() ?? 0.5,
         emissive: m['emissive'] != null ? _parseColor3(m['emissive']) : Vec3.zero,
-        alpha: m['base_color'] != null ? (m['base_color']['a'] as num?)?.toDouble() ?? 1.0 : 1.0,
+        emissiveStrength: (m['emissive_strength'] as num?)?.toDouble() ?? 1.0,
+        alpha: (m['alpha'] as num?)?.toDouble() ?? baseA,
+        unlit: m['unlit'] as bool? ?? false,
+        texture: m['texture'] as String?,
+        textureColor2: m['texture_color2'] != null
+            ? _parseColor3(m['texture_color2'])
+            : const Vec3(0.3, 0.3, 0.3),
+        textureScale: (m['texture_scale'] as num?)?.toDouble() ?? 1.0,
       );
     }
     return _MaterialDef.defaultMat;
@@ -880,14 +1013,51 @@ class _TransformDef {
 
 class _MaterialDef {
   final Vec3 baseColor;
-  final double metallic, roughness, alpha;
+  final double metallic, roughness, alpha, emissiveStrength;
   final Vec3 emissive;
+  final bool unlit;
+  /// Procedural texture kind: `noise | checkerboard | stripes | gradient` (null = none).
+  final String? texture;
+  final Vec3 textureColor2;
+  final double textureScale;
   const _MaterialDef({
     required this.baseColor, required this.metallic, required this.roughness,
     required this.emissive, required this.alpha,
+    this.emissiveStrength = 1.0,
+    this.unlit = false,
+    this.texture,
+    this.textureColor2 = const Vec3(0.3, 0.3, 0.3),
+    this.textureScale = 1.0,
   });
   static const defaultMat = _MaterialDef(
     baseColor: Vec3(0.8, 0.8, 0.8), metallic: 0.0, roughness: 0.5,
     emissive: Vec3.zero, alpha: 1.0,
   );
+
+  /// Sample the procedural texture at `uv`, returning the effective albedo.
+  /// Mirrors `Material3D.sampleTexture` in scene3d/core.dart and the Rust
+  /// `sample_texture_kind`.
+  Vec3 sampleTexture(Offset uv) {
+    switch (texture) {
+      case 'checkerboard':
+        final u = (uv.dx * textureScale).floor();
+        final v = (uv.dy * textureScale).floor();
+        return (u + v) % 2 == 0 ? baseColor : textureColor2;
+      case 'stripes':
+        final s = (uv.dx * textureScale * 10).floor() % 2 == 0;
+        return s ? baseColor : textureColor2;
+      case 'gradient':
+        return baseColor.lerp(textureColor2, uv.dy);
+      case 'noise':
+        final n = _simpleNoise(uv.dx * textureScale, uv.dy * textureScale);
+        return baseColor * (0.5 + 0.5 * n);
+      default:
+        return baseColor;
+    }
+  }
+
+  static double _simpleNoise(double x, double y) {
+    final n = math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+    return n - n.floor();
+  }
 }
