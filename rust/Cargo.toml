@@ -22,6 +22,9 @@ wasm-opt = [
     "--enable-sign-ext",
     "--enable-reference-types",
     "--enable-multivalue",
+    # The module is compiled with `-C target-feature=+simd128` (see
+    # .cargo/config.toml), so wasm-opt must accept + optimize v128 ops too.
+    "--enable-simd",
 ]
 
 [dependencies]

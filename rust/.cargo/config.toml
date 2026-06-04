@@ -1,0 +1,16 @@
+# Cargo configuration for the Elpian Rust VM / Bevy software renderer.
+#
+# WebAssembly SIMD (v128): enable the simd128 target feature for the web build
+# so LLVM auto-vectorizes the hot CPU paths — the per-pixel rasterizer fill loop
+# (barycentric coverage + depth test + blend in `fill_projected`) and the
+# per-vertex lighting/transform math. For a CPU software rasterizer this is one
+# of the largest realistic wins on the Flutter-web / Bevy-WASM path.
+#
+# This only affects the `wasm32-unknown-unknown` target; native builds (and the
+# Criterion benches) are unchanged. SIMD is universally available in modern
+# browsers (Chrome/Edge 91+, Firefox 89+, Safari 16.4+) — the same modern-WASM
+# baseline this crate already assumes via the post-MVP wasm-opt features
+# (bulk-memory, sign-ext, …) configured in Cargo.toml. wasm-opt is told to
+# accept + optimize SIMD via `--enable-simd` there.
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "target-feature=+simd128"]

@@ -142,26 +142,50 @@ class BevySceneApi {
   }
 
   /// Get the rendered frame as raw RGBA pixel data.
-  static BevyFrameData? getFrameDirect({required String sceneId}) {
+  ///
+  /// When the caller already knows the render dimensions (the controller caches
+  /// them), pass [width]/[height]/[frameCount] to take the fast path: it fetches
+  /// only the pixel bytes and skips the per-frame `_wasmGetFrame` metadata call
+  /// (a JSON encode in Rust + `jsonDecode` in Dart on *every* frame). Without the
+  /// hints it falls back to the JSON metadata path.
+  static BevyFrameData? getFrameDirect({
+    required String sceneId,
+    int? width,
+    int? height,
+    int? frameCount,
+  }) {
     if (!_wasmAvailable) return null;
     try {
+      // Fast path: dimensions known, fetch bytes only (no JSON roundtrip).
+      if (width != null && height != null) {
+        final jsBytes = _wasmGetFrameBytes(sceneId.toJS);
+        final pixels = jsBytes.toDart;
+        if (pixels.isEmpty) return null;
+        return BevyFrameData(
+          width: width,
+          height: height,
+          pixels: pixels,
+          frameCount: frameCount ?? 0,
+        );
+      }
+
       final frameJson = _wasmGetFrame(sceneId.toJS).toDart;
       final json = jsonDecode(frameJson) as Map<String, dynamic>;
       if (!json.containsKey('width')) return null;
 
-      final width = json['width'] as int;
-      final height = json['height'] as int;
-      final frameCount = json['frameCount'] as int;
+      final w = json['width'] as int;
+      final h = json['height'] as int;
+      final fc = json['frameCount'] as int;
 
       // Get raw pixel bytes from WASM
       final jsBytes = _wasmGetFrameBytes(sceneId.toJS);
       final pixels = jsBytes.toDart;
 
       return BevyFrameData(
-        width: width,
-        height: height,
+        width: w,
+        height: h,
         pixels: pixels,
-        frameCount: frameCount,
+        frameCount: fc,
       );
     } catch (_) {
       return null;
