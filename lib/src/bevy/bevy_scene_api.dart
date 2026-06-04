@@ -63,6 +63,14 @@ typedef _GetElapsedDart = double Function(ffi.Pointer<Utf8>);
 typedef _GetFrameCountC = ffi.Uint64 Function(ffi.Pointer<Utf8>);
 typedef _GetFrameCountDart = int Function(ffi.Pointer<Utf8>);
 
+typedef _FeedModelC = ffi.Int32 Function(
+    ffi.Pointer<Utf8>, ffi.Pointer<Utf8>, ffi.Pointer<Utf8>);
+typedef _FeedModelDart = int Function(
+    ffi.Pointer<Utf8>, ffi.Pointer<Utf8>, ffi.Pointer<Utf8>);
+
+typedef _HasModelC = ffi.Int32 Function(ffi.Pointer<Utf8>, ffi.Pointer<Utf8>);
+typedef _HasModelDart = int Function(ffi.Pointer<Utf8>, ffi.Pointer<Utf8>);
+
 // ── Dynamic library loader ──────────────────────────────────────────
 
 ffi.DynamicLibrary _loadLibrary() {
@@ -124,6 +132,8 @@ class BevySceneApi {
   late final _DestroyDart _sceneExists;
   late final _GetElapsedDart _getElapsedTime;
   late final _GetFrameCountDart _getFrameCount;
+  late final _FeedModelDart _feedModel;
+  late final _HasModelDart _hasModel;
 
   BevySceneApi._() {
     _lib = _loadLibrary();
@@ -169,6 +179,10 @@ class BevySceneApi {
     _getFrameCount = _lib
         .lookupFunction<_GetFrameCountC, _GetFrameCountDart>(
             'elpian_bevy_get_frame_count');
+    _feedModel = _lib
+        .lookupFunction<_FeedModelC, _FeedModelDart>('elpian_bevy_feed_model');
+    _hasModel = _lib
+        .lookupFunction<_HasModelC, _HasModelDart>('elpian_bevy_has_model');
   }
 
   factory BevySceneApi() {
@@ -344,6 +358,39 @@ class BevySceneApi {
       return api._sceneExists(sidPtr) == 1;
     } finally {
       malloc.free(sidPtr);
+    }
+  }
+
+  /// Feed model bytes (GLB / embedded-buffer glTF) into a scene, keyed by URL.
+  /// Bytes are base64-encoded across the FFI boundary. Returns true if decoded.
+  static bool feedModel({
+    required String sceneId,
+    required String url,
+    required Uint8List bytes,
+  }) {
+    final api = BevySceneApi();
+    final sidPtr = sceneId.toNativeUtf8();
+    final urlPtr = url.toNativeUtf8();
+    final b64Ptr = base64Encode(bytes).toNativeUtf8();
+    try {
+      return api._feedModel(sidPtr, urlPtr, b64Ptr) == 1;
+    } finally {
+      malloc.free(sidPtr);
+      malloc.free(urlPtr);
+      malloc.free(b64Ptr);
+    }
+  }
+
+  /// Whether a model URL is already decoded/cached in a scene.
+  static bool hasModel({required String sceneId, required String url}) {
+    final api = BevySceneApi();
+    final sidPtr = sceneId.toNativeUtf8();
+    final urlPtr = url.toNativeUtf8();
+    try {
+      return api._hasModel(sidPtr, urlPtr) == 1;
+    } finally {
+      malloc.free(sidPtr);
+      malloc.free(urlPtr);
     }
   }
 

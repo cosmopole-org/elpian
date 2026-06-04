@@ -385,6 +385,16 @@ factors, alpha mode and double-sidedness; embedded base-colour textures.
 > features — see `lib/src/scene3d/gltf/`. Preload models without blocking via
 > `GltfModelCache.instance.preload([...urls])`.
 
+> **Bevy / Rust path.** The `BevyScene` renderer has its own dependency-light
+> glTF/GLB decoder + CPU skeletal-skinning pipeline in `rust/src/bevy_scene/gltf.rs`
+> (GLB container + embedded base64 buffers; `POSITION`/`NORMAL`/`TEXCOORD_0`/
+> `JOINTS_0`/`WEIGHTS_0`; skins; T/R/S animation channels with `STEP`/`LINEAR`).
+> Model bytes are streamed by the **host** and fed to Rust via the model bridge
+> (`BevySceneController.feedModel` → `elpian_bevy_feed_model` / the WASM
+> equivalent); a tinted capsule placeholder is drawn until they arrive. Models
+> render tinted + lit from their `baseColorFactor`; embedded **image** textures
+> (PNG/JPEG) are not yet decoded on the Rust path (drawn with the base colour).
+
 ---
 
 ## 🔷 Mesh Generators
@@ -452,9 +462,20 @@ PBR (Physically Based Rendering) material properties for mesh3d nodes.
 | `wireframe` | bool | false | Wireframe rendering |
 | `unlit` | bool | false | Ignore lighting |
 
+> **Renderer parity (Bevy / Rust).** As of the TPS→Bevy migration, the
+> `BevyScene` Rust software renderer reaches parity with the `GameScene` Dart
+> renderer for every material/environment/light field above — `emissive_strength`,
+> `unlit`, scalar `alpha` + `alpha_mode:"blend"`, procedural textures
+> (`texture`/`texture_color2`/`texture_scale`, sampled **per pixel**), the
+> `environment` sky gradient (`sky_color_top`/`sky_color_bottom`), `fog_type:"linear"`
+> + `fog_near`, point-light `range`, and `segments` tessellation. The pure-Dart
+> `BevyScene` fallback mirrors them too (procedural textures sampled at the triangle
+> centroid). See `TPS_BEVY_MIGRATION_PLAN.md`.
+
 ### Procedural Textures
 
-The Dart renderer supports procedural texture generation:
+Procedural texture generation, supported by both the `GameScene` Dart renderer
+and the `BevyScene` Rust renderer:
 
 | Texture Type | Parameters | Description |
 |-------------|-----------|-------------|

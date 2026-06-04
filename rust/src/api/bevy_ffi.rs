@@ -186,6 +186,41 @@ pub extern "C" fn elpian_bevy_send_input(
     }
 }
 
+/// Feed model bytes into a scene, keyed by URL. `bytes_base64` is the GLB/glTF
+/// file content base64-encoded (matching how frame data crosses this boundary).
+/// Returns 1 if the scene exists and the bytes decoded into a usable model.
+#[unsafe(no_mangle)]
+pub extern "C" fn elpian_bevy_feed_model(
+    scene_id: *const c_char,
+    url: *const c_char,
+    bytes_base64: *const c_char,
+) -> i32 {
+    let sid = unsafe { c_str_to_string(scene_id) };
+    let u = unsafe { c_str_to_string(url) };
+    let b64 = unsafe { c_str_to_string(bytes_base64) };
+    let bytes = match base64::engine::general_purpose::STANDARD.decode(b64.as_bytes()) {
+        Ok(b) => b,
+        Err(_) => return 0,
+    };
+    if manager::feed_model_bytes(&sid, u, &bytes) {
+        1
+    } else {
+        0
+    }
+}
+
+/// Check whether a model URL is already decoded/cached in a scene. Returns 1 if so.
+#[unsafe(no_mangle)]
+pub extern "C" fn elpian_bevy_has_model(scene_id: *const c_char, url: *const c_char) -> i32 {
+    let sid = unsafe { c_str_to_string(scene_id) };
+    let u = unsafe { c_str_to_string(url) };
+    if manager::scene_has_model(&sid, &u) {
+        1
+    } else {
+        0
+    }
+}
+
 /// Destroy a scene and free its resources. Returns 1 if found.
 #[unsafe(no_mangle)]
 pub extern "C" fn elpian_bevy_destroy_scene(scene_id: *const c_char) -> i32 {

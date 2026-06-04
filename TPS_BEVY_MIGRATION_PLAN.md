@@ -84,22 +84,23 @@ Legend: ✅ present · ⚠️ partial · ❌ missing. "Rust" = `bevy_scene` rend
 | Feature | ref (`scene3d`) | Rust (`bevy_scene`) | Dart‑fb | Action phase |
 |---|:--:|:--:|:--:|:--:|
 | Cube/Sphere/Plane/Cylinder/Cone | ✅ | ✅ | ✅ | — |
-| Mesh `segments`/`subdivisions` parity | ✅ | ✅ *(P1)* | ⚠️ | P1 |
+| Mesh `segments`/`subdivisions` parity | ✅ | ✅ *(P1)* | ✅ *(P1)* | P1 |
 | Material emissive | ✅ | ✅ | ✅ | — |
-| Material `emissive_strength` | ✅ | ✅ *(P1)* | ❌ | P1 |
-| Material `unlit` | ✅ | ✅ *(P1)* | ❌ | P1 |
-| Scalar `alpha` + `alpha_mode:"blend"` | ✅ | ✅ *(P1)* | ⚠️ | P1 |
-| Procedural texture noise/checkerboard | ✅ | ❌ *(P1 follow‑up: needs mesh‑UV plumbing)* | ❌ | P1 |
-| `texture_color2`, `texture_scale` | ✅ | ⚠️ (parsed, not yet sampled) | ❌ | P1 |
-| Sky gradient `sky_color_top/bottom` | ✅ | ✅ *(P1)* | ❌ | P1 |
-| `fog_type:"linear"`, `fog_near` | ✅ | ✅ *(P1)* | ⚠️ | P1 |
-| Point light `range` attenuation | ✅ | ✅ *(P1)* | ❌ | P1 |
-| `model3d` glTF/GLB streaming | ✅ | ❌ | ❌ | P2 |
-| CPU skeletal skinning + clip sampling | ✅ | ❌ | ❌ | P2 |
-| Model `tint` / per‑node emissive | ✅ | ❌ | ❌ | P2 |
-| Static‑world bake/cache (`staticKey`) | ✅ | ❌ | ❌ | P3 |
-| `renderScale` down‑raster | ✅ | ⚠️ (fixed buffer size) | ⚠️ | P3 |
-| fps throttle / non‑interactive overlay | ✅ | ⚠️ | ⚠️ | P3/P4 |
+| Material `emissive_strength` | ✅ | ✅ *(P1)* | ✅ *(P1)* | P1 |
+| Material `unlit` | ✅ | ✅ *(P1)* | ✅ *(P1)* | P1 |
+| Scalar `alpha` + `alpha_mode:"blend"` | ✅ | ✅ *(P1)* | ✅ *(P1)* | P1 |
+| Procedural texture noise/checkerboard | ✅ | ✅ *(P1: per‑pixel)* | ✅ *(P1: centroid)* | P1 |
+| `texture_color2`, `texture_scale` | ✅ | ✅ *(P1)* | ✅ *(P1)* | P1 |
+| Sky gradient `sky_color_top/bottom` | ✅ | ✅ *(P1)* | ✅ *(P1)* | P1 |
+| `fog_type:"linear"`, `fog_near` | ✅ | ✅ *(P1)* | ✅ *(P1)* | P1 |
+| Point light `range` attenuation | ✅ | ✅ *(P1)* | ✅ *(P1)* | P1 |
+| `model3d` glTF/GLB streaming | ✅ | ✅ *(P2: GLB+data‑URI)* | ⚠️ *(P2: capsule placeholder)* | P2 |
+| CPU skeletal skinning + clip sampling | ✅ | ✅ *(P2)* | ❌ | P2 |
+| Model `tint` / per‑node emissive | ✅ | ✅ *(P2)* | ⚠️ *(P2: tint on placeholder)* | P2 |
+| Model embedded **texture images** (PNG/JPEG) | ✅ | ❌ *(deferred: needs image decoder)* | ❌ | P2+ |
+| Static‑world bake/cache (`staticKey`) | ✅ | ✅ *(P3: manager cache)* | n/a | P3 |
+| `renderScale` down‑raster | ✅ | ✅ *(P3: widget buffer scale)* | ⚠️ | P3 |
+| fps throttle / non‑interactive overlay | ✅ | ✅ *(P3: ticker throttle)* | ✅ | P3/P4 |
 | Host viewport env read | ✅ (JS) | n/a (widget) | n/a | P4 |
 
 ---
@@ -137,20 +138,67 @@ Legend: ✅ present · ⚠️ partial · ❌ missing. "Rust" = `bevy_scene` rend
 ## 4. Status board
 
 - [x] **P0 — Analysis, gap matrix & this plan** ✅ *(done)*
-- [ ] **P1 — Material, environment, light & mesh parity (Rust + Dart‑fb)** — *Rust core done*
+- [x] **P1 — Material, environment, light & mesh parity (Rust + Dart‑fb)** ✅ *(done)*
   - [x] Rust schema: `emissive_strength`, `unlit`, scalar `alpha`, lowercase `alpha_mode`,
         `texture*` (parsed), sky gradient, `fog_type`/`fog_near`, light `range`, `segments`.
   - [x] Rust renderer: unlit bypass, emissive strength, alpha blend, sky‑gradient clear,
         linear fog + near, point‑light range falloff, segment tessellation.
-  - [x] Rust tests: `rust/tests/feature_parity.rs` (7 behavioral tests) + golden stable.
-  - [ ] Rust renderer: **procedural texture sampling** (noise/checkerboard) — needs per‑vertex
-        UVs added to mesh generators + `Triangle`; sample at vertex/centroid like scene3d.
-  - [ ] Dart fallback (`dart_scene_renderer.dart`): mirror all the above for the web safety net.
-- [ ] **P2 — `model3d` glTF/GLB streaming + skeletal skinning (Rust + bridge)**
-- [ ] **P3 — Static‑world bake/cache, renderScale & frame splicing**
-- [ ] **P4 — Widget/registry, viewport & overlay wiring for the Bevy path**
-- [ ] **P5 — Rewrite the TPS example on `BevyScene`**
-- [ ] **P6 — Build (WASM+native), verify, optimize, document**
+  - [x] Rust tests: `rust/tests/feature_parity.rs` (9 behavioral tests) + golden stable.
+  - [x] Rust renderer: **procedural texture sampling** (noise/checkerboard/stripes/gradient) —
+        per‑vertex UVs on mesh generators + `Triangle`; **per‑pixel** UV‑interpolated sampling
+        in the rasterizer (untextured fast path stays byte‑identical).
+  - [x] Dart fallback (`dart_scene_renderer.dart`): mirrors all the above (sky gradient clear,
+        linear fog + near, point‑light range, `unlit`/`emissive_strength`/scalar `alpha`,
+        `segments`, and procedural textures sampled at the triangle centroid).
+- [x] **P2 — `model3d` glTF/GLB streaming + skeletal skinning (Rust + bridge)** ✅ *(core done; texture images deferred)*
+  - [x] Schema `Model3DNode` (`model`/`anim_time`/`animation`/`tint`/`emissive`/transform/children); `"model3d"`+`"gltf"`.
+  - [x] GLB container + embedded base64‑buffer glTF parse; accessor/bufferView decode.
+  - [x] Node hierarchy, skins (inverse‑bind), animation channels (T/R/S, STEP/LINEAR+slerp).
+  - [x] CPU linear‑blend skinning → posed triangles; tint × baseColorFactor + emissive.
+  - [x] Per‑renderer model cache + capsule placeholder until bytes arrive.
+  - [x] **Bridge:** host‑feed of model bytes via manager + native FFI (`elpian_bevy_feed_model`,
+        base64) and WASM FFI (`elpian_bevy_wasm_feed_model`, typed array); Dart `BevySceneApi`
+        (native+web) + `BevySceneController.feedModel`/`hasModel`.
+  - [x] Tests: `rust/tests/gltf_skinning.rs` (synthetic skinned GLB; parse/skinning/anim/integration).
+  - [x] Dart fallback: `model3d` draws a tinted capsule placeholder (full glTF in the fallback
+        deferred — the Rust path is the real implementation).
+  - [ ] *Deferred:* embedded **texture images** (PNG/JPEG) — needs a wasm‑safe image decoder.
+- [x] **P3 — Static‑world bake/cache, renderScale & frame splicing** ✅
+  - [x] Manager bakes `staticWorld` once (keyed by `staticKey`), splices the dynamic
+        `world` each frame via `renderer.render_split` (`rust/tests/static_world.rs`).
+  - [x] `renderScale` down‑raster: widget renders the FFI buffer at `size*renderScale`,
+        upscaled to fill (parity with scene3d). `BevySceneWidget.build` reads `renderScale`.
+  - [x] fps throttle: the render ticker only renders once per `1/fps` interval (so a
+        non‑60 cap actually saves CPU); `interactive:false` already disables gestures.
+  - [x] Off‑screen geometry is rejected at the fill stage (bbox clamp) + native rayon
+        tiled rasterizer retained (broad‑phase frustum cull left as a future tuning).
+- [x] **P4 — Widget/registry, viewport & overlay wiring for the Bevy path** ✅
+  - [x] `BevyScene`/`Bevy3D`/`Scene3D` registered → `BevySceneWidget.build`
+        (`lib/src/core/elpian_engine.dart`).
+  - [x] `BevySceneWidget.build` reads `scene`(+`staticWorld`/`staticKey`), `width`,
+        `height`, `fps`, `interactive`, `renderScale`, `sceneKey`/`sceneId`, `fit`.
+  - [x] Scene doc flows through `loadScene`→manager→`SceneDoc` (static world preserved).
+- [x] **P5 — Rewrite the TPS example on `BevyScene`** ✅
+  - [x] Parameterized `tps_game_program.dart` with a single `SCENE_WIDGET` constant;
+        the 3D node emits `type: SCENE_WIDGET` (kept `renderScale:0.7`, `fps:30`,
+        `interactive:false`, the `__SCENE__` splice + `staticWorld` payload).
+  - [x] `tpsGameProgramBevy` flips that one line to `'BevyScene'` — shared logic.
+  - [x] Verified every material/mesh/env/light/model field the program emits is
+        honored by the Bevy schema (P1/P2): no DSL shims needed (`segments` aliased).
+  - [x] New page `example/lib/examples/tps_game_bevy_example.dart` (`TpsGameBevyPage`),
+        reusing `GameLoading`; A/B launcher in `main.dart` (Bevy = showcase, Impeller kept).
+  - [x] Bevy widget streams `model3d` URLs via `fetchModelBytes`→`controller.feedModel`
+        (host side of the P2 bridge), so streamed glTF characters/vehicles load on the
+        Bevy path; capsule placeholder until bytes arrive.
+- [x] **P6 — Build (WASM+native), verify, optimize, document** ✅ *(native+tests+docs; WASM build deferred to CI — target not installed in this sandbox)*
+  - [x] `cargo build --release` (shipped LTO config) clean; `cargo build` clean.
+  - [x] `cargo test` all green: feature_parity (9), gltf_skinning (4), static_world (2),
+        renderer_golden (golden stable), vm_ast_integration (10), double_buffer.
+  - [x] Docs: `3D_GRAPHICS.md` (Bevy parity note on materials/textures + Rust glTF note),
+        `README.md` (two-backend / A/B TPS note); this plan's matrix updated.
+  - [ ] *Deferred to CI/user:* WASM build (`wasm32-unknown-unknown` not installed here),
+        `flutter analyze`/`flutter test` (Flutter not in sandbox), embedded glTF image
+        textures on the Rust path, and a full downtown perf profile on the Bevy path.
 
 ---
 

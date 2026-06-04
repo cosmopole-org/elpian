@@ -17,6 +17,23 @@ pub struct SceneDef {
     pub world: Vec<JsonNode>,
 }
 
+/// The full scene document emitted by the game: a baked `staticWorld` (keyed by
+/// `staticKey`, sent once and reused) plus the per-frame dynamic `world`. The
+/// manager caches the parsed static world by key and only re-parses `world` each
+/// tick (P3 frame splicing). `SceneDef` alone drops the static fields, so this is
+/// the type used at the create/update boundary.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct SceneDoc {
+    #[serde(default, rename = "staticKey")]
+    pub static_key: Option<String>,
+    #[serde(default, rename = "staticWorld")]
+    pub static_world: Vec<JsonNode>,
+    #[serde(default)]
+    pub world: Vec<JsonNode>,
+    #[serde(default)]
+    pub ui: Vec<JsonNode>,
+}
+
 // ── Node Types ───────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,6 +52,8 @@ pub enum JsonNode {
     // 3D World Elements
     #[serde(rename = "mesh3d")]
     Mesh3D(Mesh3DNode),
+    #[serde(rename = "model3d", alias = "gltf")]
+    Model3D(Model3DNode),
     #[serde(rename = "light")]
     Light(LightNode),
     #[serde(rename = "camera")]
@@ -121,6 +140,42 @@ pub struct Mesh3DNode {
     pub animation: Option<AnimationDef>,
     #[serde(default)]
     pub children: Vec<JsonNode>,
+}
+
+/// A streamed glTF/GLB model node (parity with scene3d's `model3d`). The model
+/// bytes are supplied out-of-band (FFI feed / host bridge) and looked up by `model`
+/// URL; until they resolve, the renderer draws a tinted capsule placeholder.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Model3DNode {
+    #[serde(default)]
+    pub id: Option<String>,
+    /// Model URL/key used to look up the decoded glTF in the model cache.
+    pub model: String,
+    /// Playback time (seconds) used to sample the animation clip.
+    #[serde(default)]
+    pub anim_time: f32,
+    /// Clip selector: a name (string) or an index (number). `None` = first clip.
+    #[serde(default)]
+    pub animation: Option<StringOrIndex>,
+    /// Multiplicative tint applied to the model's base color.
+    #[serde(default)]
+    pub tint: Option<ColorDef>,
+    #[serde(default)]
+    pub emissive: Option<ColorDef>,
+    #[serde(default)]
+    pub emissive_strength: Option<f32>,
+    #[serde(default)]
+    pub transform: TransformDef,
+    #[serde(default)]
+    pub children: Vec<JsonNode>,
+}
+
+/// An animation clip selector accepted as either a clip name or a numeric index.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum StringOrIndex {
+    Index(u32),
+    Name(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

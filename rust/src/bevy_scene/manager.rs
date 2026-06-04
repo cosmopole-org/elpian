@@ -19,7 +19,7 @@ use once_cell::sync::Lazy;
 use serde_json;
 
 use crate::bevy_scene::renderer::SceneRenderer;
-use crate::bevy_scene::schema::{InputEvent, SceneDef};
+use crate::bevy_scene::schema::{InputEvent, JsonNode, SceneDoc};
 
 type SceneMap = HashMap<String, SceneInstance>;
 
@@ -41,7 +41,13 @@ fn lock_scenes() -> std::sync::MutexGuard<'static, SceneMap> {
 /// A managed scene instance with renderer and parsed scene data.
 struct SceneInstance {
     renderer: SceneRenderer,
-    scene: SceneDef,
+    /// Baked static world (the city), parsed once and reused every frame.
+    static_world: Vec<JsonNode>,
+    /// Key identifying the baked static world; when an update carries the same
+    /// key, the static world is reused instead of re-parsed (P3).
+    static_key: Option<String>,
+    /// Per-frame dynamic world (camera, player, enemies, fx).
+    dynamic_world: Vec<JsonNode>,
     frame_count: u64,
 }
 
@@ -55,7 +61,7 @@ pub fn init_scene_system() {
 /// The JSON should follow the SceneDef format with `ui` and `world` arrays.
 /// Returns true on success, false if JSON parsing fails.
 pub fn create_scene(scene_id: String, json: String, width: u32, height: u32) -> bool {
-    let scene: SceneDef = match serde_json::from_str(&json) {
+    let doc: SceneDoc = match serde_json::from_str(&json) {
         Ok(s) => s,
         Err(_) => return false,
     };
@@ -63,7 +69,9 @@ pub fn create_scene(scene_id: String, json: String, width: u32, height: u32) -> 
     let renderer = SceneRenderer::new(width, height);
     let instance = SceneInstance {
         renderer,
-        scene,
+        static_world: doc.static_world,
+        static_key: doc.static_key,
+        dynamic_world: doc.world,
         frame_count: 0,
     };
 
@@ -77,14 +85,25 @@ pub fn create_scene(scene_id: String, json: String, width: u32, height: u32) -> 
 /// This replaces the scene definition while preserving the renderer state
 /// (elapsed time, frame count) for smooth transitions.
 pub fn update_scene(scene_id: String, json: String) -> bool {
-    let scene: SceneDef = match serde_json::from_str(&json) {
+    let doc: SceneDoc = match serde_json::from_str(&json) {
         Ok(s) => s,
         Err(_) => return false,
     };
 
     let mut scenes = lock_scenes();
     if let Some(instance) = scenes.get_mut(&scene_id) {
-        instance.scene = scene;
+        // Re-bake the static world only when a new keyed `staticWorld` arrives.
+        // Steady-state frames send just `{staticKey?, world}`, so the baked city
+        // is reused untouched (the P3 win). A changed key with fresh geometry
+        // swaps the cache; a changed key with no geometry keeps the old bake.
+        let key_changed = doc.static_key != instance.static_key;
+        if !doc.static_world.is_empty() && (key_changed || instance.static_world.is_empty()) {
+            instance.static_world = doc.static_world;
+        }
+        if doc.static_key.is_some() {
+            instance.static_key = doc.static_key;
+        }
+        instance.dynamic_world = doc.world;
         true
     } else {
         false
@@ -98,12 +117,45 @@ pub fn update_scene(scene_id: String, json: String) -> bool {
 pub fn render_frame(scene_id: &str, delta_time: f32) -> bool {
     let mut scenes = lock_scenes();
     if let Some(instance) = scenes.get_mut(scene_id) {
-        instance.renderer.render_scene(&instance.scene, delta_time);
+        // Splice the baked static world with the per-frame dynamic world.
+        let SceneInstance {
+            renderer,
+            static_world,
+            dynamic_world,
+            ..
+        } = instance;
+        renderer.render_split(static_world, dynamic_world, delta_time);
         instance.frame_count += 1;
         true
     } else {
         false
     }
+}
+
+/// Feed decoded model bytes (GLB or embedded-buffer glTF) into a scene's renderer,
+/// keyed by URL. The bytes are decoded once and cached; `model3d` nodes referencing
+/// the same URL then render the posed model instead of the placeholder capsule.
+///
+/// This is the "bridge" entry point: the host (Flutter/JS) fetches the model bytes
+/// over the network and hands them to Rust, which owns decoding + skinning. Returns
+/// true if the scene exists and the bytes parsed into a usable model.
+pub fn feed_model_bytes(scene_id: &str, url: String, bytes: &[u8]) -> bool {
+    let mut scenes = lock_scenes();
+    if let Some(instance) = scenes.get_mut(scene_id) {
+        instance.renderer.load_model_bytes(url, bytes)
+    } else {
+        false
+    }
+}
+
+/// Whether a decoded model is cached for `url` in this scene (so the host can
+/// skip re-fetching/re-feeding bytes it has already supplied).
+pub fn scene_has_model(scene_id: &str, url: &str) -> bool {
+    let scenes = lock_scenes();
+    scenes
+        .get(scene_id)
+        .map(|i| i.renderer.has_model(url))
+        .unwrap_or(false)
 }
 
 /// Resize the scene's render target.

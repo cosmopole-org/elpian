@@ -7,6 +7,7 @@ import 'package:flutter/scheduler.dart';
 import 'bevy_scene_controller.dart';
 import 'dart_scene_renderer.dart';
 import '../models/elpian_node.dart';
+import '../scene3d/gltf/net/model_fetch.dart';
 
 /// A Flutter widget that renders a Bevy 3D scene from JSON.
 ///
@@ -54,6 +55,11 @@ class BevySceneWidget extends StatefulWidget {
   /// How the rendered image should fit within the widget bounds.
   final BoxFit fit;
 
+  /// Down-raster factor for the render buffer (0 < scale ≤ 1). The Rust frame is
+  /// rendered at `size * renderScale` and upscaled to fill the widget, trading
+  /// sharpness for fill-rate (parity with the scene3d `renderScale`). 1.0 = native.
+  final double renderScale;
+
   const BevySceneWidget({
     super.key,
     this.sceneJson,
@@ -68,6 +74,7 @@ class BevySceneWidget extends StatefulWidget {
     this.onSceneCreated,
     this.sceneId,
     this.fit = BoxFit.contain,
+    this.renderScale = 1.0,
   }) : assert(sceneJson != null || sceneMap != null,
             'Either sceneJson or sceneMap must be provided');
 
@@ -80,6 +87,9 @@ class BevySceneWidget extends StatefulWidget {
     final fps = (props['fps'] as num?)?.toInt() ?? 60;
     final interactive = props['interactive'] as bool? ?? true;
     final fit = _parseFit(props['fit'] as String?);
+    final renderScale =
+        ((props['renderScale'] as num?)?.toDouble() ?? 1.0).clamp(0.1, 1.0);
+    final sceneId = props['sceneKey'] as String? ?? props['sceneId'] as String?;
 
     if (sceneData is Map<String, dynamic>) {
       return BevySceneWidget(
@@ -89,6 +99,8 @@ class BevySceneWidget extends StatefulWidget {
         fps: fps,
         interactive: interactive,
         fit: fit,
+        renderScale: renderScale,
+        sceneId: sceneId,
       );
     }
 
@@ -99,6 +111,8 @@ class BevySceneWidget extends StatefulWidget {
       fps: fps,
       interactive: interactive,
       fit: fit,
+      renderScale: renderScale,
+      sceneId: sceneId,
     );
   }
 
@@ -131,6 +145,10 @@ class _BevySceneWidgetState extends State<BevySceneWidget>
   bool _useDartRenderer = false;
   DartSceneRenderer? _dartRenderer;
   Map<String, dynamic>? _parsedScene;
+
+  /// Model URLs already fetched/fed to the Rust renderer, so each streamed glTF
+  /// is downloaded once and not re-requested every frame (P2 model bridge).
+  final Set<String> _requestedModels = {};
 
   static int _globalSceneCounter = 0;
   static bool _systemInitialized = false;
@@ -199,11 +217,15 @@ class _BevySceneWidgetState extends State<BevySceneWidget>
       return;
     }
 
-    // FFI path
+    // FFI path. Apply renderScale so the buffer is rendered smaller and upscaled
+    // to fill the widget (cheaper fill-rate), matching the scene3d down-raster.
     final renderBox = context.findRenderObject() as RenderBox?;
     final size = renderBox?.size ?? const Size(512, 512);
-    final renderWidth = (widget.width ?? size.width).toInt().clamp(1, 4096);
-    final renderHeight = (widget.height ?? size.height).toInt().clamp(1, 4096);
+    final scale = widget.renderScale.clamp(0.1, 1.0);
+    final renderWidth =
+        ((widget.width ?? size.width) * scale).round().clamp(1, 4096);
+    final renderHeight =
+        ((widget.height ?? size.height) * scale).round().clamp(1, 4096);
 
     final id = widget.sceneId ?? 'bevy_scene_${_globalSceneCounter++}';
     _controller = BevySceneController(sceneId: id);
@@ -232,6 +254,8 @@ class _BevySceneWidgetState extends State<BevySceneWidget>
     if (success) {
       _isInitialized = true;
       widget.onSceneCreated?.call(_controller!);
+      // Stream any glTF models referenced anywhere in the scene (static + dynamic).
+      _streamModels(_parsedScene);
       _controller!.renderFrame(deltaTime: 0);
       _updateImage();
       if (widget.autoStart && !_ticker.isActive) {
@@ -252,6 +276,17 @@ class _BevySceneWidgetState extends State<BevySceneWidget>
   void _onTick(Duration elapsed) {
     if (!_isInitialized || !mounted) return;
 
+    // Throttle to the target fps: the ticker fires every vsync, but we only
+    // render once per frame interval (e.g. 30fps → ~33ms), so a non-60 fps cap
+    // actually reduces CPU instead of rendering every vsync.
+    if (_lastFrameTime != Duration.zero && widget.fps > 0) {
+      final sinceRender =
+          (elapsed - _lastFrameTime).inMicroseconds / 1000000.0;
+      final frameInterval = 1.0 / widget.fps;
+      // 0.9 slack avoids dropping a frame when vsync lands just shy of the mark.
+      if (sinceRender < frameInterval * 0.9) return;
+    }
+
     final deltaTime = _lastFrameTime == Duration.zero
         ? 1.0 / widget.fps
         : (elapsed - _lastFrameTime).inMicroseconds / 1000000.0;
@@ -266,6 +301,41 @@ class _BevySceneWidgetState extends State<BevySceneWidget>
     } else {
       _controller?.renderFrame(deltaTime: cappedDelta);
       _updateImage();
+    }
+  }
+
+  /// Walk a scene fragment, collect `model3d` URLs, and stream any not-yet-fetched
+  /// glTF/GLB bytes into the Rust renderer (the host side of the model bridge).
+  /// No-op on the Dart fallback (which draws capsule placeholders) and on web/native
+  /// where the fetch helper is unavailable (errors are swallowed; capsule stands in).
+  void _streamModels(dynamic node) {
+    if (_useDartRenderer || _controller == null || node == null) return;
+    final urls = <String>{};
+    void scan(dynamic n) {
+      if (n is Map) {
+        if (n['type'] == 'model3d' && n['model'] is String) {
+          urls.add(n['model'] as String);
+        }
+        for (final v in n.values) {
+          scan(v);
+        }
+      } else if (n is List) {
+        for (final e in n) {
+          scan(e);
+        }
+      }
+    }
+
+    scan(node);
+    for (final url in urls) {
+      if (!_requestedModels.add(url)) continue; // already requested
+      fetchModelBytes(url).then((bytes) {
+        if (!mounted || _controller == null) return;
+        _controller!.feedModel(url, bytes);
+      }).catchError((_) {
+        // Allow a later retry if the fetch failed (network blip / offline).
+        _requestedModels.remove(url);
+      });
     }
   }
 
@@ -303,6 +373,9 @@ class _BevySceneWidgetState extends State<BevySceneWidget>
       if (!_useDartRenderer) {
         final json = widget.sceneJson ?? jsonEncode(widget.sceneMap);
         _controller?.updateScene(json);
+        // New entities (e.g. spawned enemies) may reference new models; scan the
+        // dynamic world each update. The static world was scanned once at load.
+        _streamModels(_parsedScene?['world']);
       }
     }
   }

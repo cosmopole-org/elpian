@@ -186,6 +186,65 @@ fn linear_fog_with_near_darkens_distant_geometry() {
 }
 
 #[test]
+fn checkerboard_texture_produces_two_distinct_colors() {
+    // A large unlit checkerboard plane filling the view. With base_color (red) and
+    // texture_color2 (blue) and a high scale, the frame must contain clearly red
+    // and clearly blue pixels — i.e. the procedural texture is being sampled.
+    let json = r#"{"world":[
+        {"type":"camera","transform":{"position":{"x":0,"y":6,"z":0},"rotation":{"x":-90,"y":0,"z":0}}},
+        {"type":"mesh3d","mesh":{"shape":"Plane","size":10.0},
+         "material":{"unlit":true,
+            "base_color":{"r":0.9,"g":0.05,"b":0.05},
+            "texture":"checkerboard","texture_scale":8.0,
+            "texture_color2":{"r":0.05,"g":0.05,"b":0.9}}}
+    ]}"#;
+    let px = render(json);
+    let mut reddish = 0;
+    let mut bluish = 0;
+    for p in px.chunks_exact(4) {
+        // Skip the dark sky background; only count saturated texels.
+        if p[0] > 150 && p[2] < 90 {
+            reddish += 1;
+        } else if p[2] > 150 && p[0] < 90 {
+            bluish += 1;
+        }
+    }
+    assert!(
+        reddish > 50 && bluish > 50,
+        "checkerboard should paint both base_color and texture_color2 cells: red={reddish} blue={bluish}"
+    );
+}
+
+#[test]
+fn noise_texture_varies_across_surface() {
+    // An unlit noise plane should not be a single flat color: gather the luma of
+    // many surface pixels and assert they span a range (noise modulates base_color).
+    let json = r#"{"world":[
+        {"type":"camera","transform":{"position":{"x":0,"y":6,"z":0},"rotation":{"x":-90,"y":0,"z":0}}},
+        {"type":"mesh3d","mesh":{"shape":"Plane","size":10.0},
+         "material":{"unlit":true,
+            "base_color":{"r":0.8,"g":0.8,"b":0.8},
+            "texture":"noise","texture_scale":40.0}}
+    ]}"#;
+    let px = render(json);
+    let mut min_l = 255.0f32;
+    let mut max_l = 0.0f32;
+    for p in px.chunks_exact(4) {
+        // Only consider lit surface pixels (skip dark background).
+        let l = 0.299 * p[0] as f32 + 0.587 * p[1] as f32 + 0.114 * p[2] as f32;
+        if l > 20.0 {
+            min_l = min_l.min(l);
+            max_l = max_l.max(l);
+        }
+    }
+    assert!(
+        max_l - min_l > 30.0,
+        "noise texture should produce varying brightness across the plane: span={}",
+        max_l - min_l
+    );
+}
+
+#[test]
 fn segments_alias_parses_for_cyl_cone_sphere() {
     // The scene3d DSL uses `segments`; ensure it parses and renders for all three.
     let json = r#"{"world":[

@@ -21,6 +21,7 @@ use std::sync::Arc;
 
 use glam::{Mat4, Vec2, Vec3, Vec4};
 
+use crate::bevy_scene::gltf::{self, GltfModel};
 use crate::bevy_scene::schema::*;
 
 // ── Renderer Core ────────────────────────────────────────────────────
@@ -47,10 +48,20 @@ pub struct SceneRenderer {
     /// then rasterized in one pass (serial on wasm, tiled-parallel on native). See A4.
     /// Reused across frames to avoid per-frame allocation.
     projected: Vec<ProjectedTri>,
+    /// Decoded glTF/GLB models keyed by URL. Populated out-of-band via
+    /// `load_model_bytes` (FFI feed / host bridge); `model3d` nodes look up their
+    /// posed geometry here, falling back to a capsule placeholder when absent.
+    models: HashMap<String, Arc<GltfModel>>,
 }
 
 /// A triangle projected to screen space, ready for the fill stage. Plain data so
 /// the parallel rasterizer can share `&[ProjectedTri]` across threads. See A4.
+///
+/// Untextured triangles use the precomputed flat `color` (fast path). Textured
+/// triangles carry the albedo decomposition (`light_mul`/`additive`/fog) plus the
+/// procedural-texture params and per-vertex UVs, so albedo is sampled **per pixel**
+/// from the barycentric-interpolated UV — giving crisp window grids and surface
+/// grain instead of a single flat cell per face.
 #[derive(Clone, Copy)]
 struct ProjectedTri {
     v0: Vec2,
@@ -59,8 +70,23 @@ struct ProjectedTri {
     z0: f32,
     z1: f32,
     z2: f32,
+    /// Fully shaded flat color (used when `texture == None`).
     color: [f32; 3],
     alpha: f32,
+    /// Procedural texture kind; `None` selects the flat fast path.
+    texture: TextureKind,
+    uv0: Vec2,
+    uv1: Vec2,
+    uv2: Vec2,
+    base_color: Vec3,
+    texture_color2: Vec3,
+    texture_scale: f32,
+    /// Albedo multiplier (ambient + incoming diffuse light); for unlit it is 1.
+    light_mul: Vec3,
+    /// Albedo-independent additive term (specular + emissive).
+    additive: Vec3,
+    fog_factor: f32,
+    fog_color: Vec3,
 }
 
 impl SceneRenderer {
@@ -75,7 +101,26 @@ impl SceneRenderer {
             elapsed_time: 0.0,
             mesh_cache: HashMap::new(),
             projected: Vec::new(),
+            models: HashMap::new(),
         }
+    }
+
+    /// Decode and cache a streamed model's bytes (GLB or embedded-buffer glTF),
+    /// keyed by its URL. Returns true if the bytes parsed into a usable model.
+    /// Idempotent: re-feeding the same URL replaces the cached model.
+    pub fn load_model_bytes(&mut self, url: String, bytes: &[u8]) -> bool {
+        match gltf::parse_model(bytes) {
+            Some(model) => {
+                self.models.insert(url, Arc::new(model));
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Whether a decoded model is cached for `url`.
+    pub fn has_model(&self, url: &str) -> bool {
+        self.models.contains_key(url)
     }
 
     /// Return the cached triangle list for a mesh descriptor, generating it on
@@ -171,13 +216,27 @@ impl SceneRenderer {
         }
     }
 
-    /// Render a complete scene from JSON definition.
+    /// Render a complete scene from JSON definition (no static-world split).
     pub fn render_scene(&mut self, scene: &SceneDef, delta_time: f32) {
+        self.render_split(&[], &scene.world, delta_time);
+    }
+
+    /// Render a frame from a **baked static** node set plus a per-frame **dynamic**
+    /// node set (P3 frame splicing). The static nodes (the baked city) are parsed
+    /// once by the manager and reused every frame; only the small dynamic `world`
+    /// (camera, player, enemies, fx) is re-parsed per tick. Both sets are scanned
+    /// for camera/lights/environment and rendered static-first then dynamic.
+    pub fn render_split(
+        &mut self,
+        static_nodes: &[JsonNode],
+        dynamic_nodes: &[JsonNode],
+        delta_time: f32,
+    ) {
         self.elapsed_time += delta_time;
 
-        // Collect environment settings
+        // Collect environment settings (from either node set).
         let mut env = EnvironmentSettings::default();
-        for node in &scene.world {
+        for node in static_nodes.iter().chain(dynamic_nodes.iter()) {
             if let JsonNode::Environment(e) = node {
                 env.ambient_intensity = e.ambient_intensity;
                 if let Some(ref al) = e.ambient_light {
@@ -209,7 +268,7 @@ impl SceneRenderer {
         // takes precedence over the gradient as an explicit override.
         let mut clear_color = [20u8, 20u8, 30u8, 255u8];
         let mut skybox_override = false;
-        for node in &scene.world {
+        for node in static_nodes.iter().chain(dynamic_nodes.iter()) {
             if let JsonNode::Skybox(sky) = node {
                 if let Some(ref c) = sky.color {
                     clear_color = c.to_rgba_u8();
@@ -223,19 +282,18 @@ impl SceneRenderer {
             self.clear(clear_color);
         }
 
-        // Collect camera
-        let camera = self.find_camera(&scene.world);
-
-        // Collect lights
-        let lights = self.collect_lights(&scene.world);
+        // Collect camera + lights (scanning both node sets).
+        let camera = self.find_camera(static_nodes.iter().chain(dynamic_nodes.iter()));
+        let lights = self.collect_lights(static_nodes.iter().chain(dynamic_nodes.iter()));
 
         // Build view-projection matrix
         let aspect = self.width as f32 / self.height.max(1) as f32;
         let view_proj = camera.build_view_projection(aspect);
 
-        // Render all world nodes. Traversal projects + lights triangles into
-        // `self.projected` (in scene order); the fill stage runs afterwards.
-        for node in &scene.world {
+        // Render static geometry first, then the dynamic overlay. Traversal projects
+        // + lights triangles into `self.projected` (in scene order); the fill stage
+        // runs afterwards and the depth buffer resolves overlaps deterministically.
+        for node in static_nodes.iter().chain(dynamic_nodes.iter()) {
             self.render_world_node(node, &Mat4::IDENTITY, &view_proj, &camera, &lights, &env);
         }
 
@@ -251,7 +309,7 @@ impl SceneRenderer {
         std::mem::swap(&mut self.pixels, &mut self.pixels_back);
     }
 
-    fn find_camera(&self, nodes: &[JsonNode]) -> CameraState {
+    fn find_camera<'a>(&self, nodes: impl Iterator<Item = &'a JsonNode>) -> CameraState {
         for node in nodes {
             if let JsonNode::Camera(cam) = node {
                 let transform = cam.transform.to_mat4();
@@ -291,7 +349,7 @@ impl SceneRenderer {
         }
     }
 
-    fn collect_lights(&self, nodes: &[JsonNode]) -> Vec<LightState> {
+    fn collect_lights<'a>(&self, nodes: impl Iterator<Item = &'a JsonNode>) -> Vec<LightState> {
         let mut lights = Vec::new();
         for node in nodes {
             if let JsonNode::Light(l) = node {
@@ -355,6 +413,15 @@ impl SceneRenderer {
                     self.render_world_node(child, &world, view_proj, camera, lights, env);
                 }
             }
+            JsonNode::Model3D(model) => {
+                let local = model.transform.to_mat4();
+                let world = *parent_transform * local;
+                self.render_model(model, &world, view_proj, camera, lights, env);
+
+                for child in &model.children {
+                    self.render_world_node(child, &world, view_proj, camera, lights, env);
+                }
+            }
             JsonNode::RigidBody(rb) => {
                 let local = rb.transform.to_mat4();
                 let world = *parent_transform * local;
@@ -402,6 +469,9 @@ impl SceneRenderer {
                     emissive: Vec3::ZERO,
                     alpha: water.transparency,
                     unlit: false,
+                    texture: TextureKind::None,
+                    texture_color2: Vec3::ZERO,
+                    texture_scale: 1.0,
                 };
                 let hx = water.size.x / 2.0;
                 let hz = water.size.z / 2.0;
@@ -520,6 +590,9 @@ impl SceneRenderer {
             emissive: color * 0.5,
             alpha: 1.0,
             unlit: false,
+            texture: TextureKind::None,
+            texture_color2: Vec3::ZERO,
+            texture_scale: 1.0,
         };
 
         // Simple particle rendering: scatter small spheres based on time
@@ -548,6 +621,86 @@ impl SceneRenderer {
             self.rasterize_triangles(
                 &triangles,
                 &particle_world,
+                view_proj,
+                camera,
+                lights,
+                &material,
+                env,
+            );
+        }
+    }
+
+    /// Render a streamed glTF `model3d` node. When the model bytes have been fed
+    /// into the cache, the model is posed for its animation clip + `anim_time` and
+    /// drawn skinned/tinted/lit. Until then a tinted capsule placeholder stands in
+    /// so gameplay never blocks on a download (parity with the scene3d behavior).
+    fn render_model(
+        &mut self,
+        model: &Model3DNode,
+        world: &Mat4,
+        view_proj: &Mat4,
+        camera: &CameraState,
+        lights: &[LightState],
+        env: &EnvironmentSettings,
+    ) {
+        let tint = model.tint.as_ref().map(|c| c.to_vec3()).unwrap_or(Vec3::ONE);
+        let node_emissive = model
+            .emissive
+            .as_ref()
+            .map(|c| c.to_vec3())
+            .unwrap_or(Vec3::ZERO);
+        let strength = model.emissive_strength.unwrap_or(1.0);
+
+        let Some(gltf_model) = self.models.get(&model.model).cloned() else {
+            // Placeholder: a tinted capsule at the node transform.
+            let material = MaterialState {
+                base_color: tint * Vec3::new(0.6, 0.6, 0.65),
+                metallic: 0.0,
+                roughness: 0.8,
+                emissive: node_emissive * strength,
+                alpha: 1.0,
+                unlit: false,
+                texture: TextureKind::None,
+                texture_color2: Vec3::ZERO,
+                texture_scale: 1.0,
+            };
+            let triangles = self.mesh_for(&MeshType::Parameterized(MeshTypeParam::Capsule {
+                radius: 0.4,
+                depth: 1.0,
+            }));
+            self.rasterize_triangles(&triangles, world, view_proj, camera, lights, &material, env);
+            return;
+        };
+
+        // Resolve the animation clip: explicit name/index, else the first clip.
+        let anim = match &model.animation {
+            Some(StringOrIndex::Index(i)) => Some(*i as usize),
+            Some(StringOrIndex::Name(n)) => gltf_model.animation_index_by_name(n),
+            None => {
+                if gltf_model.animation_count() > 0 {
+                    Some(0)
+                } else {
+                    None
+                }
+            }
+        };
+
+        let posed = gltf_model.pose(anim, model.anim_time);
+        for prim in &posed {
+            let material = MaterialState {
+                base_color: prim.base_color * tint,
+                metallic: 0.0,
+                roughness: 0.6,
+                emissive: (prim.emissive + node_emissive) * strength,
+                alpha: 1.0,
+                unlit: false,
+                texture: TextureKind::None,
+                texture_color2: Vec3::ZERO,
+                texture_scale: 1.0,
+            };
+            self.rasterize_triangles(
+                &prim.triangles,
+                world,
                 view_proj,
                 camera,
                 lights,
@@ -603,9 +756,15 @@ impl SceneRenderer {
                 continue;
             }
 
-            // Compute lighting for triangle center (flat shading)
+            // Flat-shade lighting at the triangle center, decomposed so the albedo
+            // (procedural texture) can be applied per pixel in the fill stage. The
+            // centroid albedo gives the flat-path color for the untextured fast path
+            // and the near-plane-clipped fan (which doesn't carry UVs).
             let center = (w0 + w1 + w2) / 3.0;
-            let lit_color = compute_lighting(center, n, camera, lights, material, env);
+            let shading = shade(center, n, camera, lights, material, env);
+            let centroid_uv = (tri.uv0 + tri.uv1 + tri.uv2) / 3.0;
+            let flat_color = shading.resolve(material.sample_texture(centroid_uv));
+            let alpha = material.alpha;
 
             if inside_count == 3 {
                 // All vertices in front: render directly
@@ -624,8 +783,19 @@ impl SceneRenderer {
                     z0: ndc0.z,
                     z1: ndc1.z,
                     z2: ndc2.z,
-                    color: lit_color,
-                    alpha: material.alpha,
+                    color: flat_color,
+                    alpha,
+                    texture: material.texture,
+                    uv0: tri.uv0,
+                    uv1: tri.uv1,
+                    uv2: tri.uv2,
+                    base_color: material.base_color,
+                    texture_color2: material.texture_color2,
+                    texture_scale: material.texture_scale,
+                    light_mul: shading.light_mul,
+                    additive: shading.additive,
+                    fog_factor: shading.fog_factor,
+                    fog_color: shading.fog_color,
                 });
             } else {
                 // Triangle crosses near plane: clip against w = w_clip_plane.
@@ -666,6 +836,8 @@ impl SceneRenderer {
                         let sb = self.ndc_to_screen(ndc_b);
                         let sc = self.ndc_to_screen(ndc_c);
 
+                        // The clip path doesn't carry interpolated UVs, so the
+                        // textured fan falls back to the flat centroid color.
                         self.projected.push(ProjectedTri {
                             v0: sa,
                             v1: sb,
@@ -673,8 +845,19 @@ impl SceneRenderer {
                             z0: ndc_a.z,
                             z1: ndc_b.z,
                             z2: ndc_c.z,
-                            color: lit_color,
-                            alpha: material.alpha,
+                            color: flat_color,
+                            alpha,
+                            texture: TextureKind::None,
+                            uv0: Vec2::ZERO,
+                            uv1: Vec2::ZERO,
+                            uv2: Vec2::ZERO,
+                            base_color: material.base_color,
+                            texture_color2: material.texture_color2,
+                            texture_scale: material.texture_scale,
+                            light_mul: shading.light_mul,
+                            additive: shading.additive,
+                            fog_factor: shading.fog_factor,
+                            fog_color: shading.fog_color,
                         });
                     }
                 }
@@ -766,18 +949,60 @@ pub struct Triangle {
     pub v1: Vec3,
     pub v2: Vec3,
     pub normal: Vec3,
+    /// Per-vertex texture coordinates (parity with scene3d). Used to sample the
+    /// procedural texture at the triangle centroid in the flat-shaded path.
+    pub uv0: Vec2,
+    pub uv1: Vec2,
+    pub uv2: Vec2,
 }
 
 impl Triangle {
     pub fn new(v0: Vec3, v1: Vec3, v2: Vec3, normal: Vec3) -> Self {
-        Self { v0, v1, v2, normal }
+        Self {
+            v0,
+            v1,
+            v2,
+            normal,
+            uv0: Vec2::ZERO,
+            uv1: Vec2::ZERO,
+            uv2: Vec2::ZERO,
+        }
+    }
+
+    /// Like `new` but with explicit per-vertex UVs.
+    pub fn new_uv(
+        v0: Vec3,
+        v1: Vec3,
+        v2: Vec3,
+        normal: Vec3,
+        uv0: Vec2,
+        uv1: Vec2,
+        uv2: Vec2,
+    ) -> Self {
+        Self {
+            v0,
+            v1,
+            v2,
+            normal,
+            uv0,
+            uv1,
+            uv2,
+        }
     }
 
     pub fn from_vertices(v0: Vec3, v1: Vec3, v2: Vec3) -> Self {
         let edge1 = v1 - v0;
         let edge2 = v2 - v0;
         let normal = edge1.cross(edge2).normalize();
-        Self { v0, v1, v2, normal }
+        Self {
+            v0,
+            v1,
+            v2,
+            normal,
+            uv0: Vec2::ZERO,
+            uv1: Vec2::ZERO,
+            uv2: Vec2::ZERO,
+        }
     }
 }
 
@@ -846,12 +1071,63 @@ fn fill_projected(
     let z1 = t.z1;
     let z2 = t.z2;
 
+    // Untextured triangles take the flat fast path (one constant color, no
+    // per-pixel sampling). This branch is byte-identical to the original A4 fill.
+    if t.texture == TextureKind::None {
+        for y in min_y..=max_y {
+            let py = y as f32 + 0.5;
+            let py0 = (py - v1.y) * e0_dx;
+            let py1 = (py - v2.y) * e1_dx;
+            let py2 = (py - v0.y) * e2_dx;
+            // Row offset relative to this band's first row.
+            let row = (y - band_y_start) as usize * width;
+
+            for x in min_x..=max_x {
+                let px = x as f32 + 0.5;
+
+                let w0 = ((px - v1.x) * e0_dy - py0) * inv_area;
+                let w1 = ((px - v2.x) * e1_dy - py1) * inv_area;
+                let w2 = ((px - v0.x) * e2_dy - py2) * inv_area;
+
+                if w0 >= 0.0 && w1 >= 0.0 && w2 >= 0.0 {
+                    let z = w0 * z0 + w1 * z1 + w2 * z2;
+                    let idx = row + x as usize;
+
+                    if z < depth[idx] {
+                        depth[idx] = z;
+
+                        let pidx = idx * 4;
+                        if opaque {
+                            pixels[pidx] = r;
+                            pixels[pidx + 1] = g;
+                            pixels[pidx + 2] = b;
+                            pixels[pidx + 3] = a;
+                        } else {
+                            let dst_r = pixels[pidx] as f32 / 255.0;
+                            let dst_g = pixels[pidx + 1] as f32 / 255.0;
+                            let dst_b = pixels[pidx + 2] as f32 / 255.0;
+                            pixels[pidx] =
+                                ((csa_r + dst_r * one_minus_sa).clamp(0.0, 1.0) * 255.0) as u8;
+                            pixels[pidx + 1] =
+                                ((csa_g + dst_g * one_minus_sa).clamp(0.0, 1.0) * 255.0) as u8;
+                            pixels[pidx + 2] =
+                                ((csa_b + dst_b * one_minus_sa).clamp(0.0, 1.0) * 255.0) as u8;
+                            pixels[pidx + 3] = 255;
+                        }
+                    }
+                }
+            }
+        }
+        return;
+    }
+
+    // Textured triangles sample the procedural albedo per pixel from the
+    // barycentric-interpolated UV, then apply `albedo*light_mul + additive` and fog.
     for y in min_y..=max_y {
         let py = y as f32 + 0.5;
         let py0 = (py - v1.y) * e0_dx;
         let py1 = (py - v2.y) * e1_dx;
         let py2 = (py - v0.y) * e2_dx;
-        // Row offset relative to this band's first row.
         let row = (y - band_y_start) as usize * width;
 
         for x in min_x..=max_x {
@@ -868,22 +1144,35 @@ fn fill_projected(
                 if z < depth[idx] {
                     depth[idx] = z;
 
+                    // Affine-interpolated UV (matches the affine z/colour interp used
+                    // elsewhere in this renderer), then sample + shade.
+                    let uv = t.uv0 * w0 + t.uv1 * w1 + t.uv2 * w2;
+                    let albedo = sample_texture_kind(
+                        t.texture,
+                        t.base_color,
+                        t.texture_color2,
+                        t.texture_scale,
+                        uv,
+                    );
+                    let pre = albedo * t.light_mul + t.additive;
+                    let c = pre.lerp(t.fog_color, t.fog_factor);
+
                     let pidx = idx * 4;
                     if opaque {
-                        pixels[pidx] = r;
-                        pixels[pidx + 1] = g;
-                        pixels[pidx + 2] = b;
+                        pixels[pidx] = (c.x.clamp(0.0, 1.0) * 255.0) as u8;
+                        pixels[pidx + 1] = (c.y.clamp(0.0, 1.0) * 255.0) as u8;
+                        pixels[pidx + 2] = (c.z.clamp(0.0, 1.0) * 255.0) as u8;
                         pixels[pidx + 3] = a;
                     } else {
                         let dst_r = pixels[pidx] as f32 / 255.0;
                         let dst_g = pixels[pidx + 1] as f32 / 255.0;
                         let dst_b = pixels[pidx + 2] as f32 / 255.0;
                         pixels[pidx] =
-                            ((csa_r + dst_r * one_minus_sa).clamp(0.0, 1.0) * 255.0) as u8;
+                            ((c.x * src_a + dst_r * one_minus_sa).clamp(0.0, 1.0) * 255.0) as u8;
                         pixels[pidx + 1] =
-                            ((csa_g + dst_g * one_minus_sa).clamp(0.0, 1.0) * 255.0) as u8;
+                            ((c.y * src_a + dst_g * one_minus_sa).clamp(0.0, 1.0) * 255.0) as u8;
                         pixels[pidx + 2] =
-                            ((csa_b + dst_b * one_minus_sa).clamp(0.0, 1.0) * 255.0) as u8;
+                            ((c.z * src_a + dst_b * one_minus_sa).clamp(0.0, 1.0) * 255.0) as u8;
                         pixels[pidx + 3] = 255;
                     }
                 }
@@ -1051,20 +1340,35 @@ fn generate_cube(size: f32) -> Vec<Triangle> {
         Vec3::new(-1.0, 0.0, 0.0), // Left
     ];
 
+    // Per-corner UVs, matching scene3d's cube layout so procedural textures
+    // (checkerboard windows, noise) tile identically across both renderers.
+    let uvs = [
+        Vec2::new(0.0, 1.0),
+        Vec2::new(1.0, 1.0),
+        Vec2::new(1.0, 0.0),
+        Vec2::new(0.0, 0.0),
+    ];
+
     let mut triangles = Vec::with_capacity(12);
     for face in 0..6 {
         let base = face * 4;
-        triangles.push(Triangle::new(
+        triangles.push(Triangle::new_uv(
             vertices[base],
             vertices[base + 1],
             vertices[base + 2],
             normals[face],
+            uvs[0],
+            uvs[1],
+            uvs[2],
         ));
-        triangles.push(Triangle::new(
+        triangles.push(Triangle::new_uv(
             vertices[base],
             vertices[base + 2],
             vertices[base + 3],
             normals[face],
+            uvs[0],
+            uvs[2],
+            uvs[3],
         ));
     }
     triangles
@@ -1088,11 +1392,17 @@ fn generate_uv_sphere(radius: f32, segments: u32) -> Vec<Triangle> {
             let v2 = sphere_point(radius, theta2, phi2);
             let v3 = sphere_point(radius, theta1, phi2);
 
+            // UVs match scene3d: u from sector, v from stack.
+            let u0 = Vec2::new(j as f32 / sectors as f32, i as f32 / stacks as f32);
+            let u1 = Vec2::new(j as f32 / sectors as f32, (i + 1) as f32 / stacks as f32);
+            let u2 = Vec2::new((j + 1) as f32 / sectors as f32, (i + 1) as f32 / stacks as f32);
+            let u3 = Vec2::new((j + 1) as f32 / sectors as f32, i as f32 / stacks as f32);
+
             if i != 0 {
-                triangles.push(Triangle::new(v0, v1, v2, v0.normalize()));
+                triangles.push(Triangle::new_uv(v0, v1, v2, v0.normalize(), u0, u1, u2));
             }
             if i != stacks - 1 {
-                triangles.push(Triangle::new(v0, v2, v3, v0.normalize()));
+                triangles.push(Triangle::new_uv(v0, v2, v3, v0.normalize(), u0, u2, u3));
             }
         }
     }
@@ -1109,18 +1419,28 @@ fn sphere_point(radius: f32, theta: f32, phi: f32) -> Vec3 {
 
 fn generate_plane(size: f32) -> Vec<Triangle> {
     let h = size / 2.0;
+    let u0 = Vec2::new(0.0, 0.0);
+    let u1 = Vec2::new(1.0, 0.0);
+    let u2 = Vec2::new(1.0, 1.0);
+    let u3 = Vec2::new(0.0, 1.0);
     vec![
-        Triangle::new(
+        Triangle::new_uv(
             Vec3::new(-h, 0.0, -h),
             Vec3::new(h, 0.0, -h),
             Vec3::new(h, 0.0, h),
             Vec3::Y,
+            u0,
+            u1,
+            u2,
         ),
-        Triangle::new(
+        Triangle::new_uv(
             Vec3::new(-h, 0.0, -h),
             Vec3::new(h, 0.0, h),
             Vec3::new(-h, 0.0, h),
             Vec3::Y,
+            u0,
+            u2,
+            u3,
         ),
     ]
 }
@@ -1138,19 +1458,27 @@ fn generate_cylinder(radius: f32, height: f32, segments: u32) -> Vec<Triangle> {
         let x2 = radius * angle2.cos();
         let z2 = radius * angle2.sin();
 
-        // Side faces
+        // Side faces (UVs wrap around: u from segment, v from height)
         let normal = Vec3::new((x1 + x2) / 2.0, 0.0, (z1 + z2) / 2.0).normalize();
-        triangles.push(Triangle::new(
+        let u_lo = i as f32 / segments as f32;
+        let u_hi = (i + 1) as f32 / segments as f32;
+        triangles.push(Triangle::new_uv(
             Vec3::new(x1, -half_h, z1),
             Vec3::new(x2, -half_h, z2),
             Vec3::new(x2, half_h, z2),
             normal,
+            Vec2::new(u_lo, 0.0),
+            Vec2::new(u_hi, 0.0),
+            Vec2::new(u_hi, 1.0),
         ));
-        triangles.push(Triangle::new(
+        triangles.push(Triangle::new_uv(
             Vec3::new(x1, -half_h, z1),
             Vec3::new(x2, half_h, z2),
             Vec3::new(x1, half_h, z1),
             normal,
+            Vec2::new(u_lo, 0.0),
+            Vec2::new(u_hi, 1.0),
+            Vec2::new(u_lo, 1.0),
         ));
 
         // Top cap
@@ -1284,6 +1612,29 @@ enum LightStateType {
     Spot,
 }
 
+/// Procedural texture kinds (parity with scene3d's `TextureType`). Sampled
+/// per-triangle at the centroid UV between `base_color` and `texture_color2`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TextureKind {
+    None,
+    Checkerboard,
+    Stripes,
+    Gradient,
+    Noise,
+}
+
+impl TextureKind {
+    fn from_str(s: Option<&str>) -> Self {
+        match s.map(|t| t.to_ascii_lowercase()).as_deref() {
+            Some("checkerboard") => TextureKind::Checkerboard,
+            Some("stripes") => TextureKind::Stripes,
+            Some("gradient") => TextureKind::Gradient,
+            Some("noise") => TextureKind::Noise,
+            _ => TextureKind::None,
+        }
+    }
+}
+
 struct MaterialState {
     base_color: Vec3,
     metallic: f32,
@@ -1293,6 +1644,12 @@ struct MaterialState {
     alpha: f32,
     /// When true, skip Blinn-Phong and output `base_color + emissive` directly.
     unlit: bool,
+    /// Procedural texture; `None` means the flat `base_color` is used.
+    texture: TextureKind,
+    /// Secondary color the procedural texture blends toward.
+    texture_color2: Vec3,
+    /// UV tiling factor for the procedural texture.
+    texture_scale: f32,
 }
 
 impl MaterialState {
@@ -1318,8 +1675,72 @@ impl MaterialState {
                 * strength,
             alpha,
             unlit: def.unlit,
+            texture: TextureKind::from_str(def.texture.as_deref()),
+            // scene3d defaults texture_color2 to (0.3,0.3,0.3) and scale to 1.0.
+            texture_color2: def
+                .texture_color2
+                .as_ref()
+                .map(|c| c.to_vec3())
+                .unwrap_or(Vec3::new(0.3, 0.3, 0.3)),
+            texture_scale: def.texture_scale.unwrap_or(1.0),
         }
     }
+
+    /// Sample the procedural texture at `uv`, returning the effective base color.
+    fn sample_texture(&self, uv: Vec2) -> Vec3 {
+        sample_texture_kind(
+            self.texture,
+            self.base_color,
+            self.texture_color2,
+            self.texture_scale,
+            uv,
+        )
+    }
+}
+
+/// Sample a procedural texture, returning the effective albedo. Mirrors
+/// `Material3D.sampleTexture` in scene3d/core.dart so both renderers produce
+/// matching window grids, asphalt noise, stripes and gradients.
+#[inline]
+fn sample_texture_kind(
+    kind: TextureKind,
+    base_color: Vec3,
+    texture_color2: Vec3,
+    texture_scale: f32,
+    uv: Vec2,
+) -> Vec3 {
+    match kind {
+        TextureKind::None => base_color,
+        TextureKind::Checkerboard => {
+            let u = (uv.x * texture_scale).floor() as i64;
+            let v = (uv.y * texture_scale).floor() as i64;
+            if (u + v).rem_euclid(2) == 0 {
+                base_color
+            } else {
+                texture_color2
+            }
+        }
+        TextureKind::Stripes => {
+            let s = ((uv.x * texture_scale * 10.0).floor() as i64).rem_euclid(2) == 0;
+            if s {
+                base_color
+            } else {
+                texture_color2
+            }
+        }
+        TextureKind::Gradient => base_color.lerp(texture_color2, uv.y),
+        TextureKind::Noise => {
+            let n = simple_noise(uv.x * texture_scale, uv.y * texture_scale);
+            base_color * (0.5 + 0.5 * n)
+        }
+    }
+}
+
+/// Cheap hash-based value noise matching scene3d's `_simpleNoise`.
+#[inline]
+fn simple_noise(x: f32, y: f32) -> f32 {
+    let n = (x * 12.9898 + y * 78.233).sin() * 43758.5453;
+    n - n.floor()
 }
 
 struct EnvironmentSettings {
@@ -1352,31 +1773,59 @@ impl Default for EnvironmentSettings {
     }
 }
 
-/// Compute Blinn-Phong lighting for a surface point.
-fn compute_lighting(
+/// Decomposed shading for a surface point, independent of the surface *albedo*
+/// so the albedo (procedural texture) can be sampled per pixel:
+/// `final = albedo * light_mul + additive`, then blended toward fog.
+struct LightingResult {
+    /// Albedo multiplier: ambient + incoming diffuse light. `Vec3::ONE` for unlit.
+    light_mul: Vec3,
+    /// Albedo-independent term: specular + emissive.
+    additive: Vec3,
+    fog_factor: f32,
+    fog_color: Vec3,
+}
+
+impl LightingResult {
+    /// Resolve to a final RGB color for a given albedo (texture sample).
+    #[inline]
+    fn resolve(&self, albedo: Vec3) -> [f32; 3] {
+        let pre = albedo * self.light_mul + self.additive;
+        let c = pre.lerp(self.fog_color, self.fog_factor);
+        [c.x, c.y, c.z]
+    }
+}
+
+/// Compute Blinn-Phong lighting for a surface point, returning the albedo-independent
+/// decomposition. Folding the surface albedo back in via `LightingResult::resolve`
+/// reproduces the previous single-color result exactly (golden-stable), while also
+/// enabling per-pixel texture sampling in the rasterizer.
+fn shade(
     position: Vec3,
     normal: Vec3,
     camera: &CameraState,
     lights: &[LightState],
     material: &MaterialState,
     env: &EnvironmentSettings,
-) -> [f32; 3] {
-    // Unlit surfaces (paint markings, neon, tracers, fx) bypass shading entirely:
-    // they emit `base_color + emissive`, then fog is still applied below so distant
-    // self-lit geometry recedes into the haze like everything else.
+) -> LightingResult {
+    let fog_factor = fog_factor(position, camera, env);
+    let fog_color = env.fog_color;
+
+    // Unlit surfaces (paint markings, neon, tracers, fx) bypass shading: the
+    // albedo passes straight through (`light_mul = 1`) plus emissive.
     if material.unlit {
-        let unlit = material.base_color + material.emissive;
-        let c = apply_fog(unlit, position, camera, env);
-        return [c.x, c.y, c.z];
+        return LightingResult {
+            light_mul: Vec3::ONE,
+            additive: material.emissive,
+            fog_factor,
+            fog_color,
+        };
     }
 
     let n = normal.normalize();
     let view_dir = (camera.position - position).normalize();
 
-    // Ambient contribution
-    let ambient = env.ambient_color * env.ambient_intensity * material.base_color;
-
-    let mut diffuse_total = Vec3::ZERO;
+    // Ambient + diffuse accumulate into the albedo multiplier; specular is additive.
+    let mut light_mul = env.ambient_color * env.ambient_intensity;
     let mut specular_total = Vec3::ZERO;
 
     for light in lights {
@@ -1408,11 +1857,11 @@ fn compute_lighting(
             }
         };
 
-        // Diffuse (Lambert)
+        // Diffuse (Lambert) — accumulates into the albedo multiplier.
         let n_dot_l = n.dot(light_dir).max(0.0);
-        let diffuse = material.base_color * light.color * light.intensity * n_dot_l * attenuation;
+        light_mul += light.color * light.intensity * n_dot_l * attenuation;
 
-        // Specular (Blinn-Phong)
+        // Specular (Blinn-Phong) — albedo-independent.
         let half_vec = (light_dir + view_dir).normalize();
         let n_dot_h = n.dot(half_vec).max(0.0);
         let shininess = ((1.0 - material.roughness) * 128.0).max(1.0);
@@ -1421,16 +1870,16 @@ fn compute_lighting(
         } else {
             0.04
         };
-        let specular =
+        specular_total +=
             light.color * light.intensity * n_dot_h.powf(shininess) * spec_strength * attenuation;
-
-        diffuse_total += diffuse;
-        specular_total += specular;
     }
 
-    let lit = ambient + diffuse_total + specular_total + material.emissive;
-    let final_color = apply_fog(lit, position, camera, env);
-    [final_color.x, final_color.y, final_color.z]
+    LightingResult {
+        light_mul,
+        additive: specular_total + material.emissive,
+        fog_factor,
+        fog_color,
+    }
 }
 
 /// Smooth point/spot-light cutoff: full strength near the source, fading to zero
@@ -1449,24 +1898,23 @@ fn range_falloff(dist: f32, range: Option<f32>) -> f32 {
     }
 }
 
-/// Blend a shaded color toward the fog color by distance from the camera.
+/// Fog blend factor (0 = no fog, 1 = fully fogged) by distance from the camera.
 /// `linear` fog ramps from `fog_near`→`fog_distance`; otherwise a squared falloff
-/// over `fog_distance` (legacy behavior) is used. Disabled when off.
+/// over `fog_distance` (legacy behavior) is used. Zero when fog is disabled.
 #[inline]
-fn apply_fog(color: Vec3, position: Vec3, camera: &CameraState, env: &EnvironmentSettings) -> Vec3 {
+fn fog_factor(position: Vec3, camera: &CameraState, env: &EnvironmentSettings) -> f32 {
     if !env.fog_enabled {
-        return color;
+        return 0.0;
     }
     let dist = (camera.position - position).length();
-    let fog_factor = if env.fog_linear {
+    if env.fog_linear {
         let near = env.fog_near;
         let far = env.fog_distance.max(near + 0.001);
         ((dist - near) / (far - near)).clamp(0.0, 1.0)
     } else {
         let f = (dist / env.fog_distance).clamp(0.0, 1.0);
         f * f
-    };
-    color.lerp(env.fog_color, fog_factor)
+    }
 }
 
 fn apply_easing(progress: f32, easing: &EasingType) -> f32 {
