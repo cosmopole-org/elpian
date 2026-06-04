@@ -14,7 +14,7 @@
 /// `addEnemyModel` and the `model3d` scene node they emit.
 library;
 
-const tpsGameProgram = r'''
+const String tpsGameProgram = r'''
 /// The complete third-person shooter, authored as a single QuickJS program.
 ///
 /// Everything game-specific lives here as JavaScript: state management, the
