@@ -1,0 +1,112 @@
+name: Build & Deploy Flutter Web to GitHub Pages
+
+on:
+  # Allow manual runs from the Actions tab.
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+# Permissions required by actions/deploy-pages to publish to GitHub Pages.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only run one Pages deployment at a time; cancel superseded in-progress runs.
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Flutter web (with Rust WASM)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.38.3"
+          channel: stable
+          cache: true
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Rust cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: rust-wasm-${{ hashFiles('rust/Cargo.lock') }}
+          restore-keys: |
+            rust-wasm-
+
+      - name: Pub cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ hashFiles('pubspec.lock', 'example/pubspec.lock') }}
+          restore-keys: |
+            pub-
+
+      - name: Install wasm-pack
+        uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          version: "latest"
+
+      - name: Flutter pub get (package)
+        run: flutter pub get
+
+      - name: Flutter pub get (example)
+        working-directory: example
+        run: flutter pub get
+
+      # Compile the Rust VM to WebAssembly (wasm-bindgen / wasm-pack, `web`
+      # target) and emit the artifact into the package's web runtime assets,
+      # which the example app bundles and loads via elpian_wasm_loader.js.
+      - name: Build Rust WASM
+        working-directory: rust
+        run: |
+          wasm-pack build \
+            --release \
+            --target web \
+            --out-name elpian_vm \
+            --out-dir "$GITHUB_WORKSPACE/assets/web_runtime/wasm/elpian_vm"
+
+      # The site is served from https://<owner>.github.io/<repo>/, so the base
+      # href must match the repository name for assets to resolve correctly.
+      - name: Flutter build web
+        working-directory: example
+        run: |
+          flutter build web --release --no-pub \
+            --target=lib/main.dart \
+            --base-href "/${GITHUB_REPOSITORY#*/}/"
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: example/build/web
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
