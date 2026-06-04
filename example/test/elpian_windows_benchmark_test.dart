@@ -11,7 +11,7 @@ void main() {
         final sw = Stopwatch()..start();
         
         // Simulate building a complex 24-card dashboard
-        final dashboardJson = {
+        final _ = {
           'type': 'Column',
           'style': {
             'padding': '20',
@@ -119,7 +119,7 @@ void main() {
       for (int i = 0; i < iterations; i++) {
         final sw = Stopwatch()..start();
 
-        final animJson = {
+        final _ = {
           'type': 'GridView',
           'props': {'itemCount': 12},
           'children': List.generate(12, (idx) {
@@ -128,7 +128,7 @@ void main() {
             return {
               'type': 'AnimatedContainer',
               'props': {
-                'duration': Duration(milliseconds: 300),
+                'duration': const Duration(milliseconds: 300),
               },
               'style': {
                 'transform': 'rotate(${angle}deg) scale($scale)',
@@ -178,13 +178,13 @@ void main() {
       for (int i = 0; i < iterations; i++) {
         final sw = Stopwatch()..start();
 
-        final inputJson = {
+        final _ = {
           'type': 'Column',
           'children': [
             {
               'type': 'TextField',
               'props': {
-                'value': 'Input test ' + ('x' * (i % 50)),
+                'value': 'Input test ${'x' * (i % 50)}',
               },
               'style': {'marginBottom': '16'},
             },
@@ -225,7 +225,7 @@ void main() {
       for (int i = 0; i < iterations; i++) {
         final sw = Stopwatch()..start();
 
-        final listJson = {
+        final _ = {
           'type': 'ListView',
           'props': {'itemCount': itemsPerBuild},
           'children': List.generate(min(50, itemsPerBuild), (idx) => {
@@ -287,7 +287,7 @@ void main() {
         final jsonStr = complexJson.toString();
         // Simulate JSON parsing
         final parsed = jsonStr.length;
-        final sum = parsed.bitLength;
+        final _ = parsed.bitLength;
 
         sw.stop();
         parseTimes.add(sw.elapsedMicroseconds.toDouble() / 1000);

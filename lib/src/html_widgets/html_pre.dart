@@ -7,7 +7,7 @@ class HtmlPre {
   static Widget build(ElpianNode node, List<Widget> children) {
     final text = node.props['text'] as String? ?? '';
     
-    final defaultStyle = const CSSStyle(
+    const defaultStyle = CSSStyle(
       fontFamily: 'monospace',
       backgroundColor: Color(0xFFF5F5F5),
       padding: EdgeInsets.all(8.0),

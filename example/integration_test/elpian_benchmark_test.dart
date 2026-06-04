@@ -68,7 +68,7 @@ class BenchmarkResult {
     buf.writeln('  Jank rate      : ${jankRate.toStringAsFixed(1)} %');
     buf.writeln('  Worst frame    : ${worstFrameMs.toStringAsFixed(2)} ms');
     buf.writeln('  First frame    : ${firstFrameMs.toStringAsFixed(2)} ms');
-    buf.writeln('  Total frames   : $totalFrames over ${durationMs} ms');
+    buf.writeln('  Total frames   : $totalFrames over $durationMs ms');
     return buf.toString();
   }
 }

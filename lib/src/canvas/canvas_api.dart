@@ -124,6 +124,11 @@ class CanvasCommand {
 class CanvasState {
   Paint fillPaint;
   Paint strokePaint;
+  // Base (un-alpha'd) colors. Kept separate from the Paint's live color so that
+  // applying globalAlpha each draw derives from the base instead of compounding
+  // onto the previously-dimmed color (see _getFillPaint/_getStrokePaint).
+  Color fillColor;
+  Color strokeColor;
   double lineWidth;
   StrokeCap lineCap;
   StrokeJoin lineJoin;
@@ -144,6 +149,8 @@ class CanvasState {
   CanvasState({
     Paint? fillPaint,
     Paint? strokePaint,
+    this.fillColor = Colors.black,
+    this.strokeColor = Colors.black,
     this.lineWidth = 1.0,
     this.lineCap = StrokeCap.butt,
     this.lineJoin = StrokeJoin.miter,
@@ -169,10 +176,15 @@ class CanvasState {
 
   CanvasState copy() {
     return CanvasState(
-      fillPaint: Paint()..color = fillPaint.color,
+      fillPaint: Paint()
+        ..color = fillPaint.color
+        ..shader = fillPaint.shader,
       strokePaint: Paint()
         ..color = strokePaint.color
-        ..style = strokePaint.style,
+        ..style = strokePaint.style
+        ..shader = strokePaint.shader,
+      fillColor: fillColor,
+      strokeColor: strokeColor,
       lineWidth: lineWidth,
       lineCap: lineCap,
       lineJoin: lineJoin,
@@ -375,15 +387,13 @@ class CanvasAPIExecutor {
 
       // Shape operations
       case CanvasCommandType.fillRect:
-        canvas.drawRect(
-          Rect.fromLTWH(
-            _getDouble(params, 'x'),
-            _getDouble(params, 'y'),
-            _getDouble(params, 'width'),
-            _getDouble(params, 'height'),
-          ),
-          _getFillPaint(),
+        final fillR = Rect.fromLTWH(
+          _getDouble(params, 'x'),
+          _getDouble(params, 'y'),
+          _getDouble(params, 'width'),
+          _getDouble(params, 'height'),
         );
+        _fillWithShadow(canvas, (c, paint) => c.drawRect(fillR, paint));
         break;
 
       case CanvasCommandType.strokeRect:
@@ -414,11 +424,11 @@ class CanvasAPIExecutor {
         break;
 
       case CanvasCommandType.fillCircle:
-        canvas.drawCircle(
-          Offset(_getDouble(params, 'x'), _getDouble(params, 'y')),
-          _getDouble(params, 'radius'),
-          _getFillPaint(),
-        );
+        final fillC =
+            Offset(_getDouble(params, 'x'), _getDouble(params, 'y'));
+        final fillCr = _getDouble(params, 'radius');
+        _fillWithShadow(
+            canvas, (c, paint) => c.drawCircle(fillC, fillCr, paint));
         break;
 
       case CanvasCommandType.strokeCircle:
@@ -448,7 +458,8 @@ class CanvasAPIExecutor {
         break;
 
       case CanvasCommandType.fill:
-        canvas.drawPath(currentPath, _getFillPaint());
+        _fillWithShadow(
+            canvas, (c, paint) => c.drawPath(currentPath, paint));
         break;
 
       case CanvasCommandType.stroke:
@@ -473,9 +484,11 @@ class CanvasAPIExecutor {
         break;
 
       case CanvasCommandType.translate:
-        currentState.transform.translate(
+        currentState.transform.translateByDouble(
           _getDouble(params, 'x'),
           _getDouble(params, 'y'),
+          0,
+          1,
         );
         canvas.translate(
           _getDouble(params, 'x'),
@@ -519,6 +532,57 @@ class CanvasAPIExecutor {
 
       case CanvasCommandType.setGlobalAlpha:
         currentState.globalAlpha = _getDouble(params, 'alpha', 1.0);
+        break;
+
+      case CanvasCommandType.setMiterLimit:
+        currentState.miterLimit = _getDouble(params, 'limit', 10.0);
+        break;
+
+      case CanvasCommandType.setLineDash:
+        final segments = params['segments'];
+        currentState.lineDash = segments is List
+            ? segments.map((e) => (e as num).toDouble()).toList()
+            : const [];
+        break;
+
+      case CanvasCommandType.setLineDashOffset:
+        currentState.lineDashOffset = _getDouble(params, 'offset');
+        break;
+
+      case CanvasCommandType.setShadowBlur:
+        currentState.shadowBlur = _getDouble(params, 'blur');
+        break;
+
+      case CanvasCommandType.setShadowColor:
+        currentState.shadowColor = _parseColor(params['color']);
+        break;
+
+      case CanvasCommandType.setShadowOffsetX:
+        currentState.shadowOffsetX = _getDouble(params, 'offset',
+            _getDouble(params, 'x'));
+        break;
+
+      case CanvasCommandType.setShadowOffsetY:
+        currentState.shadowOffsetY = _getDouble(params, 'offset',
+            _getDouble(params, 'y'));
+        break;
+
+      case CanvasCommandType.setGlobalCompositeOperation:
+        currentState.blendMode =
+            _parseBlendMode(params['operation'] as String?);
+        break;
+
+      case CanvasCommandType.setFont:
+        currentState.font = params['font'] as String? ?? currentState.font;
+        break;
+
+      case CanvasCommandType.setTextAlign:
+        currentState.textAlign = _parseTextAlignName(params['align'] as String?);
+        break;
+
+      case CanvasCommandType.setTextBaseline:
+        currentState.textBaseline =
+            _parseTextBaselineName(params['baseline'] as String?);
         break;
 
       // Gradient operations
@@ -576,19 +640,39 @@ class CanvasAPIExecutor {
     final parsed =
         _fontCache[currentState.font] ??= _ParsedFont.parse(currentState.font);
 
+    final alpha = currentState.globalAlpha;
+    final base = fill ? currentState.fillColor : currentState.strokeColor;
+    final color = alpha >= 1.0 ? base : base.withValues(alpha: alpha);
+
+    final shadow = _shadowPaint() != null
+        ? [
+            Shadow(
+              color: currentState.shadowColor
+                  .withValues(alpha: currentState.shadowColor.a * alpha),
+              offset: Offset(
+                  currentState.shadowOffsetX, currentState.shadowOffsetY),
+              blurRadius: currentState.shadowBlur / 2.0,
+            ),
+          ]
+        : null;
+
     return TextStyle(
       fontSize: parsed.size,
       fontFamily: parsed.family,
-      color:
-          fill ? currentState.fillPaint.color : currentState.strokePaint.color,
+      color: color,
       fontWeight: parsed.bold ? FontWeight.bold : FontWeight.normal,
       fontStyle: parsed.italic ? FontStyle.italic : FontStyle.normal,
+      shadows: shadow,
     );
   }
 
   void _setFillStyle(Map<String, dynamic> params) {
     if (params.containsKey('color')) {
-      currentState.fillPaint.color = _parseColor(params['color']);
+      final color = _parseColor(params['color']);
+      currentState.fillColor = color;
+      currentState.fillPaint
+        ..color = color
+        ..shader = null;
     } else if (params.containsKey('gradientId')) {
       final gradient = gradients[params['gradientId']];
       if (gradient != null) {
@@ -599,7 +683,11 @@ class CanvasAPIExecutor {
 
   void _setStrokeStyle(Map<String, dynamic> params) {
     if (params.containsKey('color')) {
-      currentState.strokePaint.color = _parseColor(params['color']);
+      final color = _parseColor(params['color']);
+      currentState.strokeColor = color;
+      currentState.strokePaint
+        ..color = color
+        ..shader = null;
     } else if (params.containsKey('gradientId')) {
       final gradient = gradients[params['gradientId']];
       if (gradient != null) {
@@ -642,20 +730,142 @@ class CanvasAPIExecutor {
     );
   }
 
+  static BlendMode _parseBlendMode(String? op) {
+    switch (op) {
+      case 'multiply':
+        return BlendMode.multiply;
+      case 'screen':
+        return BlendMode.screen;
+      case 'overlay':
+        return BlendMode.overlay;
+      case 'darken':
+        return BlendMode.darken;
+      case 'lighten':
+        return BlendMode.lighten;
+      case 'color-dodge':
+        return BlendMode.colorDodge;
+      case 'color-burn':
+        return BlendMode.colorBurn;
+      case 'hard-light':
+        return BlendMode.hardLight;
+      case 'soft-light':
+        return BlendMode.softLight;
+      case 'difference':
+        return BlendMode.difference;
+      case 'exclusion':
+        return BlendMode.exclusion;
+      case 'hue':
+        return BlendMode.hue;
+      case 'saturation':
+        return BlendMode.saturation;
+      case 'color':
+        return BlendMode.color;
+      case 'luminosity':
+        return BlendMode.luminosity;
+      case 'lighter':
+        return BlendMode.plus; // additive
+      case 'destination-out':
+        return BlendMode.dstOut;
+      case 'destination-over':
+        return BlendMode.dstOver;
+      case 'source-in':
+        return BlendMode.srcIn;
+      case 'source-out':
+        return BlendMode.srcOut;
+      case 'copy':
+        return BlendMode.src;
+      case 'xor':
+        return BlendMode.xor;
+      case 'source-over':
+      default:
+        return BlendMode.srcOver;
+    }
+  }
+
+  static TextAlign _parseTextAlignName(String? a) {
+    switch (a) {
+      case 'center':
+        return TextAlign.center;
+      case 'right':
+        return TextAlign.right;
+      case 'end':
+        return TextAlign.end;
+      case 'justify':
+        return TextAlign.justify;
+      case 'left':
+        return TextAlign.left;
+      case 'start':
+      default:
+        return TextAlign.start;
+    }
+  }
+
+  static TextBaseline _parseTextBaselineName(String? b) {
+    // Flutter only models alphabetic/ideographic; map the canvas set onto them.
+    switch (b) {
+      case 'ideographic':
+      case 'bottom':
+        return TextBaseline.ideographic;
+      case 'alphabetic':
+      case 'top':
+      case 'hanging':
+      case 'middle':
+      default:
+        return TextBaseline.alphabetic;
+    }
+  }
+
+  /// Returns a shadow paint if the current state has an active shadow, else
+  /// null. Mirrors the HTML canvas model: a blurred, offset copy drawn beneath
+  /// the shape.
+  Paint? _shadowPaint() {
+    final s = currentState;
+    final hasShadow = s.shadowColor.a != 0 &&
+        (s.shadowBlur > 0 || s.shadowOffsetX != 0 || s.shadowOffsetY != 0);
+    if (!hasShadow) return null;
+    final baseAlpha = s.shadowColor.a;
+    final paint = Paint()
+      ..color = s.shadowColor.withValues(alpha: baseAlpha * s.globalAlpha)
+      ..blendMode = s.blendMode;
+    if (s.shadowBlur > 0) {
+      // Canvas blur radius ≈ 2*sigma; convert to a Gaussian sigma.
+      paint.maskFilter = MaskFilter.blur(BlurStyle.normal, s.shadowBlur / 2.0);
+    }
+    return paint;
+  }
+
+  /// Draw a fillable shape, emitting its shadow first when one is active.
+  void _fillWithShadow(Canvas canvas, void Function(Canvas, Paint) draw) {
+    final shadow = _shadowPaint();
+    if (shadow != null) {
+      canvas.save();
+      canvas.translate(currentState.shadowOffsetX, currentState.shadowOffsetY);
+      draw(canvas, shadow);
+      canvas.restore();
+    }
+    draw(canvas, _getFillPaint());
+  }
+
   Paint _getFillPaint() {
+    final alpha = currentState.globalAlpha;
     return currentState.fillPaint
-      ..color =
-          currentState.fillPaint.color.withOpacity(currentState.globalAlpha)
+      // Derive from the base color every time so globalAlpha doesn't compound
+      // across draws. Skip the allocation entirely when fully opaque.
+      ..color = alpha >= 1.0
+          ? currentState.fillColor
+          : currentState.fillColor.withValues(alpha: alpha)
       ..blendMode = currentState.blendMode;
   }
 
   Paint _getStrokePaint() {
+    final alpha = currentState.globalAlpha;
     return currentState.strokePaint
       ..strokeWidth = currentState.lineWidth
       ..strokeCap = currentState.lineCap
       ..strokeJoin = currentState.lineJoin
-      ..color =
-          currentState.strokePaint.color.withOpacity(currentState.globalAlpha)
+      ..color = alpha >= 1.0
+          ? currentState.strokeColor
+          : currentState.strokeColor.withValues(alpha: alpha)
       ..blendMode = currentState.blendMode;
   }
 

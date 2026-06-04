@@ -7,7 +7,7 @@ class HtmlCode {
   static Widget build(ElpianNode node, List<Widget> children) {
     final text = node.props['text'] as String? ?? '';
     
-    final defaultStyle = const CSSStyle(
+    const defaultStyle = CSSStyle(
       fontFamily: 'monospace',
       backgroundColor: Color(0xFFF5F5F5),
       padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),

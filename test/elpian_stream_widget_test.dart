@@ -64,6 +64,9 @@ void main() {
           'props': {'text': 'old'},
         },
       });
+      // One pump delivers the stream event; a second lets the AnimatedSwitcher
+      // complete the (zero-duration) child swap.
+      await tester.pump();
       await tester.pump();
       expect(find.text('old'), findsOneWidget);
 
@@ -73,6 +76,7 @@ void main() {
           'props': {'text': 'new'},
         },
       });
+      await tester.pump();
       await tester.pump();
 
       expect(find.text('new'), findsOneWidget);
@@ -98,6 +102,7 @@ void main() {
         },
       });
       await tester.pump();
+      await tester.pump();
 
       controller.add({
         'action': 'setView',
@@ -109,6 +114,9 @@ void main() {
           'props': {'text': 'v2'},
         },
       });
+      // Deliver the event (pump 1) and rebuild with the new animation
+      // configuration (pump 2) before inspecting the AnimatedSwitcher.
+      await tester.pump();
       await tester.pump();
 
       final switcher = tester.widget<AnimatedSwitcher>(find.byType(AnimatedSwitcher));

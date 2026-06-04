@@ -45,7 +45,7 @@ class HtmlHeader {
       );
     }
 
-    Widget result = Container(
+    Widget result = SizedBox(
       width: double.infinity,
       child: child,
     );

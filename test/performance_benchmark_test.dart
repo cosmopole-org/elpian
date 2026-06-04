@@ -123,7 +123,7 @@ class _Stats {
 
   void print_(String label) {
     // ignore: avoid_print
-    printLine('$label');
+    printLine(label);
     printLine('  FPS (theoretical)  : $fpsStr');
     printLine('  Avg build time     : $avgStr ms');
     printLine('  P50 / P90 / P99    : $p50Str / $p90Str / $p99Str ms');
@@ -229,6 +229,13 @@ void main() {
 
   // ── S5: Widget Pump + Layout (WidgetTester) ────────────────────────────────
   testWidgets('S5: Widget Pump Performance', (tester) async {
+    // The dashboard lays out a non-wrapping Row of fixed-width cards that
+    // exceeds the default 800x600 test viewport; flutter_test treats the
+    // resulting overflow as an error. This is a throughput benchmark, not a
+    // layout test, so give it a surface large enough to lay out cleanly.
+    await tester.binding.setSurfaceSize(const Size(2400, 1600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
     final engine = ElpianEngine();
     const N = 60;
     final buildTimes = <double>[];

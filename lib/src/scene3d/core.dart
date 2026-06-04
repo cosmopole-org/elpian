@@ -1127,6 +1127,10 @@ class ParticleEmitter {
 
   List<Particle> get particles => _particles;
 
+  // B: free-list of dead Particle objects, reused on the next spawn so a busy
+  // emitter doesn't allocate (and later GC) a Particle every frame.
+  final List<Particle> _pool = [];
+
   void update(double dt, Vec3 emitterPos) {
     // Update existing particles. B: iterate back-to-front and swap-and-pop dead
     // particles (O(1)) instead of removeAt (O(n) shift). Order is irrelevant —
@@ -1137,6 +1141,7 @@ class ParticleEmitter {
       if (p.life <= 0) {
         _particles[i] = _particles.last;
         _particles.removeLast();
+        if (_pool.length < maxParticles) _pool.add(p); // recycle
         continue;
       }
       p.velocity = p.velocity + (gravity + wind) * dt;
@@ -1154,15 +1159,27 @@ class ParticleEmitter {
   Particle _spawnParticle(Vec3 pos) {
     final dir = _randomDirection();
     final spd = speed + ((_rng.nextDouble() - 0.5) * 2 * speedVariance);
-    return Particle(
-      position: pos + _shapeOffset(),
-      velocity: dir * spd,
-      color: startColor,
-      size: startSize,
-      life: lifetime * (0.8 + _rng.nextDouble() * 0.4),
-      maxLife: lifetime,
-      rotationSpeed: (_rng.nextDouble() - 0.5) * 3,
-    );
+    // Reuse a recycled particle if available; reset EVERY field so a pooled
+    // object is indistinguishable from a freshly constructed one.
+    final particle = _pool.isNotEmpty
+        ? _pool.removeLast()
+        : Particle(
+            position: Vec3.zero,
+            velocity: Vec3.zero,
+            color: startColor,
+            size: startSize,
+            life: 0,
+            maxLife: lifetime,
+          );
+    return particle
+      ..position = pos + _shapeOffset()
+      ..velocity = dir * spd
+      ..color = startColor
+      ..size = startSize
+      ..life = lifetime * (0.8 + _rng.nextDouble() * 0.4)
+      ..maxLife = lifetime
+      ..rotation = 0
+      ..rotationSpeed = (_rng.nextDouble() - 0.5) * 3;
   }
 
   Vec3 _randomDirection() {
@@ -1346,7 +1363,30 @@ class SceneNode {
     this.extra,
   }) : children = children ?? [];
 
-  Mat4 localTransform() => Mat4.compose(position, rotation, scale);
+  // Cache the composed local transform. position/rotation/scale are immutable
+  // Vec3 values (final fields), so they can only change by reassignment — an
+  // identity check is a sound, allocation-free dirty test. Avoids recomposing a
+  // TRS matrix (3 matrix builds + 2 multiplies) for every node every frame.
+  Mat4? _cachedLocal;
+  Vec3? _cachedPosition;
+  Vec3? _cachedRotation;
+  Vec3? _cachedScale;
+
+  Mat4 localTransform() {
+    final cached = _cachedLocal;
+    if (cached != null &&
+        identical(_cachedPosition, position) &&
+        identical(_cachedRotation, rotation) &&
+        identical(_cachedScale, scale)) {
+      return cached;
+    }
+    final m = Mat4.compose(position, rotation, scale);
+    _cachedLocal = m;
+    _cachedPosition = position;
+    _cachedRotation = rotation;
+    _cachedScale = scale;
+    return m;
+  }
 }
 
 // ════════════════════════════════════════════════════════════════════

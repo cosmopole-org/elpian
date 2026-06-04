@@ -71,7 +71,7 @@ void main() {
     });
 
     test('Can serialize node to JSON', () {
-      final node = ElpianNode(
+      const node = ElpianNode(
         type: 'Container',
         props: {'width': 100},
       );

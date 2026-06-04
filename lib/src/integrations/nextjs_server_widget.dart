@@ -169,7 +169,7 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
 
         final decoded = jsonDecode(responseBody);
         if (decoded is! Map<String, dynamic>) {
-          throw FormatException('Next.js route response must decode to a JSON object.');
+          throw const FormatException('Next.js route response must decode to a JSON object.');
         }
         return decoded;
       }
@@ -196,7 +196,7 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
 
       final decoded = jsonDecode(responseBody);
       if (decoded is! Map<String, dynamic>) {
-        throw FormatException('Next.js payload must decode to a JSON object.');
+        throw const FormatException('Next.js payload must decode to a JSON object.');
       }
       return decoded;
     } finally {
@@ -243,7 +243,7 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
         } else if (child is Map) {
           resolvedChildren.add(
             await _resolveClientComponentNodes(
-              Map<String, dynamic>.from(child as Map),
+              Map<String, dynamic>.from(child),
               packedClientComponents: packedClientComponents,
             ),
           );
@@ -293,11 +293,21 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
       return null;
     }
 
-    final component = await _runJsComponentCode(
-      jsCode,
-      entryFunction: entry,
-      inputProps: props,
-    );
+    Map<String, dynamic>? component;
+    try {
+      component = await _runJsComponentCode(
+        jsCode,
+        entryFunction: entry,
+        inputProps: props,
+      );
+    } catch (e) {
+      // A client component failing to execute (e.g. the QuickJS native runtime
+      // is unavailable, or the script throws) must not take down the entire
+      // server-rendered tree. Degrade to the fallback placeholder so sibling
+      // server content still renders.
+      debugPrint('NextjsServerWidget: client component "$entry" failed: $e');
+      return null;
+    }
 
     if (component == null) return null;
 

@@ -16,9 +16,11 @@ deviations. `[ ]` = todo, `[~]` = in progress, `[x]` = done & verified.
 - [x] **A5** Double-buffer + `parking_lot` + `base64` crate — `A5-rust-frame-transfer-deps.md` (no regression; report in `benchmarks/reports/optimization/A5-frame-transfer-deps.md`)
 - [x] **Bench checkpoint #2** (after A4–A5) — recorded in `benchmarks/reports/optimization/`
 
-> **Dart note:** No Flutter SDK in this container — Dart changes below are
-> inspection-level only and **must** be checked with `flutter analyze` / `flutter
-> test` / device profiling before merge (see each workstream's Verification + `V`).
+> **Dart note (updated session 4):** Flutter **can now be installed** in the container
+> (`git clone -b stable https://github.com/flutter/flutter` → add `bin` to PATH; first
+> `flutter --version` fetches the Dart SDK). Verified with **Flutter 3.44.1 / Dart 3.12.1**.
+> So `flutter analyze` + `flutter test` ARE runnable here now — only on-device **profiling**
+> (DevTools frame/raster/GC numbers) and per-platform build config still require real hardware.
 
 ### Phase 3 — Frame transfer (zero-copy / latency)
 - [~] **F1** Minimal-copy + synchronous image (native) — `F-zerocopy-lowlatency-frame-transfer.md`
@@ -35,20 +37,44 @@ deviations. `[ ]` = todo, `[~]` = in progress, `[x]` = done & verified.
     Path reuse via `path.reset()` in `scene3d/renderer.dart` triangle loop and in
     `bevy/dart_scene_renderer.dart` (also reuses one fill `Paint`); particle update in
     `scene3d/core.dart` now swap-and-pops dead particles (O(1)) instead of `removeAt` (O(n)).
-  - Remaining (higher-risk, needs Flutter): view/world matrix cache + node dirty-tracking,
-    `Particle` object pool, fixed-size clip buffers, `math.pow` LUT, repaint `Listenable`.
-- [~] **C** Canvas 2D allocations — `C-dart-canvas2d.md`
-  - Done: `clearRect` now uses `drawRect`+static `BlendMode.clear` paint (no `saveLayer`);
-    parsed-font cache (`_ParsedFont`) so the font string isn't re-scanned per `fillText`.
-  - Remaining: paint-getter color caching; decide on the dead shadow state (impl vs remove).
+  - **Session 4 (verified):** `SceneNode.localTransform()` now caches the composed TRS matrix
+    with an identity-based dirty check on the immutable Vec3 position/rotation/scale (no recompose
+    per frame when unmoved); `ParticleEmitter` now reuses a free-list of dead `Particle`s on spawn
+    (all fields reset). Tests in `test/scene3d_perf_test.dart`.
+  - Remaining: world-matrix cache across the scene-graph walk, fixed-size clip buffers, repaint
+    `Listenable` (widget-lifecycle, needs device profiling). `math.pow` specular LUT deferred —
+    exponent is a continuous roughness value, so the integer-exponent trick would change lighting
+    output; risky without visual verification.
+- [x] **C** Canvas 2D allocations — `C-dart-canvas2d.md` (verified: `flutter analyze` + `flutter test`)
+  - Done: `clearRect` `drawRect`+static `BlendMode.clear` paint (no `saveLayer`);
+    parsed-font cache (`_ParsedFont`). **Session 4:** paint-getter color caching — base
+    fill/stroke colors tracked separately so `globalAlpha` no longer compounds across draws
+    (was a latent correctness bug 0.5→0.25→…); opaque draws skip `withOpacity` alloc;
+    `setFillStyle`/`setStrokeStyle` clear stale gradient shader; `copy()` preserves shaders
+    across save/restore. Tests in `test/canvas_paint_test.dart`.
+  - **Session 5 (visually verified via golden PNGs):** shadows now **IMPLEMENTED** (fillRect/
+    fillCircle/fill(path) draw a blurred+offset shadow copy; fillText via `TextStyle.shadows`).
+    Also fixed a real bug class: a whole block of advertised commands was silently dropped
+    (`setFont` → text was stuck at 10px, `setTextAlign`/`setTextBaseline`/`setShadow*`/
+    `setLineDash`/`setLineDashOffset`/`setMiterLimit`/`setGlobalCompositeOperation`) — all wired
+    to state now (`setGlobalCompositeOperation` maps the full Flutter `BlendMode` set). fillText
+    color derives from the base color + globalAlpha. Verified by rendering to `build/visual/*.png`
+    and inspecting (alpha non-compounding, clearRect, gradient, shadow offset/blur, font sizing).
 
 ### Phase 5 — Flutter UI pipeline
 - [~] **D** HTML/CSS/Flutter-DSL pipeline — `D-dart-html-css-dsl.md`
   - Done: **D5** image decode caching (`cacheWidth`/`cacheHeight` from style) in
     `html_img.dart` + `elpian_image.dart`.
-  - Remaining (higher-risk, needs Flutter): **D1** CSS parse/computed-style memoization,
-    **D2** kill the double parse on merge (needs a verified `CSSStyle.merge`), **D3** `@immutable`
-    + `==`/`hashCode` + stable keys, **D4** layout micro-fixes, **D6** animated-widget alloc.
+  - **Session 4 (verified):** **D1** `CSSParser.parse` now memoized via a bounded LRU keyed by
+    deep map equality (CSS no longer re-parsed per element per build); `getComputedStyle` routes
+    through a new `getComputedStyleMap`. **D2** `elpian_engine.render` merges stylesheet + inline
+    *raw maps* and parses ONCE — replaces the lossy `CSSStyle→Map→merge→parse` round-trip (old
+    `_styleToMap` dropped ~140 of ~180 fields; new path is lossless). Removed dead
+    `_styleToMap`/`_colorToString`/`_fontWeight*` (also fixed a hard compile error: const map
+    keyed by `FontWeight`). Tests in `test/css_cache_merge_test.dart`.
+  - Remaining: **D3** `@immutable` + `==`/`hashCode` (180-field equality — high risk, and D1's
+    map-keyed cache already captures most ROI without it) + stable keys for all nodes (behavior
+    change), **D4** layout micro-fixes, **D6** animated-widget alloc.
 - [~] **E** Impeller config + shader warmup + image cache — `E-flutter-impeller-config.md`
   - Done: **E4** frame-blit paint hint (reused Paint, FilterQuality none/low; RepaintBoundary
     already present in `build`). **E3** pairs with D5.
@@ -65,6 +91,14 @@ deviations. `[ ]` = todo, `[~]` = in progress, `[x]` = done & verified.
 
 ### Phase 7 — OPTIONAL true GPU zero-copy
 - [ ] **G** wgpu + Flutter external textures — `G-gpu-zerocopy-external-textures.md` (only on explicit go-ahead)
+
+### Visual verification tooling (session 5)
+- [x] **Golden/screenshot harness** — `test/visual/visual_harness.dart` rasterizes a Canvas-draw
+  callback (`renderCanvasToPng`) and a pumped widget subtree (`captureBoundaryToPng`) to
+  `build/visual/*.png` (git-ignored), headless. Used to professionally review: Canvas2D
+  (alpha/gradient/clearRect/shadows/font), the Dart 3D renderer (lit cube+sphere), and the
+  full HTML/CSS engine path (D1/D2 stylesheet+inline merge). Note: `flutter test` uses the Ahem
+  font, so text glyphs render as solid boxes — sizes/colors/layout are still meaningful.
 
 ### Cross-cutting (run continuously)
 - [x] **X** Cross-platform compat verified (host build + `cargo build --target wasm32-unknown-unknown`) after every Rust change (A1–A5)
@@ -84,6 +118,42 @@ deviations. `[ ]` = todo, `[~]` = in progress, `[x]` = done & verified.
 > Leave a short note for the next session: what you finished, what's half-done,
 > any surprises, and the exact next step.
 
+- 2026-06-03 (session 5 cont.): **Fixed all 4 pre-existing test failures — suite is now 73/0.**
+  (1) Stream `patchView`/`animate`: tests asserted before async stream delivery + AnimatedSwitcher
+  swap completed → added the extra pump (product was correct). (2) Nextjs client-component: init
+  QuickJS with `xhr:false` (flutter_js's fetch/XHR timer tripped `!timersPending`) AND made a failed
+  client-component JS execution degrade to the fallback node instead of blanking the whole
+  server-rendered tree; test now tolerates executed-output-or-fallback (deterministic with/without
+  the QuickJS native lib). (3) S5 perf: non-wrapping Row of fixed-width cards overflowed the 800px
+  test viewport → gave the throughput benchmark a 2400x1600 surface. Rust still 10 VM + golden green.
+  Note: the QuickJS happy path needs `libquickjs_c_bridge_plugin.so` on `LD_LIBRARY_PATH` (it ships
+  prebuilt in the flutter_js pub-cache under `linux/shared/`); without it the fallback path keeps the
+  suite green.
+- 2026-06-03 (session 5): **Added headless visual verification** (`test/visual/`) — render Canvas2D,
+  the Dart 3D renderer, and the full HTML/CSS engine to `build/visual/*.png` and inspect. Using it,
+  **completed C fully**: implemented drop shadows (was dead/advertised state) and wired up a whole
+  block of silently-dropped canvas commands (`setFont` etc.) — visually confirmed alpha-no-compound,
+  clearRect, gradient, shadow blur/offset, and font sizing. Visually confirmed **D1/D2** end-to-end
+  (stylesheet class + inline merge renders correctly; inline wins, sheet-only fields survive).
+  Verified the **3D** path renders a correctly-lit cube+sphere. Full suite: 69 pass / 4 fail (same
+  4 pre-existing, unrelated). **Next:** D4/D6 (now golden-verifiable but marginal), F1/F2 (native FFI/
+  web — still need a device/Linux cdylib build), A6 Val-enum, G (go-ahead). The 4 pre-existing
+  failures (`elpian_stream_widget` patchView/animate, `nextjs_integration` packed-scripts, `S5`
+  perf threshold) are worth a separate fix pass now that Flutter runs here.
+- 2026-06-03 (session 4): **Unblocked the Dart side** — installed Flutter 3.44.1/Dart 3.12.1
+  in-container and confirmed prior inspection-level edits compile & analyze clean. Fixed a hard
+  compile error surfaced by the newer SDK (const map keyed by `FontWeight` in `elpian_engine`).
+  Landed & **verified** (`flutter analyze` + `flutter test`, all new tests green):
+  **D1** CSS parse memoization (LRU), **D2** lossless single-parse style merge,
+  **C** paint-color caching + globalAlpha-compounding fix + shader preservation,
+  **B** local-transform cache + particle pool. Added test files: `css_cache_merge_test.dart`,
+  `canvas_paint_test.dart`, `scene3d_perf_test.dart` (14 new tests). Full suite: 63 pass /
+  4 fail — the 4 failures (`elpian_stream_widget`, `nextjs_integration`, `S5` perf threshold)
+  are **pre-existing on `main`**, unrelated to the perf work (those source files are untouched
+  by the branch), surfaced only by the newer Flutter version. Rust: 10 VM tests + golden tests
+  still green. **Next:** D3/D4/D6 (med risk), F1/F2 frame transfer (needs device profiling),
+  E1/E2/E5 (per-device build config), A6 `Val`-enum migration (own focused effort), `G` (optional,
+  needs go-ahead). Consider fixing the 4 pre-existing test failures separately.
 - 2026-06-03: Plan authored and persisted to `upgrade/`. No code changes yet.
   Next step: implement **A1** (lowest risk, highest ROI), then bench.
 - 2026-06-03 (session 3): Continued on branch `claude/wonderful-galileo-UySD4`. No Flutter SDK

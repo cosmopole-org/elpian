@@ -240,19 +240,19 @@ class ElpianEngine {
       debugPrint('Warning: Unknown widget type "${node.type}"');
       return Container(
         padding: const EdgeInsets.all(8),
-        color: Colors.red.withOpacity(0.2),
+        color: Colors.red.withValues(alpha: 0.2),
         child: Text('Unknown widget: ${node.type}'),
       );
     }
 
-    // Get styles from stylesheet if element has ID or classes
-    CSSStyle? stylesheetStyle;
+    // Get the raw cascade map from the stylesheet if element has ID or classes.
+    Map<String, dynamic>? stylesheetMap;
     if (node.key != null || (node.props['className'] != null)) {
       final classes = node.props['className'] is String
           ? (node.props['className'] as String).split(' ')
           : (node.props['className'] as List?)?.cast<String>();
 
-      stylesheetStyle = _stylesheetManager.getComputedStyle(
+      stylesheetMap = _stylesheetManager.getComputedStyleMap(
         tagName: node.type,
         id: node.key,
         classes: classes,
@@ -260,22 +260,22 @@ class ElpianEngine {
       );
     }
 
-    // Parse inline style if present
-    CSSStyle? inlineStyle;
-    if (node.props['style'] != null) {
-      inlineStyle = CSSParser.parse(node.props['style'] as Map<String, dynamic>);
-    }
+    final inlineMap = node.props['style'] as Map<String, dynamic>?;
 
-    // Merge stylesheet style with inline style (inline has higher priority)
+    // Merge stylesheet + inline (inline wins) into one map and parse ONCE.
+    // Previously this round-tripped CSSStyle -> Map (lossy: only ~40 of the
+    // ~180 fields survived) -> merge -> parse again. Merging the raw maps is
+    // both faster (single memoized parse) and lossless.
     CSSStyle? mergedStyle;
-    if (stylesheetStyle != null && inlineStyle != null) {
-      // Merge: start with stylesheet styles, override with inline
-      final stylesheetMap = _styleToMap(stylesheetStyle);
-      final inlineMap = node.props['style'] as Map<String, dynamic>;
-      stylesheetMap.addAll(inlineMap);
+    if (stylesheetMap != null && stylesheetMap.isNotEmpty && inlineMap != null) {
+      mergedStyle = CSSParser.parse(<String, dynamic>{
+        ...stylesheetMap,
+        ...inlineMap,
+      });
+    } else if (inlineMap != null) {
+      mergedStyle = CSSParser.parse(inlineMap);
+    } else if (stylesheetMap != null && stylesheetMap.isNotEmpty) {
       mergedStyle = CSSParser.parse(stylesheetMap);
-    } else {
-      mergedStyle = inlineStyle ?? stylesheetStyle;
     }
 
     // Create node with merged style
@@ -317,69 +317,6 @@ class ElpianEngine {
     }
 
     return result;
-  }
-
-  static void _addIfNotNull(Map<String, dynamic> map, String key, dynamic value) {
-    if (value != null) map[key] = value;
-  }
-
-  /// Convert a CSSStyle back to a style map for merging
-  Map<String, dynamic> _styleToMap(CSSStyle style) {
-    final map = <String, dynamic>{};
-    _addIfNotNull(map, 'width', style.width);
-    _addIfNotNull(map, 'height', style.height);
-    _addIfNotNull(map, 'minWidth', style.minWidth);
-    _addIfNotNull(map, 'maxWidth', style.maxWidth);
-    _addIfNotNull(map, 'minHeight', style.minHeight);
-    _addIfNotNull(map, 'maxHeight', style.maxHeight);
-    if (style.padding != null) map['padding'] = '${style.padding!.top} ${style.padding!.right} ${style.padding!.bottom} ${style.padding!.left}';
-    if (style.margin != null) map['margin'] = '${style.margin!.top} ${style.margin!.right} ${style.margin!.bottom} ${style.margin!.left}';
-    if (style.backgroundColor != null) map['backgroundColor'] = _colorToString(style.backgroundColor!);
-    if (style.color != null) map['color'] = _colorToString(style.color!);
-    _addIfNotNull(map, 'fontSize', style.fontSize);
-    if (style.fontWeight != null) map['fontWeight'] = _fontWeightToString(style.fontWeight!);
-    if (style.fontStyle != null) map['fontStyle'] = style.fontStyle == FontStyle.italic ? 'italic' : 'normal';
-    _addIfNotNull(map, 'fontFamily', style.fontFamily);
-    _addIfNotNull(map, 'letterSpacing', style.letterSpacing);
-    _addIfNotNull(map, 'wordSpacing', style.wordSpacing);
-    _addIfNotNull(map, 'lineHeight', style.lineHeight);
-    if (style.textAlign != null) map['textAlign'] = style.textAlign.toString().split('.').last;
-    _addIfNotNull(map, 'borderRadius', style.borderRadius);
-    if (style.borderColor != null) map['borderColor'] = _colorToString(style.borderColor!);
-    _addIfNotNull(map, 'borderWidth', style.borderWidth);
-    _addIfNotNull(map, 'opacity', style.opacity);
-    _addIfNotNull(map, 'display', style.display);
-    _addIfNotNull(map, 'flexDirection', style.flexDirection);
-    _addIfNotNull(map, 'justifyContent', style.justifyContent);
-    _addIfNotNull(map, 'alignItems', style.alignItems);
-    _addIfNotNull(map, 'flex', style.flex);
-    _addIfNotNull(map, 'gap', style.gap);
-    _addIfNotNull(map, 'flexWrap', style.flexWrap);
-    _addIfNotNull(map, 'gradient', style.gradient);
-    _addIfNotNull(map, 'boxShadow', style.boxShadow);
-    _addIfNotNull(map, 'textShadow', style.textShadow);
-    _addIfNotNull(map, 'rotate', style.rotate);
-    _addIfNotNull(map, 'scale', style.scale);
-    _addIfNotNull(map, 'visible', style.visible);
-    _addIfNotNull(map, 'position', style.position);
-    _addIfNotNull(map, 'top', style.top);
-    _addIfNotNull(map, 'right', style.right);
-    _addIfNotNull(map, 'bottom', style.bottom);
-    _addIfNotNull(map, 'left', style.left);
-    return map;
-  }
-
-  static String _colorToString(Color color) {
-    return 'rgba(${color.red},${color.green},${color.blue},${color.alpha / 255.0})';
-  }
-
-  static const _fontWeightStringMap = <FontWeight, String>{
-    FontWeight.bold: 'bold',
-    FontWeight.normal: 'normal',
-  };
-
-  static String _fontWeightToString(FontWeight weight) {
-    return _fontWeightStringMap[weight] ?? '${weight.value}';
   }
 
   Widget renderFromJson(Map<String, dynamic> json) {
