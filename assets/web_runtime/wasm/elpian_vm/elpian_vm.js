@@ -1,7 +1,5 @@
 /* @ts-self-types="./elpian_vm.d.ts" */
 
-//#region exports
-
 /**
  * @param {string} scene_id
  * @param {string} json
@@ -10,12 +8,10 @@
  * @returns {boolean}
  */
 export function elpian_bevy_wasm_create_scene(scene_id, json, width, height) {
-    const ptr0 = passStringToWasm0(scene_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const ptr0 = passStringToWasm0(scene_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
     const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const ptr1 = passStringToWasm0(json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
     const len1 = WASM_VECTOR_LEN;
-    _assertNum(width);
-    _assertNum(height);
     const ret = wasm.elpian_bevy_wasm_create_scene(ptr0, len0, ptr1, len1, width, height);
     return ret !== 0;
 }
@@ -25,9 +21,29 @@ export function elpian_bevy_wasm_create_scene(scene_id, json, width, height) {
  * @returns {boolean}
  */
 export function elpian_bevy_wasm_destroy_scene(scene_id) {
-    const ptr0 = passStringToWasm0(scene_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const ptr0 = passStringToWasm0(scene_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
     const len0 = WASM_VECTOR_LEN;
     const ret = wasm.elpian_bevy_wasm_destroy_scene(ptr0, len0);
+    return ret !== 0;
+}
+
+/**
+ * Feed model bytes (GLB / embedded-buffer glTF) into a scene, keyed by URL.
+ * On web the host fetches the bytes and passes them straight through as a
+ * typed array (no base64 needed). Returns true if they decoded into a model.
+ * @param {string} scene_id
+ * @param {string} url
+ * @param {Uint8Array} bytes
+ * @returns {boolean}
+ */
+export function elpian_bevy_wasm_feed_model(scene_id, url, bytes) {
+    const ptr0 = passStringToWasm0(scene_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(url, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passArray8ToWasm0(bytes, wasm.__wbindgen_export);
+    const len2 = WASM_VECTOR_LEN;
+    const ret = wasm.elpian_bevy_wasm_feed_model(ptr0, len0, ptr1, len1, ptr2, len2);
     return ret !== 0;
 }
 
@@ -36,7 +52,7 @@ export function elpian_bevy_wasm_destroy_scene(scene_id) {
  * @returns {number}
  */
 export function elpian_bevy_wasm_get_elapsed_time(scene_id) {
-    const ptr0 = passStringToWasm0(scene_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const ptr0 = passStringToWasm0(scene_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
     const len0 = WASM_VECTOR_LEN;
     const ret = wasm.elpian_bevy_wasm_get_elapsed_time(ptr0, len0);
     return ret;
@@ -54,14 +70,18 @@ export function elpian_bevy_wasm_get_frame(scene_id) {
     let deferred2_0;
     let deferred2_1;
     try {
-        const ptr0 = passStringToWasm0(scene_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(scene_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.elpian_bevy_wasm_get_frame(ptr0, len0);
-        deferred2_0 = ret[0];
-        deferred2_1 = ret[1];
-        return getStringFromWasm0(ret[0], ret[1]);
+        wasm.elpian_bevy_wasm_get_frame(retptr, ptr0, len0);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        deferred2_0 = r0;
+        deferred2_1 = r1;
+        return getStringFromWasm0(r0, r1);
     } finally {
-        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+        wasm.__wbindgen_add_to_stack_pointer(16);
+        wasm.__wbindgen_export3(deferred2_0, deferred2_1, 1);
     }
 }
 
@@ -71,12 +91,19 @@ export function elpian_bevy_wasm_get_frame(scene_id) {
  * @returns {Uint8Array}
  */
 export function elpian_bevy_wasm_get_frame_bytes(scene_id) {
-    const ptr0 = passStringToWasm0(scene_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.elpian_bevy_wasm_get_frame_bytes(ptr0, len0);
-    var v2 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
-    return v2;
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(scene_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        wasm.elpian_bevy_wasm_get_frame_bytes(retptr, ptr0, len0);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        var v2 = getArrayU8FromWasm0(r0, r1).slice();
+        wasm.__wbindgen_export3(r0, r1 * 1, 1);
+        return v2;
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+    }
 }
 
 /**
@@ -84,14 +111,29 @@ export function elpian_bevy_wasm_get_frame_bytes(scene_id) {
  * @returns {bigint}
  */
 export function elpian_bevy_wasm_get_frame_count(scene_id) {
-    const ptr0 = passStringToWasm0(scene_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const ptr0 = passStringToWasm0(scene_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
     const len0 = WASM_VECTOR_LEN;
     const ret = wasm.elpian_bevy_wasm_get_frame_count(ptr0, len0);
     return BigInt.asUintN(64, ret);
 }
 
+/**
+ * Whether a model URL is already decoded/cached in a scene.
+ * @param {string} scene_id
+ * @param {string} url
+ * @returns {boolean}
+ */
+export function elpian_bevy_wasm_has_model(scene_id, url) {
+    const ptr0 = passStringToWasm0(scene_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(url, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.elpian_bevy_wasm_has_model(ptr0, len0, ptr1, len1);
+    return ret !== 0;
+}
+
 export function elpian_bevy_wasm_init() {
-    wasm.elpian_bevy_wasm_init();
+    wasm.elpian_bevy_init();
 }
 
 /**
@@ -100,7 +142,7 @@ export function elpian_bevy_wasm_init() {
  * @returns {boolean}
  */
 export function elpian_bevy_wasm_render_frame(scene_id, delta_time) {
-    const ptr0 = passStringToWasm0(scene_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const ptr0 = passStringToWasm0(scene_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
     const len0 = WASM_VECTOR_LEN;
     const ret = wasm.elpian_bevy_wasm_render_frame(ptr0, len0, delta_time);
     return ret !== 0;
@@ -113,10 +155,8 @@ export function elpian_bevy_wasm_render_frame(scene_id, delta_time) {
  * @returns {boolean}
  */
 export function elpian_bevy_wasm_resize_scene(scene_id, width, height) {
-    const ptr0 = passStringToWasm0(scene_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const ptr0 = passStringToWasm0(scene_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
     const len0 = WASM_VECTOR_LEN;
-    _assertNum(width);
-    _assertNum(height);
     const ret = wasm.elpian_bevy_wasm_resize_scene(ptr0, len0, width, height);
     return ret !== 0;
 }
@@ -126,7 +166,7 @@ export function elpian_bevy_wasm_resize_scene(scene_id, width, height) {
  * @returns {boolean}
  */
 export function elpian_bevy_wasm_scene_exists(scene_id) {
-    const ptr0 = passStringToWasm0(scene_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const ptr0 = passStringToWasm0(scene_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
     const len0 = WASM_VECTOR_LEN;
     const ret = wasm.elpian_bevy_wasm_scene_exists(ptr0, len0);
     return ret !== 0;
@@ -138,9 +178,9 @@ export function elpian_bevy_wasm_scene_exists(scene_id) {
  * @returns {boolean}
  */
 export function elpian_bevy_wasm_send_input(scene_id, input_json) {
-    const ptr0 = passStringToWasm0(scene_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const ptr0 = passStringToWasm0(scene_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
     const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(input_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const ptr1 = passStringToWasm0(input_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
     const len1 = WASM_VECTOR_LEN;
     const ret = wasm.elpian_bevy_wasm_send_input(ptr0, len0, ptr1, len1);
     return ret !== 0;
@@ -152,9 +192,9 @@ export function elpian_bevy_wasm_send_input(scene_id, input_json) {
  * @returns {boolean}
  */
 export function elpian_bevy_wasm_update_scene(scene_id, json) {
-    const ptr0 = passStringToWasm0(scene_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const ptr0 = passStringToWasm0(scene_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
     const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const ptr1 = passStringToWasm0(json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
     const len1 = WASM_VECTOR_LEN;
     const ret = wasm.elpian_bevy_wasm_update_scene(ptr0, len0, ptr1, len1);
     return ret !== 0;
@@ -169,16 +209,20 @@ export function elpian_wasm_continue_execution(machine_id, input_json) {
     let deferred3_0;
     let deferred3_1;
     try {
-        const ptr0 = passStringToWasm0(machine_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(machine_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
         const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(input_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const ptr1 = passStringToWasm0(input_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
         const len1 = WASM_VECTOR_LEN;
-        const ret = wasm.elpian_wasm_continue_execution(ptr0, len0, ptr1, len1);
-        deferred3_0 = ret[0];
-        deferred3_1 = ret[1];
-        return getStringFromWasm0(ret[0], ret[1]);
+        wasm.elpian_wasm_continue_execution(retptr, ptr0, len0, ptr1, len1);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        deferred3_0 = r0;
+        deferred3_1 = r1;
+        return getStringFromWasm0(r0, r1);
     } finally {
-        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+        wasm.__wbindgen_add_to_stack_pointer(16);
+        wasm.__wbindgen_export3(deferred3_0, deferred3_1, 1);
     }
 }
 
@@ -188,9 +232,9 @@ export function elpian_wasm_continue_execution(machine_id, input_json) {
  * @returns {boolean}
  */
 export function elpian_wasm_create_vm_from_ast(machine_id, ast_json) {
-    const ptr0 = passStringToWasm0(machine_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const ptr0 = passStringToWasm0(machine_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
     const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(ast_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const ptr1 = passStringToWasm0(ast_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
     const len1 = WASM_VECTOR_LEN;
     const ret = wasm.elpian_wasm_create_vm_from_ast(ptr0, len0, ptr1, len1);
     return ret !== 0;
@@ -202,9 +246,9 @@ export function elpian_wasm_create_vm_from_ast(machine_id, ast_json) {
  * @returns {boolean}
  */
 export function elpian_wasm_create_vm_from_code(machine_id, code) {
-    const ptr0 = passStringToWasm0(machine_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const ptr0 = passStringToWasm0(machine_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
     const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(code, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const ptr1 = passStringToWasm0(code, wasm.__wbindgen_export, wasm.__wbindgen_export2);
     const len1 = WASM_VECTOR_LEN;
     const ret = wasm.elpian_wasm_create_vm_from_code(ptr0, len0, ptr1, len1);
     return ret !== 0;
@@ -215,7 +259,7 @@ export function elpian_wasm_create_vm_from_code(machine_id, code) {
  * @returns {boolean}
  */
 export function elpian_wasm_destroy_vm(machine_id) {
-    const ptr0 = passStringToWasm0(machine_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const ptr0 = passStringToWasm0(machine_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
     const len0 = WASM_VECTOR_LEN;
     const ret = wasm.elpian_wasm_destroy_vm(ptr0, len0);
     return ret !== 0;
@@ -229,14 +273,18 @@ export function elpian_wasm_execute(machine_id) {
     let deferred2_0;
     let deferred2_1;
     try {
-        const ptr0 = passStringToWasm0(machine_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(machine_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.elpian_wasm_execute(ptr0, len0);
-        deferred2_0 = ret[0];
-        deferred2_1 = ret[1];
-        return getStringFromWasm0(ret[0], ret[1]);
+        wasm.elpian_wasm_execute(retptr, ptr0, len0);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        deferred2_0 = r0;
+        deferred2_1 = r1;
+        return getStringFromWasm0(r0, r1);
     } finally {
-        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+        wasm.__wbindgen_add_to_stack_pointer(16);
+        wasm.__wbindgen_export3(deferred2_0, deferred2_1, 1);
     }
 }
 
@@ -250,17 +298,20 @@ export function elpian_wasm_execute_func(machine_id, func_name, cb_id) {
     let deferred3_0;
     let deferred3_1;
     try {
-        const ptr0 = passStringToWasm0(machine_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(machine_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
         const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(func_name, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const ptr1 = passStringToWasm0(func_name, wasm.__wbindgen_export, wasm.__wbindgen_export2);
         const len1 = WASM_VECTOR_LEN;
-        _assertNum(cb_id);
-        const ret = wasm.elpian_wasm_execute_func(ptr0, len0, ptr1, len1, cb_id);
-        deferred3_0 = ret[0];
-        deferred3_1 = ret[1];
-        return getStringFromWasm0(ret[0], ret[1]);
+        wasm.elpian_wasm_execute_func(retptr, ptr0, len0, ptr1, len1, cb_id);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        deferred3_0 = r0;
+        deferred3_1 = r1;
+        return getStringFromWasm0(r0, r1);
     } finally {
-        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+        wasm.__wbindgen_add_to_stack_pointer(16);
+        wasm.__wbindgen_export3(deferred3_0, deferred3_1, 1);
     }
 }
 
@@ -275,24 +326,27 @@ export function elpian_wasm_execute_func_with_input(machine_id, func_name, input
     let deferred4_0;
     let deferred4_1;
     try {
-        const ptr0 = passStringToWasm0(machine_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(machine_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
         const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(func_name, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const ptr1 = passStringToWasm0(func_name, wasm.__wbindgen_export, wasm.__wbindgen_export2);
         const len1 = WASM_VECTOR_LEN;
-        const ptr2 = passStringToWasm0(input_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const ptr2 = passStringToWasm0(input_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
         const len2 = WASM_VECTOR_LEN;
-        _assertNum(cb_id);
-        const ret = wasm.elpian_wasm_execute_func_with_input(ptr0, len0, ptr1, len1, ptr2, len2, cb_id);
-        deferred4_0 = ret[0];
-        deferred4_1 = ret[1];
-        return getStringFromWasm0(ret[0], ret[1]);
+        wasm.elpian_wasm_execute_func_with_input(retptr, ptr0, len0, ptr1, len1, ptr2, len2, cb_id);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        deferred4_0 = r0;
+        deferred4_1 = r1;
+        return getStringFromWasm0(r0, r1);
     } finally {
-        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+        wasm.__wbindgen_add_to_stack_pointer(16);
+        wasm.__wbindgen_export3(deferred4_0, deferred4_1, 1);
     }
 }
 
 export function elpian_wasm_init() {
-    wasm.elpian_wasm_init();
+    wasm.elpian_init();
 }
 
 /**
@@ -300,7 +354,7 @@ export function elpian_wasm_init() {
  * @returns {boolean}
  */
 export function elpian_wasm_validate_ast(ast_json) {
-    const ptr0 = passStringToWasm0(ast_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const ptr0 = passStringToWasm0(ast_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
     const len0 = WASM_VECTOR_LEN;
     const ret = wasm.elpian_wasm_validate_ast(ptr0, len0);
     return ret !== 0;
@@ -311,31 +365,15 @@ export function elpian_wasm_validate_ast(ast_json) {
  * @returns {boolean}
  */
 export function elpian_wasm_vm_exists(machine_id) {
-    const ptr0 = passStringToWasm0(machine_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const ptr0 = passStringToWasm0(machine_id, wasm.__wbindgen_export, wasm.__wbindgen_export2);
     const len0 = WASM_VECTOR_LEN;
     const ret = wasm.elpian_wasm_vm_exists(ptr0, len0);
     return ret !== 0;
 }
 
-//#endregion
-
-//#region wasm imports
-
 function __wbg_get_imports() {
     const import0 = {
         __proto__: null,
-        __wbg___wbindgen_throw_be289d5034ed271b: function(arg0, arg1) {
-            throw new Error(getStringFromWasm0(arg0, arg1));
-        },
-        __wbindgen_init_externref_table: function() {
-            const table = wasm.__wbindgen_externrefs;
-            const offset = table.grow(4);
-            table.set(0, undefined);
-            table.set(offset + 0, undefined);
-            table.set(offset + 1, null);
-            table.set(offset + 2, true);
-            table.set(offset + 3, false);
-        },
     };
     return {
         __proto__: null,
@@ -343,17 +381,17 @@ function __wbg_get_imports() {
     };
 }
 
-
-//#endregion
-
-//#region intrinsics
-function _assertNum(n) {
-    if (typeof(n) !== 'number') throw new Error(`expected a number argument, found ${typeof(n)}`);
-}
-
 function getArrayU8FromWasm0(ptr, len) {
     ptr = ptr >>> 0;
     return getUint8ArrayMemory0().subarray(ptr / 1, ptr / 1 + len);
+}
+
+let cachedDataViewMemory0 = null;
+function getDataViewMemory0() {
+    if (cachedDataViewMemory0 === null || cachedDataViewMemory0.buffer.detached === true || (cachedDataViewMemory0.buffer.detached === undefined && cachedDataViewMemory0.buffer !== wasm.memory.buffer)) {
+        cachedDataViewMemory0 = new DataView(wasm.memory.buffer);
+    }
+    return cachedDataViewMemory0;
 }
 
 function getStringFromWasm0(ptr, len) {
@@ -369,8 +407,14 @@ function getUint8ArrayMemory0() {
     return cachedUint8ArrayMemory0;
 }
 
+function passArray8ToWasm0(arg, malloc) {
+    const ptr = malloc(arg.length * 1, 1) >>> 0;
+    getUint8ArrayMemory0().set(arg, ptr / 1);
+    WASM_VECTOR_LEN = arg.length;
+    return ptr;
+}
+
 function passStringToWasm0(arg, malloc, realloc) {
-    if (typeof(arg) !== 'string') throw new Error(`expected a string argument, found ${typeof(arg)}`);
     if (realloc === undefined) {
         const buf = cachedTextEncoder.encode(arg);
         const ptr = malloc(buf.length, 1) >>> 0;
@@ -398,7 +442,7 @@ function passStringToWasm0(arg, malloc, realloc) {
         ptr = realloc(ptr, len, len = offset + arg.length * 3, 1) >>> 0;
         const view = getUint8ArrayMemory0().subarray(ptr + offset, ptr + len);
         const ret = cachedTextEncoder.encodeInto(arg, view);
-        if (ret.read !== arg.length) throw new Error('failed to pass whole string');
+
         offset += ret.written;
         ptr = realloc(ptr, len, offset, 1) >>> 0;
     }
@@ -436,16 +480,12 @@ if (!('encodeInto' in cachedTextEncoder)) {
 
 let WASM_VECTOR_LEN = 0;
 
-
-//#endregion
-
-//#region wasm loading
 let wasmModule, wasm;
 function __wbg_finalize_init(instance, module) {
     wasm = instance.exports;
     wasmModule = module;
+    cachedDataViewMemory0 = null;
     cachedUint8ArrayMemory0 = null;
-    wasm.__wbindgen_start();
     return wasm;
 }
 
@@ -531,5 +571,3 @@ async function __wbg_init(module_or_path) {
 }
 
 export { initSync, __wbg_init as default };
-//#endregion
-export { wasm as __wasm }

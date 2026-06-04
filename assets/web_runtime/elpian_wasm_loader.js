@@ -41,6 +41,11 @@ async function loadElpianWasm() {
     globalThis.elpian_bevy_wasm_scene_exists = wasmModule.elpian_bevy_wasm_scene_exists;
     globalThis.elpian_bevy_wasm_get_elapsed_time = wasmModule.elpian_bevy_wasm_get_elapsed_time;
     globalThis.elpian_bevy_wasm_get_frame_count = wasmModule.elpian_bevy_wasm_get_frame_count;
+    // Model-streaming bridge (P2): the Dart `@JS(...)` bindings look these up as
+    // global symbols, so they must be exposed here or streamed glTF characters
+    // (player, foxes, enemies, trucks) stay stuck on their capsule placeholders.
+    globalThis.elpian_bevy_wasm_feed_model = wasmModule.elpian_bevy_wasm_feed_model;
+    globalThis.elpian_bevy_wasm_has_model = wasmModule.elpian_bevy_wasm_has_model;
 
     globalThis.elpianWasmLoaded = true;
   } catch (error) {
