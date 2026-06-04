@@ -124,7 +124,15 @@ class BevySceneController {
   /// converted to a dart:ui Image for display.
   BevyFrameData? getFrame() {
     if (!_isLoaded) return null;
-    return BevySceneApi.getFrameDirect(sceneId: sceneId);
+    // Pass the cached render dimensions + frame count so the platform API can
+    // skip its per-frame metadata roundtrip (on web that elides a JSON
+    // encode/decode every frame; on native it elides two extra FFI calls).
+    return BevySceneApi.getFrameDirect(
+      sceneId: sceneId,
+      width: _width,
+      height: _height,
+      frameCount: _frameCount,
+    );
   }
 
   /// Resize the render target.

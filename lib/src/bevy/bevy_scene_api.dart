@@ -264,7 +264,12 @@ class BevySceneApi {
   ///
   /// This is the highest-performance path for native platforms.
   /// Returns null if the scene doesn't exist.
-  static BevyFrameData? getFrameDirect({required String sceneId}) {
+  static BevyFrameData? getFrameDirect({
+    required String sceneId,
+    int? width,
+    int? height,
+    int? frameCount,
+  }) {
     final api = BevySceneApi();
     final sidPtr = sceneId.toNativeUtf8();
     try {
@@ -274,18 +279,26 @@ class BevySceneApi {
       final ptr = api._getFramePtr(sidPtr);
       if (ptr == ffi.nullptr) return null;
 
-      final dims = api._getDimensions(sidPtr);
-      final width = (dims >> 32) & 0xFFFFFFFF;
-      final height = dims & 0xFFFFFFFF;
+      // Use caller-supplied dimensions when available (the controller caches
+      // them), avoiding the extra `_getDimensions`/`_getFrameCount` FFI calls.
+      int w, h;
+      if (width != null && height != null) {
+        w = width;
+        h = height;
+      } else {
+        final dims = api._getDimensions(sidPtr);
+        w = (dims >> 32) & 0xFFFFFFFF;
+        h = dims & 0xFFFFFFFF;
+      }
 
       // Bulk copy pixels from native memory into a Dart Uint8List
       final pixels = Uint8List.fromList(ptr.asTypedList(size));
 
       return BevyFrameData(
-        width: width,
-        height: height,
+        width: w,
+        height: h,
         pixels: pixels,
-        frameCount: api._getFrameCount(sidPtr),
+        frameCount: frameCount ?? api._getFrameCount(sidPtr),
       );
     } finally {
       malloc.free(sidPtr);

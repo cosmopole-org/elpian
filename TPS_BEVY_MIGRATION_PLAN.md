@@ -193,12 +193,38 @@ Legend: ✅ present · ⚠️ partial · ❌ missing. "Rust" = `bevy_scene` rend
 - [x] **P6 — Build (WASM+native), verify, optimize, document** ✅ *(native+tests+docs; WASM build deferred to CI — target not installed in this sandbox)*
   - [x] `cargo build --release` (shipped LTO config) clean; `cargo build` clean.
   - [x] `cargo test` all green: feature_parity (9), gltf_skinning (4), static_world (2),
-        renderer_golden (golden stable), vm_ast_integration (10), double_buffer.
+        renderer_golden (golden stable), mesh_winding (7), vm_ast_integration (10), double_buffer.
   - [x] Docs: `3D_GRAPHICS.md` (Bevy parity note on materials/textures + Rust glTF note),
         `README.md` (two-backend / A/B TPS note); this plan's matrix updated.
   - [ ] *Deferred to CI/user:* WASM build (`wasm32-unknown-unknown` not installed here),
         `flutter analyze`/`flutter test` (Flutter not in sandbox), embedded glTF image
-        textures on the Rust path, and a full downtown perf profile on the Bevy path.
+        textures on the Rust path.
+
+- [x] **P7 — FPS optimization pass (web Flutter + Rust/Bevy WASM, and Impeller)** ✅ *(2026-06-04)*
+  - [x] **Back-face culling** (`renderer.rs`): single-sided materials drop screen-space
+        clockwise (back-facing) triangles at projection time, matching the scene3d
+        reference the TPS was authored against. ~**1.6× faster** on closed geometry
+        (native bench `sphere_hipoly` 2.16 ms → 1.32 ms); visible output byte-identical
+        (golden stable — back-faces were already depth-occluded). This required fixing
+        **inconsistent generator winding**: a central winding-normalization pass in
+        `generate_mesh_triangles` (flip triangles whose vertex order disagrees with their
+        assigned normal) plus a torus winding fix (it had inward normals — a latent
+        lighting bug). Guarded by `tests/mesh_winding.rs` (7 tests).
+  - [x] **Off-screen triangle rejection** (`renderer.rs`): triangles whose screen-space
+        bbox is wholly outside the viewport are dropped before the fill stage, shrinking
+        the projected set every (native) band re-iterates. Byte-identical.
+  - [x] **WASM SIMD128** (`.cargo/config.toml` + `Cargo.toml` wasm-opt `--enable-simd`):
+        compile the web module with `target-feature=+simd128` so LLVM auto-vectorizes the
+        per-pixel rasterizer fill loop — a large win for the CPU rasterizer on web. Native
+        builds unchanged (target-scoped). *(WASM build itself runs in CI.)*
+  - [x] **Web frame transfer** (`bevy_scene_api_web.dart` + controller): the per-frame
+        `_wasmGetFrame` metadata roundtrip (a JSON encode in Rust + `jsonDecode` in Dart on
+        every frame) is gone — the controller passes its cached dimensions/frame-count, so
+        only the pixel bytes cross the boundary. Native path elides two extra FFI calls too.
+  - [x] **Impeller/Flutter** (`bevy_scene_widget.dart`): per-frame `setState` (which rebuilt
+        the widget subtree every frame) replaced by a `ValueNotifier<ui.Image>` that repaints
+        *only* the `CustomPaint` layer via the painter's `repaint:` listenable — fewer layer
+        mutations on the Impeller path.
 
 ---
 

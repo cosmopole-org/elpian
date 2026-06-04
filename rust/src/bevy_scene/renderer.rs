@@ -436,17 +436,19 @@ impl SceneRenderer {
                 let world = *parent_transform * local;
                 let material = MaterialState::from_def(&terrain.material);
                 let half = terrain.size / 2.0;
+                // CCW as seen from +Y (matches the assigned normal) so back-face
+                // culling keeps the ground when viewed from above.
                 let triangles = vec![
                     Triangle::new(
                         Vec3::new(-half, 0.0, -half),
-                        Vec3::new(half, 0.0, -half),
                         Vec3::new(half, 0.0, half),
+                        Vec3::new(half, 0.0, -half),
                         Vec3::Y,
                     ),
                     Triangle::new(
                         Vec3::new(-half, 0.0, -half),
-                        Vec3::new(half, 0.0, half),
                         Vec3::new(-half, 0.0, half),
+                        Vec3::new(half, 0.0, half),
                         Vec3::Y,
                     ),
                 ];
@@ -472,6 +474,9 @@ impl SceneRenderer {
                     texture: TextureKind::None,
                     texture_color2: Vec3::ZERO,
                     texture_scale: 1.0,
+                    // A water plane is a single quad; keep both faces so it stays
+                    // visible even when the camera dips below the surface.
+                    double_sided: true,
                 };
                 let hx = water.size.x / 2.0;
                 let hz = water.size.z / 2.0;
@@ -593,6 +598,8 @@ impl SceneRenderer {
             texture: TextureKind::None,
             texture_color2: Vec3::ZERO,
             texture_scale: 1.0,
+            // Particles are closed cubes — back-faces are always occluded.
+            double_sided: false,
         };
 
         // Simple particle rendering: scatter small spheres based on time
@@ -663,6 +670,7 @@ impl SceneRenderer {
                 texture: TextureKind::None,
                 texture_color2: Vec3::ZERO,
                 texture_scale: 1.0,
+                double_sided: false,
             };
             let triangles = self.mesh_for(&MeshType::Parameterized(MeshTypeParam::Capsule {
                 radius: 0.4,
@@ -697,6 +705,10 @@ impl SceneRenderer {
                 texture: TextureKind::None,
                 texture_color2: Vec3::ZERO,
                 texture_scale: 1.0,
+                // glTF meshes may be open/one-sided authored; keep both faces so
+                // streamed characters/vehicles never show holes (matches prior
+                // behavior before back-face culling was added).
+                double_sided: true,
             };
             self.rasterize_triangles(
                 &prim.triangles,
@@ -725,6 +737,13 @@ impl SceneRenderer {
         let mvp = *view_proj * *world;
         let normal_matrix = world.inverse().transpose();
         let w_clip_plane = 0.001_f32;
+        // Back-face culling (parity with the scene3d renderer): single-sided
+        // materials drop screen-space clockwise (back-facing) triangles. This
+        // roughly halves the rasterized triangles on closed geometry (the whole
+        // city of cubes/spheres) — the dominant cost on the CPU rasterizer.
+        let cull_back = !material.double_sided;
+        let wf = self.width as f32;
+        let hf = self.height as f32;
 
         for tri in triangles {
             // Transform vertices to world space
@@ -775,6 +794,27 @@ impl SceneRenderer {
                 let s0 = self.ndc_to_screen(ndc0);
                 let s1 = self.ndc_to_screen(ndc1);
                 let s2 = self.ndc_to_screen(ndc2);
+
+                // Back-face cull: in screen space (y-down) a clockwise winding
+                // (cross > 0) faces away from the camera.
+                if cull_back {
+                    let cross = (s1.x - s0.x) * (s2.y - s0.y) - (s1.y - s0.y) * (s2.x - s0.x);
+                    if cross > 0.0 {
+                        continue;
+                    }
+                }
+
+                // Off-screen reject: skip triangles whose screen-space bounding
+                // box lies wholly outside the viewport. Output is byte-identical
+                // (the fill stage clamps anyway), but it shrinks the projected set
+                // that every fill band re-iterates.
+                let minx = s0.x.min(s1.x).min(s2.x);
+                let maxx = s0.x.max(s1.x).max(s2.x);
+                let miny = s0.y.min(s1.y).min(s2.y);
+                let maxy = s0.y.max(s1.y).max(s2.y);
+                if maxx < 0.0 || minx > wf - 1.0 || maxy < 0.0 || miny > hf - 1.0 {
+                    continue;
+                }
 
                 self.projected.push(ProjectedTri {
                     v0: s0,
@@ -835,6 +875,16 @@ impl SceneRenderer {
                         let sa = self.ndc_to_screen(ndc_a);
                         let sb = self.ndc_to_screen(ndc_b);
                         let sc = self.ndc_to_screen(ndc_c);
+
+                        // Back-face cull the clipped fan too (parity with scene3d,
+                        // which culls after near-plane clipping).
+                        if cull_back {
+                            let cross =
+                                (sb.x - sa.x) * (sc.y - sa.y) - (sb.y - sa.y) * (sc.x - sa.x);
+                            if cross > 0.0 {
+                                continue;
+                            }
+                        }
 
                         // The clip path doesn't carry interpolated UVs, so the
                         // textured fan falls back to the flat centroid color.
@@ -1249,6 +1299,25 @@ impl From<&MeshType> for MeshCacheKey {
 
 /// Generate triangles for a mesh type.
 pub fn generate_mesh_triangles(mesh_type: &MeshType) -> Vec<Triangle> {
+    let mut tris = generate_mesh_triangles_raw(mesh_type);
+    // Normalize winding: ensure every triangle is wound counter-clockwise as seen
+    // from outside, i.e. its vertex-order normal agrees with its assigned (shading)
+    // normal. The generators are otherwise inconsistent (sphere/cylinder/cone wind
+    // opposite to the cube), which back-face culling would expose as inside-out
+    // geometry. Filling is vertex-order-independent, so this never changes the
+    // rasterized pixels of a kept triangle — it only fixes the cull sign. Computed
+    // once per mesh and cached by `mesh_for`. Guarded by `tests/mesh_winding.rs`.
+    for t in &mut tris {
+        let face = (t.v1 - t.v0).cross(t.v2 - t.v0);
+        if face.dot(t.normal) < 0.0 {
+            std::mem::swap(&mut t.v1, &mut t.v2);
+            std::mem::swap(&mut t.uv1, &mut t.uv2);
+        }
+    }
+    tris
+}
+
+fn generate_mesh_triangles_raw(mesh_type: &MeshType) -> Vec<Triangle> {
     match mesh_type {
         MeshType::Named(MeshTypeName::Cube) => generate_cube(1.0),
         MeshType::Parameterized(param) => match param {
@@ -1423,6 +1492,8 @@ fn generate_plane(size: f32) -> Vec<Triangle> {
     let u1 = Vec2::new(1.0, 0.0);
     let u2 = Vec2::new(1.0, 1.0);
     let u3 = Vec2::new(0.0, 1.0);
+    // Winding is normalized centrally in `generate_mesh_triangles` so the vertex
+    // order agrees with the assigned `+Y` normal (required by back-face culling).
     vec![
         Triangle::new_uv(
             Vec3::new(-h, 0.0, -h),
@@ -1554,8 +1625,11 @@ fn generate_torus(
             let v11 = torus_point(radius, tube_radius, theta2, phi2);
             let v01 = torus_point(radius, tube_radius, theta1, phi2);
 
-            triangles.push(Triangle::from_vertices(v00, v10, v11));
-            triangles.push(Triangle::from_vertices(v00, v11, v01));
+            // Wound CCW as seen from outside so `from_vertices`' winding-derived
+            // normal points outward (was inward — a latent lighting bug that
+            // back-face culling would otherwise render inside-out).
+            triangles.push(Triangle::from_vertices(v00, v11, v10));
+            triangles.push(Triangle::from_vertices(v00, v01, v11));
         }
     }
     triangles
@@ -1650,6 +1724,10 @@ struct MaterialState {
     texture_color2: Vec3,
     /// UV tiling factor for the procedural texture.
     texture_scale: f32,
+    /// When false (the default), back-facing triangles are culled at projection
+    /// time (parity with the scene3d renderer). Single-quad surfaces that must be
+    /// visible from both sides (and open glTF meshes) set this true.
+    double_sided: bool,
 }
 
 impl MaterialState {
@@ -1683,6 +1761,7 @@ impl MaterialState {
                 .map(|c| c.to_vec3())
                 .unwrap_or(Vec3::new(0.3, 0.3, 0.3)),
             texture_scale: def.texture_scale.unwrap_or(1.0),
+            double_sided: def.double_sided,
         }
     }
 

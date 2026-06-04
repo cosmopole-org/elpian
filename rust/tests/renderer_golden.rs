@@ -119,11 +119,18 @@ fn all_scenes() -> Vec<(&'static str, &'static str)> {
 
 // ── Baseline hashes (captured 2026-06-03 on the pre-A2/A3 serial renderer) ──
 // Order matches `all_scenes()`.
+//
+// `multi_mesh` was re-captured 2026-06-04 when back-face culling was added: the
+// scene's torus was wound clockwise-from-outside, so `Triangle::from_vertices`
+// gave it inward normals (a latent lighting bug). Correcting the winding so the
+// torus is lit/culled from outside changed its pixels. Every other scene is
+// byte-identical — back-face culling only removes triangles that were already
+// hidden behind the depth buffer.
 const BASELINE: &[(&str, u64)] = &[
     ("empty", 0x952aff0bd3202325),
     ("cube", 0x9cb0269a67f5ba05),
     ("sphere", 0x6ca1c9c47e7ae1e9),
-    ("multi_mesh", 0xa3087ff23a07a4cf),
+    ("multi_mesh", 0x809a48863672f3cb),
     ("particles", 0xc92a64600f8cf54a),
     ("translucent", 0x1bf5f3f29ac99f0c),
 ];

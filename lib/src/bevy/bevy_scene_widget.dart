@@ -137,7 +137,13 @@ class _BevySceneWidgetState extends State<BevySceneWidget>
     with SingleTickerProviderStateMixin {
   BevySceneController? _controller;
   late final Ticker _ticker;
-  ui.Image? _currentImage;
+
+  /// Latest rendered frame, published to the painter via a [ValueNotifier] so a
+  /// new frame repaints *only* the `CustomPaint` layer (driven by the painter's
+  /// `repaint:` listenable) instead of calling `setState` and rebuilding the
+  /// widget subtree every frame — cheaper, and friendlier to Impeller's layer
+  /// tree on the FFI/WASM path.
+  final ValueNotifier<ui.Image?> _imageNotifier = ValueNotifier<ui.Image?>(null);
   bool _isInitialized = false;
   Duration _lastFrameTime = Duration.zero;
   Offset _lastTouchPosition = Offset.zero;
@@ -275,6 +281,9 @@ class _BevySceneWidgetState extends State<BevySceneWidget>
       // Stream any glTF models referenced anywhere in the scene (static + dynamic).
       _streamModels(_parsedScene);
       _controller!.renderFrame(deltaTime: 0);
+      // One rebuild to mount the CustomPaint subtree now that we're initialized;
+      // subsequent frames repaint via _imageNotifier without rebuilding.
+      setState(() {});
       _updateImage();
       if (widget.autoStart && !_ticker.isActive) {
         _ticker.start();
@@ -396,10 +405,9 @@ class _BevySceneWidgetState extends State<BevySceneWidget>
           image.dispose();
           return;
         }
-        final oldImage = _currentImage;
-        setState(() {
-          _currentImage = image;
-        });
+        final oldImage = _imageNotifier.value;
+        // Publish the new frame: notifies the painter (repaint only), no rebuild.
+        _imageNotifier.value = image;
         oldImage?.dispose();
         widget.onFrameRendered?.call();
       },
@@ -426,7 +434,8 @@ class _BevySceneWidgetState extends State<BevySceneWidget>
   @override
   void dispose() {
     _ticker.dispose();
-    _currentImage?.dispose();
+    _imageNotifier.value?.dispose();
+    _imageNotifier.dispose();
     _controller?.dispose();
     super.dispose();
   }
@@ -448,12 +457,14 @@ class _BevySceneWidgetState extends State<BevySceneWidget>
           widget.height ?? double.infinity,
         ),
       );
-    } else if (_currentImage != null) {
-      // FFI renderer
+    } else if (_isInitialized) {
+      // FFI renderer. The painter repaints from _imageNotifier (no rebuild per
+      // frame) and paints the background until the first frame is ready.
       child = CustomPaint(
         painter: _BevyScenePainter(
-          image: _currentImage!,
+          image: _imageNotifier,
           fit: widget.fit,
+          backgroundColor: widget.backgroundColor,
         ),
         size: Size(
           widget.width ?? double.infinity,
@@ -535,14 +546,19 @@ class _DartScenePainter extends CustomPainter {
 }
 
 /// CustomPainter for the FFI renderer path (renders a pixel-buffer image).
+///
+/// Repaints are driven by the [image] listenable (passed as `repaint:`), so a
+/// new frame repaints only this layer without rebuilding the widget tree.
 class _BevyScenePainter extends CustomPainter {
-  final ui.Image image;
+  final ValueListenable<ui.Image?> image;
   final BoxFit fit;
+  final Color backgroundColor;
 
-  const _BevyScenePainter({
+  _BevyScenePainter({
     required this.image,
     required this.fit,
-  });
+    required this.backgroundColor,
+  }) : super(repaint: image);
 
   // Reused across paints to avoid a per-frame Paint allocation (E4). Painters run
   // sequentially on the UI thread, so sharing a single instance is safe.
@@ -550,10 +566,16 @@ class _BevyScenePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    final img = image.value;
+    if (img == null) {
+      // No frame yet: paint the loading background.
+      canvas.drawRect(Offset.zero & size, Paint()..color = backgroundColor);
+      return;
+    }
     final src = Rect.fromLTWH(
       0, 0,
-      image.width.toDouble(),
-      image.height.toDouble(),
+      img.width.toDouble(),
+      img.height.toDouble(),
     );
     final dst = _applyFit(fit, src, Offset.zero & size);
     // The Rust frame is already rendered at (near) display resolution. Avoid the
@@ -563,7 +585,7 @@ class _BevyScenePainter extends CustomPainter {
         (dst.height - src.height).abs() < 1.0;
     _blitPaint.filterQuality =
         nearOneToOne ? FilterQuality.none : FilterQuality.low;
-    canvas.drawImageRect(image, src, dst, _blitPaint);
+    canvas.drawImageRect(img, src, dst, _blitPaint);
   }
 
   Rect _applyFit(BoxFit fit, Rect src, Rect dst) {
@@ -613,6 +635,10 @@ class _BevyScenePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_BevyScenePainter oldDelegate) {
-    return image != oldDelegate.image;
+    // Per-frame repaints are driven by the `repaint:` listenable; only repaint on
+    // a widget rebuild if the listenable, fit or background actually changed.
+    return image != oldDelegate.image ||
+        fit != oldDelegate.fit ||
+        backgroundColor != oldDelegate.backgroundColor;
   }
 }
