@@ -5,6 +5,13 @@ export function elpian_bevy_wasm_create_scene(scene_id: string, json: string, wi
 
 export function elpian_bevy_wasm_destroy_scene(scene_id: string): boolean;
 
+/**
+ * Feed model bytes (GLB / embedded-buffer glTF) into a scene, keyed by URL.
+ * On web the host fetches the bytes and passes them straight through as a
+ * typed array (no base64 needed). Returns true if they decoded into a model.
+ */
+export function elpian_bevy_wasm_feed_model(scene_id: string, url: string, bytes: Uint8Array): boolean;
+
 export function elpian_bevy_wasm_get_elapsed_time(scene_id: string): number;
 
 /**
@@ -21,6 +28,11 @@ export function elpian_bevy_wasm_get_frame(scene_id: string): string;
 export function elpian_bevy_wasm_get_frame_bytes(scene_id: string): Uint8Array;
 
 export function elpian_bevy_wasm_get_frame_count(scene_id: string): bigint;
+
+/**
+ * Whether a model URL is already decoded/cached in a scene.
+ */
+export function elpian_bevy_wasm_has_model(scene_id: string, url: string): boolean;
 
 export function elpian_bevy_wasm_init(): void;
 
@@ -58,58 +70,61 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
-    readonly elpian_free_string: (a: number) => void;
-    readonly elpian_init: () => void;
+    readonly elpian_bevy_create_scene: (a: number, b: number, c: number, d: number) => number;
+    readonly elpian_bevy_destroy_scene: (a: number) => number;
+    readonly elpian_bevy_feed_model: (a: number, b: number, c: number) => number;
+    readonly elpian_bevy_get_elapsed_time: (a: number) => number;
+    readonly elpian_bevy_get_frame_count: (a: number) => bigint;
+    readonly elpian_bevy_get_frame_json: (a: number) => number;
+    readonly elpian_bevy_get_frame_ptr: (a: number) => number;
+    readonly elpian_bevy_get_frame_size: (a: number) => number;
+    readonly elpian_bevy_get_scene_dimensions: (a: number) => bigint;
+    readonly elpian_bevy_has_model: (a: number, b: number) => number;
+    readonly elpian_bevy_render_frame: (a: number, b: number) => number;
+    readonly elpian_bevy_resize_scene: (a: number, b: number, c: number) => number;
+    readonly elpian_bevy_scene_exists: (a: number) => number;
+    readonly elpian_bevy_send_input: (a: number, b: number) => number;
+    readonly elpian_bevy_update_scene: (a: number, b: number) => number;
+    readonly elpian_bevy_wasm_create_scene: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
+    readonly elpian_bevy_wasm_destroy_scene: (a: number, b: number) => number;
+    readonly elpian_bevy_wasm_feed_model: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
+    readonly elpian_bevy_wasm_get_elapsed_time: (a: number, b: number) => number;
+    readonly elpian_bevy_wasm_get_frame: (a: number, b: number, c: number) => void;
+    readonly elpian_bevy_wasm_get_frame_bytes: (a: number, b: number, c: number) => void;
+    readonly elpian_bevy_wasm_get_frame_count: (a: number, b: number) => bigint;
+    readonly elpian_bevy_wasm_has_model: (a: number, b: number, c: number, d: number) => number;
+    readonly elpian_bevy_wasm_render_frame: (a: number, b: number, c: number) => number;
+    readonly elpian_bevy_wasm_resize_scene: (a: number, b: number, c: number, d: number) => number;
+    readonly elpian_bevy_wasm_scene_exists: (a: number, b: number) => number;
+    readonly elpian_bevy_wasm_send_input: (a: number, b: number, c: number, d: number) => number;
+    readonly elpian_bevy_wasm_update_scene: (a: number, b: number, c: number, d: number) => number;
+    readonly elpian_continue_execution: (a: number, b: number) => number;
     readonly elpian_create_vm_from_ast: (a: number, b: number) => number;
     readonly elpian_create_vm_from_code: (a: number, b: number) => number;
-    readonly elpian_validate_ast: (a: number) => number;
+    readonly elpian_destroy_vm: (a: number) => number;
     readonly elpian_execute: (a: number) => number;
     readonly elpian_execute_func: (a: number, b: number, c: bigint) => number;
     readonly elpian_execute_func_with_input: (a: number, b: number, c: number, d: bigint) => number;
-    readonly elpian_continue_execution: (a: number, b: number) => number;
-    readonly elpian_destroy_vm: (a: number) => number;
+    readonly elpian_free_string: (a: number) => void;
+    readonly elpian_validate_ast: (a: number) => number;
     readonly elpian_vm_exists: (a: number) => number;
-    readonly elpian_bevy_init: () => void;
-    readonly elpian_bevy_create_scene: (a: number, b: number, c: number, d: number) => number;
-    readonly elpian_bevy_update_scene: (a: number, b: number) => number;
-    readonly elpian_bevy_render_frame: (a: number, b: number) => number;
-    readonly elpian_bevy_resize_scene: (a: number, b: number, c: number) => number;
-    readonly elpian_bevy_get_frame_ptr: (a: number) => number;
-    readonly elpian_bevy_get_frame_json: (a: number) => number;
-    readonly elpian_bevy_get_frame_size: (a: number) => number;
-    readonly elpian_bevy_get_scene_dimensions: (a: number) => bigint;
-    readonly elpian_bevy_send_input: (a: number, b: number) => number;
-    readonly elpian_bevy_destroy_scene: (a: number) => number;
-    readonly elpian_bevy_scene_exists: (a: number) => number;
-    readonly elpian_bevy_get_elapsed_time: (a: number) => number;
-    readonly elpian_bevy_get_frame_count: (a: number) => bigint;
-    readonly elpian_bevy_wasm_init: () => void;
-    readonly elpian_bevy_wasm_create_scene: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
-    readonly elpian_bevy_wasm_update_scene: (a: number, b: number, c: number, d: number) => number;
-    readonly elpian_bevy_wasm_render_frame: (a: number, b: number, c: number) => number;
-    readonly elpian_bevy_wasm_resize_scene: (a: number, b: number, c: number, d: number) => number;
-    readonly elpian_bevy_wasm_get_frame: (a: number, b: number) => [number, number];
-    readonly elpian_bevy_wasm_get_frame_bytes: (a: number, b: number) => [number, number];
-    readonly elpian_bevy_wasm_send_input: (a: number, b: number, c: number, d: number) => number;
-    readonly elpian_bevy_wasm_destroy_scene: (a: number, b: number) => number;
-    readonly elpian_bevy_wasm_scene_exists: (a: number, b: number) => number;
-    readonly elpian_bevy_wasm_get_elapsed_time: (a: number, b: number) => number;
-    readonly elpian_bevy_wasm_get_frame_count: (a: number, b: number) => bigint;
-    readonly elpian_wasm_init: () => void;
+    readonly elpian_wasm_continue_execution: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly elpian_wasm_create_vm_from_ast: (a: number, b: number, c: number, d: number) => number;
     readonly elpian_wasm_create_vm_from_code: (a: number, b: number, c: number, d: number) => number;
-    readonly elpian_wasm_validate_ast: (a: number, b: number) => number;
-    readonly elpian_wasm_execute: (a: number, b: number) => [number, number];
-    readonly elpian_wasm_execute_func: (a: number, b: number, c: number, d: number, e: number) => [number, number];
-    readonly elpian_wasm_execute_func_with_input: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
-    readonly elpian_wasm_continue_execution: (a: number, b: number, c: number, d: number) => [number, number];
     readonly elpian_wasm_destroy_vm: (a: number, b: number) => number;
+    readonly elpian_wasm_execute: (a: number, b: number, c: number) => void;
+    readonly elpian_wasm_execute_func: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
+    readonly elpian_wasm_execute_func_with_input: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
+    readonly elpian_wasm_validate_ast: (a: number, b: number) => number;
     readonly elpian_wasm_vm_exists: (a: number, b: number) => number;
-    readonly __wbindgen_externrefs: WebAssembly.Table;
-    readonly __wbindgen_malloc: (a: number, b: number) => number;
-    readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
-    readonly __wbindgen_free: (a: number, b: number, c: number) => void;
-    readonly __wbindgen_start: () => void;
+    readonly elpian_bevy_init: () => void;
+    readonly elpian_bevy_wasm_init: () => void;
+    readonly elpian_init: () => void;
+    readonly elpian_wasm_init: () => void;
+    readonly __wbindgen_export: (a: number, b: number) => number;
+    readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
+    readonly __wbindgen_add_to_stack_pointer: (a: number) => number;
+    readonly __wbindgen_export3: (a: number, b: number, c: number) => void;
 }
 
 export type SyncInitInput = BufferSource | WebAssembly.Module;
