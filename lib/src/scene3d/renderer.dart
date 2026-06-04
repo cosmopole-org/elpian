@@ -466,10 +466,40 @@ class Scene3DRenderer {
     }
   }
 
+  /// Cache of generated geometry keyed by mesh descriptor.
+  ///
+  /// Mesh geometry is immutable (transforms and lighting are applied later
+  /// per-frame), so identical descriptors can safely share one [Mesh]. This
+  /// turns mesh generation from a per-paint cost into a one-time cost per
+  /// unique shape — essential for animated/game scenes that re-parse their
+  /// node tree every frame.
+  static final Map<String, Mesh> _meshCache = <String, Mesh>{};
+
+  /// Builds a stable cache key from a mesh type and its geometry params.
+  static String _meshKey(String meshType, Map<String, dynamic> p) {
+    if (p.isEmpty) return meshType;
+    final keys = p.keys.toList()..sort();
+    final sb = StringBuffer(meshType);
+    for (final k in keys) {
+      sb..write('|')..write(k)..write('=')..write(p[k]);
+    }
+    return sb.toString();
+  }
+
   Mesh? _generateMesh(String? meshType, Map<String, dynamic>? params) {
     if (meshType == null) return null;
-    final p = params ?? {};
+    final p = params ?? const <String, dynamic>{};
 
+    final cacheKey = _meshKey(meshType, p);
+    final cached = _meshCache[cacheKey];
+    if (cached != null) return cached;
+
+    final mesh = _buildMesh(meshType, p);
+    if (mesh != null) _meshCache[cacheKey] = mesh;
+    return mesh;
+  }
+
+  Mesh? _buildMesh(String meshType, Map<String, dynamic> p) {
     switch (meshType) {
       case 'Cube':
         return MeshGen.cube(size: _d(p['size'], 1.0));
