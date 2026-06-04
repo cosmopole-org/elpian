@@ -70,6 +70,20 @@ mod wasm {
         manager::send_input(&scene_id, &input_json)
     }
 
+    /// Feed model bytes (GLB / embedded-buffer glTF) into a scene, keyed by URL.
+    /// On web the host fetches the bytes and passes them straight through as a
+    /// typed array (no base64 needed). Returns true if they decoded into a model.
+    #[wasm_bindgen]
+    pub fn elpian_bevy_wasm_feed_model(scene_id: String, url: String, bytes: Vec<u8>) -> bool {
+        manager::feed_model_bytes(&scene_id, url, &bytes)
+    }
+
+    /// Whether a model URL is already decoded/cached in a scene.
+    #[wasm_bindgen]
+    pub fn elpian_bevy_wasm_has_model(scene_id: String, url: String) -> bool {
+        manager::scene_has_model(&scene_id, &url)
+    }
+
     #[wasm_bindgen]
     pub fn elpian_bevy_wasm_destroy_scene(scene_id: String) -> bool {
         manager::destroy_scene(&scene_id)

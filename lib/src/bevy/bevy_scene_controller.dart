@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 
 import 'bevy_scene_api.dart'
@@ -173,6 +174,23 @@ class BevySceneController {
     });
 
     return BevySceneApi.sendInput(sceneId: sceneId, inputJson: inputJson);
+  }
+
+  /// Feed streamed model bytes (GLB / embedded-buffer glTF) into the scene,
+  /// keyed by the same URL the `model3d` nodes reference. This is the host side
+  /// of the model bridge: the app fetches the bytes (HTTP/asset) and hands them
+  /// to the Rust renderer, which decodes + skins them. Until a model is fed, its
+  /// `model3d` nodes render a placeholder capsule. Returns true once decoded.
+  bool feedModel(String url, Uint8List bytes) {
+    if (!_isLoaded) return false;
+    return BevySceneApi.feedModel(sceneId: sceneId, url: url, bytes: bytes);
+  }
+
+  /// Whether a model URL has already been fed/decoded, so callers can avoid
+  /// re-fetching bytes the renderer already holds.
+  bool hasModel(String url) {
+    if (!_isLoaded) return false;
+    return BevySceneApi.hasModel(sceneId: sceneId, url: url);
   }
 
   /// Get the elapsed time for the scene in seconds.

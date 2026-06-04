@@ -106,6 +106,32 @@ pub fn render_frame(scene_id: &str, delta_time: f32) -> bool {
     }
 }
 
+/// Feed decoded model bytes (GLB or embedded-buffer glTF) into a scene's renderer,
+/// keyed by URL. The bytes are decoded once and cached; `model3d` nodes referencing
+/// the same URL then render the posed model instead of the placeholder capsule.
+///
+/// This is the "bridge" entry point: the host (Flutter/JS) fetches the model bytes
+/// over the network and hands them to Rust, which owns decoding + skinning. Returns
+/// true if the scene exists and the bytes parsed into a usable model.
+pub fn feed_model_bytes(scene_id: &str, url: String, bytes: &[u8]) -> bool {
+    let mut scenes = lock_scenes();
+    if let Some(instance) = scenes.get_mut(scene_id) {
+        instance.renderer.load_model_bytes(url, bytes)
+    } else {
+        false
+    }
+}
+
+/// Whether a decoded model is cached for `url` in this scene (so the host can
+/// skip re-fetching/re-feeding bytes it has already supplied).
+pub fn scene_has_model(scene_id: &str, url: &str) -> bool {
+    let scenes = lock_scenes();
+    scenes
+        .get(scene_id)
+        .map(|i| i.renderer.has_model(url))
+        .unwrap_or(false)
+}
+
 /// Resize the scene's render target.
 pub fn resize_scene(scene_id: &str, width: u32, height: u32) -> bool {
     let mut scenes = lock_scenes();

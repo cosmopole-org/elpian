@@ -478,6 +478,42 @@ class DartSceneRenderer {
           lights, env, screenSize, out,
         );
       }
+    } else if (type == 'model3d') {
+      // The pure-Dart fallback (used only when the WASM renderer is unavailable)
+      // does not run the glTF skinning pipeline; it draws a tinted capsule
+      // placeholder at the node transform so streamed entities still appear and
+      // gameplay never drops them. The Rust path renders the real skinned model.
+      final t = _parseTransform(node['transform']);
+      final local = Mat4.fromTransform(t.position, t.rotation, t.scale);
+      final world = parentTransform * local;
+      final mvp = viewProj * world;
+
+      final tint = node['tint'] != null ? _parseColor3(node['tint']) : const Vec3(1, 1, 1);
+      final emissive = node['emissive'] != null ? _parseColor3(node['emissive']) : Vec3.zero;
+      final strength = (node['emissive_strength'] as num?)?.toDouble() ?? 1.0;
+      final material = _MaterialDef(
+        baseColor: tint * 0.6,
+        metallic: 0.0,
+        roughness: 0.8,
+        emissive: emissive,
+        alpha: 1.0,
+        emissiveStrength: strength,
+      );
+
+      final triangles = _generateCapsule(0.4, 1.0);
+      for (final tri in triangles) {
+        _projectAndAddTriangle(
+          tri, world, mvp, camera, lights, material, env, screenSize, out,
+        );
+      }
+
+      final children = node['children'] as List<dynamic>? ?? [];
+      for (final child in children) {
+        _collectRenderTriangles(
+          child as Map<String, dynamic>, world, viewProj, camera,
+          lights, env, screenSize, out,
+        );
+      }
     } else if (type == 'group') {
       final t = _parseTransform(node['transform']);
       final local = Mat4.fromTransform(t.position, t.rotation, t.scale);
@@ -915,6 +951,30 @@ class DartSceneRenderer {
       final sn = Vec3((x1+x2)/2, radius/height, (z1+z2)/2).normalized;
       tris.add(_Triangle(Vec3(x1,0,z1), Vec3(x2,0,z2), apex, sn));
       tris.add(_Triangle(Vec3.zero, Vec3(x2,0,z2), Vec3(x1,0,z1), const Vec3(0,-1,0)));
+    }
+    return tris;
+  }
+
+  /// Capsule = cylinder body + two hemispheres (mirrors the Rust capsule used as
+  /// the `model3d` placeholder).
+  List<_Triangle> _generateCapsule(double radius, double depth) {
+    final tris = <_Triangle>[];
+    tris.addAll(_generateCylinder(radius, depth, 16));
+    for (final t in _generateSphere(radius, 8)) {
+      tris.add(_Triangle(
+        Vec3(t.v0.x, t.v0.y + depth / 2, t.v0.z),
+        Vec3(t.v1.x, t.v1.y + depth / 2, t.v1.z),
+        Vec3(t.v2.x, t.v2.y + depth / 2, t.v2.z),
+        t.normal,
+      ));
+    }
+    for (final t in _generateSphere(radius, 8)) {
+      tris.add(_Triangle(
+        Vec3(t.v0.x, t.v0.y - depth / 2, t.v0.z),
+        Vec3(t.v1.x, t.v1.y - depth / 2, t.v1.z),
+        Vec3(t.v2.x, t.v2.y - depth / 2, t.v2.z),
+        t.normal,
+      ));
     }
     return tris;
   }

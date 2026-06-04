@@ -94,9 +94,10 @@ Legend: ✅ present · ⚠️ partial · ❌ missing. "Rust" = `bevy_scene` rend
 | Sky gradient `sky_color_top/bottom` | ✅ | ✅ *(P1)* | ✅ *(P1)* | P1 |
 | `fog_type:"linear"`, `fog_near` | ✅ | ✅ *(P1)* | ✅ *(P1)* | P1 |
 | Point light `range` attenuation | ✅ | ✅ *(P1)* | ✅ *(P1)* | P1 |
-| `model3d` glTF/GLB streaming | ✅ | ❌ | ❌ | P2 |
-| CPU skeletal skinning + clip sampling | ✅ | ❌ | ❌ | P2 |
-| Model `tint` / per‑node emissive | ✅ | ❌ | ❌ | P2 |
+| `model3d` glTF/GLB streaming | ✅ | ✅ *(P2: GLB+data‑URI)* | ⚠️ *(P2: capsule placeholder)* | P2 |
+| CPU skeletal skinning + clip sampling | ✅ | ✅ *(P2)* | ❌ | P2 |
+| Model `tint` / per‑node emissive | ✅ | ✅ *(P2)* | ⚠️ *(P2: tint on placeholder)* | P2 |
+| Model embedded **texture images** (PNG/JPEG) | ✅ | ❌ *(deferred: needs image decoder)* | ❌ | P2+ |
 | Static‑world bake/cache (`staticKey`) | ✅ | ❌ | ❌ | P3 |
 | `renderScale` down‑raster | ✅ | ⚠️ (fixed buffer size) | ⚠️ | P3 |
 | fps throttle / non‑interactive overlay | ✅ | ⚠️ | ⚠️ | P3/P4 |
@@ -149,7 +150,19 @@ Legend: ✅ present · ⚠️ partial · ❌ missing. "Rust" = `bevy_scene` rend
   - [x] Dart fallback (`dart_scene_renderer.dart`): mirrors all the above (sky gradient clear,
         linear fog + near, point‑light range, `unlit`/`emissive_strength`/scalar `alpha`,
         `segments`, and procedural textures sampled at the triangle centroid).
-- [ ] **P2 — `model3d` glTF/GLB streaming + skeletal skinning (Rust + bridge)**
+- [x] **P2 — `model3d` glTF/GLB streaming + skeletal skinning (Rust + bridge)** ✅ *(core done; texture images deferred)*
+  - [x] Schema `Model3DNode` (`model`/`anim_time`/`animation`/`tint`/`emissive`/transform/children); `"model3d"`+`"gltf"`.
+  - [x] GLB container + embedded base64‑buffer glTF parse; accessor/bufferView decode.
+  - [x] Node hierarchy, skins (inverse‑bind), animation channels (T/R/S, STEP/LINEAR+slerp).
+  - [x] CPU linear‑blend skinning → posed triangles; tint × baseColorFactor + emissive.
+  - [x] Per‑renderer model cache + capsule placeholder until bytes arrive.
+  - [x] **Bridge:** host‑feed of model bytes via manager + native FFI (`elpian_bevy_feed_model`,
+        base64) and WASM FFI (`elpian_bevy_wasm_feed_model`, typed array); Dart `BevySceneApi`
+        (native+web) + `BevySceneController.feedModel`/`hasModel`.
+  - [x] Tests: `rust/tests/gltf_skinning.rs` (synthetic skinned GLB; parse/skinning/anim/integration).
+  - [x] Dart fallback: `model3d` draws a tinted capsule placeholder (full glTF in the fallback
+        deferred — the Rust path is the real implementation).
+  - [ ] *Deferred:* embedded **texture images** (PNG/JPEG) — needs a wasm‑safe image decoder.
 - [ ] **P3 — Static‑world bake/cache, renderScale & frame splicing**
 - [ ] **P4 — Widget/registry, viewport & overlay wiring for the Bevy path**
 - [ ] **P5 — Rewrite the TPS example on `BevyScene`**

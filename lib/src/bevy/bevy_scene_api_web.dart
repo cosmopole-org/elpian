@@ -65,6 +65,13 @@ external JSBoolean _wasmSceneExists(JSString sceneId);
 @JS('elpian_bevy_wasm_get_elapsed_time')
 external JSNumber _wasmGetElapsedTime(JSString sceneId);
 
+@JS('elpian_bevy_wasm_feed_model')
+external JSBoolean _wasmFeedModel(
+    JSString sceneId, JSString url, JSUint8Array bytes);
+
+@JS('elpian_bevy_wasm_has_model')
+external JSBoolean _wasmHasModel(JSString sceneId, JSString url);
+
 
 // ── API class ───────────────────────────────────────────────────────
 
@@ -202,6 +209,31 @@ class BevySceneApi {
       return _wasmGetElapsedTime(sceneId.toJS).toDartDouble;
     } catch (_) {
       return 0.0;
+    }
+  }
+
+  /// Feed model bytes (GLB / embedded-buffer glTF) into a scene, keyed by URL.
+  /// On web the bytes pass straight through to WASM as a typed array.
+  static bool feedModel({
+    required String sceneId,
+    required String url,
+    required Uint8List bytes,
+  }) {
+    if (!_wasmAvailable) return false;
+    try {
+      return _wasmFeedModel(sceneId.toJS, url.toJS, bytes.toJS).toDart;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Whether a model URL is already decoded/cached in a scene.
+  static bool hasModel({required String sceneId, required String url}) {
+    if (!_wasmAvailable) return false;
+    try {
+      return _wasmHasModel(sceneId.toJS, url.toJS).toDart;
+    } catch (_) {
+      return false;
     }
   }
 }
