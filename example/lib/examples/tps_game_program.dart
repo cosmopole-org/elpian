@@ -122,7 +122,7 @@ function newGame() {
     player: { x: 0, z: 8, y: 0, vy: 0, yaw: 0, health: 100, maxHealth: 100, grounded: true, hurtT: 0, animTime: 0 },
     cam: { yaw: 0.5, pitch: -0.22, recoil: 0 },
     weapon: { mag: MAG_SIZE, reserve: RESERVE_START, reloading: false, reloadT: 0, cool: 0 },
-    input: { joyActive: false, jx: 0, jz: 0, jmag: 0, jdx: 0, jdy: 0, firing: false, refYaw: 0 },
+    input: { joyActive: false, jx: 0, jz: 0, jmag: 0, jdx: 0, jdy: 0, firing: false },
     enemies: [],
     ebullets: [],
     fx: [],
@@ -400,16 +400,21 @@ function hurtPlayer(dmg) {
 
 function updatePlayer() {
   var p = G.player, inp = G.input, c = G.cam, w = G.weapon;
-  // Movement is resolved against the camera heading *latched when the stick was
-  // pressed* (refYaw), NOT the live camera yaw. That reference stays fixed for
-  // the whole gesture, so the auto-follow below converges instead of chasing
-  // its own tail: a held direction makes the player travel straight while the
-  // camera swings round once to sit behind them — rather than circling forever.
-  var baseYaw = inp.refYaw;
-  var fwdx = Math.sin(baseYaw), fwdz = -Math.cos(baseYaw);
-  var rgtx = Math.cos(baseYaw), rgtz = Math.sin(baseYaw);
-  var mx = rgtx * inp.jx + fwdx * inp.jz;
-  var mz = rgtz * inp.jx + fwdz * inp.jz;
+  // Single-stick steering. The joystick maps to an ABSOLUTE world heading
+  // (up = forward / world -Z, right = world +X), independent of where the
+  // camera is currently pointing. The camera then yaws to FOLLOW that heading,
+  // so the direction you push == the way the player runs == where the camera
+  // looks == the gun's aim.
+  //
+  // The stick is deliberately read in this fixed world frame rather than
+  // relative to the live (rotating) camera: feeding a camera-relative vector
+  // back into a camera that chases it makes you circle forever, and freezing a
+  // camera-relative frame at press-time goes stale as the camera turns (which
+  // is what made movement feel inverted after steering around). A fixed frame
+  // has neither problem — hold a direction and you travel dead straight while
+  // the camera simply settles in behind you.
+  var mx = inp.jx;    // stick right -> world +X
+  var mz = -inp.jz;   // stick up    -> world -Z (forward, into the arena)
   var ml = Math.sqrt(mx * mx + mz * mz);
   var movingNow = false;
   if (ml > 0.001) {
@@ -417,10 +422,7 @@ function updatePlayer() {
     var spd = MOVE_SPEED * Math.min(1, inp.jmag);
     p.x += mx * spd * DT; p.z += mz * spd * DT;
     movingNow = inp.jmag > 0.06;
-    // Auto-follow camera: swing the view (and therefore the gun aim) to trail
-    // the travel direction, so the joystick alone steers where you go, look and
-    // shoot — no separate camera drag needed. At steady state the move
-    // direction, the camera forward and the gun target all converge.
+    // Swing the camera (and therefore the gun aim) toward the travel heading.
     var targetYaw = Math.atan2(mx, -mz);
     c.yaw = approachAngle(c.yaw, targetYaw, CAM_FOLLOW_RATE * Math.min(1, inp.jmag) * DT);
   }
@@ -814,10 +816,6 @@ function updateJoy(ev) {
   if (mag > JOY_HALF) { vx = vx / mag * JOY_HALF; vy = vy / mag * JOY_HALF; mag = JOY_HALF; }
   G.input.jdx = vx; G.input.jdy = vy;
   G.input.jx = vx / JOY_HALF; G.input.jz = -vy / JOY_HALF; G.input.jmag = mag / JOY_HALF;
-  // Latch the camera heading at the moment the stick is first grabbed so the
-  // very first push reads as "forward = where I'm currently looking" (no jarring
-  // swing), while the reference stays fixed for the rest of the gesture.
-  if (!G.input.joyActive) G.input.refYaw = G.cam.yaw;
   G.input.joyActive = true;
 }
 function onMoveStart(input) { updateJoy(decodeEvent(input)); }
@@ -837,8 +835,11 @@ function onFireUp(input) { G.input.firing = false; }
 function onReload(input) { startReload(); }
 function onJump(input) { var p = G.player; if (p.grounded && p.y <= 0.01) { p.vy = JUMP_V; p.grounded = false; } }
 
-function onStart(input) { G.state = 'playing'; G.player.x = 0; G.player.z = 8; G.player.health = G.player.maxHealth; startWave(1); render(); }
-function onRestart(input) { newGame(); G.state = 'playing'; startWave(1); render(); }
+// Start facing into the arena (yaw 0 = world -Z) so "stick up = forward" lines
+// up with the opening view; the menu orbit leaves cam.yaw at an arbitrary spin.
+function aimCameraIntoArena() { G.cam.yaw = 0; G.cam.pitch = -0.22; G.player.yaw = 0; }
+function onStart(input) { G.state = 'playing'; G.player.x = 0; G.player.z = 8; G.player.health = G.player.maxHealth; aimCameraIntoArena(); startWave(1); render(); }
+function onRestart(input) { newGame(); G.state = 'playing'; aimCameraIntoArena(); startWave(1); render(); }
 
 // ════════════════════════════════════════════════════════════════════════
 //  RENDER + LOOP
