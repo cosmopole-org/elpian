@@ -335,6 +335,58 @@ Container node for organizing scene hierarchy.
 
 ---
 
+### model3d (glTF 2.0 / GLB)
+
+Loads a **real rigged glTF 2.0 / GLB model** — from a URL (`http`/`https`),
+a local file path (native), or a `data:` URI — and renders it with full
+**CPU skeletal animation**: the node hierarchy is posed from the requested
+keyframe clip, vertices are linear-blend skinned by their bone weights, lit,
+and drawn textured via batched `drawVertices`. Embedded PNG/JPEG base-colour
+textures are decoded and sampled.
+
+Loading is asynchronous and cached per URL: the model streams in the
+background (a capsule placeholder is shown meanwhile) and appears
+automatically once ready. `gltf` is accepted as an alias for `model3d`.
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `id` | String? | null | Node identifier |
+| `model` | String | *required* | Model URL / path / data-URI (aliases: `url`, `gltf`, `src`) |
+| `animation` | String? | first clip | Clip name or numeric index to play |
+| `anim_time` | number? | scene clock | Playback time in seconds (loops on clip duration). Drive this yourself for per-entity walk cycles. |
+| `tint` | Color? | white | Multiplies the model's base colour |
+| `emissive` | Color? | model's | Emissive glow override (e.g. hit flashes) |
+| `emissive_strength` | number? | 1.0 | Strength of the emissive override |
+| `transform` | TransformDef | {} | Placement (position / rotation / uniform scale) |
+
+```json
+{
+  "type": "model3d",
+  "model": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/CesiumMan/glTF-Binary/CesiumMan.glb",
+  "animation": "Walk",
+  "anim_time": 1.37,
+  "transform": {
+    "position": { "x": 0, "y": 0, "z": 0 },
+    "rotation": { "x": 0, "y": 180, "z": 0 },
+    "scale": { "x": 1.1, "y": 1.1, "z": 1.1 }
+  },
+  "tint": { "r": 1.0, "g": 0.9, "b": 0.9 }
+}
+```
+
+**Supported glTF features:** triangle-list primitives; `POSITION`, `NORMAL`
+(auto-derived if absent), `TEXCOORD_0`, `JOINTS_0`, `WEIGHTS_0`; indexed &
+non-indexed geometry; skins with inverse-bind matrices; node TRS or matrix;
+`translation`/`rotation`/`scale` animation channels with `LINEAR`/`STEP`/
+`CUBICSPLINE` interpolation; PBR base colour / metallic / roughness / emissive
+factors, alpha mode and double-sidedness; embedded base-colour textures.
+
+> The model loader and skeletal-skinning pipeline are foundational engine
+> features — see `lib/src/scene3d/gltf/`. Preload models without blocking via
+> `GltfModelCache.instance.preload([...urls])`.
+
+---
+
 ## 🔷 Mesh Generators
 
 Built-in geometry primitives available for `mesh3d` nodes.
