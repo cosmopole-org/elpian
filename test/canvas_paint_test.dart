@@ -36,7 +36,7 @@ void main() {
       // Base color is untouched; the live paint reflects exactly one alpha
       // application (0x80 ≈ 0.5), not 0.25 from compounding.
       expect(exec.currentState.fillColor, const Color(0xFFFF0000));
-      expect(exec.currentState.fillPaint.color.alpha, closeTo(128, 1));
+      expect(exec.currentState.fillPaint.color.a, closeTo(0.5, 0.01));
     });
 
     test('fully opaque path skips alpha adjustment and uses the base color',

@@ -330,7 +330,7 @@ class DartSceneRenderer {
       }
     }
     // Default camera
-    final pos = const Vec3(0, 5, 10);
+    const pos = Vec3(0, 5, 10);
     return _Camera(
       position: pos,
       forward: (Vec3.zero - pos).normalized,

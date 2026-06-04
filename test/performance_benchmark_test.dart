@@ -123,7 +123,7 @@ class _Stats {
 
   void print_(String label) {
     // ignore: avoid_print
-    printLine('$label');
+    printLine(label);
     printLine('  FPS (theoretical)  : $fpsStr');
     printLine('  Avg build time     : $avgStr ms');
     printLine('  P50 / P90 / P99    : $p50Str / $p90Str / $p99Str ms');

@@ -8,7 +8,7 @@ class HtmlBlockquote {
     final text = node.props['text'] as String? ?? '';
     final child = children.isNotEmpty ? children.first : Text(text);
     
-    final defaultStyle = const CSSStyle(
+    const defaultStyle = CSSStyle(
       padding: EdgeInsets.all(16.0),
       margin: EdgeInsets.symmetric(vertical: 8.0),
       borderColor: Colors.grey,

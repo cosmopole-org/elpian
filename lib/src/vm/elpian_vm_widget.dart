@@ -781,7 +781,7 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget>
       }
       return Container(
         padding: const EdgeInsets.all(16),
-        color: Colors.red.withOpacity(0.1),
+        color: Colors.red.withValues(alpha: 0.1),
         child: Text(
           'VM Error: $_error',
           style: const TextStyle(color: Colors.red),
@@ -805,7 +805,7 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget>
     } catch (e) {
       return Container(
         padding: const EdgeInsets.all(16),
-        color: Colors.orange.withOpacity(0.1),
+        color: Colors.orange.withValues(alpha: 0.1),
         child: Text(
           'Render Error: $e',
           style: const TextStyle(color: Colors.orange),

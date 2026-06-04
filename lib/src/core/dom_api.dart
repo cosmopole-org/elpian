@@ -117,23 +117,20 @@ class ElpianElement {
   final Map<String, dynamic> _style = {};
   final Map<String, Function> _eventListeners = {};
   
-  String? _textContent;
+  /// Text content of the element.
+  String? textContent;
   CSSStyle? _computedStyle;
-  
+
   ElpianElement({
     required this.tagName,
     this.id,
     this.classes = const [],
     required this.dom,
   });
-  
-  /// Get/Set text content
-  String? get textContent => _textContent;
-  set textContent(String? value) => _textContent = value;
-  
-  /// Get/Set inner HTML (as text for now)
-  String? get innerHTML => _textContent;
-  set innerHTML(String? value) => _textContent = value;
+
+  /// Get/Set inner HTML (as text for now) — aliases [textContent].
+  String? get innerHTML => textContent;
+  set innerHTML(String? value) => textContent = value;
   
   /// Get/Set attributes
   dynamic getAttribute(String name) => _attributes[name];
@@ -168,10 +165,7 @@ class ElpianElement {
   Map<String, dynamic> get style => Map.unmodifiable(_style);
   
   CSSStyle get computedStyle {
-    if (_computedStyle == null) {
-      _computedStyle = CSSParser.parse(_style);
-    }
-    return _computedStyle!;
+    return _computedStyle ??= CSSParser.parse(_style);
   }
   
   /// Class manipulation
@@ -286,7 +280,7 @@ class ElpianElement {
     
     cloned._attributes.addAll(_attributes);
     cloned._style.addAll(_style);
-    cloned._textContent = _textContent;
+    cloned.textContent = textContent;
     
     if (deep) {
       for (final child in _children) {
@@ -300,8 +294,8 @@ class ElpianElement {
   /// Convert to ElpianNode
   ElpianNode toElpianNode() {
     final props = Map<String, dynamic>.from(_attributes);
-    if (_textContent != null) {
-      props['text'] = _textContent;
+    if (textContent != null) {
+      props['text'] = textContent;
     }
     
     return ElpianNode(
@@ -323,7 +317,7 @@ class ElpianElement {
     element._attributes.addAll(node.props);
     
     if (node.props['text'] != null) {
-      element._textContent = node.props['text'] as String;
+      element.textContent = node.props['text'] as String;
     }
     
     for (final child in node.children) {

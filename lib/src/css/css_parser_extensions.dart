@@ -148,8 +148,8 @@ class CSSParserExtensions {
     if (value == null) return null;
     if (value is List) {
       return value
-          .where((item) => item is Map<String, dynamic>)
-          .map((item) => parseBoxShadowSingle(item as Map<String, dynamic>))
+          .whereType<Map<String, dynamic>>()
+          .map(parseBoxShadowSingle)
           .toList();
     } else if (value is Map<String, dynamic>) {
       return [parseBoxShadowSingle(value)];

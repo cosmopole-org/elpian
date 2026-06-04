@@ -699,10 +699,7 @@ class CSSParser {
   static List<Map<String, dynamic>>? _parseKeyframes(dynamic value) {
     if (value == null) return null;
     if (value is List) {
-      return value
-          .where((item) => item is Map<String, dynamic>)
-          .map((item) => item as Map<String, dynamic>)
-          .toList();
+      return value.whereType<Map<String, dynamic>>().toList();
     }
     return null;
   }

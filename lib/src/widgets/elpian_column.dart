@@ -4,21 +4,76 @@ import '../css/css_properties.dart';
 
 class ElpianColumn {
   static Widget build(ElpianNode node, List<Widget> children) {
-    final gap = node.style?.gap ?? 0;
-    final spacedChildren = _addGap(children, gap);
+    final style = node.style;
+    final gap = style?.gap ?? 0;
+    final flexWrap = style?.flexWrap;
+    final wraps = flexWrap == 'wrap' || flexWrap == 'wrap-reverse';
 
-    Widget result = Column(
-      mainAxisAlignment: CSSProperties.getMainAxisAlignment(node.style?.justifyContent),
-      crossAxisAlignment: CSSProperties.getCrossAxisAlignment(node.style?.alignItems),
-      mainAxisSize: MainAxisSize.max,
-      children: spacedChildren,
-    );
+    Widget result;
+    if (wraps) {
+      // CSS `flex-wrap: wrap` on a column flows items into additional columns —
+      // a vertical Wrap. Wrap manages its own spacing via spacing/runSpacing.
+      result = Wrap(
+        direction: Axis.vertical,
+        spacing: gap,
+        runSpacing: gap,
+        alignment: _wrapMainAlignment(style?.justifyContent),
+        crossAxisAlignment: _wrapCrossAlignment(style?.alignItems),
+        verticalDirection: flexWrap == 'wrap-reverse'
+            ? VerticalDirection.up
+            : VerticalDirection.down,
+        children: children,
+      );
+    } else {
+      result = Column(
+        mainAxisAlignment:
+            CSSProperties.getMainAxisAlignment(style?.justifyContent),
+        crossAxisAlignment:
+            CSSProperties.getCrossAxisAlignment(style?.alignItems),
+        mainAxisSize: MainAxisSize.max,
+        children: _addGap(children, gap),
+      );
+    }
 
-    if (node.style != null) {
-      result = CSSProperties.applyStyle(result, node.style);
+    if (style != null) {
+      result = CSSProperties.applyStyle(result, style);
     }
 
     return result;
+  }
+
+  static WrapAlignment _wrapMainAlignment(String? justifyContent) {
+    switch (justifyContent) {
+      case 'center':
+        return WrapAlignment.center;
+      case 'flex-end':
+      case 'end':
+        return WrapAlignment.end;
+      case 'space-between':
+        return WrapAlignment.spaceBetween;
+      case 'space-around':
+        return WrapAlignment.spaceAround;
+      case 'space-evenly':
+        return WrapAlignment.spaceEvenly;
+      case 'flex-start':
+      case 'start':
+      default:
+        return WrapAlignment.start;
+    }
+  }
+
+  static WrapCrossAlignment _wrapCrossAlignment(String? alignItems) {
+    switch (alignItems) {
+      case 'center':
+        return WrapCrossAlignment.center;
+      case 'flex-end':
+      case 'end':
+        return WrapCrossAlignment.end;
+      case 'flex-start':
+      case 'start':
+      default:
+        return WrapCrossAlignment.start;
+    }
   }
 
   static List<Widget> _addGap(List<Widget> children, double gap) {

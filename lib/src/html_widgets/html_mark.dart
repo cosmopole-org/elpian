@@ -7,7 +7,7 @@ class HtmlMark {
   static Widget build(ElpianNode node, List<Widget> children) {
     final text = node.props['text'] as String? ?? '';
     
-    final defaultStyle = const CSSStyle(
+    const defaultStyle = CSSStyle(
       backgroundColor: Color(0xFFFFFF00),
       padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
     );

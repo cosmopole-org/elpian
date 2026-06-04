@@ -36,44 +36,44 @@ class NextjsRenderEnvelope {
   factory NextjsRenderEnvelope.fromJson(Map<String, dynamic> json) {
     final componentRaw = json['component'];
     if (componentRaw is! Map<String, dynamic>) {
-      throw FormatException(
+      throw const FormatException(
         'Next.js payload must contain a "component" object that matches Elpian JSON.',
       );
     }
 
     final stylesheetRaw = json['stylesheet'];
     if (stylesheetRaw != null && stylesheetRaw is! Map<String, dynamic>) {
-      throw FormatException('"stylesheet" must be a JSON object when provided.');
+      throw const FormatException('"stylesheet" must be a JSON object when provided.');
     }
 
     final metaRaw = json['meta'];
     if (metaRaw != null && metaRaw is! Map<String, dynamic>) {
-      throw FormatException('"meta" must be a JSON object when provided.');
+      throw const FormatException('"meta" must be a JSON object when provided.');
     }
 
     final navigationRaw = json['navigation'];
     if (navigationRaw != null && navigationRaw is! Map<String, dynamic>) {
-      throw FormatException('"navigation" must be a JSON object when provided.');
+      throw const FormatException('"navigation" must be a JSON object when provided.');
     }
 
     final clientComponentsRaw = json['clientComponents'];
     if (clientComponentsRaw != null && clientComponentsRaw is! Map<String, dynamic>) {
-      throw FormatException('"clientComponents" must be a JSON object when provided.');
+      throw const FormatException('"clientComponents" must be a JSON object when provided.');
     }
 
     final jsCodeRaw = json['jsCode'];
     if (jsCodeRaw != null && jsCodeRaw is! String) {
-      throw FormatException('"jsCode" must be a string when provided.');
+      throw const FormatException('"jsCode" must be a string when provided.');
     }
 
     final vmAstRaw = json['vmAstJson'];
     if (vmAstRaw != null && vmAstRaw is! String) {
-      throw FormatException('"vmAstJson" must be a string when provided.');
+      throw const FormatException('"vmAstJson" must be a string when provided.');
     }
 
     final jsEntryRaw = json['jsEntryFunction'];
     if (jsEntryRaw != null && jsEntryRaw is! String) {
-      throw FormatException('"jsEntryFunction" must be a string when provided.');
+      throw const FormatException('"jsEntryFunction" must be a string when provided.');
     }
 
     return NextjsRenderEnvelope(

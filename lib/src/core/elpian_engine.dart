@@ -240,7 +240,7 @@ class ElpianEngine {
       debugPrint('Warning: Unknown widget type "${node.type}"');
       return Container(
         padding: const EdgeInsets.all(8),
-        color: Colors.red.withOpacity(0.2),
+        color: Colors.red.withValues(alpha: 0.2),
         child: Text('Unknown widget: ${node.type}'),
       );
     }

@@ -484,9 +484,11 @@ class CanvasAPIExecutor {
         break;
 
       case CanvasCommandType.translate:
-        currentState.transform.translate(
+        currentState.transform.translateByDouble(
           _getDouble(params, 'x'),
           _getDouble(params, 'y'),
+          0,
+          1,
         );
         canvas.translate(
           _getDouble(params, 'x'),
@@ -640,13 +642,13 @@ class CanvasAPIExecutor {
 
     final alpha = currentState.globalAlpha;
     final base = fill ? currentState.fillColor : currentState.strokeColor;
-    final color = alpha >= 1.0 ? base : base.withOpacity(alpha);
+    final color = alpha >= 1.0 ? base : base.withValues(alpha: alpha);
 
     final shadow = _shadowPaint() != null
         ? [
             Shadow(
               color: currentState.shadowColor
-                  .withOpacity((currentState.shadowColor.alpha / 255.0) * alpha),
+                  .withValues(alpha: currentState.shadowColor.a * alpha),
               offset: Offset(
                   currentState.shadowOffsetX, currentState.shadowOffsetY),
               blurRadius: currentState.shadowBlur / 2.0,
@@ -818,12 +820,12 @@ class CanvasAPIExecutor {
   /// the shape.
   Paint? _shadowPaint() {
     final s = currentState;
-    final hasShadow = s.shadowColor.alpha != 0 &&
+    final hasShadow = s.shadowColor.a != 0 &&
         (s.shadowBlur > 0 || s.shadowOffsetX != 0 || s.shadowOffsetY != 0);
     if (!hasShadow) return null;
-    final baseAlpha = s.shadowColor.alpha / 255.0;
+    final baseAlpha = s.shadowColor.a;
     final paint = Paint()
-      ..color = s.shadowColor.withOpacity(baseAlpha * s.globalAlpha)
+      ..color = s.shadowColor.withValues(alpha: baseAlpha * s.globalAlpha)
       ..blendMode = s.blendMode;
     if (s.shadowBlur > 0) {
       // Canvas blur radius ≈ 2*sigma; convert to a Gaussian sigma.
@@ -851,7 +853,7 @@ class CanvasAPIExecutor {
       // across draws. Skip the allocation entirely when fully opaque.
       ..color = alpha >= 1.0
           ? currentState.fillColor
-          : currentState.fillColor.withOpacity(alpha)
+          : currentState.fillColor.withValues(alpha: alpha)
       ..blendMode = currentState.blendMode;
   }
 
@@ -863,7 +865,7 @@ class CanvasAPIExecutor {
       ..strokeJoin = currentState.lineJoin
       ..color = alpha >= 1.0
           ? currentState.strokeColor
-          : currentState.strokeColor.withOpacity(alpha)
+          : currentState.strokeColor.withValues(alpha: alpha)
       ..blendMode = currentState.blendMode;
   }
 

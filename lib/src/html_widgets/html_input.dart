@@ -21,15 +21,16 @@ class HtmlInput {
         },
       );
     } else if (type == 'radio') {
-      final value = node.props['value'];
-      final groupValue = node.props['groupValue'];
-      result = Radio(
-        value: value,
+      final Object? value = node.props['value'];
+      final Object? groupValue = node.props['groupValue'];
+      // groupValue/onChanged moved to a RadioGroup ancestor in Flutter 3.32+.
+      result = RadioGroup<Object?>(
         groupValue: groupValue,
         onChanged: (newValue) {
           final dispatcher = EventDispatcher();
           dispatcher.dispatchChange(elementId, newValue);
         },
+        child: Radio<Object?>(value: value),
       );
     } else {
       result = TextField(

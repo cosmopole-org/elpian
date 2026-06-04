@@ -41,7 +41,7 @@ class ElpianStreamCommand {
 
       final action = map['action']?.toString();
       if (action == null || action.isEmpty) {
-        throw FormatException('Stream command must contain a non-empty "action".');
+        throw const FormatException('Stream command must contain a non-empty "action".');
       }
 
       return ElpianStreamCommand(
@@ -326,7 +326,7 @@ class _ElpianStreamWidgetState extends State<ElpianStreamWidget> {
       }
       return Container(
         padding: const EdgeInsets.all(16),
-        color: Colors.red.withOpacity(0.1),
+        color: Colors.red.withValues(alpha: 0.1),
         child: Text(
           'Stream Error: $_error',
           style: const TextStyle(color: Colors.red),
@@ -356,7 +356,7 @@ class _ElpianStreamWidgetState extends State<ElpianStreamWidget> {
       }
       return Container(
         padding: const EdgeInsets.all(16),
-        color: Colors.orange.withOpacity(0.1),
+        color: Colors.orange.withValues(alpha: 0.1),
         child: Text(
           message,
           style: const TextStyle(color: Colors.orange),

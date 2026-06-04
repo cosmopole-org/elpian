@@ -7,7 +7,7 @@ class HtmlVar {
   static Widget build(ElpianNode node, List<Widget> children) {
     final text = node.props['text'] as String? ?? '';
     
-    final defaultStyle = const CSSStyle(
+    const defaultStyle = CSSStyle(
       fontStyle: FontStyle.italic,
     );
     
