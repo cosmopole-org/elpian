@@ -1,20 +1,4 @@
-/// The complete third-person shooter, authored as a single QuickJS program.
-///
-/// Everything game-specific lives here as JavaScript: state management, the
-/// 3D scene-graph DSL, enemy AI, weapons, particles/effects, the HUD, and the
-/// on-screen touch controls. It drives Elpian's renderer through
-/// `askHost('render', ...)` and runs its frame loop via `askHost('setInterval')`.
-///
-/// Only foundational, reusable capabilities live in the Dart/Elpian layer:
-/// the `GameScene` 3D widget, the geometry cache in the software renderer, and
-/// the glTF 2.0 / GLB pipeline (streaming model loader, CPU skeletal-animation
-/// skinning, and textured `drawVertices` batching). The player and enemies are
-/// real rigged glTF characters streamed from the Khronos sample-asset CDN and
-/// animated with their skeletal walk cycles — see `addPlayerModel` /
-/// `addEnemyModel` and the `model3d` scene node they emit.
-library;
 
-const String tpsGameProgram = r'''
 /// The complete third-person shooter, authored as a single QuickJS program.
 ///
 /// Everything game-specific lives here as JavaScript: state management, the
