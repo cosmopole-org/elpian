@@ -200,6 +200,19 @@ class _EventEnabledWidgetState extends State<EventEnabledWidget> {
                   localPosition: Offset.zero,
                 )
             : null,
+        // A pan can be *cancelled* (lost in the gesture arena, pointer removed,
+        // or the active recognizer disposed during a rebuild) instead of
+        // ending cleanly. Flutter only fires `onPanEnd` on a clean lift, so
+        // without this a cancelled drag would never notify the consumer — e.g.
+        // an on-screen joystick would stay "held" and the character would keep
+        // moving forever. Surface a drag-end so the consumer always resets.
+        onPanCancel: events.containsKey('dragend')
+            ? () => _dispatcher.dispatchDragEnd(
+                  _elementId,
+                  Offset.zero,
+                  localPosition: Offset.zero,
+                )
+            : null,
         onHorizontalDragEnd: _hasAnyEvent(events, ['swipeleft', 'swiperight'])
             ? (details) {
                 if (details.primaryVelocity! < 0) {

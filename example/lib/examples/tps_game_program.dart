@@ -52,6 +52,14 @@ function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
 function lerp(a, b, t) { return a + (b - a) * t; }
 function rand(a, b) { return a + Math.random() * (b - a); }
 function deg(r) { return r * 180 / PI; }
+function wrapAngle(a) { while (a > PI) a -= 2 * PI; while (a < -PI) a += 2 * PI; return a; }
+// Step `cur` toward `target` (both radians) by at most `maxStep`, taking the
+// shortest way around the circle. Used to make the camera trail the joystick.
+function approachAngle(cur, target, maxStep) {
+  var d = wrapAngle(target - cur);
+  if (d > maxStep) d = maxStep; else if (d < -maxStep) d = -maxStep;
+  return cur + d;
+}
 function dist2(ax, az, bx, bz) { var dx = bx - ax, dz = bz - az; return Math.sqrt(dx * dx + dz * dz); }
 function col(r, g, b, a) { return { r: r, g: g, b: b, a: (a === undefined ? 1 : a) }; }
 function vec(x, y, z) { return { x: x, y: y, z: z }; }
@@ -69,6 +77,9 @@ var RELOAD_TIME = 1.15;
 var BULLET_RANGE = 64;
 var BULLET_DMG = 26;
 var LOOK_SENS_X = 0.0066, LOOK_SENS_Y = 0.0055;
+// How fast (rad/s) the camera yaw swings to follow the joystick travel
+// direction, so the view + gun automatically aim where the player is heading.
+var CAM_FOLLOW_RATE = 7.0;
 var JOY = 132, JOY_HALF = 66, THUMB = 56;
 
 // ---- Viewport (read from host environment) --------------------------------
@@ -111,7 +122,7 @@ function newGame() {
     player: { x: 0, z: 8, y: 0, vy: 0, yaw: 0, health: 100, maxHealth: 100, grounded: true, hurtT: 0, animTime: 0 },
     cam: { yaw: 0.5, pitch: -0.22, recoil: 0 },
     weapon: { mag: MAG_SIZE, reserve: RESERVE_START, reloading: false, reloadT: 0, cool: 0 },
-    input: { joyActive: false, jx: 0, jz: 0, jmag: 0, jdx: 0, jdy: 0, firing: false },
+    input: { joyActive: false, jx: 0, jz: 0, jmag: 0, jdx: 0, jdy: 0, firing: false, refYaw: 0 },
     enemies: [],
     ebullets: [],
     fx: [],
@@ -389,8 +400,14 @@ function hurtPlayer(dmg) {
 
 function updatePlayer() {
   var p = G.player, inp = G.input, c = G.cam, w = G.weapon;
-  var fwdx = Math.sin(c.yaw), fwdz = -Math.cos(c.yaw);
-  var rgtx = Math.cos(c.yaw), rgtz = Math.sin(c.yaw);
+  // Movement is resolved against the camera heading *latched when the stick was
+  // pressed* (refYaw), NOT the live camera yaw. That reference stays fixed for
+  // the whole gesture, so the auto-follow below converges instead of chasing
+  // its own tail: a held direction makes the player travel straight while the
+  // camera swings round once to sit behind them — rather than circling forever.
+  var baseYaw = inp.refYaw;
+  var fwdx = Math.sin(baseYaw), fwdz = -Math.cos(baseYaw);
+  var rgtx = Math.cos(baseYaw), rgtz = Math.sin(baseYaw);
   var mx = rgtx * inp.jx + fwdx * inp.jz;
   var mz = rgtz * inp.jx + fwdz * inp.jz;
   var ml = Math.sqrt(mx * mx + mz * mz);
@@ -400,6 +417,12 @@ function updatePlayer() {
     var spd = MOVE_SPEED * Math.min(1, inp.jmag);
     p.x += mx * spd * DT; p.z += mz * spd * DT;
     movingNow = inp.jmag > 0.06;
+    // Auto-follow camera: swing the view (and therefore the gun aim) to trail
+    // the travel direction, so the joystick alone steers where you go, look and
+    // shoot — no separate camera drag needed. At steady state the move
+    // direction, the camera forward and the gun target all converge.
+    var targetYaw = Math.atan2(mx, -mz);
+    c.yaw = approachAngle(c.yaw, targetYaw, CAM_FOLLOW_RATE * Math.min(1, inp.jmag) * DT);
   }
   // Advance the skeletal walk clip only while moving; freeze to a planted
   // stance when idle so the feet don't slide.
@@ -748,7 +771,8 @@ function pushMenu(ch, W, H) {
   ch.push(fullRow(H * 0.18, text('ELPIAN', '#4cc9f0', 52, 'bold', { letter: 8 })));
   ch.push(fullRow(H * 0.18 + 58, text('STRIKE FORCE', '#eaf2ff', 26, 'bold', { letter: 6 })));
   ch.push(fullRow(H * 0.40, text('A third-person shooter — pure Elpian + QuickJS', '#7f93b3', 13, 'bold')));
-  ch.push(fullRow(H * 0.47, text('LEFT STICK move    RIGHT DRAG aim camera', '#9fb4d6', 13, 'bold')));
+  ch.push(fullRow(H * 0.47, text('LEFT STICK move + auto-aim camera', '#9fb4d6', 13, 'bold')));
+  ch.push(fullRow(H * 0.47 + 22, text('RIGHT DRAG optional free look', '#7f93b3', 12, 'bold')));
   ch.push(fullRow(H * 0.51, text('FIRE to shoot    survive the waves', '#9fb4d6', 13, 'bold')));
   ch.push(fullRow(H * 0.64, container(230, 66, 'rgba(50,140,90,0.9)', 16, {
     borderColor: '#bdf3d0', borderWidth: 2, key: 'startBtn', events: { tap: 'onStart' },
@@ -790,6 +814,10 @@ function updateJoy(ev) {
   if (mag > JOY_HALF) { vx = vx / mag * JOY_HALF; vy = vy / mag * JOY_HALF; mag = JOY_HALF; }
   G.input.jdx = vx; G.input.jdy = vy;
   G.input.jx = vx / JOY_HALF; G.input.jz = -vy / JOY_HALF; G.input.jmag = mag / JOY_HALF;
+  // Latch the camera heading at the moment the stick is first grabbed so the
+  // very first push reads as "forward = where I'm currently looking" (no jarring
+  // swing), while the reference stays fixed for the rest of the gesture.
+  if (!G.input.joyActive) G.input.refYaw = G.cam.yaw;
   G.input.joyActive = true;
 }
 function onMoveStart(input) { updateJoy(decodeEvent(input)); }
