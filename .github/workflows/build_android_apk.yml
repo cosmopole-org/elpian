@@ -103,6 +103,32 @@ jobs:
             echo "Patched namespace '$pkg' into $gradle"
           done
 
+      # The example lists `integration_test` as a dev dependency (for its
+      # integration tests). `flutter pub get` writes that plugin into the
+      # generated Android plugin registrant, but its Android module is excluded
+      # from release builds, so `:app:compileReleaseJavaWithJavac` fails with
+      # "package dev.flutter.plugins.integration_test does not exist". Strip the
+      # integration_test registration before the release build, which runs with
+      # --no-pub and therefore does not regenerate the registrant.
+      - name: Strip dev-only integration_test from plugin registrant
+        run: |
+          python3 - <<'PY'
+          import re, pathlib
+          p = pathlib.Path("example/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java")
+          if not p.exists():
+              print("registrant not found; skipping")
+          else:
+              s = p.read_text()
+              s2 = re.sub(
+                  r"\n *try \{[^}]*IntegrationTestPlugin[^}]*\} catch \(Exception e\) \{[^}]*\}",
+                  "", s)
+              if s2 != s:
+                  p.write_text(s2)
+                  print("Removed integration_test registration from registrant")
+              else:
+                  print("integration_test registration not present; nothing to do")
+          PY
+
       - name: Flutter build APK release
         working-directory: example
         run: flutter build apk --release --no-pub --target=lib/main.dart
