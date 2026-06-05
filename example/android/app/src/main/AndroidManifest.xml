@@ -1,4 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required so release builds can stream glTF/GLB `model3d` assets over the
+         network (e.g. the Khronos sample-asset CDN). Without this, only debug
+         builds (whose debug manifest adds INTERNET for tooling) can fetch models,
+         and release APKs fall back to capsule placeholders for every model. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="elpian_ui_example"
         android:name="${applicationName}"
