@@ -84,6 +84,25 @@ jobs:
         working-directory: example
         run: flutter pub get
 
+      # AGP 8 requires every Android library module to declare a `namespace`.
+      # Some older transitive Flutter plugins (e.g. wasm_run / wasm_run_flutter
+      # 0.1.0, flutter_js) still rely on the removed `package` manifest
+      # attribute, which makes the Gradle build fail with "Namespace not
+      # specified". Inject a namespace derived from each plugin's manifest
+      # package wherever one is missing. Idempotent: re-runs skip patched files.
+      - name: Patch legacy plugins missing AGP namespace
+        run: |
+          set -euo pipefail
+          find ~/.pub-cache/hosted -path '*/android/build.gradle' | while read -r gradle; do
+            manifest="$(dirname "$gradle")/src/main/AndroidManifest.xml"
+            [ -f "$manifest" ] || continue
+            grep -q "namespace" "$gradle" && continue
+            pkg="$(grep -oP 'package="\K[^"]+' "$manifest" || true)"
+            [ -n "$pkg" ] || continue
+            sed -i "0,/android[[:space:]]*{/s##android {\n    namespace \"$pkg\"#" "$gradle"
+            echo "Patched namespace '$pkg' into $gradle"
+          done
+
       - name: Flutter build APK release
         working-directory: example
         run: flutter build apk --release --no-pub --target=lib/main.dart
