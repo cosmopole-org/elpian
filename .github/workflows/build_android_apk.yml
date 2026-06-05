@@ -1,0 +1,114 @@
+name: Build Android APK
+
+on:
+  # Allow manual runs from the Actions tab.
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+# Needed so the job can commit the built APK back to the repository.
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Elpian example APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.38.3"
+          channel: stable
+          cache: true
+
+      # Android targets for the native Rust VM (libelpian_vm.so). The Flutter
+      # app loads this via dart:ffi (DynamicLibrary.open('libelpian_vm.so')),
+      # so it must be cross-compiled for each device ABI and dropped into the
+      # app module's jniLibs before the APK is assembled.
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      - name: Rust cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: rust-android-${{ hashFiles('rust/Cargo.lock') }}
+          restore-keys: |
+            rust-android-
+
+      - name: Pub cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ hashFiles('pubspec.lock', 'example/pubspec.lock') }}
+          restore-keys: |
+            pub-
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+
+      # Cross-compile the Rust VM for the Android ABIs and emit the shared
+      # libraries straight into the example app's jniLibs directory, where the
+      # Android Gradle build picks them up and bundles them into the APK.
+      - name: Build Rust for Android
+        working-directory: rust
+        run: |
+          cargo ndk \
+            -t arm64-v8a \
+            -t armeabi-v7a \
+            -t x86_64 \
+            -o ../example/android/app/src/main/jniLibs \
+            build --release
+
+      - name: Flutter pub get (package)
+        run: flutter pub get
+
+      - name: Flutter pub get (example)
+        working-directory: example
+        run: flutter pub get
+
+      - name: Flutter build APK release
+        working-directory: example
+        run: flutter build apk --release --no-pub --target=lib/main.dart
+
+      - name: Copy APK to repo root
+        run: cp example/build/app/outputs/flutter-apk/app-release.apk elpian_example.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: elpian-example-apk
+          path: elpian_example.apk
+          retention-days: 90
+
+      # Commit the freshly built APK to the root of the repository. The
+      # [skip ci] tag on the commit prevents this push from re-triggering the
+      # workflow (which would otherwise loop forever).
+      - name: Commit & push APK
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f elpian_example.apk
+          if git diff --staged --quiet; then
+            echo "APK unchanged; nothing to commit."
+          else
+            git commit -m "ci: build Elpian example Android APK [skip ci]"
+            git push origin HEAD:${GITHUB_REF_NAME}
+          fi
