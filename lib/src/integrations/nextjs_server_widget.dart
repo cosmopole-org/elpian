@@ -1,12 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
 import '../vm/elpian_vm.dart';
 import '../vm/quickjs_vm.dart';
+import 'nextjs_auth.dart';
 import 'nextjs_bridge.dart';
+
+export 'nextjs_auth.dart';
 
 typedef NextjsPayloadLoader = Future<Map<String, dynamic>> Function(
   String route, {
@@ -42,6 +45,7 @@ class NextjsServerWidget extends StatefulWidget {
     this.props,
     this.headers,
     this.bridge,
+    this.authConfig,
     this.timeout = const Duration(seconds: 15),
     this.loadingBuilder,
     this.errorBuilder,
@@ -60,6 +64,11 @@ class NextjsServerWidget extends StatefulWidget {
   final Map<String, dynamic>? props;
   final Map<String, String>? headers;
   final NextjsBridge? bridge;
+
+  /// Opt-in auth: bearer injection, `meta.auth` capture, silent refresh, and
+  /// POSTing `NextjsForm`s (login/register) through to action routes.
+  final NextjsAuthConfig? authConfig;
+
   final Duration timeout;
   final WidgetBuilder? loadingBuilder;
   final Widget Function(BuildContext context, Object error)? errorBuilder;
@@ -88,6 +97,7 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
     _currentRoute = widget.route;
     _bridge = widget.bridge ?? NextjsBridge();
     _bridge.onNavigate = _handleNavigate;
+    _bridge.onSubmit = _handleFormSubmit;
     _payloadFuture = _loadPayload();
   }
 
@@ -98,6 +108,7 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
     if (widget.bridge != oldWidget.bridge && widget.bridge != null) {
       _bridge = widget.bridge!;
       _bridge.onNavigate = _handleNavigate;
+      _bridge.onSubmit = _handleFormSubmit;
     }
 
     if (widget.route != oldWidget.route) {
@@ -117,11 +128,31 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
 
   Future<Map<String, dynamic>> _loadPayload() async {
     final loader = widget.loader ?? _defaultHttpLoader;
-    final payload = await loader(
+    var payload = await loader(
       _currentRoute,
       props: widget.props,
       headers: widget.headers,
     );
+
+    // Generic auth handling: capture issued tokens, and silently refresh +
+    // retry when a protected route bounces us to the login screen.
+    _captureAuth(payload);
+    final config = widget.authConfig;
+    if (config != null && widget.loader == null) {
+      final nav = payload['navigation'];
+      final redirectsToLogin =
+          nav is Map && nav['redirectTo']?.toString() == config.loginRoute;
+      if (redirectsToLogin && (config.store.refreshToken ?? '').isNotEmpty) {
+        if (await _tryRefresh()) {
+          payload = await _defaultHttpLoader(
+            _currentRoute,
+            props: widget.props,
+            headers: widget.headers,
+          );
+          _captureAuth(payload);
+        }
+      }
+    }
 
     final envelope = NextjsRenderEnvelope.fromJson(payload);
     final resolvedComponent = await _resolveClientComponentNodes(
@@ -135,6 +166,149 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
     };
   }
 
+  /// Build an absolute request URI by *preserving the base path* (e.g. an
+  /// `/elpian` prefix). The default `Uri.resolve('/route')` would discard the
+  /// base path; concatenation keeps it, which is what server route prefixes
+  /// need. The root route `'/'` maps to the base itself.
+  Uri _buildUri(String route) {
+    final base = (widget.serverBaseUrl ?? '').replaceAll(RegExp(r'/+$'), '');
+    String path;
+    if (route.isEmpty || route == '/') {
+      path = '';
+    } else if (route.startsWith('http://') || route.startsWith('https://')) {
+      return Uri.parse(route);
+    } else {
+      path = route.startsWith('/') ? route : '/$route';
+    }
+    return Uri.parse('$base$path');
+  }
+
+  /// Authorization header from the configured token store (empty when none).
+  Map<String, String> _authHeaders() {
+    final config = widget.authConfig;
+    final token = config?.store.accessToken;
+    if (token == null || token.isEmpty) return const {};
+    return {'authorization': '${config!.bearerScheme} $token'};
+  }
+
+  /// Capture `meta.auth` / `meta.clearAuth` from a render or action response.
+  void _captureAuth(Map<String, dynamic> envelope) {
+    final config = widget.authConfig;
+    if (config == null) return;
+    final meta = envelope['meta'];
+    if (meta is! Map) return;
+    if (meta['clearAuth'] == true) {
+      config.store.clear();
+      return;
+    }
+    if (meta.containsKey('auth')) {
+      final auth = meta['auth'];
+      if (auth is Map) {
+        config.store.save(
+          access: auth['accessToken']?.toString(),
+          refresh: auth['refreshToken']?.toString(),
+        );
+      } else if (auth == null) {
+        config.store.clear();
+      }
+    }
+  }
+
+  /// Exchange the refresh token for a fresh access token. Returns true on
+  /// success; clears the session on failure.
+  Future<bool> _tryRefresh() async {
+    final config = widget.authConfig;
+    if (config == null) return false;
+    final rt = config.store.refreshToken;
+    if (rt == null || rt.isEmpty) return false;
+    try {
+      final env = await _postJson(config.refreshRoute, {'refreshToken': rt});
+      final meta = env['meta'];
+      final auth = meta is Map ? meta['auth'] : null;
+      if (auth is Map && auth['accessToken'] != null) {
+        config.store.save(
+          access: auth['accessToken']?.toString(),
+          refresh: auth['refreshToken']?.toString(),
+        );
+        return true;
+      }
+    } catch (_) {
+      // fall through to clear
+    }
+    config.store.clear();
+    return false;
+  }
+
+  /// POST a JSON body to an action route (auth attached) and decode the
+  /// returned envelope.
+  Future<Map<String, dynamic>> _postJson(String route, Object? body) async {
+    final res = await http
+        .post(
+          _buildUri(route),
+          headers: {
+            'content-type': 'application/json',
+            'accept': 'application/vnd.elpian+json, application/json',
+            'x-elpian-route': route,
+            ..._authHeaders(),
+            ...?widget.headers,
+          },
+          body: jsonEncode(body),
+        )
+        .timeout(widget.timeout);
+    final decoded = jsonDecode(res.body);
+    if (decoded is! Map<String, dynamic>) {
+      throw const FormatException('Action response must decode to a JSON object.');
+    }
+    return decoded;
+  }
+
+  /// Handle a `NextjsForm` submission: POST the values, capture auth, apply any
+  /// navigation. Returns an inline error message, or null on success.
+  Future<String?> _handleFormSubmit(
+    String action,
+    Map<String, dynamic> values,
+  ) async {
+    try {
+      final env = await _postJson(action, values);
+      _captureAuth(env);
+      final nav = env['navigation'];
+      if (nav is Map && nav.isNotEmpty) {
+        _applyServerNavigation(Map<String, dynamic>.from(nav));
+        return null;
+      }
+      // No navigation → the server returned a fragment/toast. Surface its text
+      // inline if we can find one, else swap the rendered component.
+      final inline = _firstText(env['component']);
+      if (inline != null) return inline;
+      final component = env['component'];
+      if (component is Map<String, dynamic>) {
+        _setScriptRenderedComponent(component);
+      }
+      return null;
+    } catch (e) {
+      return 'Request failed: $e';
+    }
+  }
+
+  /// Pull the first meaningful text out of a component tree (for inline errors).
+  String? _firstText(dynamic node) {
+    if (node is Map) {
+      final props = node['props'];
+      if (props is Map && props['text'] is String) {
+        final t = props['text'] as String;
+        if (t.trim().length > 2 && !t.contains('✕')) return t;
+      }
+      final children = node['children'];
+      if (children is List) {
+        for (final c in children) {
+          final r = _firstText(c);
+          if (r != null) return r;
+        }
+      }
+    }
+    return null;
+  }
+
   Future<Map<String, dynamic>> _defaultHttpLoader(
     String route, {
     Map<String, dynamic>? props,
@@ -145,71 +319,54 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
       throw StateError('serverBaseUrl is required when no custom loader is provided.');
     }
 
-    final client = HttpClient();
-    try {
-      if (widget.requestMode == NextjsServerRequestMode.routePath) {
-        final routePath = _normalizeRoutePath(route);
-        final uri = Uri.parse(baseUrl).resolve(routePath);
-        final request = await client.getUrl(uri).timeout(widget.timeout);
-        request.headers.set('accept', 'application/vnd.elpian+json, application/json');
-        request.headers.set('x-elpian-route', route);
-        if (props != null && props.isNotEmpty) {
-          request.headers.set('x-elpian-props', jsonEncode(props));
-        }
-        headers?.forEach(request.headers.set);
-
-        final response = await request.close().timeout(widget.timeout);
-        final responseBody = await response.transform(utf8.decoder).join();
-
-        if (response.statusCode < 200 || response.statusCode >= 300) {
-          throw StateError(
-            'Next.js route ${uri.toString()} returned HTTP ${response.statusCode}: $responseBody',
-          );
-        }
-
-        final decoded = jsonDecode(responseBody);
-        if (decoded is! Map<String, dynamic>) {
-          throw const FormatException('Next.js route response must decode to a JSON object.');
-        }
-        return decoded;
-      }
-
-      final endpointPath = widget.endpoint ?? '/api/elpian-render';
-      final endpointUri = Uri.parse(baseUrl).resolve(endpointPath);
-      final request = await client.postUrl(endpointUri).timeout(widget.timeout);
-      request.headers.contentType = ContentType.json;
-      headers?.forEach(request.headers.set);
-      request.write(
-        jsonEncode(
-          NextjsBridge.buildRouteRequest(route: route, props: props),
-        ),
-      );
-
-      final response = await request.close().timeout(widget.timeout);
-      final responseBody = await response.transform(utf8.decoder).join();
+    if (widget.requestMode == NextjsServerRequestMode.routePath) {
+      final uri = _buildUri(route);
+      final response = await http.get(
+        uri,
+        headers: {
+          'accept': 'application/vnd.elpian+json, application/json',
+          'x-elpian-route': route,
+          if (props != null && props.isNotEmpty) 'x-elpian-props': jsonEncode(props),
+          ..._authHeaders(),
+          ...?headers,
+        },
+      ).timeout(widget.timeout);
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw StateError(
-          'Next.js endpoint ${endpointUri.toString()} returned HTTP ${response.statusCode}: $responseBody',
+          'Next.js route $uri returned HTTP ${response.statusCode}: ${response.body}',
         );
       }
 
-      final decoded = jsonDecode(responseBody);
+      final decoded = jsonDecode(response.body);
       if (decoded is! Map<String, dynamic>) {
-        throw const FormatException('Next.js payload must decode to a JSON object.');
+        throw const FormatException('Next.js route response must decode to a JSON object.');
       }
       return decoded;
-    } finally {
-      client.close();
     }
-  }
 
-  String _normalizeRoutePath(String route) {
-    if (route.isEmpty) return '/';
-    if (route.startsWith('http://') || route.startsWith('https://')) {
-      return Uri.parse(route).path;
+    final endpointUri = _buildUri(widget.endpoint ?? '/api/elpian-render');
+    final response = await http.post(
+      endpointUri,
+      headers: {
+        'content-type': 'application/json',
+        ..._authHeaders(),
+        ...?headers,
+      },
+      body: jsonEncode(NextjsBridge.buildRouteRequest(route: route, props: props)),
+    ).timeout(widget.timeout);
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        'Next.js endpoint $endpointUri returned HTTP ${response.statusCode}: ${response.body}',
+      );
     }
-    return route.startsWith('/') ? route : '/$route';
+
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map<String, dynamic>) {
+      throw const FormatException('Next.js payload must decode to a JSON object.');
+    }
+    return decoded;
   }
 
   Future<Map<String, dynamic>> _resolveClientComponentNodes(
@@ -369,30 +526,28 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
     final baseUrl = widget.serverBaseUrl;
     if (baseUrl == null || baseUrl.isEmpty) return null;
 
-    final client = HttpClient();
     try {
-      final endpointPath =
-          widget.endpoint ?? '/api/elpian-client-component';
-      final endpointUri = Uri.parse(baseUrl).resolve(endpointPath);
-      final request = await client.postUrl(endpointUri).timeout(widget.timeout);
-      request.headers.contentType = ContentType.json;
-      request.headers.set('accept', 'application/json');
-      widget.headers?.forEach(request.headers.set);
-      request.write(
-        jsonEncode({
+      final endpointUri = _buildUri(widget.endpoint ?? '/api/elpian-client-component');
+      final response = await http.post(
+        endpointUri,
+        headers: {
+          'content-type': 'application/json',
+          'accept': 'application/json',
+          ..._authHeaders(),
+          ...?widget.headers,
+        },
+        body: jsonEncode({
           'route': _currentRoute,
           'lookupKeys': lookupKeys,
           'componentNode': node,
         }),
-      );
+      ).timeout(widget.timeout);
 
-      final response = await request.close().timeout(widget.timeout);
       if (response.statusCode < 200 || response.statusCode >= 300) {
         return null;
       }
 
-      final responseBody = await response.transform(utf8.decoder).join();
-      final decoded = jsonDecode(responseBody);
+      final decoded = jsonDecode(response.body);
       if (decoded is! Map<String, dynamic>) {
         return null;
       }
@@ -428,8 +583,6 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
       }
     } catch (_) {
       // Ignore fetch failures, client component can still be resolved inline.
-    } finally {
-      client.close();
     }
 
     return null;
