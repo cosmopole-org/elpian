@@ -127,6 +127,10 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
   }
 
   Future<Map<String, dynamic>> _loadPayload() async {
+    // Restore a persisted session (cross-platform) before the first request, so
+    // a returning user stays logged in. Idempotent.
+    await widget.authConfig?.store.ensureReady();
+
     final loader = widget.loader ?? _defaultHttpLoader;
     var payload = await loader(
       _currentRoute,
