@@ -187,6 +187,17 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
     return Uri.parse('$base$path');
   }
 
+  /// Decode an HTTP response body as **UTF-8**, regardless of (or in the
+  /// absence of) a `charset` in the Content-Type header.
+  ///
+  /// `package:http`'s `response.body` falls back to **latin1** when no charset
+  /// is declared, which mangles every non-ASCII character (emoji, smart quotes,
+  /// accented text) into garbage. Server render envelopes are UTF-8 JSON, so we
+  /// always decode the raw bytes as UTF-8.
+  static String _utf8Body(http.Response response) {
+    return utf8.decode(response.bodyBytes, allowMalformed: true);
+  }
+
   /// Authorization header from the configured token store (empty when none).
   Map<String, String> _authHeaders() {
     final config = widget.authConfig;
@@ -259,7 +270,7 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
           body: jsonEncode(body),
         )
         .timeout(widget.timeout);
-    final decoded = jsonDecode(res.body);
+    final decoded = jsonDecode(_utf8Body(res));
     if (decoded is! Map<String, dynamic>) {
       throw const FormatException('Action response must decode to a JSON object.');
     }
@@ -338,11 +349,11 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw StateError(
-          'Next.js route $uri returned HTTP ${response.statusCode}: ${response.body}',
+          'Next.js route $uri returned HTTP ${response.statusCode}: ${_utf8Body(response)}',
         );
       }
 
-      final decoded = jsonDecode(response.body);
+      final decoded = jsonDecode(_utf8Body(response));
       if (decoded is! Map<String, dynamic>) {
         throw const FormatException('Next.js route response must decode to a JSON object.');
       }
@@ -362,11 +373,11 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
-        'Next.js endpoint $endpointUri returned HTTP ${response.statusCode}: ${response.body}',
+        'Next.js endpoint $endpointUri returned HTTP ${response.statusCode}: ${_utf8Body(response)}',
       );
     }
 
-    final decoded = jsonDecode(response.body);
+    final decoded = jsonDecode(_utf8Body(response));
     if (decoded is! Map<String, dynamic>) {
       throw const FormatException('Next.js payload must decode to a JSON object.');
     }
@@ -551,7 +562,7 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
         return null;
       }
 
-      final decoded = jsonDecode(response.body);
+      final decoded = jsonDecode(_utf8Body(response));
       if (decoded is! Map<String, dynamic>) {
         return null;
       }
