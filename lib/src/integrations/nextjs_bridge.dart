@@ -223,8 +223,13 @@ class NextjsBridge {
     }
 
     // Apply the resolved CSS (gradient/background/border/radius/padding/size/…)
-    // through the same helper every styled element uses.
-    Widget styled = CSSProperties.applyStyle(content, style);
+    // through the same helper every styled element uses. `applyFlex: false`:
+    // we wrap the result in interaction widgets below, so a `flex` style must
+    // be re-applied as the OUTERMOST widget (see end of method) — otherwise the
+    // Flexible would be buried beneath GestureDetector and Flutter throws
+    // "Incorrect use of ParentDataWidget" whenever the link sits in a Row/Column
+    // (e.g. the flex:1 Sign In/Sign Up tabs), crashing the whole subtree.
+    Widget styled = CSSProperties.applyStyle(content, style, applyFlex: false);
 
     Widget tappable = GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -241,6 +246,12 @@ class NextjsBridge {
 
     if (ariaLabel != null && ariaLabel.isNotEmpty) {
       tappable = Semantics(button: true, label: ariaLabel, child: tappable);
+    }
+
+    // Re-apply flex outermost so the Flexible is a direct child of the parent
+    // Row/Column (the whole tappable box still flexes and stays clickable).
+    if (style?.flex != null) {
+      tappable = Flexible(flex: style!.flex!, child: tappable);
     }
 
     return tappable;
