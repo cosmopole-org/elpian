@@ -83,8 +83,15 @@ class BevySceneWidget extends StatefulWidget {
   static Widget build(ElpianNode node, List<Widget> children) {
     final props = node.props;
     final sceneData = props['scene'] ?? props['sceneJson'];
-    final width = (props['width'] as num?)?.toDouble();
-    final height = (props['height'] as num?)?.toDouble();
+    final fitProp = props['fit'] as String?;
+    // A `fit` request means fill the container (the server pairs it with
+    // `style: width/height 100%`). Drop the fixed design pixels so the scene
+    // renders at the real layout size (Bevy already derives its render target
+    // from `context.size` when width/height are null) and `fit` scales the
+    // frame to cover it — instead of pinning a desktop-sized canvas on phones.
+    final responsive = fitProp != null && fitProp.isNotEmpty && fitProp != 'none';
+    final width = responsive ? null : (props['width'] as num?)?.toDouble();
+    final height = responsive ? null : (props['height'] as num?)?.toDouble();
     final fps = (props['fps'] as num?)?.toInt() ?? 60;
     final interactive = props['interactive'] as bool? ?? true;
     final fit = _parseFit(props['fit'] as String?);

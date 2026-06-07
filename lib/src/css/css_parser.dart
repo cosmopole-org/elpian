@@ -1,4 +1,5 @@
 import 'dart:collection';
+import 'dart:math' as math;
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
@@ -24,6 +25,13 @@ class CSSParser {
   static void clearCache() => _cache.clear();
 
   static CSSStyle parse(Map<String, dynamic> styleMap) {
+    // Viewport-relative units (`%`, `vw`, `vh`, `vmin`, `vmax`) resolve against
+    // the live screen size, so their parsed result must never be cached: it
+    // would go stale across devices and on rotate/resize. Parse them fresh.
+    if (_hasViewportUnits(styleMap)) {
+      return _parseUncached(styleMap);
+    }
+
     final cached = _cache[styleMap];
     if (cached != null) {
       // Promote to most-recently-used (LinkedHashMap keeps insertion order).
@@ -45,20 +53,20 @@ class CSSParser {
 
   static CSSStyle _parseUncached(Map<String, dynamic> styleMap) {
     return CSSStyle(
-      width: parseDouble(styleMap['width']),
-      height: parseDouble(styleMap['height']),
-      minWidth: parseDouble(styleMap['minWidth'] ?? styleMap['min-width']),
-      maxWidth: parseDouble(styleMap['maxWidth'] ?? styleMap['max-width']),
-      minHeight: parseDouble(styleMap['minHeight'] ?? styleMap['min-height']),
-      maxHeight: parseDouble(styleMap['maxHeight'] ?? styleMap['max-height']),
+      width: parseDimension(styleMap['width'], isWidth: true),
+      height: parseDimension(styleMap['height'], isWidth: false),
+      minWidth: parseDimension(styleMap['minWidth'] ?? styleMap['min-width'], isWidth: true),
+      maxWidth: parseDimension(styleMap['maxWidth'] ?? styleMap['max-width'], isWidth: true),
+      minHeight: parseDimension(styleMap['minHeight'] ?? styleMap['min-height'], isWidth: false),
+      maxHeight: parseDimension(styleMap['maxHeight'] ?? styleMap['max-height'], isWidth: false),
       padding: _parseEdgeInsets(styleMap['padding']),
       margin: _parseEdgeInsets(styleMap['margin']),
       alignment: parseAlignment(styleMap['alignment']),
       position: styleMap['position'] as String?,
-      top: parseDouble(styleMap['top']),
-      right: parseDouble(styleMap['right']),
-      bottom: parseDouble(styleMap['bottom']),
-      left: parseDouble(styleMap['left']),
+      top: parseDimension(styleMap['top'], isWidth: false),
+      right: parseDimension(styleMap['right'], isWidth: true),
+      bottom: parseDimension(styleMap['bottom'], isWidth: false),
+      left: parseDimension(styleMap['left'], isWidth: true),
       zIndex: parseDouble(styleMap['zIndex'] ?? styleMap['z-index']),
       display: styleMap['display'] as String?,
       flexDirection:
@@ -202,6 +210,86 @@ class CSSParser {
       return double.tryParse(numStr);
     }
     return null;
+  }
+
+  /// Parse a length value into logical pixels, resolving viewport-relative units
+  /// against the live screen size:
+  ///
+  /// * `42`, `"42"`, `"42px"`  → `42`
+  /// * `"100vw"` / `"100vh"`   → full screen width / height
+  /// * `"50vmin"` / `"80vmax"` → percentage of the smaller / larger screen edge
+  /// * `"100%"`                → full extent of the relevant axis ([isWidth]
+  ///   selects width vs height)
+  ///
+  /// Without this, `replaceAll`-based parsing silently dropped the unit and read
+  /// `"100vh"` as `100` *pixels*, so full-viewport containers (the city/world
+  /// stage, full-screen panels) collapsed — a near-blank screen on phones, whose
+  /// real viewport is nowhere near the desktop-ish fixed sizes that masked it.
+  static double? parseDimension(dynamic value, {required bool isWidth}) {
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    if (value is! String) return null;
+
+    final raw = value.trim();
+    if (raw.isEmpty) return null;
+
+    final numStr = raw.replaceAll(RegExp(r'[^0-9.\-]'), '');
+    final n = double.tryParse(numStr);
+    if (n == null) return null;
+
+    final size = _viewportSize();
+    if (raw.contains('vmin')) return n / 100.0 * math.min(size.width, size.height);
+    if (raw.contains('vmax')) return n / 100.0 * math.max(size.width, size.height);
+    if (raw.contains('vw')) return n / 100.0 * size.width;
+    if (raw.contains('vh')) return n / 100.0 * size.height;
+    if (raw.contains('%')) return n / 100.0 * (isWidth ? size.width : size.height);
+    return n;
+  }
+
+  /// Dimension properties whose values flow through [parseDimension] and may use
+  /// viewport-relative units.
+  static const List<String> _dimensionKeys = [
+    'width', 'height',
+    'minWidth', 'min-width', 'maxWidth', 'max-width',
+    'minHeight', 'min-height', 'maxHeight', 'max-height',
+    'top', 'right', 'bottom', 'left',
+  ];
+
+  /// True when a *dimension* property uses a viewport-relative unit (`%`, `vw`,
+  /// `vh`, `vmin`, `vmax`). Such results depend on the live screen size and must
+  /// not be served from the (size-agnostic) parse cache. Scoped to dimension
+  /// keys so the common `%` inside gradients/colors still caches normally.
+  static bool _hasViewportUnits(Map<String, dynamic> styleMap) {
+    for (final key in _dimensionKeys) {
+      final value = styleMap[key];
+      if (value is String &&
+          (value.contains('%') ||
+              value.contains('vw') ||
+              value.contains('vh') ||
+              value.contains('vmin') ||
+              value.contains('vmax'))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Live logical screen size, with a sane mobile-portrait fallback for early
+  /// frames / unit tests where no render view is attached yet.
+  static Size _viewportSize() {
+    try {
+      final view = WidgetsBinding.instance.platformDispatcher.implicitView;
+      if (view != null) {
+        final physical = view.physicalSize;
+        final dpr = view.devicePixelRatio;
+        if (physical.width > 0 && physical.height > 0 && dpr > 0) {
+          return Size(physical.width / dpr, physical.height / dpr);
+        }
+      }
+    } catch (_) {
+      // No binding (e.g. pure unit test) — fall through to the default.
+    }
+    return const Size(390, 844);
   }
 
   static int? parseInt(dynamic value) {
