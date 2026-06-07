@@ -2,8 +2,15 @@ import 'package:flutter/material.dart';
 import '../models/css_style.dart';
 
 class CSSProperties {
-  /// Apply CSS styles to a widget using Container or other wrappers
-  static Widget applyStyle(Widget child, CSSStyle? style) {
+  /// Apply CSS styles to a widget using Container or other wrappers.
+  ///
+  /// [applyFlex] controls whether a `flex` style is wrapped here as a
+  /// [Flexible]. Callers that add their own wrappers *around* the result (e.g.
+  /// a tappable link wrapping it in a GestureDetector) must pass `false` and
+  /// re-apply the flex as the outermost widget themselves — otherwise the
+  /// [Flexible] is buried beneath a non-Flex widget and Flutter throws
+  /// "Incorrect use of ParentDataWidget" when the element sits in a Row/Column.
+  static Widget applyStyle(Widget child, CSSStyle? style, {bool applyFlex = true}) {
     if (style == null) return child;
 
     Widget result = child;
@@ -103,8 +110,9 @@ class CSSProperties {
       result = _wrapWithAnimations(result, style);
     }
 
-    // Apply flex LAST so Flexible is a direct child of Row/Column/Flex
-    if (style.flex != null) {
+    // Apply flex LAST so Flexible is a direct child of Row/Column/Flex.
+    // Skipped when the caller will wrap the result and re-apply flex outermost.
+    if (applyFlex && style.flex != null) {
       result = Flexible(
         flex: style.flex!,
         child: result,
