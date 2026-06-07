@@ -11,7 +11,7 @@ import 'dart:typed_data';
 Future<Uint8List> fetchModelBytes(String url) async {
   final uri = Uri.parse(url);
   if (uri.scheme == 'http' || uri.scheme == 'https') {
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 20);
+    final client = HttpClient()..connectionTimeout = const Duration(minutes: 2);
     try {
       final request = await client.getUrl(uri);
       request.followRedirects = true;

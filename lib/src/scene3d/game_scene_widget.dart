@@ -72,8 +72,16 @@ class GameSceneWidget extends StatefulWidget {
     final sceneData = props['scene'] ?? props['sceneJson'];
     final fps = (props['fps'] as num?)?.toInt() ?? 60;
     final interactive = props['interactive'] as bool? ?? true;
-    final width = (props['width'] as num?)?.toDouble();
-    final height = (props['height'] as num?)?.toDouble();
+    // A `fit` request ("cover"/"contain"/…) means the embedder wants the scene
+    // to fill its container (the server pairs it with `style: width/height
+    // 100%`). Honour it by dropping the fixed design pixels so the scene paints
+    // at the real container size — otherwise a desktop-framed canvas shows only
+    // empty sky on a phone. The design width/height stay a fallback for the
+    // unsized (no-`fit`) case.
+    final fit = props['fit']?.toString();
+    final responsive = fit != null && fit.isNotEmpty && fit != 'none';
+    final width = responsive ? null : (props['width'] as num?)?.toDouble();
+    final height = responsive ? null : (props['height'] as num?)?.toDouble();
     final sceneKey = props['sceneKey']?.toString();
     final renderScale = (props['renderScale'] as num?)?.toDouble() ?? 1.0;
 

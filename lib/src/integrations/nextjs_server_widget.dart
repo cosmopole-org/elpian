@@ -46,7 +46,7 @@ class NextjsServerWidget extends StatefulWidget {
     this.headers,
     this.bridge,
     this.authConfig,
-    this.timeout = const Duration(seconds: 15),
+    this.timeout = const Duration(minutes: 2),
     this.loadingBuilder,
     this.errorBuilder,
     this.onScriptExecuted,
@@ -69,6 +69,10 @@ class NextjsServerWidget extends StatefulWidget {
   /// POSTing `NextjsForm`s (login/register) through to action routes.
   final NextjsAuthConfig? authConfig;
 
+  /// Per-request timeout for every Next.js round-trip (route GET, action POST,
+  /// silent refresh, client-component fetch). Defaults to 2 minutes to match the
+  /// Next.js route handlers' `maxDuration = 120` budget — slow mobile links and
+  /// cold serverless renders routinely need well over the old 15s ceiling.
   final Duration timeout;
   final WidgetBuilder? loadingBuilder;
   final Widget Function(BuildContext context, Object error)? errorBuilder;
