@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/elpian_engine.dart';
+import '../css/css_properties.dart';
 import '../models/elpian_node.dart';
 
 typedef NextjsNavigate = void Function(String route, {bool replace});
@@ -175,25 +176,74 @@ class NextjsBridge {
     );
   }
 
+  /// A `NextjsLink` is the game's primary actionable element: most "buttons"
+  /// are links that re-fetch a route. The engine has already resolved the
+  /// node's `className`/inline `style` into [ElpianNode.style] (e.g. the shared
+  /// `.btn`/`.btn-primary` rules), so we honour it exactly like `div`/`button`
+  /// do — otherwise every styled button would fall back to a bare, default
+  /// `TextButton` and the whole UI looks unstyled. The label/children are
+  /// painted with the resolved background/gradient/border/radius/padding, then
+  /// wrapped in a tap target.
   Widget _buildNextjsLink(ElpianNode node, List<Widget> children) {
     final href = node.props['href']?.toString();
     final replace = node.props['replace'] == true;
     final label = node.props['text']?.toString() ?? href ?? 'Navigate';
+    final style = node.style;
+    final enabled = href != null;
 
+    final ariaLabel = node.props['ariaLabel']?.toString();
+
+    // The element is "button-like" when it carries any container styling
+    // (background, gradient, border or padding); otherwise it is a plain
+    // inline text link and should read as one (accent colour + pointer).
+    final isButtonLike = style != null &&
+        (style.backgroundColor != null ||
+            style.gradient != null ||
+            style.border != null ||
+            style.borderColor != null ||
+            style.padding != null);
+
+    Widget content;
     if (children.isNotEmpty) {
-      return TextButton(
-        onPressed: href == null ? null : () => _onNavigate?.call(href, replace: replace),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: children,
+      content = children.length == 1
+          ? children.first
+          : Row(mainAxisSize: MainAxisSize.min, children: children);
+    } else {
+      content = Text(
+        label,
+        textAlign: style?.textAlign ?? (isButtonLike ? TextAlign.center : TextAlign.start),
+        style: TextStyle(
+          // Default to a gold accent so an unstyled link still reads as a link.
+          color: style?.color ?? const Color(0xFFD6B36A),
+          fontSize: style?.fontSize,
+          fontWeight: style?.fontWeight ?? (isButtonLike ? FontWeight.w700 : null),
+          letterSpacing: style?.letterSpacing,
         ),
       );
     }
 
-    return TextButton(
-      onPressed: href == null ? null : () => _onNavigate?.call(href, replace: replace),
-      child: Text(label),
+    // Apply the resolved CSS (gradient/background/border/radius/padding/size/…)
+    // through the same helper every styled element uses.
+    Widget styled = CSSProperties.applyStyle(content, style);
+
+    Widget tappable = GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      // `href == null` (not the `enabled` alias) so Dart promotes `href` to a
+      // non-null `String` inside the navigate closure.
+      onTap: href == null ? null : () => _onNavigate?.call(href, replace: replace),
+      child: styled,
     );
+
+    tappable = MouseRegion(
+      cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      child: tappable,
+    );
+
+    if (ariaLabel != null && ariaLabel.isNotEmpty) {
+      tappable = Semantics(button: true, label: ariaLabel, child: tappable);
+    }
+
+    return tappable;
   }
 
   Widget renderEnvelope(Map<String, dynamic> envelopeJson) {
@@ -290,37 +340,91 @@ class _NextjsFormWidgetState extends State<_NextjsFormWidget> {
 
   @override
   Widget build(BuildContext context) {
+    // Nautical/gold theme tokens (shared with the JSON stylesheet) so inputs
+    // sit on the navy glass panels instead of rendering as bright default
+    // Material fields.
+    const fieldFill = Color(0xFF0A1626);
+    const fieldBorder = Color(0xFF1C3450);
+    const fieldBorderFocus = Color(0xFFD6B36A);
+    const textColor = Color(0xFFF7EEDC);
+    const hintColor = Color(0xFF6E8394);
+    const gold = Color(0xFFD6B36A);
+
+    OutlineInputBorder borderOf(Color c, [double w = 1]) => OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: c, width: w),
+        );
+
     final children = <Widget>[];
     for (final f in widget.fields) {
       final name = f['name']?.toString() ?? '';
       if (name.isEmpty) continue;
-      final isPassword = (f['type']?.toString() ?? '') == 'password';
+      final type = f['type']?.toString() ?? '';
+      final isPassword = type == 'password';
+      final isMultiline = type == 'textarea';
+      final label = f['label']?.toString();
       children.add(Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: TextField(
-          controller: _controllers[name],
-          obscureText: isPassword,
-          onSubmitted: (_) => _busy ? null : _submit(),
-          decoration: InputDecoration(
-            hintText: f['placeholder']?.toString() ?? name,
-            border: const OutlineInputBorder(),
-            isDense: true,
-          ),
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (label != null && label.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(label,
+                    style: const TextStyle(
+                        color: hintColor, fontSize: 11, fontWeight: FontWeight.w600)),
+              ),
+            TextField(
+              controller: _controllers[name],
+              obscureText: isPassword,
+              maxLines: isMultiline ? 4 : 1,
+              minLines: isMultiline ? 3 : 1,
+              style: const TextStyle(color: textColor, fontSize: 14),
+              cursorColor: gold,
+              onSubmitted: isMultiline ? null : (_) => _busy ? null : _submit(),
+              decoration: InputDecoration(
+                hintText: f['placeholder']?.toString() ?? name,
+                hintStyle: const TextStyle(color: hintColor, fontSize: 14),
+                filled: true,
+                fillColor: fieldFill,
+                isDense: true,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                enabledBorder: borderOf(fieldBorder),
+                focusedBorder: borderOf(fieldBorderFocus, 1.5),
+                border: borderOf(fieldBorder),
+              ),
+            ),
+          ],
         ),
       ));
     }
     if (_error != null) {
       children.add(Padding(
         padding: const EdgeInsets.only(bottom: 8),
-        child: Text(_error!, style: const TextStyle(color: Color(0xFFE53935), fontSize: 13)),
+        child: Text(_error!, style: const TextStyle(color: Color(0xFFC0492F), fontSize: 13)),
       ));
     }
     children.add(SizedBox(
       width: double.infinity,
       child: ElevatedButton(
         onPressed: _busy ? null : _submit,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: gold,
+          foregroundColor: const Color(0xFF06122A),
+          disabledBackgroundColor: gold.withValues(alpha: 0.5),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          textStyle: const TextStyle(fontWeight: FontWeight.w700, letterSpacing: 0.3),
+        ),
         child: _busy
-            ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
+            ? const SizedBox(
+                height: 16,
+                width: 16,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: Color(0xFF06122A)))
             : Text(widget.submitLabel),
       ),
     ));
