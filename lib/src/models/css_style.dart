@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 enum Overflow {
   visible,
+  hidden,
   clip,
+  scroll,
 }
 
 class CSSStyle {

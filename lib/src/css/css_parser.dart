@@ -76,6 +76,8 @@ class CSSParser {
       alignItems: styleMap['alignItems'] ?? styleMap['align-items'] as String?,
       flex: parseInt(styleMap['flex']),
       overflow: _parseOverflow(styleMap['overflow']),
+      overflowX: _parseOverflow(styleMap['overflowX'] ?? styleMap['overflow-x']),
+      overflowY: _parseOverflow(styleMap['overflowY'] ?? styleMap['overflow-y']),
       backgroundColor: parseColor(
           styleMap['backgroundColor'] ?? styleMap['background-color']),
       backgroundImage: styleMap['backgroundImage'] ??
@@ -557,7 +559,12 @@ class CSSParser {
 
   static const _overflowMap = <String, Overflow>{
     'visible': Overflow.visible,
+    'hidden': Overflow.hidden,
     'clip': Overflow.clip,
+    // `auto`/`scroll` both produce a scrollable region (CSS distinguishes them
+    // only by when the scrollbar appears, which Flutter handles automatically).
+    'auto': Overflow.scroll,
+    'scroll': Overflow.scroll,
   };
 
   static Overflow? _parseOverflow(dynamic value) {

@@ -4,8 +4,14 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
+import '../core/event_system.dart';
 import '../vm/elpian_vm.dart';
+import '../vm/host_api_catalog.dart';
+import '../vm/host_handler.dart';
 import '../vm/quickjs_vm.dart';
+import '../vm/scope_patch.dart';
+import '../vm/timer_host_api.dart';
+import '../vm/vm_runtime_client.dart';
 import 'nextjs_auth.dart';
 import 'nextjs_bridge.dart';
 
@@ -94,6 +100,18 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
   Map<String, dynamic>? _scriptRenderedComponent;
   final Map<String, Map<String, dynamic>> _clientComponentCache =
       <String, Map<String, dynamic>>{};
+
+  /// The component tree from the most recent server payload. Scoped client
+  /// renders patch *this* tree so a local mutation (a HUD tick, a tab switch)
+  /// only rebuilds its `Scope` subtree instead of the whole screen.
+  Map<String, dynamic>? _lastEnvelopeComponent;
+
+  /// Long-lived VM for the page-level client script. Unlike one-shot client
+  /// component resolution, this stays alive for the duration of the route so
+  /// its timers keep ticking and its event handlers keep firing — the engine of
+  /// scoped, in-place updates.
+  VmRuntimeClient? _pageVm;
+  VmTimerHostApi? _pageTimerApi;
 
   @override
   void initState() {
@@ -669,6 +687,7 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
   void _navigateTo(String route, {bool replace = false}) {
     if (_currentRoute == route && !replace) return;
 
+    unawaited(_disposePageVm());
     setState(() {
       if (!replace) {
         _history.add(_currentRoute);
@@ -676,26 +695,37 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
       _currentRoute = route;
       _payloadFuture = _loadPayload();
       _scriptRenderedComponent = null;
+      _lastEnvelopeComponent = null;
       _lastScriptSignature = null;
     });
   }
 
   void _navigateBack() {
     if (_history.isEmpty) return;
+    unawaited(_disposePageVm());
     setState(() {
       _currentRoute = _history.removeLast();
       _payloadFuture = _loadPayload();
       _scriptRenderedComponent = null;
+      _lastEnvelopeComponent = null;
       _lastScriptSignature = null;
     });
   }
 
   void _refresh() {
+    unawaited(_disposePageVm());
     setState(() {
       _payloadFuture = _loadPayload();
       _scriptRenderedComponent = null;
+      _lastEnvelopeComponent = null;
       _lastScriptSignature = null;
     });
+  }
+
+  @override
+  void dispose() {
+    unawaited(_disposePageVm());
+    super.dispose();
   }
 
   Future<void> _ensureElpianVmInitialized() async {
@@ -726,6 +756,159 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
     });
   }
 
+  /// Apply a `render(view, scopeKey)` call from a live client script.
+  ///
+  /// With a `scopeKey`, only the matching `Scope` subtree of the live tree is
+  /// substituted (and its enclosing scopes' tokens bumped) so a local mutation —
+  /// a HUD tick, a tab switch — rebuilds just that region instead of the whole
+  /// screen. Without one, it replaces the rendered component (legacy behaviour).
+  void _applyClientRender(Map<String, dynamic> view, String? scopeKey) {
+    if (!mounted) return;
+    final key = ScopePatch.normalizeKey(scopeKey);
+    if (key == null) {
+      setState(() => _scriptRenderedComponent = view);
+      return;
+    }
+    // Patch the live tree — the script's own prior render if any, else the
+    // current server-rendered component — in place.
+    final tree = _scriptRenderedComponent ?? _lastEnvelopeComponent;
+    final next = ScopePatch.apply(tree, view, key);
+    setState(() => _scriptRenderedComponent = next);
+  }
+
+  /// Tear down the persistent page-level VM and its timers (on route change or
+  /// widget disposal) so pollers and intervals don't outlive their screen.
+  Future<void> _disposePageVm() async {
+    _pageTimerApi?.dispose();
+    _pageTimerApi = null;
+    final vm = _pageVm;
+    _pageVm = null;
+    if (vm != null) {
+      try {
+        await vm.dispose();
+      } catch (_) {
+        // best-effort teardown
+      }
+    }
+  }
+
+  static const String _hostOk = '{"type":"i16","data":{"value":1}}';
+
+  /// `askHost('fetch', { route, onData })` — fetch a fragment route and hand the
+  /// decoded envelope back to the VM function named by `onData`. Async by
+  /// design: the call returns immediately and the result arrives via callback,
+  /// so a poller never blocks the VM waiting on the network.
+  Future<String> _hostFetch(String payload) async {
+    try {
+      final args = _firstArgMap(payload);
+      final route = args['route']?.toString();
+      final onData = args['onData']?.toString();
+      if (route == null || route.isEmpty) return _hostOk;
+      final envelope = await _defaultHttpLoader(route, headers: widget.headers);
+      final vm = _pageVm;
+      if (onData != null && onData.isNotEmpty && vm != null) {
+        await vm.callFunctionWithInput(onData, jsonEncode(envelope));
+      }
+    } catch (e) {
+      debugPrint('NextjsServerWidget[page fetch]: $e');
+    }
+    return _hostOk;
+  }
+
+  /// `askHost('submit', { route, body, onResult })` — POST an action and hand
+  /// the response envelope back to `onResult`. Navigation directives are applied
+  /// automatically (matching `NextjsForm`).
+  Future<String> _hostSubmit(String payload) async {
+    try {
+      final args = _firstArgMap(payload);
+      final route = args['route']?.toString();
+      final onResult = args['onResult']?.toString();
+      if (route == null || route.isEmpty) return _hostOk;
+      final env = await _postJson(route, args['body']);
+      _captureAuth(env);
+      final nav = env['navigation'];
+      if (nav is Map && nav.isNotEmpty) {
+        _applyServerNavigation(Map<String, dynamic>.from(nav));
+      }
+      final vm = _pageVm;
+      if (onResult != null && onResult.isNotEmpty && vm != null) {
+        await vm.callFunctionWithInput(onResult, jsonEncode(env));
+      }
+    } catch (e) {
+      debugPrint('NextjsServerWidget[page submit]: $e');
+    }
+    return _hostOk;
+  }
+
+  /// `askHost('navigate', navigation)` — apply a server-style navigation
+  /// directive (`redirectTo` / `refresh` / `back`) from a client script.
+  String _hostNavigate(String payload) {
+    try {
+      final nav = _firstArgMap(payload);
+      if (nav.isNotEmpty) _applyServerNavigation(nav);
+    } catch (e) {
+      debugPrint('NextjsServerWidget[page navigate]: $e');
+    }
+    return _hostOk;
+  }
+
+  /// Route engine UI events (clicks, pointer moves, …) on the rendered tree to
+  /// the live page VM's named handlers. A node opts in by declaring
+  /// `events: { 'click': 'handlerFnName' }`; the script registers that function.
+  /// This is what lets a tap re-render only its `Scope` instead of re-fetching
+  /// the whole route.
+  void _wirePageEventRouting() {
+    _bridge.engine.setGlobalEventHandler((event) {
+      unawaited(_routePageEvent(event));
+    });
+  }
+
+  Future<void> _routePageEvent(ElpianEvent event) async {
+    final vm = _pageVm;
+    if (vm == null) return;
+    final nodeId = event.currentTarget?.toString();
+    if (nodeId == null || nodeId.isEmpty) return;
+    final node = _bridge.engine.eventDispatcher.getNode(nodeId);
+    final handler = node?.events?[event.type];
+    if (handler is! String || handler.isEmpty) return;
+
+    // QuickJS handlers receive a plain-JSON event (unlike the Rust VM's typed
+    // payloads), so a loose object is enough; fall back to a no-arg call for
+    // handlers declared without parameters.
+    final input = jsonEncode(<String, dynamic>{'type': event.type});
+    try {
+      await vm.callFunctionWithInput(handler, input);
+    } catch (_) {
+      try {
+        await vm.callFunction(handler);
+      } catch (e) {
+        debugPrint('NextjsServerWidget: event handler "$handler" failed: $e');
+      }
+    }
+  }
+
+  /// Decode the first host-call argument into a JSON map (host calls wrap their
+  /// args in an array; the bridge may also pass a bare object or JSON string).
+  Map<String, dynamic> _firstArgMap(String payload) {
+    dynamic parsed;
+    try {
+      parsed = jsonDecode(payload);
+    } catch (_) {
+      return const {};
+    }
+    if (parsed is List && parsed.isNotEmpty) parsed = parsed.first;
+    if (parsed is String) {
+      try {
+        parsed = jsonDecode(parsed);
+      } catch (_) {
+        return const {};
+      }
+    }
+    if (parsed is Map<String, dynamic>) return parsed;
+    if (parsed is Map) return Map<String, dynamic>.from(parsed);
+    return const {};
+  }
+
   Future<Map<String, dynamic>?> _runJsComponentCode(
     String jsCode, {
     required String entryFunction,
@@ -752,6 +935,79 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
     }
   }
 
+  /// Run the page-level client script on a *persistent* QuickJS VM.
+  ///
+  /// Unlike one-shot `clientComp` resolution, this VM lives for the duration of
+  /// the route (until [_navigateTo]/[_refresh]/dispose tears it down) so its
+  /// `setInterval` timers keep ticking and its `render(view, scopeKey)` calls
+  /// keep arriving. Combined with `Scope` nodes, that yields cheap, isolated
+  /// in-place updates (e.g. a polled HUD) without re-rendering the whole screen.
+  ///
+  /// Host surface: the standard core/timer/DOM APIs (via [HostHandler]) plus
+  /// `fetch`/`submit`/`navigate` bridges back into this widget.
+  Future<void> _runPageScript(
+    String jsCode, {
+    required String entryFunction,
+  }) async {
+    await _disposePageVm();
+
+    final machineId = 'nextjs-page-${DateTime.now().microsecondsSinceEpoch}';
+    final vm = await QuickJsVm.fromCode(machineId, jsCode);
+    _pageVm = vm;
+
+    final hostHandler = HostHandler(
+      onRender: (viewJson, scopeKey) => _applyClientRender(viewJson, scopeKey),
+      onPrintln: (m) => debugPrint('NextjsServerWidget[page]: $m'),
+    );
+
+    _pageTimerApi = VmTimerHostApi(
+      invoke: (funcName, inputJson) async {
+        if (_pageVm == null) return;
+        if (inputJson == null) {
+          await vm.callFunction(funcName);
+        } else {
+          await vm.callFunctionWithInput(funcName, inputJson);
+        }
+      },
+      onError: (m) => debugPrint('NextjsServerWidget[page timer]: $m'),
+    );
+
+    final handlers = <String, HostCallHandler>{
+      for (final apiName in VmHostApiCatalog.allHostApiNames)
+        apiName: (name, payload) => hostHandler.handleHostCall(name, payload),
+      for (final apiName in VmHostApiCatalog.timerApiNames)
+        apiName: (name, payload) => _pageTimerApi!.handle(name, payload),
+      'fetch': (name, payload) => _hostFetch(payload),
+      'submit': (name, payload) => _hostSubmit(payload),
+      'navigate': (name, payload) => _hostNavigate(payload),
+    };
+    vm.registerHostHandlers(handlers);
+    _wirePageEventRouting();
+
+    await vm.run();
+    if (entryFunction.isNotEmpty) {
+      final initial = await vm.callFunction(entryFunction);
+      // The entry's return value seeds the initial render only when the script
+      // returns a real component tree (a full-screen renderer). A side-effect
+      // script — e.g. a poller that patches a scope via `askHost('render')` —
+      // returns `null`, leaving the server-rendered screen untouched.
+      final seeded = _decodeRenderPayload(initial);
+      if (seeded != null &&
+          seeded['type'] != null &&
+          _scriptRenderedComponent == null) {
+        _setScriptRenderedComponent(seeded);
+      }
+    }
+
+    widget.onScriptExecuted?.call(
+      NextjsScriptExecutionResult(
+        route: _currentRoute,
+        kind: 'js',
+        output: '',
+      ),
+    );
+  }
+
   void _triggerScriptExecution(NextjsRenderEnvelope envelope) {
     final jsCode = envelope.jsCode;
     final vmAst = envelope.vmAstJson;
@@ -770,18 +1026,9 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
   Future<void> _executeEnvelopeScripts(NextjsRenderEnvelope envelope) async {
     try {
       if (envelope.jsCode != null && envelope.jsCode!.isNotEmpty) {
-        final rendered = await _runJsComponentCode(
+        await _runPageScript(
           envelope.jsCode!,
           entryFunction: envelope.jsEntryFunction ?? 'MainComponent',
-        );
-        _setScriptRenderedComponent(rendered);
-
-        widget.onScriptExecuted?.call(
-          NextjsScriptExecutionResult(
-            route: _currentRoute,
-            kind: 'js',
-            output: jsonEncode(rendered ?? const <String, dynamic>{}),
-          ),
         );
       }
 
@@ -870,6 +1117,9 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
         }
 
         final envelope = NextjsRenderEnvelope.fromJson(payload);
+        // Remember the server tree so a scoped client render has a base to
+        // patch even before the script's first full render.
+        _lastEnvelopeComponent = envelope.component;
         _triggerScriptExecution(envelope);
         _applyServerNavigation(envelope.navigation);
 
