@@ -58,6 +58,29 @@ class CSSProperties {
       );
     }
 
+    // Apply overflow (clip / scroll). Kept *inside* the size constraints below
+    // so the ConstrainedBox/SizedBox supplies the bound the scroll view needs.
+    //
+    // A scroll view fed an unbounded constraint on its scroll axis throws in
+    // Flutter, so we only make an axis scrollable when that axis is actually
+    // bounded by an explicit or max size on the same node (the common case:
+    // a panel/window with `maxHeight` + `overflowY: auto`). Otherwise `auto`
+    // degrades to a clip, which is always safe.
+    final overflowX = style.overflowX ?? style.overflow;
+    final overflowY = style.overflowY ?? style.overflow;
+    final boundedWidth = style.width != null || style.maxWidth != null;
+    final boundedHeight = style.height != null || style.maxHeight != null;
+    final scrollY = overflowY == Overflow.scroll && boundedHeight;
+    final scrollX = overflowX == Overflow.scroll && boundedWidth;
+    if (scrollY || scrollX) {
+      result = SingleChildScrollView(
+        scrollDirection: scrollY ? Axis.vertical : Axis.horizontal,
+        child: result,
+      );
+    } else if (_clips(overflowX) || _clips(overflowY)) {
+      result = ClipRect(child: result);
+    }
+
     // Apply size constraints (before flex so Flexible is outermost)
     if (style.width != null || style.height != null ||
         style.minWidth != null || style.maxWidth != null ||
@@ -157,6 +180,10 @@ class CSSProperties {
 
     return result;
   }
+
+  /// Whether an overflow value should clip its content to the box.
+  static bool _clips(Overflow? overflow) =>
+      overflow == Overflow.hidden || overflow == Overflow.clip;
 
   static bool _needsContainer(CSSStyle style) {
     return style.padding != null ||
