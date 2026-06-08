@@ -47,6 +47,15 @@ void main() {
         addTearDown(tester.view.reset);
 
         final bridge = NextjsBridge()..onNavigate = (_, {bool replace = false}) {};
+        // 3D scenes are kept with their real type so the engine treats their
+        // screens as full-bleed stages; render them as a cheap placeholder that
+        // fills the slot (no async glTF/Bevy load in a layout audit).
+        for (final t in ['GameScene', 'BevyScene', 'scene3d', 'mesh3d', 'model3d']) {
+          bridge.engine.registerWidget(
+            t,
+            (node, children) => const ColoredBox(color: Color(0xFF0C2336)),
+          );
+        }
         final key = GlobalKey();
         await tester.pumpWidget(
           MaterialApp(

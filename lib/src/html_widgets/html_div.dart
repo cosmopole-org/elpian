@@ -393,16 +393,18 @@ class HtmlDiv {
   /// overwhelming common case) the container is returned untouched at no cost.
   static Widget _flexSafe(Widget flexBox,
       {required bool isRow, required bool hasFlex}) {
-    if (!hasFlex) return flexBox;
+    // Only rows are guarded: an unbounded WIDTH is the common nesting case (a
+    // flex row dropped into another flex container) and [IntrinsicWidth] is
+    // robust for the small pill/label rows it wraps. Columns are deliberately
+    // left alone — [IntrinsicHeight] throws on the many descendants that don't
+    // expose an intrinsic height (scroll views, 3D scenes), and a column's
+    // unbounded-height case is instead absorbed by the document scroll, which
+    // sizes vertical flex to content rather than forcing it to grow.
+    if (!hasFlex || !isRow) return flexBox;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final unbounded = isRow
-            ? !constraints.maxWidth.isFinite
-            : !constraints.maxHeight.isFinite;
-        if (!unbounded) return flexBox;
-        return isRow
-            ? IntrinsicWidth(child: flexBox)
-            : IntrinsicHeight(child: flexBox);
+        if (constraints.maxWidth.isFinite) return flexBox;
+        return IntrinsicWidth(child: flexBox);
       },
     );
   }

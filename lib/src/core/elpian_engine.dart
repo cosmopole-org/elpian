@@ -375,7 +375,31 @@ class ElpianEngine {
     );
     if (raw['position']?.toString() == 'fixed') return true;
     final h = raw['height']?.toString().trim();
-    return h != null && (h.contains('vh') || h == '100%');
+    if (h != null && (h.contains('vh') || h == '100%')) return true;
+    // A screen that embeds a 3D scene is a full-bleed stage, never a scrolling
+    // document: the scene fills the viewport and a HUD floats over it. Scenes
+    // also can't be measured for intrinsic height, so document-scrolling one
+    // would break its `flex`/`100%` fill. Detect one anywhere in the subtree.
+    return _containsScene(root, 0);
+  }
+
+  static const _sceneTypes = {
+    'GameScene', 'BevyScene', 'scene3d', 'Scene3D', 'mesh3d', 'model3d',
+  };
+
+  /// Whether [node]'s subtree contains a 3D scene node (bounded-depth walk).
+  bool _containsScene(Map<String, dynamic> node, int depth) {
+    if (depth > 6) return false;
+    if (_sceneTypes.contains(node['type'])) return true;
+    final children = node['children'];
+    if (children is List) {
+      for (final c in children) {
+        if (c is Map<String, dynamic> && _containsScene(c, depth + 1)) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   void registerWidget(String type, Widget Function(ElpianNode node, List<Widget> children) builder) {

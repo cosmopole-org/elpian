@@ -11,11 +11,25 @@ class HtmlSpan {
       textStyle = CSSProperties.createTextStyle(node.style);
     }
 
+    // Honour `text-overflow`/`white-space` so a label can truncate with an
+    // ellipsis instead of overflowing its (e.g. flex-shrunk) box. `nowrap` pins
+    // it to one line — the canonical "ellipsis a title that's too narrow" idiom;
+    // these only engage when the author opts in, so default wrapping is intact.
+    final overflow = node.style?.textOverflow;
+    final maxLines = node.style?.whiteSpace == 'nowrap' ? 1 : null;
+    Text textWidget(String value) => Text(
+          value,
+          style: textStyle,
+          overflow: overflow,
+          maxLines: maxLines,
+          softWrap: maxLines == 1 ? false : null,
+        );
+
     Widget result;
     if (children.isNotEmpty) {
       final widgets = <Widget>[];
       if (text.isNotEmpty) {
-        widgets.add(Text(text, style: textStyle));
+        widgets.add(textWidget(text));
       }
       widgets.addAll(children);
       result = Wrap(
@@ -23,7 +37,7 @@ class HtmlSpan {
         children: widgets,
       );
     } else {
-      result = Text(text, style: textStyle);
+      result = textWidget(text);
     }
 
     if (node.style != null) {
