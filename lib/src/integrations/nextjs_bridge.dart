@@ -253,9 +253,10 @@ class NextjsBridge {
     // CSS `flex:<n>` grows to fill its share, so use a TIGHT fit (Expanded) —
     // this is what makes equal-width segmented controls (the Sign In/Sign Up
     // tabs, the leaderboard toggles) actually fill their half and centre.
-    if (style?.flex != null) {
+    final linkFlex = style?.flex ?? style?.flexGrow;
+    if (linkFlex != null) {
       tappable = Flexible(
-        flex: style!.flex!,
+        flex: linkFlex,
         fit: FlexFit.tight,
         child: SizedBox(width: double.infinity, child: tappable),
       );

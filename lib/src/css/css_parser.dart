@@ -57,6 +57,7 @@ class CSSParser {
       height: parseDimension(styleMap['height'], isWidth: false),
       widthFactor: _percentFactor(styleMap['width']),
       heightFactor: _percentFactor(styleMap['height']),
+      aspectRatio: parseAspectRatio(styleMap['aspectRatio'] ?? styleMap['aspect-ratio']),
       minWidth: parseDimension(styleMap['minWidth'] ?? styleMap['min-width'], isWidth: true),
       maxWidth: parseDimension(styleMap['maxWidth'] ?? styleMap['max-width'], isWidth: true),
       minHeight: parseDimension(styleMap['minHeight'] ?? styleMap['min-height'], isWidth: false),
@@ -77,6 +78,9 @@ class CSSParser {
           styleMap['justifyContent'] ?? styleMap['justify-content'] as String?,
       alignItems: styleMap['alignItems'] ?? styleMap['align-items'] as String?,
       flex: parseInt(styleMap['flex']),
+      flexGrow: parseInt(styleMap['flexGrow'] ?? styleMap['flex-grow']),
+      flexShrink: parseInt(styleMap['flexShrink'] ?? styleMap['flex-shrink']),
+      flexBasis: (styleMap['flexBasis'] ?? styleMap['flex-basis'])?.toString(),
       overflow: _parseOverflow(styleMap['overflow']),
       overflowX: _parseOverflow(styleMap['overflowX'] ?? styleMap['overflow-x']),
       overflowY: _parseOverflow(styleMap['overflowY'] ?? styleMap['overflow-y']),
@@ -283,18 +287,112 @@ class CSSParser {
 
     final raw = value.trim();
     if (raw.isEmpty) return null;
+    if (raw.contains('calc(')) return _evalCalc(raw, isWidth: isWidth);
+    return _resolveLength(raw, isWidth: isWidth);
+  }
 
-    final numStr = raw.replaceAll(RegExp(r'[^0-9.\-]'), '');
+  /// Resolve a SINGLE CSS length token to logical pixels: plain numbers, `px`,
+  /// the viewport units (`vw`/`vh`/`vmin`/`vmax`), `%` (against the viewport
+  /// axis — standalone `%` also yields a parent-relative factor elsewhere), and
+  /// `env(safe-area-inset-*)`. Returns null when unparseable.
+  static double? _resolveLength(String raw, {required bool isWidth}) {
+    final t = raw.trim();
+    if (t.isEmpty) return null;
+    if (t.startsWith('env(')) return _resolveEnv(t, isWidth: isWidth);
+    // `*` / `/` (and any leftover parens) are unsupported in a length term —
+    // reject rather than let the digit-strip below fabricate a number.
+    if (t.contains('*') || t.contains('/') || t.contains('(')) return null;
+
+    final numStr = t.replaceAll(RegExp(r'[^0-9.\-]'), '');
     final n = double.tryParse(numStr);
     if (n == null) return null;
 
     final size = _viewportSize();
-    if (raw.contains('vmin')) return n / 100.0 * math.min(size.width, size.height);
-    if (raw.contains('vmax')) return n / 100.0 * math.max(size.width, size.height);
-    if (raw.contains('vw')) return n / 100.0 * size.width;
-    if (raw.contains('vh')) return n / 100.0 * size.height;
-    if (raw.contains('%')) return n / 100.0 * (isWidth ? size.width : size.height);
+    if (t.contains('vmin')) return n / 100.0 * math.min(size.width, size.height);
+    if (t.contains('vmax')) return n / 100.0 * math.max(size.width, size.height);
+    if (t.contains('vw')) return n / 100.0 * size.width;
+    if (t.contains('vh')) return n / 100.0 * size.height;
+    if (t.contains('%')) return n / 100.0 * (isWidth ? size.width : size.height);
     return n;
+  }
+
+  /// Evaluate a `calc()` length, the canonical "screen size minus a fixed bar"
+  /// idiom (`calc(100vh - 92px)`, `calc(100% - env(safe-area-inset-bottom))`).
+  /// Supports top-level `+`/`-` between length terms per the CSS grammar (which
+  /// requires whitespace around those operators). `*`/`/` and nested `calc()`
+  /// are unsupported and yield null, so the property is dropped exactly as an
+  /// unparseable value was before — never a wrong number.
+  static double? _evalCalc(String raw, {required bool isWidth}) {
+    final m = RegExp(r'^calc\((.*)\)$', dotAll: true).firstMatch(raw.trim());
+    final body = m?.group(1)?.trim();
+    if (body == null || body.isEmpty) return null;
+
+    double sum = 0;
+    double sign = 1;
+    var start = 0;
+    var depth = 0;
+    // Split on top-level ` + ` / ` - ` (spaces required by CSS), respecting the
+    // parens of an inner `env(...)`.
+    for (var i = 0; i < body.length; i++) {
+      final c = body[i];
+      if (c == '(') {
+        depth++;
+      } else if (c == ')') {
+        depth--;
+      } else if (depth == 0 &&
+          (c == '+' || c == '-') &&
+          i > 0 &&
+          body[i - 1] == ' ' &&
+          i + 1 < body.length &&
+          body[i + 1] == ' ') {
+        final v = _resolveLength(body.substring(start, i).trim(), isWidth: isWidth);
+        if (v == null) return null;
+        sum += sign * v;
+        sign = c == '+' ? 1 : -1;
+        start = i + 1;
+      }
+    }
+    final last = _resolveLength(body.substring(start).trim(), isWidth: isWidth);
+    if (last == null) return null;
+    return sum + sign * last;
+  }
+
+  /// Resolve `env(safe-area-inset-top|right|bottom|left[, <fallback>])` against
+  /// the device's safe-area insets (notch / status bar / home indicator).
+  static double? _resolveEnv(String raw, {required bool isWidth}) {
+    final m = RegExp(r'^env\(\s*([a-z-]+)\s*(?:,\s*([^)]+))?\)$').firstMatch(raw.trim());
+    if (m == null) return null;
+    final insets = _safeAreaInsets();
+    switch (m.group(1)) {
+      case 'safe-area-inset-top':
+        return insets.top;
+      case 'safe-area-inset-right':
+        return insets.right;
+      case 'safe-area-inset-bottom':
+        return insets.bottom;
+      case 'safe-area-inset-left':
+        return insets.left;
+    }
+    final fallback = m.group(2);
+    return fallback != null ? (_resolveLength(fallback.trim(), isWidth: isWidth) ?? 0) : 0;
+  }
+
+  /// Parse a CSS `aspect-ratio` (`"16/9"`, `"1.5"`, `"4 / 3"`) into a
+  /// width÷height ratio. Returns null for absent/`auto`/zero values.
+  static double? parseAspectRatio(dynamic value) {
+    if (value is num) return value > 0 ? value.toDouble() : null;
+    if (value is! String) return null;
+    final raw = value.trim().toLowerCase();
+    if (raw.isEmpty || raw == 'auto') return null;
+    final parts = raw.split('/');
+    if (parts.length == 2) {
+      final w = double.tryParse(parts[0].trim());
+      final h = double.tryParse(parts[1].trim());
+      if (w != null && h != null && h != 0) return w / h;
+      return null;
+    }
+    final v = double.tryParse(raw);
+    return (v != null && v > 0) ? v : null;
   }
 
   /// Dimension properties whose values flow through [parseDimension] and may use
@@ -318,7 +416,9 @@ class CSSParser {
               value.contains('vw') ||
               value.contains('vh') ||
               value.contains('vmin') ||
-              value.contains('vmax'))) {
+              value.contains('vmax') ||
+              value.contains('calc(') ||
+              value.contains('env('))) {
         return true;
       }
     }
@@ -363,6 +463,28 @@ class CSSParser {
       // No binding (e.g. pure unit test) — fall through to the default.
     }
     return const Size(390, 844);
+  }
+
+  /// Live device safe-area insets (notch / status bar / home indicator) in
+  /// logical pixels, used to resolve `env(safe-area-inset-*)`. Zero when no
+  /// render view is attached (unit tests / early frames).
+  static EdgeInsets _safeAreaInsets() {
+    try {
+      final view = WidgetsBinding.instance.platformDispatcher.implicitView;
+      if (view != null && view.devicePixelRatio > 0) {
+        final dpr = view.devicePixelRatio;
+        final p = view.padding;
+        return EdgeInsets.fromLTRB(
+          p.left / dpr,
+          p.top / dpr,
+          p.right / dpr,
+          p.bottom / dpr,
+        );
+      }
+    } catch (_) {
+      // No binding (pure unit test) — fall through to zero insets.
+    }
+    return EdgeInsets.zero;
   }
 
   static int? parseInt(dynamic value) {

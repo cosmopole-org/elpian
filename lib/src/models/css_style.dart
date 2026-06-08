@@ -57,6 +57,10 @@ class CSSStyle {
   final int? flexGrow;
   final int? flexShrink;
   final String? flexBasis;
+  // CSS `aspect-ratio` as a width/height ratio (e.g. `16/9` → 1.777…). Lets a
+  // box derive one axis from the other so media (3D scenes, images) keep their
+  // shape across screen sizes instead of squashing.
+  final double? aspectRatio;
   final Overflow? overflow;
   final Overflow? overflowX;
   final Overflow? overflowY;
@@ -295,6 +299,7 @@ class CSSStyle {
     this.flexGrow,
     this.flexShrink,
     this.flexBasis,
+    this.aspectRatio,
     this.overflow,
     this.overflowX,
     this.overflowY,

@@ -234,6 +234,8 @@ class MediaQuery {
   });
   
   static final _dimensionPattern = RegExp(r'(min|max)-(width|height):\s*(\d+)');
+  static final _orientationPattern =
+      RegExp(r'orientation:\s*(portrait|landscape)');
 
   bool matches(double width, double height) {
     for (final match in _dimensionPattern.allMatches(query)) {
@@ -243,6 +245,12 @@ class MediaQuery {
       final actual = isWidth ? width : height;
       if (isMin && actual < threshold) return false;
       if (!isMin && actual > threshold) return false;
+    }
+    // CSS `(orientation: portrait|landscape)` — landscape is width ≥ height.
+    final om = _orientationPattern.firstMatch(query);
+    if (om != null) {
+      final wantsLandscape = om.group(1) == 'landscape';
+      if (wantsLandscape != (width >= height)) return false;
     }
     return true;
   }

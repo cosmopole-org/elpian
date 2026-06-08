@@ -118,6 +118,14 @@ class CSSProperties {
           : ClipRect(child: result);
     }
 
+    // Apply CSS `aspect-ratio`: derive the missing axis from the other so media
+    // keeps its shape across screen sizes. Skipped when both axes are already
+    // fixed (nothing to derive) — the [SizedBox] below then governs size.
+    if (style.aspectRatio != null &&
+        !(style.width != null && style.height != null)) {
+      result = AspectRatio(aspectRatio: style.aspectRatio!, child: result);
+    }
+
     // Apply size constraints (before flex so Flexible is outermost). Percentage
     // axes are sized later by a FractionallySizedBox (see below), so the fixed
     // pixel value is suppressed here for any axis that carries a factor.
@@ -229,9 +237,10 @@ class CSSProperties {
     // CSS `flex:<n>` grows to fill its share → TIGHT fit, so equal-width tiles
     // (resource pills), spacers (`flex:1` gaps in stat rows) and full-bleed
     // panes actually claim their space instead of collapsing to content width.
-    if (applyFlex && style.flex != null) {
+    final flexGrow = style.flex ?? style.flexGrow;
+    if (applyFlex && flexGrow != null) {
       result = Flexible(
-        flex: style.flex!,
+        flex: flexGrow,
         fit: FlexFit.tight,
         child: result,
       );
