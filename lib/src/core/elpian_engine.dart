@@ -245,37 +245,30 @@ class ElpianEngine {
       );
     }
 
-    // Get the raw cascade map from the stylesheet if element has ID or classes.
-    Map<String, dynamic>? stylesheetMap;
-    if (node.key != null || (node.props['className'] != null)) {
+    final inlineMap = node.props['style'] as Map<String, dynamic>?;
+
+    // Resolve the full cascade in ONE place when the element carries an id or
+    // classes, so `getComputedStyleMap` can apply CSS `!important` priority
+    // across global rules, matching `@media` rules AND the inline styles
+    // (important declarations must beat inline — e.g. the mobile `.game-window`
+    // full-screen override beats the window's inline drag offset). Merging the
+    // raw maps and parsing once is also lossless (the old CSSStyle round-trip
+    // dropped most fields) and cheap (single memoized parse).
+    CSSStyle? mergedStyle;
+    if (node.key != null || node.props['className'] != null) {
       final classes = node.props['className'] is String
           ? (node.props['className'] as String).split(' ')
           : (node.props['className'] as List?)?.cast<String>();
 
-      stylesheetMap = _stylesheetManager.getComputedStyleMap(
+      final computed = _stylesheetManager.getComputedStyleMap(
         tagName: node.type,
         id: node.key,
         classes: classes,
-        inlineStyles: null,
+        inlineStyles: inlineMap,
       );
-    }
-
-    final inlineMap = node.props['style'] as Map<String, dynamic>?;
-
-    // Merge stylesheet + inline (inline wins) into one map and parse ONCE.
-    // Previously this round-tripped CSSStyle -> Map (lossy: only ~40 of the
-    // ~180 fields survived) -> merge -> parse again. Merging the raw maps is
-    // both faster (single memoized parse) and lossless.
-    CSSStyle? mergedStyle;
-    if (stylesheetMap != null && stylesheetMap.isNotEmpty && inlineMap != null) {
-      mergedStyle = CSSParser.parse(<String, dynamic>{
-        ...stylesheetMap,
-        ...inlineMap,
-      });
+      if (computed.isNotEmpty) mergedStyle = CSSParser.parse(computed);
     } else if (inlineMap != null) {
       mergedStyle = CSSParser.parse(inlineMap);
-    } else if (stylesheetMap != null && stylesheetMap.isNotEmpty) {
-      mergedStyle = CSSParser.parse(stylesheetMap);
     }
 
     // Create node with merged style

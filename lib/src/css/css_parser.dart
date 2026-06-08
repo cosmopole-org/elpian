@@ -340,6 +340,13 @@ class CSSParser {
     return value;
   }
 
+  /// Whether a raw value carries a trailing CSS `!important` flag. Used by the
+  /// cascade to give such declarations priority over normal ones (notably over
+  /// inline styles, which otherwise always win).
+  static bool isImportant(dynamic value) =>
+      value is String &&
+      RegExp(r'!\s*important\s*$', caseSensitive: false).hasMatch(value);
+
   /// Live logical screen size, with a sane mobile-portrait fallback for early
   /// frames / unit tests where no render view is attached yet.
   static Size _viewportSize() {

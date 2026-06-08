@@ -289,8 +289,16 @@ class GlobalStylesheetManager {
   /// media-query rules (evaluated against the live viewport when no explicit
   /// screen size is given), then inline styles. The whole **raw** map is carried
   /// through — previously only six properties survived, which silently dropped
-  /// every class-based `width`/`position`/`border`/`boxShadow`/gradient/flex —
-  /// and a trailing `!important` flag is stripped so the value parses.
+  /// every class-based `width`/`position`/`border`/`boxShadow`/gradient/flex.
+  ///
+  /// CSS `!important` is honoured: an important declaration outranks every
+  /// normal one, *including inline styles*. This is what lets a responsive
+  /// `@media` rule (e.g. the mobile `.game-window` full-screen override) beat
+  /// the element's own inline `position/left/top` — without it the inline drag
+  /// offset always won and panels never went full-screen on phones. We do two
+  /// passes: normal declarations in cascade order, then important declarations
+  /// in cascade order on top. The `!important` flag is stripped from the value
+  /// either way so it still parses.
   Map<String, dynamic> getComputedStyleMap({
     required String tagName,
     String? id,
@@ -300,11 +308,19 @@ class GlobalStylesheetManager {
     double? screenHeight,
   }) {
     final mergedStyles = <String, dynamic>{};
+    final importantStyles = <String, dynamic>{};
 
     void mergeRaw(Map<String, dynamic>? raw) {
       if (raw == null) return;
       for (final entry in raw.entries) {
-        mergedStyles[entry.key] = CSSParser.stripImportant(entry.value);
+        final stripped = CSSParser.stripImportant(entry.value);
+        // Normal layer: applied in cascade order (later wins).
+        mergedStyles[entry.key] = stripped;
+        // Important layer: collected separately so it can override the normal
+        // layer (incl. inline) afterwards, also in cascade order (later wins).
+        if (CSSParser.isImportant(entry.value)) {
+          importantStyles[entry.key] = stripped;
+        }
       }
     }
 
@@ -334,10 +350,13 @@ class GlobalStylesheetManager {
       }
     }
 
-    // 3. Inline styles win.
+    // 3. Inline styles win — among *normal* declarations.
     if (inlineStyles != null) {
       mergeRaw(inlineStyles);
     }
+
+    // 4. `!important` declarations override the normal layer (incl. inline).
+    mergedStyles.addAll(importantStyles);
 
     return mergedStyles;
   }
