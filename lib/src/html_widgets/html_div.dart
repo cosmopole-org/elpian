@@ -47,6 +47,10 @@ class HtmlDiv {
     final flexWrap = node.style?.flexWrap;
     final gap = node.style?.gap ?? 0;
 
+    if (display == 'grid' || display == 'inline-grid') {
+      return _buildGrid(node, children);
+    }
+
     if (display == 'flex' || display == 'inline-flex') {
       final isRow = flexDirection == null ||
           flexDirection == 'row' ||
@@ -74,24 +78,187 @@ class HtmlDiv {
           children: _addGap(children, gap, Axis.horizontal),
         );
       }
-      return Column(
+      return _buildColumn(
+        node,
+        children,
+        gap: gap,
         mainAxisAlignment: CSSProperties.getMainAxisAlignment(
           node.style?.justifyContent,
         ),
-        crossAxisAlignment: CSSProperties.getCrossAxisAlignment(
-          node.style?.alignItems,
-        ),
         mainAxisSize: MainAxisSize.max,
-        children: _addGap(children, gap, Axis.vertical),
       );
     } else if (children.length == 1) {
       return children.first;
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return _buildColumn(
+      node,
+      children,
+      gap: gap,
+      mainAxisAlignment: MainAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
-      children: _addGap(children, gap, Axis.vertical),
     );
+  }
+
+  /// Build a column, reproducing CSS's default cross-axis `stretch` for flex
+  /// columns (and block-flow stacks) whose `align-items` is **unset**.
+  ///
+  /// Flutter's [Column] defaults the cross axis to `start`, which shrink-wraps
+  /// every child to its content width. In CSS a column's children fill the
+  /// cross axis by default, so row-children get the full parent width and their
+  /// `justify-content` / `space-between` actually has room to push items apart
+  /// (this is finding #4: collapsed space-between rows, badges sitting on text,
+  /// flex spacers and progress bars collapsing).
+  ///
+  /// We can't simply use [CrossAxisAlignment.stretch] because it throws on an
+  /// unbounded width **and** clobbers children that set an explicit `width`
+  /// (e.g. the auth card). Instead we give each width-less child an infinite
+  /// width — but only when:
+  ///   * the author left `align-items` unset (so `center`/`start` columns such
+  ///     as the auth screen are left exactly as-is), and
+  ///   * the laid-out widgets line up 1:1 with the source nodes (so we can read
+  ///     each child's declared width), and
+  ///   * the column actually has a bounded width (checked at layout time).
+  static Widget _buildColumn(
+    ElpianNode node,
+    List<Widget> children, {
+    required double gap,
+    required MainAxisAlignment mainAxisAlignment,
+    required MainAxisSize mainAxisSize,
+  }) {
+    final alignItems = node.style?.alignItems;
+
+    final canStretch =
+        alignItems == null && node.children.length == children.length;
+    if (!canStretch) {
+      return Column(
+        mainAxisAlignment: mainAxisAlignment,
+        crossAxisAlignment: CSSProperties.getCrossAxisAlignment(alignItems),
+        mainAxisSize: mainAxisSize,
+        children: _addGap(children, gap, Axis.vertical),
+      );
+    }
+
+    // Children that already declare an explicit width keep it; the rest fill.
+    final fill = [
+      for (final child in node.children) _childStyle(child)?.width == null,
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final bounded = constraints.maxWidth.isFinite;
+        final laidOut = <Widget>[
+          for (var i = 0; i < children.length; i++)
+            bounded && fill[i]
+                ? SizedBox(width: double.infinity, child: children[i])
+                : children[i],
+        ];
+        return Column(
+          mainAxisAlignment: mainAxisAlignment,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: mainAxisSize,
+          children: _addGap(laidOut, gap, Axis.vertical),
+        );
+      },
+    );
+  }
+
+  /// Resolve a child node's style, parsing an inline `style` map when the
+  /// node hasn't been parsed yet (mirrors [_buildPositioned]).
+  static CSSStyle? _childStyle(ElpianNode child) {
+    final raw = child.props['style'];
+    return raw is Map<String, dynamic> ? CSSParser.parse(raw) : child.style;
+  }
+
+  /// Lay out a `display:grid` container (finding #6). The engine has no real
+  /// CSS-grid solver, so DOM-order children were dropping into a vertical
+  /// stack. We support the two `grid-template-columns` shapes the builders
+  /// actually emit and map them to a responsive [Wrap]:
+  ///   * `repeat(auto-fill|auto-fit, minmax(<min>px, 1fr))` — pack as many
+  ///     equal columns of at least `<min>` as fit the available width, then
+  ///     stretch them to fill it (the `tileGrid` shape).
+  ///   * `repeat(<n>, 1fr)` / an explicit `1fr 1fr …` track list — a fixed
+  ///     column count.
+  /// Anything else falls back to an intrinsic-width [Wrap] (still better than a
+  /// forced single column). Column/row gaps come from `grid-gap`/`gap`.
+  static Widget _buildGrid(ElpianNode node, List<Widget> children) {
+    final style = node.style;
+    final baseGap = style?.gridGap ?? style?.gap ?? 0;
+    final colGap = style?.gridColumnGap ?? baseGap;
+    final rowGap = style?.gridRowGap ?? baseGap;
+    final spec = _parseGridColumns(style?.gridTemplateColumns);
+
+    if (spec == null) {
+      return Wrap(spacing: colGap, runSpacing: rowGap, children: children);
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxW = constraints.maxWidth;
+        if (!maxW.isFinite) {
+          // No width to divide — fall back to natural wrapping.
+          return Wrap(spacing: colGap, runSpacing: rowGap, children: children);
+        }
+
+        int cols;
+        if (spec.fixedCount != null) {
+          cols = spec.fixedCount!;
+        } else {
+          final min = spec.minItemWidth ?? maxW;
+          cols = ((maxW + colGap) / (min + colGap)).floor();
+        }
+        if (cols < 1) cols = 1;
+        if (cols > children.length && children.isNotEmpty) {
+          cols = children.length;
+        }
+
+        final itemWidth = (maxW - colGap * (cols - 1)) / cols;
+        return Wrap(
+          spacing: colGap,
+          runSpacing: rowGap,
+          children: [
+            for (final child in children)
+              SizedBox(
+                width: itemWidth > 0 ? itemWidth : 0,
+                child: child,
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Parse the subset of `grid-template-columns` syntax the builders use into
+  /// either a fixed column count or a minimum item width. Returns null when the
+  /// value is absent or unrecognised.
+  static _GridColumnSpec? _parseGridColumns(String? template) {
+    if (template == null) return null;
+    final value = template.trim().toLowerCase();
+    if (value.isEmpty) return null;
+
+    // repeat(auto-fill|auto-fit, minmax(<min>px, 1fr))
+    final autoMin = RegExp(
+      r'repeat\(\s*auto-(?:fill|fit)\s*,\s*minmax\(\s*([\d.]+)px\s*,',
+    ).firstMatch(value);
+    if (autoMin != null) {
+      final min = double.tryParse(autoMin.group(1)!);
+      if (min != null) return _GridColumnSpec(minItemWidth: min);
+    }
+
+    // repeat(<n>, …)
+    final repeatN = RegExp(r'repeat\(\s*(\d+)\s*,').firstMatch(value);
+    if (repeatN != null) {
+      final n = int.tryParse(repeatN.group(1)!);
+      if (n != null && n > 0) return _GridColumnSpec(fixedCount: n);
+    }
+
+    // An explicit track list ("1fr 1fr 1fr", "120px 1fr", …): count the tracks.
+    if (!value.contains('repeat') && !value.contains('minmax')) {
+      final tracks =
+          value.split(RegExp(r'\s+')).where((t) => t.isNotEmpty).length;
+      if (tracks > 0) return _GridColumnSpec(fixedCount: tracks);
+    }
+
+    return null;
   }
 
   /// Build a [Stack] when any direct child is `position: absolute|fixed`:
@@ -207,4 +374,12 @@ class HtmlDiv {
         return WrapCrossAlignment.start;
     }
   }
+}
+
+/// Resolved column intent for [HtmlDiv._buildGrid]: either a fixed number of
+/// columns or a minimum per-item width for responsive packing.
+class _GridColumnSpec {
+  const _GridColumnSpec({this.fixedCount, this.minItemWidth});
+  final int? fixedCount;
+  final double? minItemWidth;
 }
