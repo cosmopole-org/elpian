@@ -34,3 +34,28 @@ flutter:
     - assets/web_runtime/elpian_wasm_loader.js
     - assets/web_runtime/wasm/elpian_vm/elpian_vm.js
     - assets/web_runtime/wasm/elpian_vm/elpian_vm_bg.wasm
+
+  # Generic CSS font families. A web renderer must honour `font-family: serif`
+  # and `font-family: monospace` (and the named serif/mono stacks the markup
+  # falls back through) with an actual serif/monospace face — Flutter/CanvasKit
+  # otherwise has only the default sans (Roboto), so every serif heading
+  # silently rendered as sans. We bundle the metric-compatible Liberation faces
+  # (SIL OFL) under the generic family names so the CSS resolver can point
+  # `serif`/`Georgia`/`Times`… → "serif" and `monospace`/`Courier`… →
+  # "monospace". This matches how a Linux browser resolves the same stacks.
+  fonts:
+    - family: serif
+      fonts:
+        - asset: assets/fonts/LiberationSerif-Regular.ttf
+        - asset: assets/fonts/LiberationSerif-Italic.ttf
+          style: italic
+        - asset: assets/fonts/LiberationSerif-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/LiberationSerif-BoldItalic.ttf
+          weight: 700
+          style: italic
+    - family: monospace
+      fonts:
+        - asset: assets/fonts/LiberationMono-Regular.ttf
+        - asset: assets/fonts/LiberationMono-Bold.ttf
+          weight: 700

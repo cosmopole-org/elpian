@@ -86,8 +86,14 @@ class CSSProperties {
           : ClipRect(child: result);
     }
 
-    // Apply size constraints (before flex so Flexible is outermost)
-    if (style.width != null || style.height != null ||
+    // Apply size constraints (before flex so Flexible is outermost). Percentage
+    // axes are sized later by a FractionallySizedBox (see below), so the fixed
+    // pixel value is suppressed here for any axis that carries a factor.
+    final wf = style.widthFactor;
+    final hf = style.heightFactor;
+    final fixedWidth = wf == null ? style.width : null;
+    final fixedHeight = hf == null ? style.height : null;
+    if (fixedWidth != null || fixedHeight != null ||
         style.minWidth != null || style.maxWidth != null ||
         style.minHeight != null || style.maxHeight != null) {
       result = ConstrainedBox(
@@ -98,8 +104,8 @@ class CSSProperties {
           maxHeight: style.maxHeight ?? double.infinity,
         ),
         child: SizedBox(
-          width: style.width,
-          height: style.height,
+          width: fixedWidth,
+          height: fixedHeight,
           child: result,
         ),
       );
@@ -130,6 +136,42 @@ class CSSProperties {
       result = Padding(
         padding: style.margin!,
         child: result,
+      );
+    }
+
+    // Apply percentage width/height relative to the PARENT (CSS semantics).
+    //
+    // Wrapped here — outside the decoration/size/margin — so the fraction
+    // governs the whole painted box (a `width:60%` fill paints its gradient at
+    // 60% of the parent, not 60% of the screen). Resolving `%` against the
+    // viewport previously made fills span the full bar on desktop. We only
+    // engage the FractionallySizedBox when the parent's matching axis is
+    // bounded; otherwise the (viewport-resolved) pixel value is reinstated as a
+    // safe fallback so the box never collapses or throws on an unbounded axis.
+    if (wf != null || hf != null) {
+      final inner = result;
+      result = LayoutBuilder(
+        builder: (context, constraints) {
+          final useW = wf != null && constraints.maxWidth.isFinite;
+          final useH = hf != null && constraints.maxHeight.isFinite;
+          if (!useW && !useH) {
+            return SizedBox(
+              width: wf != null ? style.width : null,
+              height: hf != null ? style.height : null,
+              child: inner,
+            );
+          }
+          return FractionallySizedBox(
+            alignment: Alignment.centerLeft,
+            widthFactor: useW ? wf : null,
+            heightFactor: useH ? hf : null,
+            child: (!useW && wf != null)
+                ? SizedBox(width: style.width, child: inner)
+                : (!useH && hf != null)
+                    ? SizedBox(height: style.height, child: inner)
+                    : inner,
+          );
+        },
       );
     }
 
@@ -204,6 +246,62 @@ class CSSProperties {
         style.borderColor != null;
   }
 
+  /// Map a CSS `font-family` stack onto a font Flutter can actually render.
+  ///
+  /// CSS passes a comma-separated preference list ending in a generic family,
+  /// e.g. `"Georgia, Cambria, 'Times New Roman', serif"`. Passing that whole
+  /// string to [TextStyle.fontFamily] matches *nothing* (it is treated as one
+  /// family name), so the engine fell back to the default sans for every serif
+  /// or monospace run. We walk the list in order and resolve the first entry to
+  /// a bundled face: serif-ish names → the bundled `serif` family, mono-ish
+  /// names → `monospace`. Sans/unknown names resolve to `null` (Flutter's
+  /// default sans, Roboto), mirroring a browser's own fallback for these stacks.
+  static String? resolveFontFamily(String? family) {
+    if (family == null) return null;
+    for (final raw in family.split(',')) {
+      final name = raw.trim().replaceAll(RegExp("^['\"]|['\"]\$"), '').toLowerCase();
+      if (name.isEmpty) continue;
+      if (_serifFamilies.contains(name) || name.contains('serif') && !name.contains('sans')) {
+        return _serifFamily;
+      }
+      if (_monoFamilies.contains(name) || name.contains('mono')) {
+        return _monoFamily;
+      }
+      if (_sansFamilies.contains(name) ||
+          name.contains('sans') ||
+          name == 'system-ui' ||
+          name.startsWith('-apple') ||
+          name == 'ui-sans-serif') {
+        return null; // Flutter default sans (Roboto)
+      }
+      // A concrete, unrecognised family name: hand it to Flutter as-is (it may
+      // be bundled by the host app); keep scanning only if it is clearly empty.
+      return raw.trim().replaceAll(RegExp("^['\"]|['\"]\$"), '');
+    }
+    return null;
+  }
+
+  // Fonts declared in this package are exposed under a `packages/<pkg>/` family
+  // prefix (see the generated FontManifest), so callers — even inside the
+  // package — must reference the prefixed name.
+  static const String _serifFamily = 'packages/elpian_ui/serif';
+  static const String _monoFamily = 'packages/elpian_ui/monospace';
+
+  static const Set<String> _serifFamilies = {
+    'serif', 'georgia', 'times', 'times new roman', 'cambria', 'garamond',
+    'cinzel', 'playfair display', 'merriweather', 'crimson', 'crimson pro',
+    'pt serif', 'noto serif', 'liberation serif', 'roboto serif',
+  };
+  static const Set<String> _monoFamilies = {
+    'monospace', 'courier', 'courier new', 'consolas', 'menlo', 'monaco',
+    'roboto mono', 'sf mono', 'source code pro', 'fira code', 'jetbrains mono',
+    'liberation mono', 'ui-monospace',
+  };
+  static const Set<String> _sansFamilies = {
+    'sans-serif', 'arial', 'helvetica', 'helvetica neue', 'roboto', 'inter',
+    'segoe ui', 'verdana', 'tahoma', 'noto sans', 'liberation sans', 'ubuntu',
+  };
+
   /// Create a TextStyle from CSS style
   static TextStyle? createTextStyle(CSSStyle? style) {
     if (style == null) return null;
@@ -213,7 +311,7 @@ class CSSProperties {
       fontSize: style.fontSize,
       fontWeight: style.fontWeight,
       fontStyle: style.fontStyle,
-      fontFamily: style.fontFamily,
+      fontFamily: resolveFontFamily(style.fontFamily),
       letterSpacing: style.letterSpacing,
       wordSpacing: style.wordSpacing,
       height: style.lineHeight,
