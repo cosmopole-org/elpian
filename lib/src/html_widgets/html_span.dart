@@ -27,7 +27,14 @@ class HtmlSpan {
     }
 
     if (node.style != null) {
-      result = CSSProperties.applyStyle(result, node.style);
+      // The multi-child branch above already lays content out in a centred
+      // [Wrap]; the bare-text branch is a lone child, so let `applyStyle` centre
+      // it when the span is a fixed-size flex box (e.g. a `✕` close glyph).
+      result = CSSProperties.applyStyle(
+        result,
+        node.style,
+        layoutHandled: children.isNotEmpty,
+      );
     }
 
     return result;

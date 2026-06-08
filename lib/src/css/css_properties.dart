@@ -10,10 +10,42 @@ class CSSProperties {
   /// re-apply the flex as the outermost widget themselves — otherwise the
   /// [Flexible] is buried beneath a non-Flex widget and Flutter throws
   /// "Incorrect use of ParentDataWidget" when the element sits in a Row/Column.
-  static Widget applyStyle(Widget child, CSSStyle? style, {bool applyFlex = true}) {
+  ///
+  /// [layoutHandled] is set by container builders (`div`, `section`, `nav`, …)
+  /// that have **already** laid their children out in a flex [Row]/[Column]
+  /// honouring `justify-content`/`align-items`. For every other element the
+  /// incoming [child] is a single, un-positioned content widget, so when the
+  /// node is itself a fixed-size flex box (`display:flex` + a `width` **and**
+  /// `height`) we centre/align that lone child within the box per its
+  /// `justify-content`/`align-items` — the canonical "centre a glyph in a
+  /// square" icon-button idiom. Without this a `NextjsLink`/`span` icon button
+  /// painted its glyph in the box's top-left corner (div already did this
+  /// correctly via its own Row/Column, which is why only non-div icon buttons
+  /// were off-centre).
+  static Widget applyStyle(
+    Widget child,
+    CSSStyle? style, {
+    bool applyFlex = true,
+    bool layoutHandled = false,
+  }) {
     if (style == null) return child;
 
     Widget result = child;
+
+    // Centre/align a single content child inside a fixed-size flex box. Applied
+    // first so it is the innermost wrapper: the `width`/`height` SizedBox added
+    // below then bounds the [Align], which positions the glyph within it. Gated
+    // on BOTH dimensions being fixed so an unbounded axis can never let the
+    // Align over-expand and shove its row siblings around.
+    if (!layoutHandled &&
+        (style.display == 'flex' || style.display == 'inline-flex') &&
+        style.width != null &&
+        style.height != null) {
+      final alignment = _flexSingleChildAlignment(style);
+      if (alignment != Alignment.topLeft) {
+        result = Align(alignment: alignment, child: result);
+      }
+    }
 
     // Apply opacity
     if (style.opacity != null && style.opacity! < 1.0) {
@@ -330,6 +362,35 @@ class CSSProperties {
       decoration: style.textDecoration,
       shadows: style.textShadow,
     );
+  }
+
+  /// Resolve the [Alignment] of a lone flex child from `justify-content`
+  /// (main axis) + `align-items` (cross axis), accounting for `flex-direction`.
+  /// For a single item CSS collapses every `space-*` distribution to the start
+  /// edge, and `stretch`/unset behave as the start edge here (we can't stretch
+  /// one [Align] child), so only `center` and the end keywords move it.
+  static Alignment _flexSingleChildAlignment(CSSStyle style) {
+    final isColumn = style.flexDirection == 'column' ||
+        style.flexDirection == 'column-reverse';
+    final mainFactor = _axisFactor(style.justifyContent);
+    final crossFactor = _axisFactor(style.alignItems);
+    // Row: justify drives X, align drives Y. Column: the axes swap.
+    return isColumn
+        ? Alignment(crossFactor, mainFactor)
+        : Alignment(mainFactor, crossFactor);
+  }
+
+  /// Map a flex alignment keyword to a -1…1 [Alignment] factor (start…end).
+  static double _axisFactor(String? value) {
+    switch (value?.toLowerCase()) {
+      case 'center':
+        return 0.0;
+      case 'flex-end':
+      case 'end':
+        return 1.0;
+      default: // flex-start, start, stretch, space-*, baseline, unset
+        return -1.0;
+    }
   }
 
   static const _mainAxisAlignmentMap = <String, MainAxisAlignment>{

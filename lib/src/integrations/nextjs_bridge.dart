@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../core/elpian_engine.dart';
+import '../css/css_parser.dart';
 import '../css/css_properties.dart';
+import '../models/css_style.dart';
 import '../models/elpian_node.dart';
 
 typedef NextjsNavigate = void Function(String route, {bool replace});
@@ -205,9 +207,7 @@ class NextjsBridge {
 
     Widget content;
     if (children.isNotEmpty) {
-      content = children.length == 1
-          ? children.first
-          : Row(mainAxisSize: MainAxisSize.min, children: children);
+      content = _layoutLinkChildren(node, children);
     } else {
       content = Text(
         label,
@@ -262,6 +262,62 @@ class NextjsBridge {
     }
 
     return tappable;
+  }
+
+  /// Lay out a `NextjsLink`'s children for its content box. A bare icon button
+  /// is one centred glyph (the [CSSProperties.applyStyle] flex-centring handles
+  /// the actual centring once this returns a single child). When a child is
+  /// `position:absolute` — the notification badge on the battles/menu icons —
+  /// it is lifted out of flow and overlaid in a [Stack] so the glyph stays
+  /// centred and the badge floats at its corner, instead of sitting inline and
+  /// shoving the glyph off-centre. Mirrors the CSS semantics `HtmlDiv` already
+  /// applies; without it links never honoured `position` on their children.
+  Widget _layoutLinkChildren(ElpianNode node, List<Widget> children) {
+    // Pair each built child widget with its source node's resolved style so we
+    // can read `position`/offsets. Falls back gracefully when they don't align.
+    final nodes = node.children;
+    final aligned = nodes.length == children.length;
+
+    final flow = <Widget>[];
+    final overlays = <Widget>[];
+    for (var i = 0; i < children.length; i++) {
+      final childStyle = aligned ? _linkChildStyle(nodes[i]) : null;
+      final pos = childStyle?.position;
+      if ((pos == 'absolute' || pos == 'fixed') && childStyle != null) {
+        overlays.add(Positioned(
+          top: childStyle.top,
+          left: childStyle.left,
+          right: childStyle.right,
+          bottom: childStyle.bottom,
+          child: children[i],
+        ));
+      } else {
+        flow.add(children[i]);
+      }
+    }
+
+    final base = flow.isEmpty
+        ? const SizedBox.shrink()
+        : flow.length == 1
+            ? flow.first
+            : Row(mainAxisSize: MainAxisSize.min, children: flow);
+
+    if (overlays.isEmpty) return base;
+    // Clip.none: badges intentionally poke past the button's rounded corners.
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [base, ...overlays],
+    );
+  }
+
+  /// Resolve a link child's inline style (the raw `style` map the builders emit)
+  /// into a [CSSStyle] so its `position`/offsets can be read. Prefers the
+  /// pre-parsed [ElpianNode.style], falling back to parsing `props['style']`.
+  CSSStyle? _linkChildStyle(ElpianNode child) {
+    if (child.style != null) return child.style;
+    final inline = child.props['style'];
+    if (inline is Map<String, dynamic>) return CSSParser.parse(inline);
+    return null;
   }
 
   Widget renderEnvelope(Map<String, dynamic> envelopeJson) {
