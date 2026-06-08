@@ -16,6 +16,15 @@ class CSSStyle {
   final double? minHeight;
   final double? maxHeight;
 
+  // Percentage sizing factors (0..1+) when `width`/`height` were given as a
+  // CSS `%`. CSS resolves `%` against the *parent's* content box, so these are
+  // applied at layout time via a FractionallySizedBox rather than baked into a
+  // pixel value (which would wrongly resolve against the viewport). The pixel
+  // [width]/[height] above are still populated (viewport-resolved) and used as
+  // a fallback only when the parent's matching axis is unbounded.
+  final double? widthFactor;
+  final double? heightFactor;
+
   // Spacing
   final EdgeInsets? padding;
   final EdgeInsets? margin;
@@ -257,6 +266,8 @@ class CSSStyle {
     this.maxWidth,
     this.minHeight,
     this.maxHeight,
+    this.widthFactor,
+    this.heightFactor,
     this.padding,
     this.margin,
     this.paddingTop,
@@ -458,6 +469,8 @@ class CSSStyle {
     double? maxWidth,
     double? minHeight,
     double? maxHeight,
+    double? widthFactor,
+    double? heightFactor,
     EdgeInsets? padding,
     EdgeInsets? margin,
     AlignmentGeometry? alignment,
@@ -545,6 +558,8 @@ class CSSStyle {
     return CSSStyle(
       width: width ?? this.width,
       height: height ?? this.height,
+      widthFactor: widthFactor ?? this.widthFactor,
+      heightFactor: heightFactor ?? this.heightFactor,
       minWidth: minWidth ?? this.minWidth,
       maxWidth: maxWidth ?? this.maxWidth,
       minHeight: minHeight ?? this.minHeight,

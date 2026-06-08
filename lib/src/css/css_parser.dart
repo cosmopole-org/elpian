@@ -55,12 +55,14 @@ class CSSParser {
     return CSSStyle(
       width: parseDimension(styleMap['width'], isWidth: true),
       height: parseDimension(styleMap['height'], isWidth: false),
+      widthFactor: _percentFactor(styleMap['width']),
+      heightFactor: _percentFactor(styleMap['height']),
       minWidth: parseDimension(styleMap['minWidth'] ?? styleMap['min-width'], isWidth: true),
       maxWidth: parseDimension(styleMap['maxWidth'] ?? styleMap['max-width'], isWidth: true),
       minHeight: parseDimension(styleMap['minHeight'] ?? styleMap['min-height'], isWidth: false),
       maxHeight: parseDimension(styleMap['maxHeight'] ?? styleMap['max-height'], isWidth: false),
-      padding: _parseEdgeInsets(styleMap['padding']),
-      margin: _parseEdgeInsets(styleMap['margin']),
+      padding: _parseEdgeInsetsFor(styleMap, 'padding'),
+      margin: _parseEdgeInsetsFor(styleMap, 'margin'),
       alignment: parseAlignment(styleMap['alignment']),
       position: styleMap['position'] as String?,
       top: parseDimension(styleMap['top'], isWidth: false),
@@ -262,6 +264,18 @@ class CSSParser {
   /// `"100vh"` as `100` *pixels*, so full-viewport containers (the city/world
   /// stage, full-screen panels) collapsed — a near-blank screen on phones, whose
   /// real viewport is nowhere near the desktop-ish fixed sizes that masked it.
+  /// Extract a 0..1+ layout factor from a CSS `%` length (`'60%'` → 0.6).
+  /// Returns null for non-percentage values (px / vw / vh / numbers), which
+  /// keep their absolute pixel resolution. Viewport units (`vw`/`vh`/…) are
+  /// *correctly* viewport-relative, so they are intentionally excluded here.
+  static double? _percentFactor(dynamic value) {
+    if (value is! String) return null;
+    final raw = value.trim();
+    if (!raw.endsWith('%')) return null;
+    final n = double.tryParse(raw.substring(0, raw.length - 1).trim());
+    return n == null ? null : n / 100.0;
+  }
+
   static double? parseDimension(dynamic value, {required bool isWidth}) {
     if (value == null) return null;
     if (value is num) return value.toDouble();
@@ -407,6 +421,38 @@ class CSSParser {
       return _namedColors[colorStr.toLowerCase()];
     }
     return null;
+  }
+
+  /// Resolve the `padding`/`margin` box for [base] (`'padding'` or `'margin'`)
+  /// by merging the shorthand with any individual-side longhands. CSS authors
+  /// (and the Tritonias screen builders) frequently set only one side —
+  /// `paddingTop`, `marginBottom`, `paddingLeft`/`Right`, … — which the engine
+  /// previously dropped entirely (only the `padding`/`margin` shorthand was
+  /// read). That collapsed vertical rhythm across every screen: card padding,
+  /// inter-element margins and section spacing all vanished. Longhand sides win
+  /// over the shorthand, matching the CSS cascade for these properties.
+  static EdgeInsets? _parseEdgeInsetsFor(Map<String, dynamic> m, String base) {
+    final shorthand = _parseEdgeInsets(m[base]);
+    final top = parseDouble(m['${base}Top'] ?? m['$base-top']);
+    final right = parseDouble(m['${base}Right'] ?? m['$base-right']);
+    final bottom = parseDouble(m['${base}Bottom'] ?? m['$base-bottom']);
+    final left = parseDouble(m['${base}Left'] ?? m['$base-left']);
+    // Horizontal/vertical longhands (`paddingX`/`paddingY`) — convenience forms
+    // the primitives emit; expand them to the matching pair of sides.
+    final x = parseDouble(m['${base}X']);
+    final y = parseDouble(m['${base}Y']);
+    if (shorthand == null &&
+        top == null && right == null && bottom == null && left == null &&
+        x == null && y == null) {
+      return null;
+    }
+    final b = shorthand ?? EdgeInsets.zero;
+    return EdgeInsets.only(
+      top: top ?? y ?? b.top,
+      right: right ?? x ?? b.right,
+      bottom: bottom ?? y ?? b.bottom,
+      left: left ?? x ?? b.left,
+    );
   }
 
   static EdgeInsets? _parseEdgeInsets(dynamic value) {
