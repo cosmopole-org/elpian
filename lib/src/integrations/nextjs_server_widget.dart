@@ -1124,10 +1124,13 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
         _applyServerNavigation(envelope.navigation);
 
         final componentToRender = _scriptRenderedComponent ?? envelope.component;
-        return _bridge.engine.renderWithStylesheet(
+        final rendered = _bridge.engine.renderWithStylesheet(
           componentToRender,
           stylesheet: envelope.stylesheet,
         );
+        // Browser `<body>` semantics: tall screens scroll, full-bleed stages
+        // stay pinned. Without this, content past the viewport was unreachable.
+        return _bridge.engine.wrapAsDocument(rendered, componentToRender);
       },
     );
   }

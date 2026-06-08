@@ -68,25 +68,33 @@ class HtmlDiv {
           children: children,
         );
       } else if (isRow) {
-        return Row(
+        return _flexSafe(
+          Row(
+            mainAxisAlignment: CSSProperties.getMainAxisAlignment(
+              node.style?.justifyContent,
+            ),
+            crossAxisAlignment: CSSProperties.getCrossAxisAlignment(
+              node.style?.alignItems,
+            ),
+            mainAxisSize: MainAxisSize.max,
+            children: _addGap(children, gap, Axis.horizontal),
+          ),
+          isRow: true,
+          hasFlex: _hasFlexChild(node),
+        );
+      }
+      return _flexSafe(
+        _buildColumn(
+          node,
+          children,
+          gap: gap,
           mainAxisAlignment: CSSProperties.getMainAxisAlignment(
             node.style?.justifyContent,
           ),
-          crossAxisAlignment: CSSProperties.getCrossAxisAlignment(
-            node.style?.alignItems,
-          ),
           mainAxisSize: MainAxisSize.max,
-          children: _addGap(children, gap, Axis.horizontal),
-        );
-      }
-      return _buildColumn(
-        node,
-        children,
-        gap: gap,
-        mainAxisAlignment: CSSProperties.getMainAxisAlignment(
-          node.style?.justifyContent,
         ),
-        mainAxisSize: MainAxisSize.max,
+        isRow: false,
+        hasFlex: _hasFlexChild(node),
       );
     } else if (children.length == 1) {
       return children.first;
@@ -362,6 +370,43 @@ class HtmlDiv {
     // constraints already force the stack to fill (the full-screen stage);
     // otherwise it sizes to its in-flow base layer (CSS-like).
     return Stack(clipBehavior: Clip.hardEdge, children: stackChildren);
+  }
+
+  /// True when any direct child declares `flex`/`flex-grow` (so the laid-out
+  /// container holds a tight [Flexible]/[Expanded]).
+  static bool _hasFlexChild(ElpianNode node) {
+    for (final child in node.children) {
+      final s = _childStyle(child);
+      if (s?.flex != null || s?.flexGrow != null) return true;
+    }
+    return false;
+  }
+
+  /// Guard a flex container against an unbounded MAIN-axis constraint. A tight
+  /// `flex:n` child (an [Expanded]) inside an unbounded [Row]/[Column] throws
+  /// "non-zero flex but unbounded constraints". This happens whenever a flex
+  /// row/column is nested as a NON-flex child of another flex container — CSS
+  /// allows it freely (the live case: the resource dock's `flex:1` pill rows
+  /// sit inside the HUD column, which a parent Row hands an unbounded width).
+  /// When the main axis is unbounded we shrink-wrap with Intrinsic{Width,Height}
+  /// so the flex children get a finite axis to divide; when it is bounded (the
+  /// overwhelming common case) the container is returned untouched at no cost.
+  static Widget _flexSafe(Widget flexBox,
+      {required bool isRow, required bool hasFlex}) {
+    // Only rows are guarded: an unbounded WIDTH is the common nesting case (a
+    // flex row dropped into another flex container) and [IntrinsicWidth] is
+    // robust for the small pill/label rows it wraps. Columns are deliberately
+    // left alone — [IntrinsicHeight] throws on the many descendants that don't
+    // expose an intrinsic height (scroll views, 3D scenes), and a column's
+    // unbounded-height case is instead absorbed by the document scroll, which
+    // sizes vertical flex to content rather than forcing it to grow.
+    if (!hasFlex || !isRow) return flexBox;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth.isFinite) return flexBox;
+        return IntrinsicWidth(child: flexBox);
+      },
+    );
   }
 
   static List<Widget> _addGap(List<Widget> children, double gap, Axis axis) {

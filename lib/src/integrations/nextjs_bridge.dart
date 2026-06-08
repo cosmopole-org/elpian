@@ -253,9 +253,10 @@ class NextjsBridge {
     // CSS `flex:<n>` grows to fill its share, so use a TIGHT fit (Expanded) —
     // this is what makes equal-width segmented controls (the Sign In/Sign Up
     // tabs, the leaderboard toggles) actually fill their half and centre.
-    if (style?.flex != null) {
+    final linkFlex = style?.flex ?? style?.flexGrow;
+    if (linkFlex != null) {
       tappable = Flexible(
-        flex: style!.flex!,
+        flex: linkFlex,
         fit: FlexFit.tight,
         child: SizedBox(width: double.infinity, child: tappable),
       );
@@ -329,6 +330,17 @@ class NextjsBridge {
       envelope.component,
       stylesheet: envelope.stylesheet,
     );
+  }
+
+  /// Render a full envelope as a SCREEN with browser `<body>` document
+  /// semantics (tall content scrolls vertically; full-bleed stages stay
+  /// pinned). This is what the host (`NextjsServerWidget`) mounts; use it
+  /// instead of [renderEnvelope] when rendering a top-level route so over-tall
+  /// screens stay reachable on short viewports.
+  Widget renderDocument(Map<String, dynamic> envelopeJson) {
+    final envelope = NextjsRenderEnvelope.fromJson(envelopeJson);
+    final rendered = renderParsedEnvelope(envelope);
+    return _engine.wrapAsDocument(rendered, envelope.component);
   }
 
   Widget renderComponent(Map<String, dynamic> componentJson) {
