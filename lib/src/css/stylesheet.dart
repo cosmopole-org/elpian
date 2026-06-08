@@ -271,15 +271,26 @@ class GlobalStylesheetManager {
   CSSStylesheet get global => _globalStylesheet;
   
   void addMediaQuery(String query, CSSStylesheet stylesheet) {
+    // Dedupe by query so re-applying the same theme on every render (the
+    // server-driven host re-loads the stylesheet each build) can't accumulate
+    // duplicate media queries unboundedly.
+    _mediaQueries.removeWhere((mq) => mq.query == query);
     _mediaQueries.add(MediaQuery(
       query: query,
       stylesheet: stylesheet,
     ));
   }
   
-  /// Build the merged raw style map for an element (global + media-query +
-  /// inline cascade), before parsing. Lets callers merge further raw maps and
-  /// parse exactly once.
+  /// Build the merged **raw** style map for an element (global + matching
+  /// `@media` + inline cascade), before parsing. Lets callers merge further raw
+  /// maps and parse exactly once.
+  ///
+  /// Cascade order (lowest → highest priority): global rules, then any matching
+  /// media-query rules (evaluated against the live viewport when no explicit
+  /// screen size is given), then inline styles. The whole **raw** map is carried
+  /// through — previously only six properties survived, which silently dropped
+  /// every class-based `width`/`position`/`border`/`boxShadow`/gradient/flex —
+  /// and a trailing `!important` flag is stripped so the value parses.
   Map<String, dynamic> getComputedStyleMap({
     required String tagName,
     String? id,
@@ -290,36 +301,42 @@ class GlobalStylesheetManager {
   }) {
     final mergedStyles = <String, dynamic>{};
 
-    // Start with global styles - use the result
-    final globalStyle = _globalStylesheet.getComputedStyle(
+    void mergeRaw(Map<String, dynamic>? raw) {
+      if (raw == null) return;
+      for (final entry in raw.entries) {
+        mergedStyles[entry.key] = CSSParser.stripImportant(entry.value);
+      }
+    }
+
+    // 1. Global rules — the full raw cascade (tag + class + id), every property.
+    mergeRaw(_globalStylesheet.getComputedStyleMap(
       tagName: tagName,
       id: id,
       classes: classes,
-      inlineStyles: null,
-    );
-    // Merge global styles into the map
-    if (globalStyle.backgroundColor != null) mergedStyles['backgroundColor'] = globalStyle.backgroundColor;
-    if (globalStyle.color != null) mergedStyles['color'] = globalStyle.color;
-    if (globalStyle.fontSize != null) mergedStyles['fontSize'] = globalStyle.fontSize;
-    if (globalStyle.fontWeight != null) mergedStyles['fontWeight'] = globalStyle.fontWeight;
-    if (globalStyle.padding != null) mergedStyles['padding'] = globalStyle.padding;
-    if (globalStyle.margin != null) mergedStyles['margin'] = globalStyle.margin;
+    ));
 
-    // Add media query styles
-    if (screenWidth != null && screenHeight != null) {
+    // 2. Matching `@media` rules. Default to the live viewport so responsive
+    //    rules work without the caller having to thread a screen size through.
+    if (_mediaQueries.isNotEmpty) {
+      final size = CSSParser.viewportSize();
+      final w = screenWidth ?? size.width;
+      final h = screenHeight ?? size.height;
       for (final mediaQuery in _mediaQueries) {
-        if (mediaQuery.matches(screenWidth, screenHeight)) {
-          final mqStyles = mediaQuery.stylesheet.getStyle(tagName);
-          if (mqStyles != null) {
-            mergedStyles.addAll(mqStyles);
-          }
+        if (mediaQuery.matches(w, h)) {
+          // Resolve against the SAME element (tag + class + id), so class/id
+          // media rules (e.g. `.game-window`) match, not just bare tags.
+          mergeRaw(mediaQuery.stylesheet.getComputedStyleMap(
+            tagName: tagName,
+            id: id,
+            classes: classes,
+          ));
         }
       }
     }
 
-    // Add inline styles last
+    // 3. Inline styles win.
     if (inlineStyles != null) {
-      mergedStyles.addAll(inlineStyles);
+      mergeRaw(inlineStyles);
     }
 
     return mergedStyles;

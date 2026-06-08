@@ -311,6 +311,21 @@ class CSSParser {
     return false;
   }
 
+  /// Public accessor for the live logical viewport size — used by the
+  /// stylesheet manager to evaluate `@media` queries against the real screen.
+  static Size viewportSize() => _viewportSize();
+
+  /// Strip a trailing CSS `!important` flag from a raw value so the remaining
+  /// token parses normally (e.g. `"100% !important"` → `"100%"`,
+  /// `"fixed !important"` → `"fixed"`). Non-strings pass through unchanged.
+  static dynamic stripImportant(dynamic value) {
+    if (value is String) {
+      final m = RegExp(r'\s*!\s*important\s*$', caseSensitive: false);
+      if (m.hasMatch(value)) return value.replaceAll(m, '').trim();
+    }
+    return value;
+  }
+
   /// Live logical screen size, with a sane mobile-portrait fallback for early
   /// frames / unit tests where no render view is attached yet.
   static Size _viewportSize() {

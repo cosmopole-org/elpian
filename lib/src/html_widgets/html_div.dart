@@ -306,7 +306,20 @@ class HtmlDiv {
 
     final stackChildren = <Widget>[];
     if (flowChildren.isNotEmpty) {
-      stackChildren.add(_buildFlow(node, flowChildren));
+      // The in-flow base layer behaves like block content of a positioned
+      // container: it fills the available WIDTH (so `justify/alignItems:center`
+      // actually centres, and full-width children stretch) while still sizing
+      // its HEIGHT to content (which is what gives a loose Stack its size). Wrap
+      // it to the incoming max width when that's bounded; otherwise leave it to
+      // shrink-wrap (an unbounded stack has no width to fill).
+      final base = _buildFlow(node, flowChildren);
+      stackChildren.add(
+        LayoutBuilder(
+          builder: (context, constraints) => constraints.maxWidth.isFinite
+              ? SizedBox(width: constraints.maxWidth, child: base)
+              : base,
+        ),
+      );
     }
     for (final i in positionedOrder) {
       final style = styles[i]!;

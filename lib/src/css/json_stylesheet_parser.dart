@@ -28,14 +28,26 @@ class JsonStylesheetParser {
   static CSSStylesheet parseJsonStylesheet(Map<String, dynamic> json) {
     final stylesheet = CSSStylesheet();
     
-    // Parse regular rules
+    // Parse regular rules. A rule may carry an inline `media` query (the shape
+    // Next.js/Elpian emits: `{ media, selector, styles }`); route those into the
+    // media-query system so they only apply when the query matches — otherwise a
+    // mobile `@media` override would corrupt the desktop layout.
     if (json.containsKey('rules') && json['rules'] is List) {
       final rules = json['rules'] as List;
+      final mediaGroups = <String, CSSStylesheet>{};
       for (final rule in rules) {
-        if (rule is Map<String, dynamic>) {
+        if (rule is! Map<String, dynamic>) continue;
+        final media = rule['media'];
+        if (media is String && media.trim().isNotEmpty) {
+          final sheet = mediaGroups.putIfAbsent(media, () => CSSStylesheet());
+          _parseRule(rule, sheet);
+        } else {
           _parseRule(rule, stylesheet);
         }
       }
+      mediaGroups.forEach((query, sheet) {
+        GlobalStylesheetManager().addMediaQuery(query, sheet);
+      });
     }
     
     // Parse media queries
