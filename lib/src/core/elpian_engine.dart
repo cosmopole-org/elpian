@@ -328,6 +328,56 @@ class ElpianEngine {
     return renderFromJson(json);
   }
 
+  /// Wrap a rendered SCREEN ROOT with browser document semantics: it fills at
+  /// least the viewport and scrolls vertically when its content is taller — the
+  /// default `<body>` behaviour the bare engine lacked, so tall forms/panels
+  /// (auth, the world side-panel, long lists) were clipped and unreachable on
+  /// short screens with no way to scroll to them.
+  ///
+  /// A viewport-locked full-screen STAGE is left pinned (no scroll), because it
+  /// intentionally owns the whole viewport and positions a HUD against its
+  /// edges — scrolling it would detach the absolute navbar/dock. A root is
+  /// treated as such a stage when it declares `position:fixed`, or a
+  /// `height` of `100vh`/`100%` (the city/world shell stage). Everything else is
+  /// a normal-flow document and becomes vertically scrollable.
+  Widget wrapAsDocument(Widget rendered, Map<String, dynamic>? root) {
+    if (root == null || _isViewportLockedRoot(root)) return rendered;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final minHeight =
+            constraints.maxHeight.isFinite ? constraints.maxHeight : 0.0;
+        return SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: minHeight),
+            child: rendered,
+          ),
+        );
+      },
+    );
+  }
+
+  /// Whether [root]'s fully-cascaded style locks it to the viewport (a full-bleed
+  /// stage that should not document-scroll). Reads the RAW computed map so a
+  /// `100vh`/`100%`/`fixed` written via a class or inline style is honoured.
+  bool _isViewportLockedRoot(Map<String, dynamic> root) {
+    final props = root['props'];
+    final propsMap = props is Map ? props : const {};
+    final className = root['className'] ?? propsMap['className'];
+    final classes = className is String
+        ? className.split(' ')
+        : (className is List ? className.cast<String>() : null);
+    final inline = root['style'] ?? propsMap['style'];
+    final raw = _stylesheetManager.getComputedStyleMap(
+      tagName: root['type'] as String? ?? 'div',
+      id: root['key'] as String?,
+      classes: classes,
+      inlineStyles: inline is Map<String, dynamic> ? inline : null,
+    );
+    if (raw['position']?.toString() == 'fixed') return true;
+    final h = raw['height']?.toString().trim();
+    return h != null && (h.contains('vh') || h == '100%');
+  }
+
   void registerWidget(String type, Widget Function(ElpianNode node, List<Widget> children) builder) {
     _registry.register(type, builder);
   }

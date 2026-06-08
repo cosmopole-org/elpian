@@ -332,6 +332,17 @@ class NextjsBridge {
     );
   }
 
+  /// Render a full envelope as a SCREEN with browser `<body>` document
+  /// semantics (tall content scrolls vertically; full-bleed stages stay
+  /// pinned). This is what the host (`NextjsServerWidget`) mounts; use it
+  /// instead of [renderEnvelope] when rendering a top-level route so over-tall
+  /// screens stay reachable on short viewports.
+  Widget renderDocument(Map<String, dynamic> envelopeJson) {
+    final envelope = NextjsRenderEnvelope.fromJson(envelopeJson);
+    final rendered = renderParsedEnvelope(envelope);
+    return _engine.wrapAsDocument(rendered, envelope.component);
+  }
+
   Widget renderComponent(Map<String, dynamic> componentJson) {
     return _engine.renderFromJson(componentJson);
   }
