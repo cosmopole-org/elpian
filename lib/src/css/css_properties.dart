@@ -78,7 +78,12 @@ class CSSProperties {
         child: result,
       );
     } else if (_clips(overflowX) || _clips(overflowY)) {
-      result = ClipRect(child: result);
+      // Clip to the rounded shape when a border radius is set, so a window/card
+      // with `borderRadius` + `overflow:hidden` actually rounds its corners
+      // (a plain ClipRect leaves square corners poking past the rounded box).
+      result = style.borderRadius != null
+          ? ClipRRect(borderRadius: style.borderRadius!, child: result)
+          : ClipRect(child: result);
     }
 
     // Apply size constraints (before flex so Flexible is outermost)
@@ -135,9 +140,13 @@ class CSSProperties {
 
     // Apply flex LAST so Flexible is a direct child of Row/Column/Flex.
     // Skipped when the caller will wrap the result and re-apply flex outermost.
+    // CSS `flex:<n>` grows to fill its share → TIGHT fit, so equal-width tiles
+    // (resource pills), spacers (`flex:1` gaps in stat rows) and full-bleed
+    // panes actually claim their space instead of collapsing to content width.
     if (applyFlex && style.flex != null) {
       result = Flexible(
         flex: style.flex!,
+        fit: FlexFit.tight,
         child: result,
       );
     }
