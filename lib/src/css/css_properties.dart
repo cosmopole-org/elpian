@@ -180,6 +180,18 @@ class CSSProperties {
       result = _wrapWithAnimations(result, style);
     }
 
+    // CSS `pointer-events: none` — make the element and its whole subtree
+    // transparent to hit testing so taps fall through to whatever sits behind
+    // it. Without this, decorative `position:absolute` overlays (the auth
+    // screen's ambient gradient "blobs", any full-bleed sheen/scrim) painted
+    // above the content silently swallow every tap meant for the controls
+    // beneath them — text fields never focus and buttons/tabs only respond on
+    // the sliver not covered by the overlay. The property was already parsed
+    // into the style model but never applied.
+    if (style.pointerEvents == 'none') {
+      result = IgnorePointer(child: result);
+    }
+
     // Apply flex LAST so Flexible is a direct child of Row/Column/Flex.
     // Skipped when the caller will wrap the result and re-apply flex outermost.
     // CSS `flex:<n>` grows to fill its share → TIGHT fit, so equal-width tiles

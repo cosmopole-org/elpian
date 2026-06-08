@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/elpian_node.dart';
 import '../css/css_parser.dart';
 import '../css/css_properties.dart';
+import '../css/stylesheet.dart';
 import '../models/css_style.dart';
 
 class HtmlDiv {
@@ -162,11 +163,32 @@ class HtmlDiv {
     );
   }
 
-  /// Resolve a child node's style, parsing an inline `style` map when the
-  /// node hasn't been parsed yet (mirrors [_buildPositioned]).
+  /// Resolve a child node's **fully cascaded** style — the stylesheet
+  /// (tag/class/id + matching `@media`, honouring `!important`) merged with the
+  /// node's inline style. Reading only the inline `style` here meant a
+  /// positioned child whose geometry comes from a class (e.g. the responsive
+  /// `.game-window`: a floating window on desktop, full-screen via the mobile
+  /// `@media` override) was laid out from its inline drag offset alone — so
+  /// panels never went full-screen on phones. Falls back to the inline map (or
+  /// the pre-parsed [ElpianNode.style]) when the node carries no class/id.
   static CSSStyle? _childStyle(ElpianNode child) {
-    final raw = child.props['style'];
-    return raw is Map<String, dynamic> ? CSSParser.parse(raw) : child.style;
+    final className = child.props['className'];
+    final inline = child.props['style'];
+    final inlineMap = inline is Map<String, dynamic> ? inline : null;
+    if (className != null || child.key != null) {
+      final classes = className is String
+          ? className.split(' ')
+          : (className as List?)?.cast<String>();
+      final computed = GlobalStylesheetManager().getComputedStyleMap(
+        tagName: child.type,
+        id: child.key,
+        classes: classes,
+        inlineStyles: inlineMap,
+      );
+      if (computed.isNotEmpty) return CSSParser.parse(computed);
+    }
+    if (inlineMap != null) return CSSParser.parse(inlineMap);
+    return child.style;
   }
 
   /// Lay out a `display:grid` container (finding #6). The engine has no real
@@ -277,8 +299,7 @@ class HtmlDiv {
     final styles = <CSSStyle?>[];
     var hasPositioned = false;
     for (final child in nodes) {
-      final raw = child.props['style'];
-      final style = raw is Map<String, dynamic> ? CSSParser.parse(raw) : child.style;
+      final style = _childStyle(child);
       styles.add(style);
       final pos = style?.position;
       if (pos == 'absolute' || pos == 'fixed') hasPositioned = true;
