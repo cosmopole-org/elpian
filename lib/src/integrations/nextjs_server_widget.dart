@@ -106,6 +106,12 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
   /// only rebuilds its `Scope` subtree instead of the whole screen.
   Map<String, dynamic>? _lastEnvelopeComponent;
 
+  /// The last fully-rendered component tree, retained across a navigation so the
+  /// previous screen stays painted while the next route loads — instead of a
+  /// full-screen spinner that tears down (and on city/world screens, reloads)
+  /// the 3D scene on every tap.
+  Map<String, dynamic>? _previousComponent;
+
   /// Long-lived VM for the page-level client script. Unlike one-shot client
   /// component resolution, this stays alive for the duration of the route so
   /// its timers keep ticking and its event handlers keep firing — the engine of
@@ -694,6 +700,10 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
       }
       _currentRoute = route;
       _payloadFuture = _loadPayload();
+      // Keep the just-rendered screen as the loading fallback so the next route
+      // paints over a live screen (scene included) instead of a blank spinner.
+      _previousComponent =
+          _scriptRenderedComponent ?? _lastEnvelopeComponent ?? _previousComponent;
       _scriptRenderedComponent = null;
       _lastEnvelopeComponent = null;
       _lastScriptSignature = null;
@@ -706,6 +716,10 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
     setState(() {
       _currentRoute = _history.removeLast();
       _payloadFuture = _loadPayload();
+      // Keep the just-rendered screen as the loading fallback so the next route
+      // paints over a live screen (scene included) instead of a blank spinner.
+      _previousComponent =
+          _scriptRenderedComponent ?? _lastEnvelopeComponent ?? _previousComponent;
       _scriptRenderedComponent = null;
       _lastEnvelopeComponent = null;
       _lastScriptSignature = null;
@@ -716,6 +730,10 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
     unawaited(_disposePageVm());
     setState(() {
       _payloadFuture = _loadPayload();
+      // Keep the just-rendered screen as the loading fallback so the next route
+      // paints over a live screen (scene included) instead of a blank spinner.
+      _previousComponent =
+          _scriptRenderedComponent ?? _lastEnvelopeComponent ?? _previousComponent;
       _scriptRenderedComponent = null;
       _lastEnvelopeComponent = null;
       _lastScriptSignature = null;
@@ -1096,6 +1114,35 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
       future: _payloadFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
+          // While the next route loads, keep the previous screen painted (with a
+          // thin progress bar on top) so navigation doesn't blank out — and, on
+          // city/world screens, doesn't tear down and reload the 3D scene. The
+          // engine's static-scene cache then lets the next screen reuse the
+          // already-baked scaffold, so the swap is near-instant.
+          final fallback = _previousComponent;
+          if (fallback != null) {
+            Widget previous;
+            try {
+              previous = _bridge.engine.wrapAsDocument(
+                _bridge.engine.renderFromJson(fallback),
+                fallback,
+              );
+            } catch (_) {
+              previous = widget.loadingBuilder?.call(context) ??
+                  const Center(child: CircularProgressIndicator());
+            }
+            return Stack(
+              children: [
+                previous,
+                const Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: LinearProgressIndicator(minHeight: 2),
+                ),
+              ],
+            );
+          }
           return widget.loadingBuilder?.call(context) ??
               const Center(child: CircularProgressIndicator());
         }

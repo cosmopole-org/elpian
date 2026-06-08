@@ -113,6 +113,18 @@ class GameSceneWidget extends StatefulWidget {
 
   @override
   State<GameSceneWidget> createState() => _GameSceneWidgetState();
+
+  /// Number of distinct `staticKey`s currently held in the process-wide static
+  /// scene cache. Exposed for tests that assert navigation reuse (a second
+  /// screen with the same `staticKey` must NOT grow the cache).
+  @visibleForTesting
+  static int debugStaticSceneCacheSize() =>
+      _GameSceneWidgetState._staticSceneCache.length;
+
+  /// Drop all cached static scenes (test isolation).
+  @visibleForTesting
+  static void debugClearStaticSceneCache() =>
+      _GameSceneWidgetState._staticSceneCache.clear();
 }
 
 class _GameSceneWidgetState extends State<GameSceneWidget>
@@ -132,6 +144,17 @@ class _GameSceneWidgetState extends State<GameSceneWidget>
   // small dynamic `world` is re-parsed per frame and merged in.
   ParsedScene? _staticScene;
   String? _staticKey;
+
+  // Process-wide cache of parsed+baked static sub-scenes, keyed by `staticKey`.
+  //
+  // The baked geometry the renderer stores on each static node (`renderCache`,
+  // world-space lit triangles) is independent of the camera/viewport, so it is
+  // safe to share the same static [ParsedScene] across widget instances. This
+  // is what makes navigation cheap: opening a panel (which mounts a brand-new
+  // GameSceneWidget for the same city) reuses the already-baked island/sky
+  // scaffold instead of re-parsing and re-lighting thousands of triangles.
+  static final Map<String, ParsedScene> _staticSceneCache =
+      <String, ParsedScene>{};
 
   // Camera interaction state
   Offset _lastPointerPos = Offset.zero;
@@ -171,12 +194,15 @@ class _GameSceneWidgetState extends State<GameSceneWidget>
     final staticWorld = json['staticWorld'];
     if (staticWorld is List) {
       final key = json['staticKey']?.toString();
-      if (_staticScene == null || key != _staticKey) {
-        final parsed = SceneParser.parse({'world': staticWorld});
-        for (final n in parsed.nodes) {
-          _markStatic(n);
-        }
-        _staticScene = parsed;
+      if (key != null && key.isNotEmpty) {
+        // Keyed: reuse the process-wide baked static scene across widgets so
+        // navigation between screens with the same scaffold never re-bakes.
+        final cached = _staticSceneCache[key] ??= _parseStaticWorld(staticWorld);
+        _staticScene = cached;
+        _staticKey = key;
+      } else if (_staticScene == null || key != _staticKey) {
+        // Unkeyed: parse once per widget instance.
+        _staticScene = _parseStaticWorld(staticWorld);
         _staticKey = key;
       }
     } else {
@@ -209,6 +235,17 @@ class _GameSceneWidgetState extends State<GameSceneWidget>
       }
       _orbitInitialized = true;
     }
+  }
+
+  /// Parse a `staticWorld` node list into a [ParsedScene] and flag every node
+  /// (and its descendants) static so the renderer bakes + caches its lit
+  /// world-space geometry.
+  static ParsedScene _parseStaticWorld(List<dynamic> staticWorld) {
+    final parsed = SceneParser.parse({'world': staticWorld});
+    for (final n in parsed.nodes) {
+      _markStatic(n);
+    }
+    return parsed;
   }
 
   /// Recursively flag a parsed static node (and its children) so the renderer

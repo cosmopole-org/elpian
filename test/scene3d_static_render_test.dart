@@ -196,4 +196,50 @@ void main() {
 
     expect(find.byType(GameSceneWidget), findsOneWidget);
   });
+
+  testWidgets(
+      'a second GameSceneWidget with the same staticKey reuses the baked '
+      'static scene instead of re-parsing it (navigation stays cheap)',
+      (tester) async {
+    final base = _scene()['world'] as List;
+    final env = base[0], cam = base[1], light = base[2];
+    final cube = base[3], sphere = base[4], ground = base[5];
+
+    String sceneJson() => jsonEncode({
+          'staticKey': 'city-scaffold-vX',
+          'staticWorld': [env, light, cube, sphere, ground],
+          'world': [cam],
+        });
+
+    Widget host(Key key) => MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 200,
+              height: 200,
+              child: GameSceneWidget(
+                key: key,
+                sceneJson: sceneJson(),
+                interactive: false,
+                autoStart: false,
+              ),
+            ),
+          ),
+        );
+
+    GameSceneWidget.debugClearStaticSceneCache();
+    expect(GameSceneWidget.debugStaticSceneCacheSize(), 0);
+
+    // First screen mounts → scaffold parsed + baked once.
+    await tester.pumpWidget(host(const ValueKey('screen-a')));
+    await tester.pump();
+    expect(GameSceneWidget.debugStaticSceneCacheSize(), 1);
+
+    // Navigate to a different screen that shows the same city: a brand-new
+    // GameSceneWidget (distinct key/State) is mounted. It must reuse the cached
+    // baked scaffold rather than re-parsing it — so the cache does NOT grow.
+    await tester.pumpWidget(host(const ValueKey('screen-b')));
+    await tester.pump();
+    expect(GameSceneWidget.debugStaticSceneCacheSize(), 1);
+    expect(tester.takeException(), isNull);
+  });
 }

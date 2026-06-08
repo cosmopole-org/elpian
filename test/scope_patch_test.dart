@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:elpian_ui/src/vm/scope_patch.dart';
 
@@ -11,27 +13,34 @@ void main() {
     });
   });
 
-  Map<String, dynamic> tree() => {
+  // Build the fixture the way production does: every node is a
+  // `Map<String, dynamic>` (as `jsonDecode` yields), not a `Map<String, Object>`
+  // that map literals would otherwise infer. The round-trip guarantees the
+  // patch path is exercised against the exact map type it sees at runtime.
+  Map<String, dynamic> tree() => jsonDecode(jsonEncode({
         'type': 'div',
         'children': [
+          // Mirrors the real `scope()` primitive: the `Scope` wrapper is keyed
+          // `<key>__scope`, the inner content node carries the bare `<key>` that
+          // a client `host.render(view, key)` targets.
           {
             'type': 'Scope',
-            'key': 'navbar',
+            'key': 'navbar__scope',
             'props': <String, dynamic>{},
             'children': [
-              {'type': 'span', 'props': {'text': 'nav'}}
+              {'type': 'span', 'key': 'navbar', 'props': {'text': 'nav'}}
             ],
           },
           {
             'type': 'Scope',
-            'key': 'hud',
+            'key': 'hud__scope',
             'props': <String, dynamic>{},
             'children': [
               {'type': 'span', 'key': 'hud', 'props': {'text': 'old'}}
             ],
           },
         ],
-      };
+      })) as Map<String, dynamic>;
 
   group('ScopePatch.apply', () {
     test('no scope key → returns the new view (full render)', () {
