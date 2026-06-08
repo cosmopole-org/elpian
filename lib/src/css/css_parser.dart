@@ -78,15 +78,26 @@ class CSSParser {
       overflow: _parseOverflow(styleMap['overflow']),
       overflowX: _parseOverflow(styleMap['overflowX'] ?? styleMap['overflow-x']),
       overflowY: _parseOverflow(styleMap['overflowY'] ?? styleMap['overflow-y']),
+      // CSS `background` shorthand: a `linear-gradient(...)`/`radial-gradient(...)`
+      // value resolves to a gradient, any other value to a solid colour. Without
+      // this the engine only honoured the explicit `gradient`/`backgroundColor`
+      // keys, so every `background: linear-gradient(...)` (the app's primary way
+      // of styling bars, cards, buttons, tabs) was silently dropped — flat UI.
       backgroundColor: parseColor(
-          styleMap['backgroundColor'] ?? styleMap['background-color']),
+              styleMap['backgroundColor'] ?? styleMap['background-color']) ??
+          (_isGradientValue(styleMap['background'])
+              ? null
+              : parseColor(styleMap['background'])),
       backgroundImage: styleMap['backgroundImage'] ??
           styleMap['background-image'] as String?,
       backgroundSize: _parseBoxFit(
           styleMap['backgroundSize'] ?? styleMap['background-size']),
       backgroundPosition: parseAlignment(
           styleMap['backgroundPosition'] ?? styleMap['background-position']),
-      gradient: _parseGradient(styleMap['gradient']),
+      gradient: _parseGradient(styleMap['gradient']) ??
+          (_isGradientValue(styleMap['background'])
+              ? _parseGradient(styleMap['background'])
+              : null),
       border: _parseBorder(styleMap['border']),
       borderRadius: _parseBorderRadius(
           styleMap['borderRadius'] ?? styleMap['border-radius']),
@@ -659,9 +670,142 @@ class CSSParser {
     return null;
   }
 
+  /// True when [value] is a CSS gradient function string.
+  static bool _isGradientValue(dynamic value) =>
+      value is String && value.contains('gradient(');
+
+  /// Parse a CSS gradient string into a Flutter [Gradient].
+  ///
+  /// Supports `linear-gradient([<angle>deg | to <side>,] color [stop%], …)` and
+  /// `radial-gradient(…, color, color)`. Colour stop percentages are honoured;
+  /// the angle maps to begin/end alignments (rounded to the nearest 45°).
+  static Gradient? _parseCssGradientString(String raw) {
+    final s = raw.trim();
+    final isRadial = s.startsWith('radial-gradient');
+    final open = s.indexOf('(');
+    final close = s.lastIndexOf(')');
+    if (open < 0 || close <= open) return null;
+
+    final parts = _splitTopLevelCommas(s.substring(open + 1, close));
+    if (parts.isEmpty) return null;
+
+    double? angleDeg;
+    var colorParts = parts;
+    final first = parts.first.trim();
+    if (first.endsWith('deg')) {
+      angleDeg = double.tryParse(first.substring(0, first.length - 3).trim());
+      colorParts = parts.sublist(1);
+    } else if (first.startsWith('to ')) {
+      angleDeg = _angleForSideKeyword(first.substring(3).trim());
+      colorParts = parts.sublist(1);
+    }
+
+    final colors = <Color>[];
+    final stops = <double>[];
+    for (final part in colorParts) {
+      final t = part.trim();
+      if (t.isEmpty) continue;
+      final stopMatch = RegExp(r'\s+(-?\d+(?:\.\d+)?)%\s*$').firstMatch(t);
+      var colorStr = t;
+      double? stop;
+      if (stopMatch != null) {
+        stop = (double.tryParse(stopMatch.group(1)!) ?? 0) / 100.0;
+        colorStr = t.substring(0, stopMatch.start).trim();
+      }
+      final color = parseColor(colorStr);
+      if (color != null) {
+        colors.add(color);
+        if (stop != null) stops.add(stop.clamp(0.0, 1.0));
+      }
+    }
+
+    if (colors.isEmpty) return null;
+    if (colors.length == 1) colors.add(colors.first);
+    final useStops = stops.length == colors.length ? stops : null;
+
+    if (isRadial) {
+      return RadialGradient(colors: colors, stops: useStops);
+    }
+    final (begin, end) = _beginEndForAngle(angleDeg ?? 180);
+    return LinearGradient(colors: colors, begin: begin, end: end, stops: useStops);
+  }
+
+  /// Split on top-level commas only (commas inside `rgba(...)` etc. are kept).
+  static List<String> _splitTopLevelCommas(String input) {
+    final out = <String>[];
+    var depth = 0;
+    var start = 0;
+    for (var i = 0; i < input.length; i++) {
+      final ch = input[i];
+      if (ch == '(') {
+        depth++;
+      } else if (ch == ')') {
+        if (depth > 0) depth--;
+      } else if (ch == ',' && depth == 0) {
+        out.add(input.substring(start, i));
+        start = i + 1;
+      }
+    }
+    out.add(input.substring(start));
+    return out;
+  }
+
+  static double _angleForSideKeyword(String side) {
+    switch (side.replaceAll(RegExp(r'\s+'), ' ').trim()) {
+      case 'top':
+        return 0;
+      case 'top right':
+      case 'right top':
+        return 45;
+      case 'right':
+        return 90;
+      case 'bottom right':
+      case 'right bottom':
+        return 135;
+      case 'bottom':
+        return 180;
+      case 'bottom left':
+      case 'left bottom':
+        return 225;
+      case 'left':
+        return 270;
+      case 'top left':
+      case 'left top':
+        return 315;
+      default:
+        return 180;
+    }
+  }
+
+  /// CSS gradient angle (0° = upward) → Flutter begin/end alignments, rounded to
+  /// the nearest 45°.
+  static (Alignment, Alignment) _beginEndForAngle(double deg) {
+    final a = ((deg % 360) + 360) % 360;
+    switch ((a / 45).round() % 8) {
+      case 0: // to top
+        return (Alignment.bottomCenter, Alignment.topCenter);
+      case 1: // to top-right
+        return (Alignment.bottomLeft, Alignment.topRight);
+      case 2: // to right
+        return (Alignment.centerLeft, Alignment.centerRight);
+      case 3: // to bottom-right
+        return (Alignment.topLeft, Alignment.bottomRight);
+      case 4: // to bottom
+        return (Alignment.topCenter, Alignment.bottomCenter);
+      case 5: // to bottom-left
+        return (Alignment.topRight, Alignment.bottomLeft);
+      case 6: // to left
+        return (Alignment.centerRight, Alignment.centerLeft);
+      default: // to top-left
+        return (Alignment.bottomRight, Alignment.topLeft);
+    }
+  }
+
   static Gradient? _parseGradient(dynamic value) {
     if (value == null) return null;
     if (value is Gradient) return value;
+    // CSS string form, e.g. `linear-gradient(135deg, #F4C95B, #E0902F)`.
+    if (value is String) return _parseCssGradientString(value);
     if (value is Map) {
       final type = value['type'] as String?;
       final colors = (value['colors'] as List?)
