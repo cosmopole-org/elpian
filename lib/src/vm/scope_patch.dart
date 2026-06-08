@@ -61,6 +61,11 @@ class ScopePatch {
   /// * no scope key (or no existing [tree]) → return [view] for a full render;
   /// * key found → patch [tree] in place and return it (same instance);
   /// * key missing → return [view] (caller falls back to a full render).
+  ///
+  /// NOTE: prefer [applyBounded] for live scoped renders — falling back to
+  /// [view] on a missing key turns a *bounded* update into a whole-screen
+  /// replacement (the "global re-render propagation" bug). [apply] is kept for
+  /// callers that explicitly want the legacy full-render fallback.
   static Map<String, dynamic> apply(
     Map<String, dynamic>? tree,
     Map<String, dynamic> view,
@@ -71,6 +76,29 @@ class ScopePatch {
     final replacement = markRerender(ensureKey(view, key));
     final replaced = replaceByKey(tree, key, replacement);
     return replaced ? tree : view;
+  }
+
+  /// Resolve a scoped render, keeping the update *bounded* to its scope:
+  ///
+  /// * no scope key, or no existing [tree] → returns [view] (a legitimate full
+  ///   render / first seed);
+  /// * key found → patches [tree] in place and returns it (same instance);
+  /// * key present but NOT found in a non-null [tree] → returns `null`.
+  ///
+  /// A `null` result is the signal a caller must honour to avoid a global
+  /// re-render: a render that asked to update a specific scope, but whose scope
+  /// is absent, must NOT silently repaint the entire screen. Callers keep the
+  /// current tree (and typically log) instead.
+  static Map<String, dynamic>? applyBounded(
+    Map<String, dynamic>? tree,
+    Map<String, dynamic> view,
+    String? scopeKey,
+  ) {
+    final key = normalizeKey(scopeKey);
+    if (key == null || tree == null) return view;
+    final replacement = markRerender(ensureKey(view, key));
+    final replaced = replaceByKey(tree, key, replacement);
+    return replaced ? tree : null;
   }
 
   static bool _replace(
