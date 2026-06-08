@@ -10,7 +10,7 @@ class HtmlDiv {
     if (children.isEmpty) {
       Widget result = const SizedBox.shrink();
       if (node.style != null) {
-        result = CSSProperties.applyStyle(result, node.style);
+        result = CSSProperties.applyStyle(result, node.style, layoutHandled: true);
       }
       return result;
     }
@@ -26,7 +26,7 @@ class HtmlDiv {
     if (positioned != null) {
       Widget result = Container(child: positioned);
       if (node.style != null) {
-        result = CSSProperties.applyStyle(result, node.style);
+        result = CSSProperties.applyStyle(result, node.style, layoutHandled: true);
       }
       return result;
     }
@@ -34,7 +34,7 @@ class HtmlDiv {
     Widget result = Container(child: _buildFlow(node, children));
 
     if (node.style != null) {
-      result = CSSProperties.applyStyle(result, node.style);
+      result = CSSProperties.applyStyle(result, node.style, layoutHandled: true);
     }
 
     return result;

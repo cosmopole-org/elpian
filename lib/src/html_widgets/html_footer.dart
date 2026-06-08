@@ -7,7 +7,7 @@ class HtmlFooter {
     if (children.isEmpty) {
       Widget result = const SizedBox.shrink();
       if (node.style != null) {
-        result = CSSProperties.applyStyle(result, node.style);
+        result = CSSProperties.applyStyle(result, node.style, layoutHandled: true);
       }
       return result;
     }
@@ -51,7 +51,7 @@ class HtmlFooter {
     );
 
     if (node.style != null) {
-      result = CSSProperties.applyStyle(result, node.style);
+      result = CSSProperties.applyStyle(result, node.style, layoutHandled: true);
     }
 
     return result;
