@@ -142,7 +142,31 @@ class CSSParser {
       pointerEvents:
           styleMap['pointerEvents'] ?? styleMap['pointer-events'] as String?,
       gap: parseDouble(styleMap['gap']),
+      rowGap: parseDouble(styleMap['rowGap'] ?? styleMap['row-gap']),
+      columnGap: parseDouble(styleMap['columnGap'] ?? styleMap['column-gap']),
       flexWrap: styleMap['flexWrap'] ?? styleMap['flex-wrap'] as String?,
+      // CSS grid track definitions. The fields existed on CSSStyle but were
+      // never read here, so every `display:grid` container fell through to a
+      // plain vertical stack (finding #6). HtmlDiv now maps these to a
+      // responsive Wrap.
+      gridTemplateColumns: styleMap['gridTemplateColumns'] ??
+          styleMap['grid-template-columns'] as String?,
+      gridTemplateRows: styleMap['gridTemplateRows'] ??
+          styleMap['grid-template-rows'] as String?,
+      gridTemplateAreas: styleMap['gridTemplateAreas'] ??
+          styleMap['grid-template-areas'] as String?,
+      gridAutoColumns: styleMap['gridAutoColumns'] ??
+          styleMap['grid-auto-columns'] as String?,
+      gridAutoRows:
+          styleMap['gridAutoRows'] ?? styleMap['grid-auto-rows'] as String?,
+      gridAutoFlow:
+          styleMap['gridAutoFlow'] ?? styleMap['grid-auto-flow'] as String?,
+      gridColumnGap: parseDouble(
+          styleMap['gridColumnGap'] ?? styleMap['grid-column-gap'] ??
+              styleMap['columnGap'] ?? styleMap['column-gap']),
+      gridRowGap: parseDouble(styleMap['gridRowGap'] ??
+          styleMap['grid-row-gap'] ?? styleMap['rowGap'] ?? styleMap['row-gap']),
+      gridGap: parseDouble(styleMap['gridGap'] ?? styleMap['grid-gap']),
       transitionDuration: parseDuration(
           styleMap['transitionDuration'] ?? styleMap['transition-duration']),
       transitionCurve: parseCurve(
