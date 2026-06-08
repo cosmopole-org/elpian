@@ -8,6 +8,7 @@ import '../core/event_system.dart';
 import 'elpian_vm.dart';
 import 'quickjs_vm.dart';
 import 'runtime_kind.dart';
+import 'scope_patch.dart';
 import 'wasm_vm.dart';
 import 'vm_runtime_client.dart';
 import 'host_api_catalog.dart';
@@ -164,7 +165,6 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget>
   Map<String, dynamic>? _currentViewJson;
   String? _error;
   bool _isLoading = true;
-  int _scopeRenderTokenCounter = 0;
   Map<String, dynamic> _hostEnvironmentData = const <String, dynamic>{};
   String? _hostEnvironmentDigest;
   bool _hostEnvironmentSyncScheduled = false;
@@ -617,139 +617,22 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget>
     Map<String, dynamic> incomingViewJson, {
     String? scopeKey,
   }) {
-    final normalizedScopeKey = _normalizeScopeKey(scopeKey);
-
-    if (normalizedScopeKey == null || _currentViewJson == null) {
-      _currentViewJson = incomingViewJson;
-      return;
-    }
-
-    final replacement = _markScopeRerender(
-      _ensureNodeKey(incomingViewJson, normalizedScopeKey),
+    // Shared, bounded scope patch (see ScopePatch). A scoped render whose key
+    // isn't present is kept bounded — it must not fall back to replacing the
+    // whole view — matching the host-driven path in NextjsServerWidget.
+    final next = ScopePatch.applyBounded(
+      _currentViewJson,
+      incomingViewJson,
+      scopeKey,
     );
-    final replaced = _replaceNodeByKey(
-      _currentViewJson!,
-      normalizedScopeKey,
-      replacement,
-      scopeAncestorStack: <Map<String, dynamic>>[],
-    );
-
-    if (replaced) {
-      return;
-    }
-
-    debugPrint(
-      'ElpianVmWidget: scope "$normalizedScopeKey" not found. Applying full render.',
-    );
-    _currentViewJson = incomingViewJson;
-  }
-
-  bool _replaceNodeByKey(Map<String, dynamic> node, String targetKey,
-      Map<String, dynamic> replacement,
-      {required List<Map<String, dynamic>> scopeAncestorStack}) {
-    final key = node['key']?.toString();
-    if (key == targetKey) {
-      node
-        ..clear()
-        ..addAll(replacement);
-      _markScopeNodesForRefresh(scopeAncestorStack);
-      return true;
-    }
-
-    final isScopeNode = node['type']?.toString() == 'Scope';
-    if (isScopeNode) {
-      scopeAncestorStack.add(node);
-    }
-
-    final children = node['children'];
-    if (children is! List) {
-      if (isScopeNode) {
-        scopeAncestorStack.removeLast();
-      }
-      return false;
-    }
-
-    for (var i = 0; i < children.length; i++) {
-      final child = children[i];
-      if (child is! Map) continue;
-
-      final childMap = child is Map<String, dynamic>
-          ? child
-          : Map<String, dynamic>.from(child);
-      final replaced = _replaceNodeByKey(
-        childMap,
-        targetKey,
-        replacement,
-        scopeAncestorStack: scopeAncestorStack,
+    if (next == null) {
+      debugPrint(
+        'ElpianVmWidget: scoped render targeted missing scope "$scopeKey"; '
+        'keeping current view (no full re-render).',
       );
-      if (!identical(child, childMap)) {
-        children[i] = childMap;
-      }
-      if (replaced) {
-        if (isScopeNode) {
-          scopeAncestorStack.removeLast();
-        }
-        return true;
-      }
+      return;
     }
-
-    if (isScopeNode) {
-      scopeAncestorStack.removeLast();
-    }
-
-    return false;
-  }
-
-  String? _normalizeScopeKey(String? scopeKey) {
-    if (scopeKey == null) return null;
-    final normalized = scopeKey.trim();
-    if (normalized.isEmpty || normalized == 'null') return null;
-    return normalized;
-  }
-
-  Map<String, dynamic> _ensureNodeKey(
-    Map<String, dynamic> json,
-    String scopeKey,
-  ) {
-    if ((json['key']?.toString().isNotEmpty ?? false)) {
-      return json;
-    }
-    return <String, dynamic>{
-      ...json,
-      'key': scopeKey,
-    };
-  }
-
-  Map<String, dynamic> _markScopeRerender(Map<String, dynamic> json) {
-    _markScopeTokensInPlace(json);
-    return json;
-  }
-
-  void _markScopeNodesForRefresh(List<Map<String, dynamic>> scopeNodes) {
-    for (final scopeNode in scopeNodes) {
-      final props =
-          Map<String, dynamic>.from(scopeNode['props'] as Map? ?? const {});
-      props['__scopeRenderToken'] = ++_scopeRenderTokenCounter;
-      scopeNode['props'] = props;
-    }
-  }
-
-  void _markScopeTokensInPlace(dynamic node) {
-    if (node is! Map) return;
-
-    final type = node['type']?.toString();
-    if (type == 'Scope') {
-      final props =
-          Map<String, dynamic>.from(node['props'] as Map? ?? const {});
-      props['__scopeRenderToken'] = ++_scopeRenderTokenCounter;
-      node['props'] = props;
-    }
-
-    final children = node['children'];
-    if (children is! List) return;
-    for (final child in children) {
-      _markScopeTokensInPlace(child);
-    }
+    _currentViewJson = next;
   }
 
   /// Call a function in the running VM from Dart.

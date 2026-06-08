@@ -238,7 +238,7 @@ class Scene3DRenderer {
 
       // Translucent fills can't join an opaque batch without breaking the
       // back-to-front blend, so draw them individually (after flushing).
-      if (st.color.alpha < 255) {
+      if (st.color.a < 1.0) {
         flushTriBatch();
         triPaint.color = st.color;
         strokeTri(st, triPaint);

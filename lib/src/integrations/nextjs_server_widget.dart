@@ -12,6 +12,7 @@ import '../vm/quickjs_vm.dart';
 import '../vm/scope_patch.dart';
 import '../vm/timer_host_api.dart';
 import '../vm/vm_runtime_client.dart';
+import 'client_comp_routing.dart';
 import 'nextjs_auth.dart';
 import 'nextjs_bridge.dart';
 
@@ -119,6 +120,20 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
   VmRuntimeClient? _pageVm;
   VmTimerHostApi? _pageTimerApi;
 
+  /// Live, persistent VMs for inline `clientComp` nodes (a tab strip, a
+  /// draggable window), keyed by a per-render mount id. Each one stays alive for
+  /// the route so its event handlers and timers keep firing, and every render it
+  /// pushes is patched in place at its OWN mount scope — so a tap on a tab or a
+  /// drag repaints just that component's subtree, never the whole screen.
+  ///
+  /// This is what makes client interactivity *bounded*: previously these scripts
+  /// ran once in a throwaway VM that was disposed immediately, so their handlers
+  /// were dead and the only way to change anything was a full-route navigation.
+  final Map<String, _LiveClientComp> _liveClientComps =
+      <String, _LiveClientComp>{};
+  int _clientCompSeq = 0;
+  bool _eventRoutingWired = false;
+
   @override
   void initState() {
     super.initState();
@@ -126,6 +141,10 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
     _bridge = widget.bridge ?? NextjsBridge();
     _bridge.onNavigate = _handleNavigate;
     _bridge.onSubmit = _handleFormSubmit;
+    // Route engine UI events once, up front — to live `clientComp` VMs and/or
+    // the page VM. Wiring it here (not only when a page script runs) means a
+    // panel with no poller still delivers taps to its window/tab components.
+    _wireEventRouting();
     _payloadFuture = _loadPayload();
   }
 
@@ -155,6 +174,11 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
   }
 
   Future<Map<String, dynamic>> _loadPayload() async {
+    // Tear down the previous screen's live client-component VMs and restart mount
+    // numbering, so this load resolves a fresh, self-consistent set of mounts.
+    await _disposeClientCompVms();
+    _clientCompSeq = 0;
+
     // Restore a persisted session (cross-platform) before the first request, so
     // a returning user stays logged in. Idempotent.
     await widget.authConfig?.store.ensureReady();
@@ -482,38 +506,148 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
       return null;
     }
 
-    Map<String, dynamic>? component;
+    // Mount the component on a PERSISTENT VM (not a throwaway one): its handlers
+    // and timers stay alive and its renders patch its own scope in place. On any
+    // failure this returns null and the caller renders the fallback placeholder,
+    // so a broken component never takes down sibling server content.
+    return _mountClientComponent(
+      jsCode: jsCode,
+      entryFunction: entry,
+      props: props,
+      style: node['style'],
+    );
+  }
+
+  /// Mount an inline `clientComp` on a long-lived QuickJS VM and return its
+  /// initial render, wrapped in a `Scope` keyed by the mount id. The VM is kept
+  /// in [_liveClientComps] so events route back to it and its subsequent renders
+  /// (taps, timers) patch only its mount scope. Returns null on failure.
+  Future<Map<String, dynamic>?> _mountClientComponent({
+    required String jsCode,
+    required String entryFunction,
+    required Map<String, dynamic> props,
+    Object? style,
+  }) async {
+    final mountId = 'cc${_clientCompSeq++}';
+    final machineId =
+        'nextjs-$mountId-${DateTime.now().microsecondsSinceEpoch}';
+
+    QuickJsVm vm;
     try {
-      component = await _runJsComponentCode(
-        jsCode,
-        entryFunction: entry,
-        inputProps: props,
-      );
+      vm = await QuickJsVm.fromCode(machineId, jsCode);
     } catch (e) {
-      // A client component failing to execute (e.g. the QuickJS native runtime
-      // is unavailable, or the script throws) must not take down the entire
-      // server-rendered tree. Degrade to the fallback placeholder so sibling
-      // server content still renders.
-      debugPrint('NextjsServerWidget: client component "$entry" failed: $e');
+      debugPrint('NextjsServerWidget: clientComp "$mountId" create failed: $e');
       return null;
     }
+    final record = _LiveClientComp(mountId: mountId, vm: vm);
 
-    if (component == null) return null;
+    final hostHandler = HostHandler(
+      // The script's own scopeKey is ignored: every client-component render is
+      // bound to its OWN mount scope, so a tab switch / drag repaints just this
+      // component — never the rest of the screen.
+      onRender: (viewJson, _) {
+        final namespaced =
+            ClientCompRouting.namespaceHandlers(viewJson, mountId);
+        if (!record.mounted) {
+          record.captured = namespaced; // initial render (inlined below)
+        } else {
+          _applyClientCompRender(record, namespaced);
+        }
+      },
+      onPrintln: (m) => debugPrint('NextjsServerWidget[$mountId]: $m'),
+    );
 
-    final style = node['style'];
-    if (style is Map<String, dynamic>) {
-      final existingStyle = component['style'];
-      if (existingStyle is Map<String, dynamic>) {
-        component['style'] = {
-          ...style,
-          ...existingStyle,
-        };
-      } else {
-        component['style'] = style;
-      }
+    record.timer = VmTimerHostApi(
+      invoke: (fn, input) async {
+        if (input == null) {
+          await vm.callFunction(fn);
+        } else {
+          await vm.callFunctionWithInput(fn, input);
+        }
+      },
+      onError: (m) => debugPrint('NextjsServerWidget[$mountId timer]: $m'),
+    );
+
+    final handlers = <String, HostCallHandler>{
+      for (final apiName in VmHostApiCatalog.allHostApiNames)
+        apiName: (name, payload) => hostHandler.handleHostCall(name, payload),
+      for (final apiName in VmHostApiCatalog.timerApiNames)
+        apiName: (name, payload) => record.timer!.handle(name, payload),
+      'navigate': (name, payload) => _hostNavigate(payload),
+    };
+    vm.registerHostHandlers(handlers);
+
+    try {
+      await vm.run();
+      await vm.callFunctionWithInput(entryFunction, jsonEncode(props));
+    } catch (e) {
+      debugPrint('NextjsServerWidget: clientComp "$mountId" exec failed: $e');
+      await record.dispose();
+      return null;
     }
+    record.mounted = true;
 
-    return component;
+    final component = record.captured;
+    if (component == null) {
+      await record.dispose();
+      return null;
+    }
+    _liveClientComps[mountId] = record;
+
+    if (style is Map<String, dynamic>) {
+      final existing = component['style'];
+      component['style'] =
+          existing is Map<String, dynamic> ? {...style, ...existing} : style;
+    }
+    return _wrapClientCompInScope(component, mountId);
+  }
+
+  /// Wrap a client component's render in a `Scope` keyed `<mountId>__scope`,
+  /// with the content node keyed `<mountId>` so a scoped patch targets it.
+  Map<String, dynamic> _wrapClientCompInScope(
+    Map<String, dynamic> component,
+    String mountId,
+  ) {
+    return <String, dynamic>{
+      'type': 'Scope',
+      'key': '${mountId}__scope',
+      'props': <String, dynamic>{},
+      'children': <dynamic>[
+        <String, dynamic>{...component, 'key': mountId},
+      ],
+    };
+  }
+
+  /// Apply a live client component's re-render, bounded to its mount scope.
+  void _applyClientCompRender(
+    _LiveClientComp record,
+    Map<String, dynamic> view,
+  ) {
+    if (!mounted) return;
+    final tree = _scriptRenderedComponent ?? _lastEnvelopeComponent;
+    if (tree == null) return;
+    final replacement = ScopePatch.markRerender(
+      <String, dynamic>{...view, 'key': record.mountId},
+    );
+    final replaced = ScopePatch.replaceByKey(tree, record.mountId, replacement);
+    if (!replaced) {
+      debugPrint(
+        'NextjsServerWidget: clientComp "${record.mountId}" mount scope '
+        'missing; skipping render.',
+      );
+      return;
+    }
+    setState(() => _scriptRenderedComponent = tree);
+  }
+
+  /// Tear down all live client-component VMs (on route change or disposal).
+  Future<void> _disposeClientCompVms() async {
+    if (_liveClientComps.isEmpty) return;
+    final comps = _liveClientComps.values.toList();
+    _liveClientComps.clear();
+    for (final c in comps) {
+      await c.dispose();
+    }
   }
 
   _PackedClientScript? _findPackedClientComponentScript(
@@ -743,6 +877,7 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
   @override
   void dispose() {
     unawaited(_disposePageVm());
+    unawaited(_disposeClientCompVms());
     super.dispose();
   }
 
@@ -788,9 +923,18 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
       return;
     }
     // Patch the live tree — the script's own prior render if any, else the
-    // current server-rendered component — in place.
+    // current server-rendered component — in place, BOUNDED to the target
+    // scope. A render aimed at a scope that isn't on screen must not blow away
+    // the whole view (the global-propagation bug): keep the current tree.
     final tree = _scriptRenderedComponent ?? _lastEnvelopeComponent;
-    final next = ScopePatch.apply(tree, view, key);
+    final next = ScopePatch.applyBounded(tree, view, key);
+    if (next == null) {
+      debugPrint(
+        'NextjsServerWidget: scoped render targeted missing scope "$key"; '
+        'keeping current screen (no global re-render).',
+      );
+      return;
+    }
     setState(() => _scriptRenderedComponent = next);
   }
 
@@ -871,38 +1015,58 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
   }
 
   /// Route engine UI events (clicks, pointer moves, …) on the rendered tree to
-  /// the live page VM's named handlers. A node opts in by declaring
-  /// `events: { 'click': 'handlerFnName' }`; the script registers that function.
-  /// This is what lets a tap re-render only its `Scope` instead of re-fetching
-  /// the whole route.
-  void _wirePageEventRouting() {
+  /// the owning VM's named handlers. A node opts in by declaring
+  /// `events: { 'click': 'handlerFnName' }`. Handlers belonging to an inline
+  /// client component are namespaced `<mountId>::<fn>` so a tap is delivered to
+  /// that component's own VM; everything else goes to the page VM. This is what
+  /// lets a tap re-render only its scope instead of re-fetching the route.
+  void _wireEventRouting() {
+    if (_eventRoutingWired) return;
+    _eventRoutingWired = true;
     _bridge.engine.setGlobalEventHandler((event) {
-      unawaited(_routePageEvent(event));
+      unawaited(_routeEvent(event));
     });
   }
 
-  Future<void> _routePageEvent(ElpianEvent event) async {
-    final vm = _pageVm;
-    if (vm == null) return;
+  Future<void> _routeEvent(ElpianEvent event) async {
     final nodeId = event.currentTarget?.toString();
     if (nodeId == null || nodeId.isEmpty) return;
     final node = _bridge.engine.eventDispatcher.getNode(nodeId);
     final handler = node?.events?[event.type];
     if (handler is! String || handler.isEmpty) return;
 
+    // A namespaced handler (`<mountId>::<fn>`) belongs to a live client
+    // component; route it to that component's VM. Otherwise it's the page VM's.
+    final route = ClientCompRouting.parse(handler);
+    final VmRuntimeClient? vm =
+        route != null ? _liveClientComps[route.mountId]?.vm : _pageVm;
+    final String fn = route?.fn ?? handler;
+    if (vm == null) return;
+
     // QuickJS handlers receive a plain-JSON event (unlike the Rust VM's typed
     // payloads), so a loose object is enough; fall back to a no-arg call for
     // handlers declared without parameters.
-    final input = jsonEncode(<String, dynamic>{'type': event.type});
+    final input = jsonEncode(_eventToHostJson(event));
     try {
-      await vm.callFunctionWithInput(handler, input);
+      await vm.callFunctionWithInput(fn, input);
     } catch (_) {
       try {
-        await vm.callFunction(handler);
+        await vm.callFunction(fn);
       } catch (e) {
         debugPrint('NextjsServerWidget: event handler "$handler" failed: $e');
       }
     }
+  }
+
+  /// A loose JSON event for QuickJS handlers. Includes pointer coordinates so
+  /// drag components (which read `e.x`/`e.y`) work.
+  Map<String, dynamic> _eventToHostJson(ElpianEvent event) {
+    final base = <String, dynamic>{'type': event.type};
+    if (event is ElpianPointerEvent) {
+      base['x'] = event.position.dx;
+      base['y'] = event.position.dy;
+    }
+    return base;
   }
 
   /// Decode the first host-call argument into a JSON map (host calls wrap their
@@ -925,32 +1089,6 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
     if (parsed is Map<String, dynamic>) return parsed;
     if (parsed is Map) return Map<String, dynamic>.from(parsed);
     return const {};
-  }
-
-  Future<Map<String, dynamic>?> _runJsComponentCode(
-    String jsCode, {
-    required String entryFunction,
-    Map<String, dynamic>? inputProps,
-  }) async {
-    final jsMachineId = 'nextjs-comp-${DateTime.now().microsecondsSinceEpoch}';
-    final quickVm = await QuickJsVm.fromCode(jsMachineId, jsCode);
-    Map<String, dynamic>? rendered;
-
-    quickVm.registerHostHandler('render', (apiName, payload) {
-      rendered = _decodeRenderPayload(payload) ?? rendered;
-      return '{"type":"i16","data":{"value":1}}';
-    });
-
-    try {
-      await quickVm.run();
-      final output = inputProps == null
-          ? await quickVm.callFunction(entryFunction)
-          : await quickVm.callFunctionWithInput(entryFunction, jsonEncode(inputProps));
-      rendered ??= _decodeRenderPayload(output);
-      return rendered;
-    } finally {
-      await quickVm.dispose();
-    }
   }
 
   /// Run the page-level client script on a *persistent* QuickJS VM.
@@ -1000,7 +1138,7 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
       'navigate': (name, payload) => _hostNavigate(payload),
     };
     vm.registerHostHandlers(handlers);
-    _wirePageEventRouting();
+    // Event routing is wired once in initState (covers page VM + client comps).
 
     await vm.run();
     if (entryFunction.isNotEmpty) {
@@ -1180,6 +1318,35 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
         return _bridge.engine.wrapAsDocument(rendered, componentToRender);
       },
     );
+  }
+}
+
+/// A mounted inline client component: a persistent VM, its timer host API, and
+/// the initial render it produced. Lives for the route so its handlers/timers
+/// keep firing and its renders patch its own mount scope in place.
+class _LiveClientComp {
+  _LiveClientComp({required this.mountId, required this.vm});
+
+  final String mountId;
+  final VmRuntimeClient vm;
+  VmTimerHostApi? timer;
+
+  /// The component's most recent (initially, first) render — the node inlined
+  /// into the server tree under this mount's `Scope`.
+  Map<String, dynamic>? captured;
+
+  /// False until the initial render has been captured; once true, further
+  /// renders patch the live tree instead of seeding the inline content.
+  bool mounted = false;
+
+  Future<void> dispose() async {
+    timer?.dispose();
+    timer = null;
+    try {
+      await vm.dispose();
+    } catch (_) {
+      // best-effort teardown
+    }
   }
 }
 

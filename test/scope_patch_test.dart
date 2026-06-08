@@ -92,4 +92,36 @@ void main() {
       expect(token2, greaterThan(token1));
     });
   });
+
+  group('ScopePatch.applyBounded', () {
+    test('no scope key → returns the view (legitimate full render)', () {
+      final view = {'type': 'div', 'key': 'x'};
+      expect(ScopePatch.applyBounded(tree(), view, null), same(view));
+    });
+
+    test('null tree → returns the view (first seed)', () {
+      final view = {'type': 'div'};
+      expect(ScopePatch.applyBounded(null, view, 'hud'), same(view));
+    });
+
+    test('known key → patches the tree in place and returns it', () {
+      final t = tree();
+      final result = ScopePatch.applyBounded(t, {'type': 'span'}, 'hud');
+      expect(result, same(t));
+      final patched =
+          (((t['children'] as List)[1] as Map)['children'] as List)[0] as Map;
+      expect(patched['type'], 'span');
+    });
+
+    test('missing key → returns null (caller keeps current; NO global render)',
+        () {
+      final t = tree();
+      final before = jsonEncode(t);
+      final result = ScopePatch.applyBounded(t, {'type': 'span'}, 'does-not-exist');
+      // Signals "miss": caller must keep the current screen, not globalize.
+      expect(result, isNull);
+      // And the tree was left untouched.
+      expect(jsonEncode(t), before);
+    });
+  });
 }
