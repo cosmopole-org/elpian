@@ -447,9 +447,23 @@ class CSSParser {
       value is String &&
       RegExp(r'!\s*important\s*$', caseSensitive: false).hasMatch(value);
 
-  /// Live logical screen size, with a sane mobile-portrait fallback for early
-  /// frames / unit tests where no render view is attached yet.
+  /// Authoritative logical viewport for `@media` resolution, set by the host
+  /// from the real widget `MediaQuery` before each render. `platformDispatcher.
+  /// implicitView.physicalSize` is unreliable on web (stale/zero on early
+  /// frames, and not always the laid-out size), which made `(max-width: …)`
+  /// rules mis-evaluate — e.g. a desktop window wrongly collapsing to the mobile
+  /// full-screen layout. When set, this takes precedence.
+  static Size? viewportOverride;
+
+  /// Live logical screen size. Prefers [viewportOverride] (the widget
+  /// MediaQuery), then the platform view, then a desktop-biased fallback for
+  /// early frames / unit tests — biased to desktop so an unknown viewport never
+  /// wrongly forces a mobile-only layout.
   static Size _viewportSize() {
+    final override = viewportOverride;
+    if (override != null && override.width > 0 && override.height > 0) {
+      return override;
+    }
     try {
       final view = WidgetsBinding.instance.platformDispatcher.implicitView;
       if (view != null) {
@@ -462,7 +476,7 @@ class CSSParser {
     } catch (_) {
       // No binding (e.g. pure unit test) — fall through to the default.
     }
-    return const Size(390, 844);
+    return const Size(1280, 800);
   }
 
   /// Live device safe-area insets (notch / status bar / home indicator) in
