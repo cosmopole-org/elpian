@@ -184,28 +184,78 @@ class Scene3DRenderer {
     // B: reuse a single Path across triangles (reset instead of reallocating
     // a new ui.Path per triangle each frame).
     final path = ui.Path();
-    for (final d in drawables) {
-      if (d is _ModelBatch) {
-        batchPaint.shader = d.shader;
-        canvas.drawVertices(d.vertices, ui.BlendMode.modulate, batchPaint);
-        continue;
-      }
-      final st = d as _ScreenTri;
+
+    // C: batch consecutive opaque, solid-fill triangles into ONE
+    // `drawVertices` call instead of one `drawPath` per triangle. The world
+    // scaffold is thousands of such triangles, so this collapses thousands of
+    // per-frame draw ops into a handful — the dominant cost of the software
+    // painter. Depth order (painter's algorithm) is preserved because the batch
+    // is flushed whenever a draw that must interleave by depth is hit: a model
+    // batch, a wireframe edge, or a translucent triangle.
+    final batchPos = <ui.Offset>[];
+    final batchCol = <Color>[];
+    void flushTriBatch() {
+      if (batchPos.isEmpty) return;
+      final verts = ui.Vertices(
+        ui.VertexMode.triangles,
+        List<ui.Offset>.of(batchPos),
+        colors: List<Color>.of(batchCol),
+      );
+      batchPaint
+        ..shader = null
+        ..color = const Color(0xFFFFFFFF);
+      // modulate(vertexColor, white) == vertexColor → flat per-triangle colour.
+      canvas.drawVertices(verts, ui.BlendMode.modulate, batchPaint);
+      batchPos.clear();
+      batchCol.clear();
+    }
+
+    void strokeTri(_ScreenTri st, ui.Paint paint) {
       path.reset();
       path
         ..moveTo(st.pts[0].dx, st.pts[0].dy)
         ..lineTo(st.pts[1].dx, st.pts[1].dy)
         ..lineTo(st.pts[2].dx, st.pts[2].dy)
         ..close();
+      canvas.drawPath(path, paint);
+    }
+
+    for (final d in drawables) {
+      if (d is _ModelBatch) {
+        flushTriBatch();
+        batchPaint.shader = d.shader;
+        canvas.drawVertices(d.vertices, ui.BlendMode.modulate, batchPaint);
+        continue;
+      }
+      final st = d as _ScreenTri;
 
       if (st.isWireframe) {
+        flushTriBatch();
         wirePaint.color = st.wireColor ?? st.color;
-        canvas.drawPath(path, wirePaint);
-      } else {
-        triPaint.color = st.color;
-        canvas.drawPath(path, triPaint);
+        strokeTri(st, wirePaint);
+        continue;
       }
+
+      // Translucent fills can't join an opaque batch without breaking the
+      // back-to-front blend, so draw them individually (after flushing).
+      if (st.color.alpha < 255) {
+        flushTriBatch();
+        triPaint.color = st.color;
+        strokeTri(st, triPaint);
+        continue;
+      }
+
+      // Opaque solid fill → accumulate into the current vertex batch.
+      batchPos
+        ..add(st.pts[0])
+        ..add(st.pts[1])
+        ..add(st.pts[2]);
+      batchCol
+        ..add(st.color)
+        ..add(st.color)
+        ..add(st.color);
     }
+    flushTriBatch();
 
     // Draw particles (as circles, sorted by depth)
     final particlePaint = ui.Paint()..style = ui.PaintingStyle.fill;
