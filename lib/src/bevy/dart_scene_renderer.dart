@@ -348,7 +348,14 @@ class DartSceneRenderer {
           t.rotation.y * math.pi / 180.0,
           t.rotation.z * math.pi / 180.0,
         );
-        final forward = rotMat.transformDirection(const Vec3(0, 0, -1)).normalized;
+        // Prefer an explicit look-at target when authored; only fall back to the
+        // rotation-derived forward vector when none is given (otherwise a
+        // target-authored camera looks straight ahead instead of at the scene).
+        final lookTarget = _parseVec3Opt(node['target']) ??
+            _parseVec3Opt(node['look_at']);
+        final forward = lookTarget != null
+            ? (lookTarget - t.position).normalized
+            : rotMat.transformDirection(const Vec3(0, 0, -1)).normalized;
         final up = rotMat.transformDirection(Vec3.up).normalized;
         return _Camera(
           position: t.position,
@@ -1015,6 +1022,26 @@ class DartSceneRenderer {
       );
     }
     return Vec3.zero;
+  }
+
+  /// Nullable Vec3 parse — returns null when the value is absent, so callers can
+  /// distinguish "not authored" from "origin".
+  Vec3? _parseVec3Opt(dynamic v) {
+    if (v is Map) {
+      return Vec3(
+        (v['x'] as num?)?.toDouble() ?? 0,
+        (v['y'] as num?)?.toDouble() ?? 0,
+        (v['z'] as num?)?.toDouble() ?? 0,
+      );
+    }
+    if (v is List && v.length >= 3) {
+      return Vec3(
+        (v[0] as num).toDouble(),
+        (v[1] as num).toDouble(),
+        (v[2] as num).toDouble(),
+      );
+    }
+    return null;
   }
 
   Vec3 _parseColor3(dynamic c) {

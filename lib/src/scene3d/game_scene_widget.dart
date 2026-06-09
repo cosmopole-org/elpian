@@ -375,9 +375,16 @@ class _GameSceneWidgetState extends State<GameSceneWidget>
     _lastPointerPos = pos;
 
     if (details.pointerCount > 1) {
-      // Pinch to zoom
+      // Pinch to zoom. The dolly range honours the scene camera's
+      // min/maxDistance when supplied (so a large city/world map can zoom out
+      // far enough to frame the whole scene); otherwise it falls back to a
+      // generous built-in range rather than a hardcoded 100-unit ceiling that
+      // would force big scenes to stay zoomed in.
+      final cam = _scene.camera;
+      final minD = cam.minDistance ?? 1.0;
+      final maxD = cam.maxDistance ?? 1000.0;
       _orbitDistance *= (1.0 / details.scale).clamp(0.5, 2.0);
-      _orbitDistance = _orbitDistance.clamp(1.0, 100.0);
+      _orbitDistance = _orbitDistance.clamp(minD, maxD);
     } else {
       // Drag to orbit
       _orbitYaw -= delta.dx * 0.005;
@@ -440,7 +447,11 @@ class _GameScenePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (renderScale >= 0.999 || size.isEmpty) {
+    // A zero/degenerate size yields a NaN aspect ratio (width / 0), which
+    // produces an invalid projection matrix that culls all geometry — i.e. a
+    // blank scene. Skip painting until the widget has a real size.
+    if (size.isEmpty || size.width <= 0 || size.height <= 0) return;
+    if (renderScale >= 0.999) {
       _renderTo(canvas, size);
       return;
     }

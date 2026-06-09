@@ -866,6 +866,11 @@ class Camera3D {
   CameraMode mode;
   double orbitSpeed;
   double orbitRadius;
+  /// Interactive orbit dolly clamp (distance from [target]). When null the
+  /// renderer falls back to its built-in bounds. Driven by the scene JSON
+  /// (`min_distance`/`max_distance`) so the embedder controls zoom range.
+  double? minDistance;
+  double? maxDistance;
   Vec3? followTarget;
   Vec3 followOffset;
   double shakeAmount;
@@ -883,6 +888,8 @@ class Camera3D {
     this.mode = CameraMode.fixed,
     this.orbitSpeed = 10.0,
     this.orbitRadius = 10.0,
+    this.minDistance,
+    this.maxDistance,
     this.followTarget,
     this.followOffset = const Vec3(0, 5, 10),
     this.shakeAmount = 0.0,

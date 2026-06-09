@@ -110,17 +110,35 @@ class SceneParser {
   static Camera3D _parseCamera(Map<String, dynamic> json) {
     final transform = json['transform'] as Map<String, dynamic>? ?? {};
     final pos = _parseVec3(transform['position']) ?? const Vec3(0, 5, 10);
-    final rot = _parseVec3(transform['rotation']) ?? Vec3.zero;
 
-    // Compute target from rotation angles
-    final rx = rot.x * math.pi / 180;
-    final ry = rot.y * math.pi / 180;
-    final forward = Vec3(
-      math.sin(ry) * math.cos(rx),
-      math.sin(rx),
-      -math.cos(ry) * math.cos(rx),
-    );
-    final target = pos + forward * 10;
+    // Prefer an explicit look-at point (`target` / `look_at`) — this is how
+    // orbit/look-at cameras are authored (a pivot to look at and orbit around).
+    // Only when no explicit target is given do we derive one from the camera's
+    // rotation (forward vector). Previously the rotation path always won, so a
+    // camera authored with a `target` but no `transform.rotation` looked
+    // straight ahead (target = position - 10·z) instead of at the scene —
+    // collapsing the orbit distance and framing empty space.
+    final explicitTarget =
+        _parseVec3(json['target']) ?? _parseVec3(json['look_at']);
+    final Vec3 target;
+    if (explicitTarget != null) {
+      target = explicitTarget;
+    } else {
+      final rot = _parseVec3(transform['rotation']) ?? Vec3.zero;
+      final rx = rot.x * math.pi / 180;
+      final ry = rot.y * math.pi / 180;
+      final forward = Vec3(
+        math.sin(ry) * math.cos(rx),
+        math.sin(rx),
+        -math.cos(ry) * math.cos(rx),
+      );
+      target = pos + forward * 10;
+    }
+
+    // Optional interactive zoom (dolly) clamp, accepting snake_case or
+    // camelCase. Lets the embedder bound how far in/out the user can zoom.
+    final minDistance = _dn(json['min_distance'] ?? json['minDistance']);
+    final maxDistance = _dn(json['max_distance'] ?? json['maxDistance']);
 
     return Camera3D(
       type: json['camera_type'] == 'Orthographic'
@@ -135,6 +153,8 @@ class SceneParser {
       mode: _parseCameraMode(json['mode'] as String?),
       orbitSpeed: _d(json['orbit_speed'], 10.0),
       orbitRadius: _d(json['orbit_radius'], 10.0),
+      minDistance: minDistance,
+      maxDistance: maxDistance,
     );
   }
 
@@ -433,6 +453,9 @@ class SceneParser {
 
   static double _d(dynamic v, double def) =>
       (v as num?)?.toDouble() ?? def;
+
+  /// Nullable double: returns null when the value is absent/non-numeric.
+  static double? _dn(dynamic v) => (v as num?)?.toDouble();
 
   static Vec3? _parseVec3(dynamic v) {
     if (v is Map) {
