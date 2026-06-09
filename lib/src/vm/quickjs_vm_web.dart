@@ -4,6 +4,7 @@ import 'dart:js_interop_unsafe';
 
 import 'package:flutter/foundation.dart';
 
+import '../diagnostics/elpian_trace.dart';
 import 'elpian_vm.dart';
 import 'vm_runtime_client.dart';
 
@@ -70,6 +71,9 @@ class QuickJsVm implements VmRuntimeClient {
   }
 
   String _syncHostCall(String apiName, String payload) {
+    if (apiName == 'render' || apiName == 'fetch' || apiName == 'submit') {
+      ElpianTrace.mark('vm[$machineId] host.$apiName');
+    }
     return _dispatchHostCall(apiName, payload);
   }
 
