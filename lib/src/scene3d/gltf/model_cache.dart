@@ -9,6 +9,7 @@ library;
 
 import 'dart:typed_data';
 
+import '../../diagnostics/elpian_trace.dart';
 import 'gltf_loader.dart';
 import 'gltf_model.dart';
 import 'net/model_fetch.dart';
@@ -71,12 +72,18 @@ class GltfModelCache {
   }
 
   Future<GltfModel> _doLoad(String url) async {
+    final sw = ElpianTrace.enabled ? (Stopwatch()..start()) : null;
     try {
+      ElpianTrace.mark('gltf load START $url');
       final Uint8List bytes = await fetchModelBytes(url);
+      final fetchedMs = sw?.elapsedMilliseconds;
       final model = await GltfBinaryLoader.parse(bytes);
       _ready[url] = model;
       _status[url] = GltfLoadStatus.ready;
       _inFlight.remove(url);
+      ElpianTrace.mark('gltf load DONE $url '
+          '(fetch=${fetchedMs}ms total=${sw?.elapsedMilliseconds}ms '
+          'bytes=${bytes.length})');
       return model;
     } catch (e) {
       _status[url] = GltfLoadStatus.failed;
