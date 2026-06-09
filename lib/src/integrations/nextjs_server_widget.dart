@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../core/event_system.dart';
+import '../css/css_parser.dart';
 import '../vm/elpian_vm.dart';
 import '../vm/host_api_catalog.dart';
 import '../vm/host_handler.dart';
@@ -539,19 +540,28 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
       debugPrint('NextjsServerWidget: clientComp "$mountId" create failed: $e');
       return null;
     }
-    final record = _LiveClientComp(mountId: mountId, vm: vm);
+    final record = _LiveClientComp(
+      mountId: mountId,
+      vm: vm,
+      style: style is Map<String, dynamic> ? style : null,
+    );
+    // Register before running so an asynchronously-delivered render (the web
+    // QuickJS runtime calls back async) lands in the registry.
+    _liveClientComps[mountId] = record;
 
+    // The web QuickJS runtime delivers renders asynchronously, so we await the
+    // FIRST render (with a timeout) before inlining, then fold later renders
+    // (drag/tab) on the next build. Every render is bound to this mount's OWN
+    // scope, so it repaints just this component — never the rest of the screen.
+    final firstRender = Completer<void>();
     final hostHandler = HostHandler(
-      // The script's own scopeKey is ignored: every client-component render is
-      // bound to its OWN mount scope, so a tab switch / drag repaints just this
-      // component — never the rest of the screen.
       onRender: (viewJson, _) {
-        final namespaced =
-            ClientCompRouting.namespaceHandlers(viewJson, mountId);
-        if (!record.mounted) {
-          record.captured = namespaced; // initial render (inlined below)
+        record.latest = ClientCompRouting.namespaceHandlers(viewJson, mountId);
+        if (!firstRender.isCompleted) {
+          firstRender.complete();
         } else {
-          _applyClientCompRender(record, namespaced);
+          record.dirty = true;
+          if (mounted) setState(() {});
         }
       },
       onPrintln: (m) => debugPrint('NextjsServerWidget[$mountId]: $m'),
@@ -573,6 +583,12 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
         apiName: (name, payload) => hostHandler.handleHostCall(name, payload),
       for (final apiName in VmHostApiCatalog.timerApiNames)
         apiName: (name, payload) => record.timer!.handle(name, payload),
+      // Let a client component fetch a fragment route and receive the decoded
+      // envelope back in ITS OWN VM — so e.g. the stage shell can open a
+      // server-driven panel as an instant skeleton, then fill it once the fetch
+      // returns. submit/navigate are wired likewise for completeness.
+      'fetch': (name, payload) => _hostFetchInto(record.vm, payload),
+      'submit': (name, payload) => _hostSubmitInto(record.vm, payload),
       'navigate': (name, payload) => _hostNavigate(payload),
     };
     vm.registerHostHandlers(handlers);
@@ -580,64 +596,73 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
     try {
       await vm.run();
       await vm.callFunctionWithInput(entryFunction, jsonEncode(props));
+      // Give the (async) first render a chance to land so the inlined content is
+      // the real component, not an empty placeholder.
+      await firstRender.future.timeout(
+        const Duration(seconds: 3),
+        onTimeout: () {
+          debugPrint('NextjsServerWidget: clientComp "$mountId" first render timed out');
+        },
+      );
     } catch (e) {
       debugPrint('NextjsServerWidget: clientComp "$mountId" exec failed: $e');
+      _liveClientComps.remove(mountId);
       await record.dispose();
       return null;
     }
-    record.mounted = true;
 
-    final component = record.captured;
-    if (component == null) {
-      await record.dispose();
-      return null;
-    }
-    _liveClientComps[mountId] = record;
-
-    if (style is Map<String, dynamic>) {
-      final existing = component['style'];
-      component['style'] =
-          existing is Map<String, dynamic> ? {...style, ...existing} : style;
-    }
-    return _wrapClientCompInScope(component, mountId);
+    // Inline this mount's Scope with its first render (or an empty placeholder
+    // if it never arrived — a later render folds in on the next build).
+    record.dirty = false;
+    return _wrapClientCompInScope(_clientCompContent(record), mountId);
   }
 
-  /// Wrap a client component's render in a `Scope` keyed `<mountId>__scope`,
-  /// with the content node keyed `<mountId>` so a scoped patch targets it.
+  /// The content node inlined under a mount's `Scope`: the component's latest
+  /// render (or an empty div before the first render arrives), keyed `<mountId>`
+  /// so a scoped patch targets it, with the server node's style merged in.
+  Map<String, dynamic> _clientCompContent(_LiveClientComp record) {
+    final base = record.latest ?? <String, dynamic>{'type': 'div'};
+    final node = <String, dynamic>{...base, 'key': record.mountId};
+    final style = record.style;
+    if (style != null) {
+      final existing = node['style'];
+      node['style'] =
+          existing is Map<String, dynamic> ? {...style, ...existing} : style;
+    }
+    return node;
+  }
+
+  /// Wrap a client component's content in a `Scope` keyed `<mountId>__scope`.
   Map<String, dynamic> _wrapClientCompInScope(
-    Map<String, dynamic> component,
+    Map<String, dynamic> content,
     String mountId,
   ) {
     return <String, dynamic>{
       'type': 'Scope',
       'key': '${mountId}__scope',
       'props': <String, dynamic>{},
-      'children': <dynamic>[
-        <String, dynamic>{...component, 'key': mountId},
-      ],
+      'children': <dynamic>[content],
     };
   }
 
-  /// Apply a live client component's re-render, bounded to its mount scope.
-  void _applyClientCompRender(
-    _LiveClientComp record,
-    Map<String, dynamic> view,
-  ) {
-    if (!mounted) return;
+  /// Fold any pending client-component renders into the live tree, each bounded
+  /// to its own mount scope. `replaceByKey` swaps just that mount's content and
+  /// bumps its enclosing `Scope` token, so only that component's subtree
+  /// rebuilds — the scene, navbar and other components keep their cached widgets.
+  /// Called from build(); it never re-bumps a scope whose content is unchanged.
+  void _foldClientCompRenders() {
+    if (_liveClientComps.isEmpty) return;
     final tree = _scriptRenderedComponent ?? _lastEnvelopeComponent;
     if (tree == null) return;
-    final replacement = ScopePatch.markRerender(
-      <String, dynamic>{...view, 'key': record.mountId},
-    );
-    final replaced = ScopePatch.replaceByKey(tree, record.mountId, replacement);
-    if (!replaced) {
-      debugPrint(
-        'NextjsServerWidget: clientComp "${record.mountId}" mount scope '
-        'missing; skipping render.',
-      );
-      return;
+    var any = false;
+    for (final record in _liveClientComps.values) {
+      if (!record.dirty || record.latest == null) continue;
+      if (ScopePatch.replaceByKey(tree, record.mountId, _clientCompContent(record))) {
+        record.dirty = false;
+        any = true;
+      }
     }
-    setState(() => _scriptRenderedComponent = tree);
+    if (any) _scriptRenderedComponent = tree;
   }
 
   /// Tear down all live client-component VMs (on route change or disposal).
@@ -960,19 +985,22 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
   /// decoded envelope back to the VM function named by `onData`. Async by
   /// design: the call returns immediately and the result arrives via callback,
   /// so a poller never blocks the VM waiting on the network.
-  Future<String> _hostFetch(String payload) async {
+  Future<String> _hostFetch(String payload) => _hostFetchInto(_pageVm, payload);
+
+  /// As [_hostFetch], but delivers the result to a specific [vm] (e.g. the live
+  /// client component that issued the fetch), not the page VM.
+  Future<String> _hostFetchInto(VmRuntimeClient? vm, String payload) async {
     try {
       final args = _firstArgMap(payload);
       final route = args['route']?.toString();
       final onData = args['onData']?.toString();
       if (route == null || route.isEmpty) return _hostOk;
       final envelope = await _defaultHttpLoader(route, headers: widget.headers);
-      final vm = _pageVm;
       if (onData != null && onData.isNotEmpty && vm != null) {
         await vm.callFunctionWithInput(onData, jsonEncode(envelope));
       }
     } catch (e) {
-      debugPrint('NextjsServerWidget[page fetch]: $e');
+      debugPrint('NextjsServerWidget[fetch]: $e');
     }
     return _hostOk;
   }
@@ -980,7 +1008,10 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
   /// `askHost('submit', { route, body, onResult })` — POST an action and hand
   /// the response envelope back to `onResult`. Navigation directives are applied
   /// automatically (matching `NextjsForm`).
-  Future<String> _hostSubmit(String payload) async {
+  Future<String> _hostSubmit(String payload) => _hostSubmitInto(_pageVm, payload);
+
+  /// As [_hostSubmit], but delivers the result to a specific [vm].
+  Future<String> _hostSubmitInto(VmRuntimeClient? vm, String payload) async {
     try {
       final args = _firstArgMap(payload);
       final route = args['route']?.toString();
@@ -992,12 +1023,11 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
       if (nav is Map && nav.isNotEmpty) {
         _applyServerNavigation(Map<String, dynamic>.from(nav));
       }
-      final vm = _pageVm;
       if (onResult != null && onResult.isNotEmpty && vm != null) {
         await vm.callFunctionWithInput(onResult, jsonEncode(env));
       }
     } catch (e) {
-      debugPrint('NextjsServerWidget[page submit]: $e');
+      debugPrint('NextjsServerWidget[submit]: $e');
     }
     return _hostOk;
   }
@@ -1248,6 +1278,12 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
 
   @override
   Widget build(BuildContext context) {
+    // Resolve `@media` rules against the REAL widget viewport (not the
+    // platform view, which is unreliable on web) so responsive layout — a
+    // floating window on desktop, full-screen on mobile — is correct.
+    final mq = MediaQuery.maybeOf(context);
+    if (mq != null) CSSParser.viewportOverride = mq.size;
+
     return FutureBuilder<Map<String, dynamic>>(
       future: _payloadFuture,
       builder: (context, snapshot) {
@@ -1308,6 +1344,10 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
         _triggerScriptExecution(envelope);
         _applyServerNavigation(envelope.navigation);
 
+        // Fold any client-component renders that arrived (async) since the last
+        // build into the live tree, each bounded to its own mount scope.
+        _foldClientCompRenders();
+
         final componentToRender = _scriptRenderedComponent ?? envelope.component;
         final rendered = _bridge.engine.renderWithStylesheet(
           componentToRender,
@@ -1322,22 +1362,27 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
 }
 
 /// A mounted inline client component: a persistent VM, its timer host API, and
-/// the initial render it produced. Lives for the route so its handlers/timers
-/// keep firing and its renders patch its own mount scope in place.
+/// the latest render it produced. Lives for the route so its handlers/timers
+/// keep firing and its renders fold into its own mount scope in place.
 class _LiveClientComp {
-  _LiveClientComp({required this.mountId, required this.vm});
+  _LiveClientComp({required this.mountId, required this.vm, this.style});
 
   final String mountId;
   final VmRuntimeClient vm;
+
+  /// The server node's style, merged onto every render of this mount.
+  final Map<String, dynamic>? style;
+
   VmTimerHostApi? timer;
 
-  /// The component's most recent (initially, first) render — the node inlined
-  /// into the server tree under this mount's `Scope`.
-  Map<String, dynamic>? captured;
+  /// The component's most recent render (namespaced handlers), folded into the
+  /// tree under this mount's `Scope` on the next build. Null before the first
+  /// render arrives (web delivers the first render asynchronously).
+  Map<String, dynamic>? latest;
 
-  /// False until the initial render has been captured; once true, further
-  /// renders patch the live tree instead of seeding the inline content.
-  bool mounted = false;
+  /// Set when [latest] changes; cleared once folded so an unchanged mount scope
+  /// is never re-bumped (and thus never needlessly rebuilds).
+  bool dirty = false;
 
   Future<void> dispose() async {
     timer?.dispose();
