@@ -4,6 +4,7 @@ import 'dart:js_interop_unsafe';
 
 import 'package:flutter/foundation.dart';
 
+import '../diagnostics/elpian_trace.dart';
 import 'elpian_vm.dart';
 import 'vm_runtime_client.dart';
 
@@ -13,6 +14,17 @@ class QuickJsVm implements VmRuntimeClient {
   HostCallHandler? _defaultHostHandler;
   Map<String, dynamic> _globalHostData = const {};
   String? _bootCode;
+
+  /// Per-machine host-call handlers, keyed by `machineId`. The browser exposes a
+  /// SINGLE global `__elpianQuickJsHostCall`, so every live VM must share it and
+  /// be dispatched to by id. (Previously each VM overwrote the global with a
+  /// closure bound to its own id, so on a screen with more than one live VM —
+  /// e.g. a page poller plus a client-component stage shell — only the
+  /// last-created VM's `host.render`/`host.fetch`/`host.submit` calls were
+  /// honoured and every other VM's calls were silently dropped.)
+  static final Map<String, String Function(String apiName, String payload)>
+      _hostCallRegistry = {};
+  static bool _globalBridgeInstalled = false;
 
   QuickJsVm({required this.machineId});
 
@@ -33,13 +45,20 @@ class QuickJsVm implements VmRuntimeClient {
   }
 
   void _bootstrapHostBridge() {
+    // Register this VM's handler, then install the SINGLE shared global
+    // dispatcher exactly once. The dispatcher routes each call to the VM named
+    // by `machineId`, so every live VM keeps working no matter the create order.
+    _hostCallRegistry[machineId] = _syncHostCall;
+    if (_globalBridgeInstalled) return;
+    _globalBridgeInstalled = true;
     globalContext.setProperty(
       '__elpianQuickJsHostCall'.toJS,
       ((String machineId, String apiName, String payload) {
-        if (machineId != this.machineId) {
+        final handler = _hostCallRegistry[machineId];
+        if (handler == null) {
           return '{"type":"i16","data":{"value":0}}';
         }
-        return _syncHostCall(apiName, payload);
+        return handler(apiName, payload);
       }).toJS,
     );
   }
@@ -52,6 +71,9 @@ class QuickJsVm implements VmRuntimeClient {
   }
 
   String _syncHostCall(String apiName, String payload) {
+    if (apiName == 'render' || apiName == 'fetch' || apiName == 'submit') {
+      ElpianTrace.mark('vm[$machineId] host.$apiName');
+    }
     return _dispatchHostCall(apiName, payload);
   }
 
@@ -182,6 +204,7 @@ class QuickJsVm implements VmRuntimeClient {
 
   @override
   Future<void> dispose() async {
+    _hostCallRegistry.remove(machineId);
     try {
       await _callAsync(
         method: 'disposeMachine',

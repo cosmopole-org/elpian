@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import '../core/event_system.dart';
 import '../css/css_parser.dart';
 import '../vm/elpian_vm.dart';
+import '../diagnostics/elpian_trace.dart';
 import '../vm/host_api_catalog.dart';
 import '../vm/host_handler.dart';
 import '../vm/quickjs_vm.dart';
@@ -175,6 +176,7 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
   }
 
   Future<Map<String, dynamic>> _loadPayload() async {
+    ElpianTrace.mark('loadPayload "$_currentRoute" start');
     // Tear down the previous screen's live client-component VMs and restart mount
     // numbering, so this load resolves a fresh, self-consistent set of mounts.
     await _disposeClientCompVms();
@@ -211,11 +213,13 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
       }
     }
 
+    ElpianTrace.mark('loadPayload "$_currentRoute" HTTP done; resolving clientComps');
     final envelope = NextjsRenderEnvelope.fromJson(payload);
     final resolvedComponent = await _resolveClientComponentNodes(
       envelope.component,
       packedClientComponents: envelope.clientComponents,
     );
+    ElpianTrace.mark('loadPayload "$_currentRoute" clientComps resolved');
 
     return {
       ...payload,
@@ -556,6 +560,8 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
     final firstRender = Completer<void>();
     final hostHandler = HostHandler(
       onRender: (viewJson, _) {
+        ElpianTrace.mark('clientComp[$mountId] render received'
+            '${firstRender.isCompleted ? '' : ' (first)'}');
         record.latest = ClientCompRouting.namespaceHandlers(viewJson, mountId);
         if (!firstRender.isCompleted) {
           firstRender.complete();
@@ -594,16 +600,20 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
     vm.registerHostHandlers(handlers);
 
     try {
+      ElpianTrace.mark('clientComp[$mountId] run + entry');
       await vm.run();
       await vm.callFunctionWithInput(entryFunction, jsonEncode(props));
       // Give the (async) first render a chance to land so the inlined content is
       // the real component, not an empty placeholder.
+      ElpianTrace.mark('clientComp[$mountId] awaiting first render (<=3s)');
       await firstRender.future.timeout(
         const Duration(seconds: 3),
         onTimeout: () {
           debugPrint('NextjsServerWidget: clientComp "$mountId" first render timed out');
+          ElpianTrace.mark('clientComp[$mountId] first render TIMED OUT (3s)');
         },
       );
+      ElpianTrace.mark('clientComp[$mountId] mounted');
     } catch (e) {
       debugPrint('NextjsServerWidget: clientComp "$mountId" exec failed: $e');
       _liveClientComps.remove(mountId);
@@ -942,6 +952,7 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
   /// screen. Without one, it replaces the rendered component (legacy behaviour).
   void _applyClientRender(Map<String, dynamic> view, String? scopeKey) {
     if (!mounted) return;
+    ElpianTrace.mark('page render received (scope=$scopeKey)');
     final key = ScopePatch.normalizeKey(scopeKey);
     if (key == null) {
       setState(() => _scriptRenderedComponent = view);
@@ -995,9 +1006,12 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
       final route = args['route']?.toString();
       final onData = args['onData']?.toString();
       if (route == null || route.isEmpty) return _hostOk;
+      ElpianTrace.mark('host.fetch "$route" -> issuing HTTP');
       final envelope = await _defaultHttpLoader(route, headers: widget.headers);
+      ElpianTrace.mark('host.fetch "$route" <- HTTP responded');
       if (onData != null && onData.isNotEmpty && vm != null) {
         await vm.callFunctionWithInput(onData, jsonEncode(envelope));
+        ElpianTrace.mark('host.fetch "$route" delivered to "$onData"');
       }
     } catch (e) {
       debugPrint('NextjsServerWidget[fetch]: $e');
@@ -1065,6 +1079,8 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
     final handler = node?.events?[event.type];
     if (handler is! String || handler.isEmpty) return;
 
+    ElpianTrace.mark('event "${event.type}" -> handler "$handler"');
+
     // A namespaced handler (`<mountId>::<fn>`) belongs to a live client
     // component; route it to that component's VM. Otherwise it's the page VM's.
     final route = ClientCompRouting.parse(handler);
@@ -1086,6 +1102,7 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
         debugPrint('NextjsServerWidget: event handler "$handler" failed: $e');
       }
     }
+    ElpianTrace.mark('handler "$handler" returned');
   }
 
   /// A loose JSON event for QuickJS handlers. Includes pointer coordinates so
@@ -1348,11 +1365,13 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
         // build into the live tree, each bounded to its own mount scope.
         _foldClientCompRenders();
 
+        ElpianTrace.mark('build(): rendering widget tree');
         final componentToRender = _scriptRenderedComponent ?? envelope.component;
         final rendered = _bridge.engine.renderWithStylesheet(
           componentToRender,
           stylesheet: envelope.stylesheet,
         );
+        ElpianTrace.mark('build(): widget tree rendered');
         // Browser `<body>` semantics: tall screens scroll, full-bleed stages
         // stay pinned. Without this, content past the viewport was unreachable.
         return _bridge.engine.wrapAsDocument(rendered, componentToRender);
