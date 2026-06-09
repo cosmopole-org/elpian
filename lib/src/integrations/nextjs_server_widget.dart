@@ -583,6 +583,12 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
         apiName: (name, payload) => hostHandler.handleHostCall(name, payload),
       for (final apiName in VmHostApiCatalog.timerApiNames)
         apiName: (name, payload) => record.timer!.handle(name, payload),
+      // Let a client component fetch a fragment route and receive the decoded
+      // envelope back in ITS OWN VM — so e.g. the stage shell can open a
+      // server-driven panel as an instant skeleton, then fill it once the fetch
+      // returns. submit/navigate are wired likewise for completeness.
+      'fetch': (name, payload) => _hostFetchInto(record.vm, payload),
+      'submit': (name, payload) => _hostSubmitInto(record.vm, payload),
       'navigate': (name, payload) => _hostNavigate(payload),
     };
     vm.registerHostHandlers(handlers);
@@ -979,19 +985,22 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
   /// decoded envelope back to the VM function named by `onData`. Async by
   /// design: the call returns immediately and the result arrives via callback,
   /// so a poller never blocks the VM waiting on the network.
-  Future<String> _hostFetch(String payload) async {
+  Future<String> _hostFetch(String payload) => _hostFetchInto(_pageVm, payload);
+
+  /// As [_hostFetch], but delivers the result to a specific [vm] (e.g. the live
+  /// client component that issued the fetch), not the page VM.
+  Future<String> _hostFetchInto(VmRuntimeClient? vm, String payload) async {
     try {
       final args = _firstArgMap(payload);
       final route = args['route']?.toString();
       final onData = args['onData']?.toString();
       if (route == null || route.isEmpty) return _hostOk;
       final envelope = await _defaultHttpLoader(route, headers: widget.headers);
-      final vm = _pageVm;
       if (onData != null && onData.isNotEmpty && vm != null) {
         await vm.callFunctionWithInput(onData, jsonEncode(envelope));
       }
     } catch (e) {
-      debugPrint('NextjsServerWidget[page fetch]: $e');
+      debugPrint('NextjsServerWidget[fetch]: $e');
     }
     return _hostOk;
   }
@@ -999,7 +1008,10 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
   /// `askHost('submit', { route, body, onResult })` — POST an action and hand
   /// the response envelope back to `onResult`. Navigation directives are applied
   /// automatically (matching `NextjsForm`).
-  Future<String> _hostSubmit(String payload) async {
+  Future<String> _hostSubmit(String payload) => _hostSubmitInto(_pageVm, payload);
+
+  /// As [_hostSubmit], but delivers the result to a specific [vm].
+  Future<String> _hostSubmitInto(VmRuntimeClient? vm, String payload) async {
     try {
       final args = _firstArgMap(payload);
       final route = args['route']?.toString();
@@ -1011,12 +1023,11 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
       if (nav is Map && nav.isNotEmpty) {
         _applyServerNavigation(Map<String, dynamic>.from(nav));
       }
-      final vm = _pageVm;
       if (onResult != null && onResult.isNotEmpty && vm != null) {
         await vm.callFunctionWithInput(onResult, jsonEncode(env));
       }
     } catch (e) {
-      debugPrint('NextjsServerWidget[page submit]: $e');
+      debugPrint('NextjsServerWidget[submit]: $e');
     }
     return _hostOk;
   }
