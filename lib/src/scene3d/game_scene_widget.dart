@@ -15,6 +15,7 @@ import 'core.dart';
 import 'renderer.dart';
 import 'scene_parser.dart';
 import '../models/elpian_node.dart';
+import '../diagnostics/elpian_trace.dart';
 
 /// A Flutter widget that renders a 3D scene from a JSON definition
 /// using a pure-Dart Canvas-based renderer.
@@ -66,6 +67,21 @@ class GameSceneWidget extends StatefulWidget {
   }) : assert(sceneJson != null || sceneMap != null,
             'Either sceneJson or sceneMap must be provided');
 
+  /// Process-wide map of scene identity → a stable [GlobalKey], so the SAME
+  /// scene (same `sceneKey`/`staticKey`) keeps its [State] — renderer, ticker,
+  /// and cached scene layer — across navigation. Without it, every route change
+  /// rebuilds the widget at a fresh tree position, `initState` re-runs, and the
+  /// scene is re-created and cold-rendered from scratch (the dominant per-nav
+  /// cost). The builds during a navigation are sequential (the FutureBuilder
+  /// shows the previous screen, then the next), never simultaneous, so reusing
+  /// one GlobalKey per identity cannot collide.
+  static final Map<String, GlobalKey> _sceneKeyRegistry = <String, GlobalKey>{};
+
+  static GlobalKey? _stableKeyFor(String? identity) {
+    if (identity == null || identity.isEmpty) return null;
+    return _sceneKeyRegistry[identity] ??= GlobalKey();
+  }
+
   /// Build from a ElpianNode (for JSON GUI integration).
   static Widget build(ElpianNode node, List<Widget> children) {
     final props = node.props;
@@ -85,9 +101,21 @@ class GameSceneWidget extends StatefulWidget {
     final sceneKey = props['sceneKey']?.toString();
     final renderScale = (props['renderScale'] as num?)?.toDouble() ?? 1.0;
 
+    // Identity that survives a route change: prefer an explicit sceneKey, else
+    // the scaffold's `staticKey` (the same city/world background is shared by
+    // every screen built on it). Drives [_stableKeyFor] so the scene's State is
+    // preserved across navigation instead of torn down and re-created.
+    final sceneStaticKey =
+        sceneData is Map<String, dynamic> ? sceneData['staticKey']?.toString() : null;
+    final identity = (sceneKey != null && sceneKey.isNotEmpty)
+        ? sceneKey
+        : sceneStaticKey;
+    final stableKey = _stableKeyFor(identity);
+
     Widget scene;
     if (sceneData is Map<String, dynamic>) {
       scene = GameSceneWidget(
+        key: stableKey,
         sceneMap: sceneData,
         fps: fps,
         interactive: interactive,
@@ -96,6 +124,7 @@ class GameSceneWidget extends StatefulWidget {
       );
     } else {
       scene = GameSceneWidget(
+        key: stableKey,
         sceneJson: sceneData?.toString() ?? '{"world":[]}',
         fps: fps,
         interactive: interactive,
@@ -164,9 +193,21 @@ class _GameSceneWidgetState extends State<GameSceneWidget>
   Vec3 _orbitTarget = Vec3.zero;
   bool _orbitInitialized = false;
 
+  /// Set whenever the scene must be repainted on the next tick even though the
+  /// renderer reported no dynamic content (a fresh parse, a camera drag, …).
+  /// Starts true so the very first frame always paints. See [_onTick].
+  bool _dirty = true;
+
+  /// Bumped only on the ticks that actually repaint the 3D layer. The painter
+  /// keys [CustomPainter.shouldRepaint] off it, so an unrelated parent rebuild
+  /// (a HUD poll, a client-component re-render) reuses the cached scene layer
+  /// (via the surrounding `RepaintBoundary`) instead of re-rasterizing it.
+  int _frameToken = 0;
+
   @override
   void initState() {
     super.initState();
+    ElpianTrace.mark('GameScene initState (NEW renderer + state)');
     _renderer = Scene3DRenderer();
     _parseScene();
 
@@ -177,6 +218,7 @@ class _GameSceneWidgetState extends State<GameSceneWidget>
   }
 
   void _parseScene() {
+    final _sw = ElpianTrace.enabled ? (Stopwatch()..start()) : null;
     Map<String, dynamic> json;
     try {
       if (widget.sceneJson != null) {
@@ -235,6 +277,18 @@ class _GameSceneWidgetState extends State<GameSceneWidget>
       }
       _orbitInitialized = true;
     }
+
+    // A freshly parsed scene must paint at least once.
+    _dirty = true;
+
+    if (_sw != null) {
+      _sw.stop();
+      final staticCached =
+          _staticKey != null && _staticSceneCache.containsKey(_staticKey);
+      ElpianTrace.mark('_parseScene done ${_sw.elapsedMilliseconds}ms '
+          '(staticKey=$_staticKey, staticCacheHit=$staticCached, '
+          'nodes=${_scene.nodes.length})');
+    }
   }
 
   /// Parse a `staticWorld` node list into a [ParsedScene] and flag every node
@@ -274,6 +328,19 @@ class _GameSceneWidgetState extends State<GameSceneWidget>
     _repaintAccum += cappedDt;
     if (_repaintAccum + 1e-6 < interval) return;
     _repaintAccum = 0;
+
+    // Idle-repaint gating: a software-rasterized frame of this scene costs
+    // 50–130ms of MAIN-THREAD CPU. Re-running it every tick for a scene that
+    // never changes (fixed camera, no animation/particles — e.g. the city/menu
+    // screens) saturates the UI thread and makes every tap/navigation lag by
+    // seconds. So only repaint when something actually changed: a pending edit
+    // (_dirty), or the last frame contained time-varying content (an animated
+    // camera, particles, a keyframe/glTF animation, or a model still loading).
+    if (!_dirty && !_renderer.hadDynamicContent) {
+      return;
+    }
+    _dirty = false;
+    _frameToken++;
 
     setState(() {});
     widget.onFrameRendered?.call();
@@ -324,6 +391,8 @@ class _GameSceneWidgetState extends State<GameSceneWidget>
       _orbitTarget.z + _orbitDistance * math.cos(_orbitPitch) * math.cos(_orbitYaw),
     );
     _scene.camera.target = _orbitTarget;
+    // The user is dragging the camera — repaint the next frame.
+    _dirty = true;
   }
 
   @override
@@ -333,6 +402,7 @@ class _GameSceneWidgetState extends State<GameSceneWidget>
         renderer: _renderer,
         scene: _scene,
         renderScale: widget.renderScale.clamp(0.1, 1.0),
+        frameToken: _frameToken,
       ),
       size: Size.infinite,
     );
@@ -359,11 +429,13 @@ class _GameScenePainter extends CustomPainter {
   final Scene3DRenderer renderer;
   final ParsedScene scene;
   final double renderScale;
+  final int frameToken;
 
   const _GameScenePainter({
     required this.renderer,
     required this.scene,
     this.renderScale = 1.0,
+    this.frameToken = 0,
   });
 
   @override
@@ -407,5 +479,8 @@ class _GameScenePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_GameScenePainter oldDelegate) => true;
+  bool shouldRepaint(_GameScenePainter oldDelegate) =>
+      oldDelegate.frameToken != frameToken ||
+      oldDelegate.scene != scene ||
+      oldDelegate.renderScale != renderScale;
 }

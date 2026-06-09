@@ -10,6 +10,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart' show Color;
+import '../diagnostics/elpian_trace.dart';
 import 'core.dart';
 import 'gltf/gltf_model.dart';
 import 'gltf/model_cache.dart';
@@ -73,6 +74,16 @@ class _StaticMesh {
   final Vec3 center;
   final double radius;
   _StaticMesh(this.pos, this.col, this.center, this.radius);
+
+  // Projected-triangle cache: a static node's screen triangles only change when
+  // the view-projection matrix or the viewport does. While the camera is still
+  // (the common case — a fixed-camera city/world with at most some animated
+  // units), reusing this list skips re-projecting thousands of vertices per
+  // frame. Keyed by a snapshot of `vp.m` (16 doubles) and the surface size.
+  List<_ScreenTri>? cachedTris;
+  List<double>? cachedVp;
+  double cachedW = -1;
+  double cachedH = -1;
 }
 
 /// Six view-frustum planes (a·x+b·y+c·z+d), extracted from a view-projection
@@ -123,6 +134,14 @@ class Scene3DRenderer {
   /// View frustum for the current frame, used to cull static nodes.
   _Frustum? _frustum;
 
+  /// Whether the most recent [render] drew any time-varying content — an
+  /// animated camera, a particle system, a keyframe-animated node, or an
+  /// animated glTF clip. When this is false the scene is fully static and the
+  /// host widget can stop repainting it (see `GameSceneWidget._onTick`) instead
+  /// of re-rasterizing an identical frame every tick.
+  bool _dynamic = false;
+  bool get hadDynamicContent => _dynamic;
+
   double get elapsed => _elapsed;
 
   /// Advance the internal clock (called by widget ticker).
@@ -144,6 +163,14 @@ class Scene3DRenderer {
     required List<Light3D> lights,
     required List<SceneNode> nodes,
   }) {
+    final _frameSw = ElpianTrace.enabled ? (Stopwatch()..start()) : null;
+    // Assume static until we encounter time-varying content this frame.
+    _dynamic = false;
+    // An animated camera (orbit/follow/flythrough) or an active shake keeps the
+    // scene moving every frame even when nothing else does.
+    if (camera.mode != CameraMode.fixed || camera.shakeAmount > 0) {
+      _dynamic = true;
+    }
     // Sky gradient background
     _drawSkyGradient(canvas, size, environment);
 
@@ -263,7 +290,20 @@ class Scene3DRenderer {
       particlePaint.color = sp.color;
       canvas.drawCircle(sp.center, sp.radius, particlePaint);
     }
+
+    if (_frameSw != null) {
+      _frameSw.stop();
+      _frameCount++;
+      final ms = _frameSw.elapsedMilliseconds;
+      // Log the first few frames (cold paints after a rebuild) and any slow one.
+      if (_frameCount <= 5 || ms >= 30) {
+        ElpianTrace.mark('scene.render frame#$_frameCount '
+            '${ms}ms (nodes=${nodes.length}, tris=${screenTris.length})');
+      }
+    }
   }
+
+  int _frameCount = 0;
 
   void _drawSkyGradient(ui.Canvas canvas, ui.Size size, Environment3D env) {
     final rect = ui.Rect.fromLTWH(0, 0, size.width, size.height);
@@ -297,7 +337,8 @@ class Scene3DRenderer {
       var localXform = node.localTransform();
 
       // Apply animations
-      if (node.animations != null) {
+      if (node.animations != null && node.animations!.isNotEmpty) {
+        _dynamic = true;
         for (final anim in node.animations!) {
           localXform = anim.evaluate(_elapsed, localXform);
         }
@@ -307,6 +348,7 @@ class Scene3DRenderer {
 
       // Apply physics
       if (node.rigidBody != null && !node.rigidBody!.isStatic) {
+        _dynamic = true;
         node.position = node.rigidBody!.applyPhysics(
           node.position, 1.0 / 60.0, environment.gravity,
         );
@@ -327,6 +369,7 @@ class Scene3DRenderer {
           );
           break;
         case 'particles':
+          _dynamic = true;
           _renderParticles(
             node, worldXform, vp, size, camera, screenParticles,
           );
@@ -342,6 +385,15 @@ class Scene3DRenderer {
         );
       }
     }
+  }
+
+  /// Cheap element-wise equality for two 16-element view-projection matrices.
+  static bool _vpEquals(List<double>? a, List<double> b) {
+    if (a == null || a.length != b.length) return false;
+    for (var i = 0; i < b.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
   }
 
   void _renderMesh(
@@ -370,13 +422,27 @@ class Scene3DRenderer {
       if (_frustum != null && _frustum!.sphereOutside(baked.center, baked.radius)) {
         return;
       }
+      // Reuse the cached projection while the camera and viewport are unchanged.
+      if (baked.cachedTris != null &&
+          baked.cachedW == size.width &&
+          baked.cachedH == size.height &&
+          _vpEquals(baked.cachedVp, vp.m)) {
+        screenTris.addAll(baked.cachedTris!);
+        return;
+      }
+      final projected = <_ScreenTri>[];
       for (var i = 0; i < baked.pos.length; i += 3) {
         _projectTri(
           baked.pos[i], baked.pos[i + 1], baked.pos[i + 2],
           baked.col[i], baked.col[i + 1], baked.col[i + 2],
-          mat, vp, size, camera, environment, screenTris,
+          mat, vp, size, camera, environment, projected,
         );
       }
+      baked.cachedTris = projected;
+      baked.cachedVp = List<double>.from(vp.m);
+      baked.cachedW = size.width;
+      baked.cachedH = size.height;
+      screenTris.addAll(projected);
       return;
     }
 
@@ -592,6 +658,12 @@ class Scene3DRenderer {
     final model = GltfModelCache.instance.get(url);
 
     if (model == null) {
+      // A model that is still loading must keep the scene repainting so it pops
+      // in the moment its bytes arrive (otherwise idle-gating would freeze the
+      // frame on the placeholder forever).
+      if (GltfModelCache.instance.statusOf(url) != GltfLoadStatus.failed) {
+        _dynamic = true;
+      }
       // Loading (or failed): draw a subtle capsule placeholder.
       final placeholder = _generateMesh('Capsule', const {
         'radius': 0.45,
@@ -612,7 +684,11 @@ class Scene3DRenderer {
     final extra = node.extra ?? const <String, dynamic>{};
     final animName = extra['animation'] as String?;
     final animIdx = model.resolveAnimation(animName);
-    final time = (extra['anim_time'] as num?)?.toDouble() ?? _elapsed;
+    final pinnedTime = (extra['anim_time'] as num?)?.toDouble();
+    final time = pinnedTime ?? _elapsed;
+    // A playing clip (driven by the elapsed clock, not pinned to a fixed pose)
+    // keeps the model moving every frame.
+    if (animIdx != null && animIdx >= 0 && pinnedTime == null) _dynamic = true;
 
     final tint = _vec3From(extra['tint']) ?? Vec3.one;
     final emissiveOverride = _vec3From(extra['emissive']);
