@@ -558,10 +558,13 @@ class Scene3DRenderer {
     final clip1 = vp.transformVec4(wp1);
     final clip2 = vp.transformVec4(wp2);
 
-    // Near-plane clipping: collect vertices with their w values
+    // Frustum clipping (near plane + the four side planes). Side clipping is
+    // what keeps huge floor/sea planes visible: a ground quad's corners can sit
+    // far outside NDC while its surface fills the whole viewport, so whole-
+    // triangle rejection must only happen for triangles entirely outside.
     final clipVerts = [clip0, clip1, clip2];
     final colors = [c0, c1, c2];
-    final clipped = _clipNearPlane(clipVerts, colors, nearPlane);
+    final clipped = _clipFrustum(clipVerts, colors, nearPlane);
     if (clipped == null || clipped.verts.isEmpty) return;
 
     // Perspective divide and screen mapping for clipped triangles
@@ -1085,51 +1088,52 @@ class Scene3DRenderer {
     );
   }
 
-  _ClippedResult? _clipNearPlane(List<Vec4> verts, List<Vec3> colors, double near) {
-    // Simple near-plane clip: vertices with w > near pass
-    final inside = <int>[];
-    final outside = <int>[];
-    for (var i = 0; i < verts.length; i++) {
-      if (verts[i].w > near) {
-        inside.add(i);
-      } else {
-        outside.add(i);
+  /// Sutherland–Hodgman clip of a clip-space triangle against the near plane
+  /// and the four side planes (|x| ≤ m·w, |y| ≤ m·w with a small margin so
+  /// screen-edge interpolation artifacts stay just offscreen). Returns a fan
+  /// polygon, or null when fully outside.
+  _ClippedResult? _clipFrustum(List<Vec4> verts, List<Vec3> colors, double near) {
+    const m = 1.05; // guard-band margin in NDC units
+    // Signed "inside" distance per plane; > 0 keeps the vertex.
+    final planes = <double Function(Vec4)>[
+      (v) => v.w - near, // near
+      (v) => m * v.w - v.x, // right  (x ≤ m·w)
+      (v) => m * v.w + v.x, // left   (x ≥ -m·w)
+      (v) => m * v.w - v.y, // top    (y ≤ m·w)
+      (v) => m * v.w + v.y, // bottom (y ≥ -m·w)
+    ];
+
+    var pv = verts;
+    var pc = colors;
+    for (final plane in planes) {
+      if (pv.isEmpty) return null;
+      final ov = <Vec4>[];
+      final oc = <Vec3>[];
+      for (var i = 0; i < pv.length; i++) {
+        final j = (i + 1) % pv.length;
+        final di = plane(pv[i]);
+        final dj = plane(pv[j]);
+        if (di > 0) {
+          ov.add(pv[i]);
+          oc.add(pc[i]);
+        }
+        if ((di > 0) != (dj > 0)) {
+          final t = di / (di - dj);
+          final vi = pv[i], vj = pv[j];
+          ov.add(Vec4(
+            vi.x + t * (vj.x - vi.x),
+            vi.y + t * (vj.y - vi.y),
+            vi.z + t * (vj.z - vi.z),
+            vi.w + t * (vj.w - vi.w),
+          ));
+          oc.add(pc[i].lerp(pc[j], t));
+        }
       }
+      pv = ov;
+      pc = oc;
     }
-
-    if (inside.length == 3) return _ClippedResult(verts, colors);
-    if (inside.isEmpty) return null;
-
-    // Clip: generate new vertices at the near plane
-    final outVerts = <Vec4>[];
-    final outColors = <Vec3>[];
-
-    for (var i = 0; i < 3; i++) {
-      final j = (i + 1) % 3;
-      final vi = verts[i], vj = verts[j];
-      final ci = colors[i], cj = colors[j];
-      final wi = vi.w, wj = vj.w;
-
-      if (wi > near) {
-        outVerts.add(vi);
-        outColors.add(ci);
-      }
-
-      // Edge crosses near plane?
-      if ((wi > near) != (wj > near)) {
-        final t = (near - wi) / (wj - wi);
-        outVerts.add(Vec4(
-          vi.x + t * (vj.x - vi.x),
-          vi.y + t * (vj.y - vi.y),
-          vi.z + t * (vj.z - vi.z),
-          vi.w + t * (vj.w - vi.w),
-        ));
-        outColors.add(ci.lerp(cj, t));
-      }
-    }
-
-    if (outVerts.length < 3) return null;
-    return _ClippedResult(outVerts, outColors);
+    if (pv.length < 3) return null;
+    return _ClippedResult(pv, pc);
   }
 
   void _renderParticles(
