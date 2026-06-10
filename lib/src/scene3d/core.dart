@@ -519,6 +519,85 @@ class MeshGen {
     return Mesh(tris, AABB(Vec3(-radius, -hh, -radius), Vec3(radius, hh, radius)));
   }
 
+  /// Flat-topped annulus (washer) with inner/outer side walls — for ground
+  /// rings (grass around a paved interior, shallow-water bands) that must not
+  /// overlap the disc they surround: the painter-sorted renderer cannot order
+  /// large coplanar cylinder caps, so "disc on bigger disc" z-fights as
+  /// radial wedges. CCW-outward winding like every other primitive.
+  static Mesh ring({
+    double innerRadius = 0.5,
+    double outerRadius = 1.0,
+    double height = 0.2,
+    int segments = 32,
+  }) {
+    final tris = <Triangle>[];
+    final hh = height / 2;
+    for (var i = 0; i < segments; i++) {
+      final a1 = 2 * math.pi * i / segments, a2 = 2 * math.pi * (i + 1) / segments;
+      final c1 = math.cos(a1), s1 = math.sin(a1);
+      final c2 = math.cos(a2), s2 = math.sin(a2);
+      final u0 = i / segments, u1 = (i + 1) / segments;
+      final oB1 = Vec3(outerRadius * c1, -hh, outerRadius * s1);
+      final oB2 = Vec3(outerRadius * c2, -hh, outerRadius * s2);
+      final oT1 = Vec3(outerRadius * c1, hh, outerRadius * s1);
+      final oT2 = Vec3(outerRadius * c2, hh, outerRadius * s2);
+      final iB1 = Vec3(innerRadius * c1, -hh, innerRadius * s1);
+      final iB2 = Vec3(innerRadius * c2, -hh, innerRadius * s2);
+      final iT1 = Vec3(innerRadius * c1, hh, innerRadius * s1);
+      final iT2 = Vec3(innerRadius * c2, hh, innerRadius * s2);
+      final no = Vec3((c1 + c2) / 2, 0, (s1 + s2) / 2).normalized;
+      final ni = no * -1.0;
+      // Top annulus (+Y)
+      tris.add(Triangle(
+        Vertex(position: iT1, normal: Vec3.up, uv: Vec2(u0, 0)),
+        Vertex(position: oT2, normal: Vec3.up, uv: Vec2(u1, 1)),
+        Vertex(position: oT1, normal: Vec3.up, uv: Vec2(u0, 1)),
+      ));
+      tris.add(Triangle(
+        Vertex(position: iT1, normal: Vec3.up, uv: Vec2(u0, 0)),
+        Vertex(position: iT2, normal: Vec3.up, uv: Vec2(u1, 0)),
+        Vertex(position: oT2, normal: Vec3.up, uv: Vec2(u1, 1)),
+      ));
+      // Bottom annulus (-Y)
+      tris.add(Triangle(
+        Vertex(position: iB1, normal: Vec3.down, uv: Vec2(u0, 0)),
+        Vertex(position: oB1, normal: Vec3.down, uv: Vec2(u0, 1)),
+        Vertex(position: oB2, normal: Vec3.down, uv: Vec2(u1, 1)),
+      ));
+      tris.add(Triangle(
+        Vertex(position: iB1, normal: Vec3.down, uv: Vec2(u0, 0)),
+        Vertex(position: oB2, normal: Vec3.down, uv: Vec2(u1, 1)),
+        Vertex(position: iB2, normal: Vec3.down, uv: Vec2(u1, 0)),
+      ));
+      // Outer wall (radially out)
+      tris.add(Triangle(
+        Vertex(position: oB1, normal: no, uv: Vec2(u0, 0)),
+        Vertex(position: oT2, normal: no, uv: Vec2(u1, 1)),
+        Vertex(position: oB2, normal: no, uv: Vec2(u1, 0)),
+      ));
+      tris.add(Triangle(
+        Vertex(position: oB1, normal: no, uv: Vec2(u0, 0)),
+        Vertex(position: oT1, normal: no, uv: Vec2(u0, 1)),
+        Vertex(position: oT2, normal: no, uv: Vec2(u1, 1)),
+      ));
+      // Inner wall (radially in)
+      tris.add(Triangle(
+        Vertex(position: iB1, normal: ni, uv: Vec2(u0, 0)),
+        Vertex(position: iB2, normal: ni, uv: Vec2(u1, 0)),
+        Vertex(position: iT2, normal: ni, uv: Vec2(u1, 1)),
+      ));
+      tris.add(Triangle(
+        Vertex(position: iB1, normal: ni, uv: Vec2(u0, 0)),
+        Vertex(position: iT2, normal: ni, uv: Vec2(u1, 1)),
+        Vertex(position: iT1, normal: ni, uv: Vec2(u0, 1)),
+      ));
+    }
+    return Mesh(
+      tris,
+      AABB(Vec3(-outerRadius, -hh, -outerRadius), Vec3(outerRadius, hh, outerRadius)),
+    );
+  }
+
   static Mesh cone({double radius = 0.5, double height = 1.0, int segments = 16}) {
     final tris = <Triangle>[];
     final apex = Vec3(0, height, 0);

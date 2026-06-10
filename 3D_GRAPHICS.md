@@ -412,6 +412,7 @@ Built-in geometry primitives available for `mesh3d` nodes.
 | Plane | `{"Plane": {...}}` | `size`, `subdivisions` | Flat plane |
 | Cylinder | `{"Cylinder": {...}}` | `radius`, `height`, `segments` | Cylinder |
 | Cone | `{"Cone": {...}}` | `radius`, `height`, `segments` | Cone |
+| Ring | `{"Ring": {...}}` | `inner_radius`, `outer_radius`, `height`, `segments` | Flat annulus (washer) with side walls — use for ground rings around a disc; large coplanar discs cannot be painter-sorted |
 | Torus | `{"Torus": {...}}` | `radius`, `tube_radius`, `segments` | Donut shape |
 | Capsule | `{"Capsule": {...}}` | `radius`, `depth` | Spherocylinder |
 | Pyramid | `{"Pyramid": {...}}` | `base`, `height` | 4-sided pyramid |

@@ -68,6 +68,8 @@ void main() {
         'Torus', MeshGen.torus(radius: 1, tubeRadius: 0.3, radial: 8, tubular: 12));
     expectWindingMatchesNormals(
         'Capsule', MeshGen.capsule(radius: 0.5, height: 1, segments: 12));
+    expectWindingMatchesNormals('Ring',
+        MeshGen.ring(innerRadius: 2, outerRadius: 5, height: 0.3, segments: 16));
     expectWindingMatchesNormals('Pyramid', MeshGen.pyramid(base: 1, height: 1));
     expectWindingMatchesNormals('Wedge', MeshGen.wedge());
     expectWindingMatchesNormals('IcoSphere', MeshGen.icosphere(radius: 1));

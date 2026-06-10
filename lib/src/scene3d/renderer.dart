@@ -1230,6 +1230,13 @@ class Scene3DRenderer {
           height: _d(p['height'], 1.0),
           segments: _i(p['segments'], 16),
         );
+      case 'Ring':
+        return MeshGen.ring(
+          innerRadius: _d(p['inner_radius'], 0.5),
+          outerRadius: _d(p['outer_radius'], 1.0),
+          height: _d(p['height'], 0.2),
+          segments: _i(p['segments'], 32),
+        );
       case 'Cone':
         return MeshGen.cone(
           radius: _d(p['radius'], 0.5),
