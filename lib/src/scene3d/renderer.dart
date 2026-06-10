@@ -748,19 +748,22 @@ class Scene3DRenderer {
       dynamic normalize, GltfModel model, Mat4 worldXform) {
     if (normalize == null) return worldXform;
     double? height;
+    double? footprint;
     var ground = false;
     var center = false;
     if (normalize is num) {
       height = normalize.toDouble();
     } else if (normalize is Map) {
       height = (normalize['height'] as num?)?.toDouble();
+      footprint = (normalize['footprint'] as num?)?.toDouble();
       ground = normalize['ground'] == true;
       center = normalize['center'] == true;
     } else {
       return worldXform;
     }
     return worldXform *
-        model.normalizeTransform(height: height, ground: ground, center: center);
+        model.normalizeTransform(
+            height: height, footprint: footprint, ground: ground, center: center);
   }
 
   void _emitPrimitive(

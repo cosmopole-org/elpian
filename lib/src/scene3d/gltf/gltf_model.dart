@@ -213,23 +213,37 @@ class GltfModel {
     this.restMax = const Vec3(0.5, 0.5, 0.5),
   });
 
-  /// Model-space adjustment that normalizes the rest pose to [height] world
-  /// units tall (uniform scale), optionally snapping the rest-pose base to
-  /// `y = 0` ([ground]) and centering the footprint on the local origin
-  /// ([center]). Returns identity when the bounds are degenerate or [height]
-  /// is not positive. Apply between the node transform and the model:
-  /// `world = nodeTransform * normalizeTransform(...)`.
+  /// Model-space adjustment that normalizes the rest pose to a target size
+  /// (uniform scale), optionally snapping the rest-pose base to `y = 0`
+  /// ([ground]) and centering the footprint on the local origin ([center]).
+  ///
+  /// [height] targets the rest-pose Y extent; [footprint] targets the larger
+  /// of the X/Z extents. When both are given the *smaller* factor wins — a
+  /// "contain" fit, so the model fills a `footprint × footprint` cell without
+  /// exceeding `height`. Returns identity when the bounds are degenerate or
+  /// no positive constraint is given. Apply between the node transform and
+  /// the model: `world = nodeTransform * normalizeTransform(...)`.
   Mat4 normalizeTransform({
     double? height,
+    double? footprint,
     bool ground = false,
     bool center = false,
   }) {
     final extentY = restMax.y - restMin.y;
-    var f = 1.0;
+    final extentXZ = (restMax.x - restMin.x) > (restMax.z - restMin.z)
+        ? restMax.x - restMin.x
+        : restMax.z - restMin.z;
+    double? f;
     if (height != null && height > 0 && extentY > 1e-9) {
       f = height / extentY;
-    } else if (height != null) {
-      return Mat4.identity();
+    }
+    if (footprint != null && footprint > 0 && extentXZ > 1e-9) {
+      final ff = footprint / extentXZ;
+      f = (f == null || ff < f) ? ff : f;
+    }
+    if (f == null) {
+      if (height != null || footprint != null) return Mat4.identity();
+      f = 1.0;
     }
     var m = Mat4.scale(Vec3(f, f, f));
     if (ground || center) {

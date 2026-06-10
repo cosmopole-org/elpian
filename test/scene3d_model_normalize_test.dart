@@ -60,6 +60,20 @@ void main() {
     expect(mid.y, closeTo(0, 1e-9));
   });
 
+  test('footprint targets the larger XZ extent; with height it contain-fits', () {
+    // 2 wide × 4 deep × 1 tall.
+    final m = _model(min: const Vec3(-1, 0, -2), max: const Vec3(1, 1, 2));
+    // Footprint alone: larger XZ extent (4) → target 8 = ×2.
+    final t1 = m.normalizeTransform(footprint: 8);
+    expect(t1.transformPoint(const Vec3(0, 0, 2)).z, closeTo(4, 1e-9));
+    // Contain fit: height would give ×6, footprint ×2 → ×2 wins.
+    final t2 = m.normalizeTransform(height: 6, footprint: 8);
+    expect(t2.transformPoint(const Vec3(0, 1, 0)).y, closeTo(2, 1e-9));
+    // Contain fit the other way: footprint ×2, height ×0.5 → ×0.5 wins.
+    final t3 = m.normalizeTransform(height: 0.5, footprint: 8);
+    expect(t3.transformPoint(const Vec3(0, 0, 2)).z, closeTo(1, 1e-9));
+  });
+
   test('degenerate bounds or non-positive height → identity', () {
     void expectIdentity(Mat4 t) {
       final p = t.transformPoint(const Vec3(1, 1, 1));
