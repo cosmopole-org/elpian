@@ -17,6 +17,7 @@ export 'src/core/elpian_engine.dart';
 export 'src/core/widget_registry.dart';
 export 'src/core/dom_api.dart';
 export 'src/core/event_system.dart';
+export 'src/core/resources.dart';
 export 'src/core/event_dispatcher.dart';
 export 'src/core/event_enabled_widget.dart';
 
