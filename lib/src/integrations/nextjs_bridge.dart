@@ -301,7 +301,7 @@ class NextjsBridge {
         ? const SizedBox.shrink()
         : flow.length == 1
             ? flow.first
-            : Row(mainAxisSize: MainAxisSize.min, children: flow);
+            : _linkFlow(node, flow);
 
     if (overlays.isEmpty) return base;
     // Clip.none: badges intentionally poke past the button's rounded corners.
@@ -309,6 +309,60 @@ class NextjsBridge {
       clipBehavior: Clip.none,
       children: [base, ...overlays],
     );
+  }
+
+  /// Lay a link's in-flow children out per the link's OWN flex styles. Most
+  /// game "buttons" are `NextjsLink`s styled `display:flex` with a `gap` and
+  /// centring (`justifyContent`/`alignItems`) — a bare default [Row] dropped
+  /// all of that, so a glyph + label rendered squashed together and
+  /// mis-aligned (most visibly in the mobile navbar / menu buttons).
+  Widget _linkFlow(ElpianNode node, List<Widget> flow) {
+    final style = node.style;
+    final direction = style?.flexDirection;
+    final isColumn = direction == 'column' || direction == 'column-reverse';
+    final gap = style?.gap ?? 0;
+    final children = _withGaps(
+      flow,
+      gap,
+      isColumn ? Axis.vertical : Axis.horizontal,
+    );
+    final mainAlign =
+        CSSProperties.getMainAxisAlignment(style?.justifyContent);
+    // Default the cross axis to CENTER — the [Row] default these buttons were
+    // built against (and the sensible default for a button's content box) —
+    // honouring an explicit `alignItems` when one is set.
+    final crossAlign = style?.alignItems == null
+        ? CrossAxisAlignment.center
+        : CSSProperties.getCrossAxisAlignment(style?.alignItems);
+    return isColumn
+        ? Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: mainAlign,
+            crossAxisAlignment: crossAlign,
+            children: children,
+          )
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: mainAlign,
+            crossAxisAlignment: crossAlign,
+            children: children,
+          );
+  }
+
+  /// Interleave fixed [gap] spacers between [children] along [axis].
+  List<Widget> _withGaps(List<Widget> children, double gap, Axis axis) {
+    if (gap <= 0 || children.length <= 1) return children;
+    final spaced = <Widget>[];
+    for (var i = 0; i < children.length; i++) {
+      spaced.add(children[i]);
+      if (i < children.length - 1) {
+        spaced.add(SizedBox(
+          width: axis == Axis.horizontal ? gap : 0,
+          height: axis == Axis.vertical ? gap : 0,
+        ));
+      }
+    }
+    return spaced;
   }
 
   /// Resolve a link child's inline style (the raw `style` map the builders emit)
