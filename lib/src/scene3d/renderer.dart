@@ -1236,7 +1236,13 @@ class Scene3DRenderer {
           segments: _i(p['subdivisions'], _i(p['segments'], 16)),
         );
       case 'Plane':
-        return MeshGen.plane(size: _d(p['size'], 10.0));
+        return MeshGen.plane(
+          size: _d(p['size'], 10.0),
+          // Subdivision matters beyond tessellation detail: the painter's
+          // algorithm sorts whole triangles, so a 2-triangle ground plane
+          // spanning the scene cannot order against geometry resting on it.
+          subdivisions: _i(p['subdivisions'], 1),
+        );
       case 'Cylinder':
         return MeshGen.cylinder(
           radius: _d(p['radius'], 0.5),
