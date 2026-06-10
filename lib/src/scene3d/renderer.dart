@@ -664,17 +664,27 @@ class Scene3DRenderer {
       if (GltfModelCache.instance.statusOf(url) != GltfLoadStatus.failed) {
         _dynamic = true;
       }
-      // Loading (or failed): draw a subtle capsule placeholder.
-      final placeholder = _generateMesh('Capsule', const {
-        'radius': 0.45,
-        'height': 1.0,
+      // Loading (or failed): draw a subtle capsule placeholder. When the node
+      // declares a `normalize` height, size the placeholder to it so the
+      // pop-in does not jump scale.
+      final extra = node.extra ?? const <String, dynamic>{};
+      final normalize = extra['normalize'];
+      final targetH = normalize is num
+          ? normalize.toDouble()
+          : normalize is Map
+              ? (normalize['height'] as num?)?.toDouble()
+              : null;
+      final h = (targetH != null && targetH > 0) ? targetH : 1.0;
+      final placeholder = _generateMesh('Capsule', {
+        'radius': 0.45 * h,
+        'height': h,
         'segments': 10,
       });
       if (placeholder != null) {
         _emitMeshTris(
           placeholder,
           const Material3D(baseColor: Vec3(0.3, 0.34, 0.42), roughness: 0.8),
-          worldXform * Mat4.translation(const Vec3(0, 0.5, 0)),
+          worldXform * Mat4.translation(Vec3(0, 0.5 * h, 0)),
           vp, size, camera, environment, lights, screenTris,
         );
       }
@@ -693,6 +703,12 @@ class Scene3DRenderer {
     final tint = _vec3From(extra['tint']) ?? Vec3.one;
     final emissiveOverride = _vec3From(extra['emissive']);
     final emissiveStrength = (extra['emissive_strength'] as num?)?.toDouble() ?? 1.0;
+
+    // Bounds-based normalization: `normalize: 4` (target height) or
+    // `normalize: {height, ground, center}`. Applied between the node
+    // transform and the model so authors size assets in world units.
+    final normalized = _normalizeFrame(extra['normalize'], model, worldXform);
+    worldXform = normalized;
 
     final globals = model.computeGlobalTransforms(animIdx, time);
 
@@ -720,6 +736,28 @@ class Scene3DRenderer {
         );
       }
     }
+  }
+
+  /// Resolve a `model3d` node's `normalize` request against the model's
+  /// rest-pose bounds. Accepts a bare number (target world height) or a map
+  /// `{height, ground, center}`; anything else returns [worldXform] unchanged.
+  static Mat4 _normalizeFrame(
+      dynamic normalize, GltfModel model, Mat4 worldXform) {
+    if (normalize == null) return worldXform;
+    double? height;
+    var ground = false;
+    var center = false;
+    if (normalize is num) {
+      height = normalize.toDouble();
+    } else if (normalize is Map) {
+      height = (normalize['height'] as num?)?.toDouble();
+      ground = normalize['ground'] == true;
+      center = normalize['center'] == true;
+    } else {
+      return worldXform;
+    }
+    return worldXform *
+        model.normalizeTransform(height: height, ground: ground, center: center);
   }
 
   void _emitPrimitive(

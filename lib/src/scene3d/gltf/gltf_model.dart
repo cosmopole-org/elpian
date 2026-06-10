@@ -191,6 +191,13 @@ class GltfModel {
   final Vec3 restCenter;
   final double restRadius;
 
+  /// Rest-pose axis-aligned bounds (model space). Drives `normalize` on
+  /// `model3d` nodes: scene authors give a target world height instead of
+  /// hand-tuning a per-asset scale factor for GLBs with arbitrary intrinsic
+  /// sizes.
+  final Vec3 restMin;
+  final Vec3 restMax;
+
   GltfModel({
     required this.nodes,
     required this.rootNodes,
@@ -202,7 +209,37 @@ class GltfModel {
     required this.animationByName,
     this.restCenter = Vec3.zero,
     this.restRadius = 1.0,
+    this.restMin = const Vec3(-0.5, -0.5, -0.5),
+    this.restMax = const Vec3(0.5, 0.5, 0.5),
   });
+
+  /// Model-space adjustment that normalizes the rest pose to [height] world
+  /// units tall (uniform scale), optionally snapping the rest-pose base to
+  /// `y = 0` ([ground]) and centering the footprint on the local origin
+  /// ([center]). Returns identity when the bounds are degenerate or [height]
+  /// is not positive. Apply between the node transform and the model:
+  /// `world = nodeTransform * normalizeTransform(...)`.
+  Mat4 normalizeTransform({
+    double? height,
+    bool ground = false,
+    bool center = false,
+  }) {
+    final extentY = restMax.y - restMin.y;
+    var f = 1.0;
+    if (height != null && height > 0 && extentY > 1e-9) {
+      f = height / extentY;
+    } else if (height != null) {
+      return Mat4.identity();
+    }
+    var m = Mat4.scale(Vec3(f, f, f));
+    if (ground || center) {
+      final tx = center ? -(restMin.x + restMax.x) / 2 : 0.0;
+      final tz = center ? -(restMin.z + restMax.z) / 2 : 0.0;
+      final ty = ground ? -restMin.y : 0.0;
+      m = m * Mat4.translation(Vec3(tx, ty, tz));
+    }
+    return m;
+  }
 
   int? resolveAnimation(String? name) {
     if (animations.isEmpty) return null;

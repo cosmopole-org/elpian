@@ -357,6 +357,7 @@ automatically once ready. `gltf` is accepted as an alias for `model3d`.
 | `tint` | Color? | white | Multiplies the model's base colour |
 | `emissive` | Color? | model's | Emissive glow override (e.g. hit flashes) |
 | `emissive_strength` | number? | 1.0 | Strength of the emissive override |
+| `normalize` | number \| object? | — | Bounds-based sizing: a number is a target **world height** for the rest pose (uniform scale); the object form is `{ "height": 6, "ground": true, "center": true }` where `ground` snaps the rest-pose base to `y = 0` and `center` recenters the footprint on the node origin. Applied *inside* the node `transform`, so assets with arbitrary intrinsic sizes can be placed without per-asset scale tuning. The loading placeholder is sized to `height` too, so pop-in keeps scale. |
 | `transform` | TransformDef | {} | Placement (position / rotation / uniform scale) |
 
 ```json
