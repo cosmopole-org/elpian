@@ -357,6 +357,7 @@ automatically once ready. `gltf` is accepted as an alias for `model3d`.
 | `tint` | Color? | white | Multiplies the model's base colour |
 | `emissive` | Color? | model's | Emissive glow override (e.g. hit flashes) |
 | `emissive_strength` | number? | 1.0 | Strength of the emissive override |
+| `normalize` | number \| object? | — | Bounds-based sizing: a number is a target **world height** for the rest pose (uniform scale); the object form is `{ "height": 6, "footprint": 4, "ground": true, "center": true }`. `footprint` targets the larger of the X/Z extents; when both `height` and `footprint` are given the smaller factor wins (a "contain" fit). `ground` snaps the rest-pose base to `y = 0`; `center` recenters the footprint on the node origin. Applied *inside* the node `transform`, so assets with arbitrary intrinsic sizes can be placed without per-asset scale tuning. The loading placeholder is sized to `height` too, so pop-in keeps scale. |
 | `transform` | TransformDef | {} | Placement (position / rotation / uniform scale) |
 
 ```json
@@ -411,6 +412,7 @@ Built-in geometry primitives available for `mesh3d` nodes.
 | Plane | `{"Plane": {...}}` | `size`, `subdivisions` | Flat plane |
 | Cylinder | `{"Cylinder": {...}}` | `radius`, `height`, `segments` | Cylinder |
 | Cone | `{"Cone": {...}}` | `radius`, `height`, `segments` | Cone |
+| Ring | `{"Ring": {...}}` | `inner_radius`, `outer_radius`, `height`, `segments` | Flat annulus (washer) with side walls — use for ground rings around a disc; large coplanar discs cannot be painter-sorted |
 | Torus | `{"Torus": {...}}` | `radius`, `tube_radius`, `segments` | Donut shape |
 | Capsule | `{"Capsule": {...}}` | `radius`, `depth` | Spherocylinder |
 | Pyramid | `{"Pyramid": {...}}` | `base`, `height` | 4-sided pyramid |

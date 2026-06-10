@@ -191,6 +191,13 @@ class GltfModel {
   final Vec3 restCenter;
   final double restRadius;
 
+  /// Rest-pose axis-aligned bounds (model space). Drives `normalize` on
+  /// `model3d` nodes: scene authors give a target world height instead of
+  /// hand-tuning a per-asset scale factor for GLBs with arbitrary intrinsic
+  /// sizes.
+  final Vec3 restMin;
+  final Vec3 restMax;
+
   GltfModel({
     required this.nodes,
     required this.rootNodes,
@@ -202,7 +209,51 @@ class GltfModel {
     required this.animationByName,
     this.restCenter = Vec3.zero,
     this.restRadius = 1.0,
+    this.restMin = const Vec3(-0.5, -0.5, -0.5),
+    this.restMax = const Vec3(0.5, 0.5, 0.5),
   });
+
+  /// Model-space adjustment that normalizes the rest pose to a target size
+  /// (uniform scale), optionally snapping the rest-pose base to `y = 0`
+  /// ([ground]) and centering the footprint on the local origin ([center]).
+  ///
+  /// [height] targets the rest-pose Y extent; [footprint] targets the larger
+  /// of the X/Z extents. When both are given the *smaller* factor wins — a
+  /// "contain" fit, so the model fills a `footprint × footprint` cell without
+  /// exceeding `height`. Returns identity when the bounds are degenerate or
+  /// no positive constraint is given. Apply between the node transform and
+  /// the model: `world = nodeTransform * normalizeTransform(...)`.
+  Mat4 normalizeTransform({
+    double? height,
+    double? footprint,
+    bool ground = false,
+    bool center = false,
+  }) {
+    final extentY = restMax.y - restMin.y;
+    final extentXZ = (restMax.x - restMin.x) > (restMax.z - restMin.z)
+        ? restMax.x - restMin.x
+        : restMax.z - restMin.z;
+    double? f;
+    if (height != null && height > 0 && extentY > 1e-9) {
+      f = height / extentY;
+    }
+    if (footprint != null && footprint > 0 && extentXZ > 1e-9) {
+      final ff = footprint / extentXZ;
+      f = (f == null || ff < f) ? ff : f;
+    }
+    if (f == null) {
+      if (height != null || footprint != null) return Mat4.identity();
+      f = 1.0;
+    }
+    var m = Mat4.scale(Vec3(f, f, f));
+    if (ground || center) {
+      final tx = center ? -(restMin.x + restMax.x) / 2 : 0.0;
+      final tz = center ? -(restMin.z + restMax.z) / 2 : 0.0;
+      final ty = ground ? -restMin.y : 0.0;
+      m = m * Mat4.translation(Vec3(tx, ty, tz));
+    }
+    return m;
+  }
 
   int? resolveAnimation(String? name) {
     if (animations.isEmpty) return null;

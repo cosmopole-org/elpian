@@ -203,6 +203,8 @@ class GltfBinaryLoader {
       animationByName: animationByName,
       restCenter: bounds.$1,
       restRadius: bounds.$2,
+      restMin: bounds.$3,
+      restMax: bounds.$4,
     );
   }
 
@@ -527,7 +529,7 @@ class GltfBinaryLoader {
 
   // ── Bounds estimate ─────────────────────────────────────────────────────
 
-  static (Vec3, double) _estimateBounds(
+  static (Vec3, double, Vec3, Vec3) _estimateBounds(
     List<GltfNodeDef> nodes,
     List<int> roots,
     List<List<GltfPrimitive>> meshes,
@@ -586,10 +588,12 @@ class GltfBinaryLoader {
         }
       }
     }
-    if (!any) return (Vec3.zero, 1.0);
+    if (!any) {
+      return (Vec3.zero, 1.0, const Vec3(-0.5, -0.5, -0.5), const Vec3(0.5, 0.5, 0.5));
+    }
     final center = Vec3((minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2);
     final radius = Vec3(maxX - minX, maxY - minY, maxZ - minZ).length / 2;
-    return (center, radius);
+    return (center, radius, Vec3(minX, minY, minZ), Vec3(maxX, maxY, maxZ));
   }
 
   static Vec3 _skinPoint(List<Mat4> jm, Uint16List joints, Float32List weights,

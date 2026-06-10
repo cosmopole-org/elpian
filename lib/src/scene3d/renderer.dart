@@ -558,16 +558,26 @@ class Scene3DRenderer {
     final clip1 = vp.transformVec4(wp1);
     final clip2 = vp.transformVec4(wp2);
 
-    // Near-plane clipping: collect vertices with their w values
+    // Frustum clipping (near plane + the four side planes). Side clipping is
+    // what keeps huge floor/sea planes visible: a ground quad's corners can sit
+    // far outside NDC while its surface fills the whole viewport, so whole-
+    // triangle rejection must only happen for triangles entirely outside.
     final clipVerts = [clip0, clip1, clip2];
     final colors = [c0, c1, c2];
-    final clipped = _clipNearPlane(clipVerts, colors, nearPlane);
+    // World positions ride along through the clipper (clip coords are affine
+    // in world coords, so the same edge t interpolates them exactly): fog must
+    // be evaluated per clipped piece, not from the source triangle's centre —
+    // a screen-filling ground triangle otherwise paints its *near* clipped
+    // piece with its *far* centre's fog, a sky-coloured wedge over the scene.
+    final worlds = [wp0, wp1, wp2];
+    final clipped = _clipFrustum(clipVerts, colors, worlds, nearPlane);
     if (clipped == null || clipped.verts.isEmpty) return;
 
     // Perspective divide and screen mapping for clipped triangles
     for (var i = 0; i < clipped.verts.length - 2; i++) {
       final cvs = [clipped.verts[0], clipped.verts[i + 1], clipped.verts[i + 2]];
       final cls = [clipped.colors[0], clipped.colors[i + 1], clipped.colors[i + 2]];
+      final cws = [clipped.worlds[0], clipped.worlds[i + 1], clipped.worlds[i + 2]];
 
       final screenPts = <ui.Offset>[];
       var avgDepth = 0.0;
@@ -605,8 +615,8 @@ class Scene3DRenderer {
       final avgG = (cls[0].y + cls[1].y + cls[2].y) / 3.0;
       final avgB = (cls[0].z + cls[1].z + cls[2].z) / 3.0;
 
-      // Apply fog
-      final triCenter = (wp0 + wp1 + wp2) / 3.0;
+      // Apply fog — per clipped piece, from ITS world-space centre.
+      final triCenter = (cws[0] + cws[1] + cws[2]) / 3.0;
       final dist = (triCenter - camera.position).length;
       final fogF = environment.fogFactor(dist);
 
@@ -664,17 +674,27 @@ class Scene3DRenderer {
       if (GltfModelCache.instance.statusOf(url) != GltfLoadStatus.failed) {
         _dynamic = true;
       }
-      // Loading (or failed): draw a subtle capsule placeholder.
-      final placeholder = _generateMesh('Capsule', const {
-        'radius': 0.45,
-        'height': 1.0,
+      // Loading (or failed): draw a subtle capsule placeholder. When the node
+      // declares a `normalize` height, size the placeholder to it so the
+      // pop-in does not jump scale.
+      final extra = node.extra ?? const <String, dynamic>{};
+      final normalize = extra['normalize'];
+      final targetH = normalize is num
+          ? normalize.toDouble()
+          : normalize is Map
+              ? (normalize['height'] as num?)?.toDouble()
+              : null;
+      final h = (targetH != null && targetH > 0) ? targetH : 1.0;
+      final placeholder = _generateMesh('Capsule', {
+        'radius': 0.45 * h,
+        'height': h,
         'segments': 10,
       });
       if (placeholder != null) {
         _emitMeshTris(
           placeholder,
           const Material3D(baseColor: Vec3(0.3, 0.34, 0.42), roughness: 0.8),
-          worldXform * Mat4.translation(const Vec3(0, 0.5, 0)),
+          worldXform * Mat4.translation(Vec3(0, 0.5 * h, 0)),
           vp, size, camera, environment, lights, screenTris,
         );
       }
@@ -693,6 +713,12 @@ class Scene3DRenderer {
     final tint = _vec3From(extra['tint']) ?? Vec3.one;
     final emissiveOverride = _vec3From(extra['emissive']);
     final emissiveStrength = (extra['emissive_strength'] as num?)?.toDouble() ?? 1.0;
+
+    // Bounds-based normalization: `normalize: 4` (target height) or
+    // `normalize: {height, ground, center}`. Applied between the node
+    // transform and the model so authors size assets in world units.
+    final normalized = _normalizeFrame(extra['normalize'], model, worldXform);
+    worldXform = normalized;
 
     final globals = model.computeGlobalTransforms(animIdx, time);
 
@@ -720,6 +746,31 @@ class Scene3DRenderer {
         );
       }
     }
+  }
+
+  /// Resolve a `model3d` node's `normalize` request against the model's
+  /// rest-pose bounds. Accepts a bare number (target world height) or a map
+  /// `{height, ground, center}`; anything else returns [worldXform] unchanged.
+  static Mat4 _normalizeFrame(
+      dynamic normalize, GltfModel model, Mat4 worldXform) {
+    if (normalize == null) return worldXform;
+    double? height;
+    double? footprint;
+    var ground = false;
+    var center = false;
+    if (normalize is num) {
+      height = normalize.toDouble();
+    } else if (normalize is Map) {
+      height = (normalize['height'] as num?)?.toDouble();
+      footprint = (normalize['footprint'] as num?)?.toDouble();
+      ground = normalize['ground'] == true;
+      center = normalize['center'] == true;
+    } else {
+      return worldXform;
+    }
+    return worldXform *
+        model.normalizeTransform(
+            height: height, footprint: footprint, ground: ground, center: center);
   }
 
   void _emitPrimitive(
@@ -1047,51 +1098,58 @@ class Scene3DRenderer {
     );
   }
 
-  _ClippedResult? _clipNearPlane(List<Vec4> verts, List<Vec3> colors, double near) {
-    // Simple near-plane clip: vertices with w > near pass
-    final inside = <int>[];
-    final outside = <int>[];
-    for (var i = 0; i < verts.length; i++) {
-      if (verts[i].w > near) {
-        inside.add(i);
-      } else {
-        outside.add(i);
+  /// Sutherland–Hodgman clip of a clip-space triangle against the near plane
+  /// and the four side planes (|x| ≤ m·w, |y| ≤ m·w with a small margin so
+  /// screen-edge interpolation artifacts stay just offscreen). Returns a fan
+  /// polygon, or null when fully outside.
+  _ClippedResult? _clipFrustum(
+      List<Vec4> verts, List<Vec3> colors, List<Vec3> worlds, double near) {
+    const m = 1.05; // guard-band margin in NDC units
+    // Signed "inside" distance per plane; > 0 keeps the vertex.
+    final planes = <double Function(Vec4)>[
+      (v) => v.w - near, // near
+      (v) => m * v.w - v.x, // right  (x ≤ m·w)
+      (v) => m * v.w + v.x, // left   (x ≥ -m·w)
+      (v) => m * v.w - v.y, // top    (y ≤ m·w)
+      (v) => m * v.w + v.y, // bottom (y ≥ -m·w)
+    ];
+
+    var pv = verts;
+    var pc = colors;
+    var pw = worlds;
+    for (final plane in planes) {
+      if (pv.isEmpty) return null;
+      final ov = <Vec4>[];
+      final oc = <Vec3>[];
+      final ow = <Vec3>[];
+      for (var i = 0; i < pv.length; i++) {
+        final j = (i + 1) % pv.length;
+        final di = plane(pv[i]);
+        final dj = plane(pv[j]);
+        if (di > 0) {
+          ov.add(pv[i]);
+          oc.add(pc[i]);
+          ow.add(pw[i]);
+        }
+        if ((di > 0) != (dj > 0)) {
+          final t = di / (di - dj);
+          final vi = pv[i], vj = pv[j];
+          ov.add(Vec4(
+            vi.x + t * (vj.x - vi.x),
+            vi.y + t * (vj.y - vi.y),
+            vi.z + t * (vj.z - vi.z),
+            vi.w + t * (vj.w - vi.w),
+          ));
+          oc.add(pc[i].lerp(pc[j], t));
+          ow.add(pw[i].lerp(pw[j], t));
+        }
       }
+      pv = ov;
+      pc = oc;
+      pw = ow;
     }
-
-    if (inside.length == 3) return _ClippedResult(verts, colors);
-    if (inside.isEmpty) return null;
-
-    // Clip: generate new vertices at the near plane
-    final outVerts = <Vec4>[];
-    final outColors = <Vec3>[];
-
-    for (var i = 0; i < 3; i++) {
-      final j = (i + 1) % 3;
-      final vi = verts[i], vj = verts[j];
-      final ci = colors[i], cj = colors[j];
-      final wi = vi.w, wj = vj.w;
-
-      if (wi > near) {
-        outVerts.add(vi);
-        outColors.add(ci);
-      }
-
-      // Edge crosses near plane?
-      if ((wi > near) != (wj > near)) {
-        final t = (near - wi) / (wj - wi);
-        outVerts.add(Vec4(
-          vi.x + t * (vj.x - vi.x),
-          vi.y + t * (vj.y - vi.y),
-          vi.z + t * (vj.z - vi.z),
-          vi.w + t * (vj.w - vi.w),
-        ));
-        outColors.add(ci.lerp(cj, t));
-      }
-    }
-
-    if (outVerts.length < 3) return null;
-    return _ClippedResult(outVerts, outColors);
+    if (pv.length < 3) return null;
+    return _ClippedResult(pv, pc, pw);
   }
 
   void _renderParticles(
@@ -1178,12 +1236,25 @@ class Scene3DRenderer {
           segments: _i(p['subdivisions'], _i(p['segments'], 16)),
         );
       case 'Plane':
-        return MeshGen.plane(size: _d(p['size'], 10.0));
+        return MeshGen.plane(
+          size: _d(p['size'], 10.0),
+          // Subdivision matters beyond tessellation detail: the painter's
+          // algorithm sorts whole triangles, so a 2-triangle ground plane
+          // spanning the scene cannot order against geometry resting on it.
+          subdivisions: _i(p['subdivisions'], 1),
+        );
       case 'Cylinder':
         return MeshGen.cylinder(
           radius: _d(p['radius'], 0.5),
           height: _d(p['height'], 1.0),
           segments: _i(p['segments'], 16),
+        );
+      case 'Ring':
+        return MeshGen.ring(
+          innerRadius: _d(p['inner_radius'], 0.5),
+          outerRadius: _d(p['outer_radius'], 1.0),
+          height: _d(p['height'], 0.2),
+          segments: _i(p['segments'], 32),
         );
       case 'Cone':
         return MeshGen.cone(
@@ -1238,7 +1309,8 @@ class Scene3DRenderer {
 class _ClippedResult {
   final List<Vec4> verts;
   final List<Vec3> colors;
-  _ClippedResult(this.verts, this.colors);
+  final List<Vec3> worlds;
+  _ClippedResult(this.verts, this.colors, this.worlds);
 }
 
 /// A projected, lit glTF triangle awaiting batch assembly. Holds screen-space

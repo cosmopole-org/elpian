@@ -277,6 +277,14 @@ class ElpianEngine {
       nodeWithStyle = node.copyWith(style: mergedStyle ?? node.style);
     }
 
+    // CSS `display: none` removes the element from layout entirely. Checked on
+    // the RESOLVED cascade so responsive rules work — e.g. a desktop-only
+    // navbar cluster hidden by an `@media (max-width: …) { display: none }`
+    // stylesheet rule, or shown again when the viewport grows.
+    if (nodeWithStyle.style?.display == 'none') {
+      return const SizedBox.shrink();
+    }
+
     // Store current parent for child rendering
     final previousParentId = _currentParentId;
     _currentParentId = node.key;

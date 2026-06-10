@@ -428,18 +428,20 @@ class MeshGen {
         final u1 = Vec2(j / segments, (i + 1) / segments);
         final u2 = Vec2((j + 1) / segments, (i + 1) / segments);
         final u3 = Vec2((j + 1) / segments, i / segments);
+        // CCW from outside (winding along the outward normal) so the
+        // screen-space backface cull keeps the *front* hemisphere.
         if (i != 0) {
           tris.add(Triangle(
             Vertex(position: v0, normal: n0, uv: u0),
-            Vertex(position: v1, normal: n1, uv: u1),
             Vertex(position: v2, normal: n2, uv: u2),
+            Vertex(position: v1, normal: n1, uv: u1),
           ));
         }
         if (i != segments - 1) {
           tris.add(Triangle(
             Vertex(position: v0, normal: n0, uv: u0),
-            Vertex(position: v2, normal: n2, uv: u2),
             Vertex(position: v3, normal: n3, uv: u3),
+            Vertex(position: v2, normal: n2, uv: u2),
           ));
         }
       }
@@ -462,15 +464,19 @@ class MeshGen {
         final u1 = Vec2((j + 1) / subdivisions, i / subdivisions);
         final u2 = Vec2((j + 1) / subdivisions, (i + 1) / subdivisions);
         final u3 = Vec2(j / subdivisions, (i + 1) / subdivisions);
+        // Wind counter-clockwise seen from +Y so cross(p1-p0, p2-p0) points
+        // along the +Y normal — the same convention as every other primitive.
+        // (The previous clockwise winding made horizontal planes backface-cull
+        // when viewed from above: an invisible ground/sea.)
         tris.add(Triangle(
           Vertex(position: Vec3(x0, 0, z0), normal: Vec3.up, uv: u0),
-          Vertex(position: Vec3(x1, 0, z0), normal: Vec3.up, uv: u1),
           Vertex(position: Vec3(x1, 0, z1), normal: Vec3.up, uv: u2),
+          Vertex(position: Vec3(x1, 0, z0), normal: Vec3.up, uv: u1),
         ));
         tris.add(Triangle(
           Vertex(position: Vec3(x0, 0, z0), normal: Vec3.up, uv: u0),
-          Vertex(position: Vec3(x1, 0, z1), normal: Vec3.up, uv: u2),
           Vertex(position: Vec3(x0, 0, z1), normal: Vec3.up, uv: u3),
+          Vertex(position: Vec3(x1, 0, z1), normal: Vec3.up, uv: u2),
         ));
       }
     }
@@ -486,31 +492,110 @@ class MeshGen {
       final c2 = math.cos(a2), s2 = math.sin(a2);
       final x1 = radius * c1, z1 = radius * s1, x2 = radius * c2, z2 = radius * s2;
       final n = Vec3((c1 + c2) / 2, 0, (s1 + s2) / 2).normalized;
-      // Side
+      // Side — CCW from outside so winding follows the outward normal.
       tris.add(Triangle(
         Vertex(position: Vec3(x1, -hh, z1), normal: n, uv: Vec2(i / segments, 0)),
-        Vertex(position: Vec3(x2, -hh, z2), normal: n, uv: Vec2((i + 1) / segments, 0)),
         Vertex(position: Vec3(x2, hh, z2), normal: n, uv: Vec2((i + 1) / segments, 1)),
+        Vertex(position: Vec3(x2, -hh, z2), normal: n, uv: Vec2((i + 1) / segments, 0)),
       ));
       tris.add(Triangle(
         Vertex(position: Vec3(x1, -hh, z1), normal: n, uv: Vec2(i / segments, 0)),
-        Vertex(position: Vec3(x2, hh, z2), normal: n, uv: Vec2((i + 1) / segments, 1)),
         Vertex(position: Vec3(x1, hh, z1), normal: n, uv: Vec2(i / segments, 1)),
+        Vertex(position: Vec3(x2, hh, z2), normal: n, uv: Vec2((i + 1) / segments, 1)),
       ));
       // Top cap
       tris.add(Triangle(
         Vertex(position: Vec3(0, hh, 0), normal: Vec3.up),
-        Vertex(position: Vec3(x1, hh, z1), normal: Vec3.up),
         Vertex(position: Vec3(x2, hh, z2), normal: Vec3.up),
+        Vertex(position: Vec3(x1, hh, z1), normal: Vec3.up),
       ));
       // Bottom cap
       tris.add(Triangle(
         Vertex(position: Vec3(0, -hh, 0), normal: Vec3.down),
-        Vertex(position: Vec3(x2, -hh, z2), normal: Vec3.down),
         Vertex(position: Vec3(x1, -hh, z1), normal: Vec3.down),
+        Vertex(position: Vec3(x2, -hh, z2), normal: Vec3.down),
       ));
     }
     return Mesh(tris, AABB(Vec3(-radius, -hh, -radius), Vec3(radius, hh, radius)));
+  }
+
+  /// Flat-topped annulus (washer) with inner/outer side walls — for ground
+  /// rings (grass around a paved interior, shallow-water bands) that must not
+  /// overlap the disc they surround: the painter-sorted renderer cannot order
+  /// large coplanar cylinder caps, so "disc on bigger disc" z-fights as
+  /// radial wedges. CCW-outward winding like every other primitive.
+  static Mesh ring({
+    double innerRadius = 0.5,
+    double outerRadius = 1.0,
+    double height = 0.2,
+    int segments = 32,
+  }) {
+    final tris = <Triangle>[];
+    final hh = height / 2;
+    for (var i = 0; i < segments; i++) {
+      final a1 = 2 * math.pi * i / segments, a2 = 2 * math.pi * (i + 1) / segments;
+      final c1 = math.cos(a1), s1 = math.sin(a1);
+      final c2 = math.cos(a2), s2 = math.sin(a2);
+      final u0 = i / segments, u1 = (i + 1) / segments;
+      final oB1 = Vec3(outerRadius * c1, -hh, outerRadius * s1);
+      final oB2 = Vec3(outerRadius * c2, -hh, outerRadius * s2);
+      final oT1 = Vec3(outerRadius * c1, hh, outerRadius * s1);
+      final oT2 = Vec3(outerRadius * c2, hh, outerRadius * s2);
+      final iB1 = Vec3(innerRadius * c1, -hh, innerRadius * s1);
+      final iB2 = Vec3(innerRadius * c2, -hh, innerRadius * s2);
+      final iT1 = Vec3(innerRadius * c1, hh, innerRadius * s1);
+      final iT2 = Vec3(innerRadius * c2, hh, innerRadius * s2);
+      final no = Vec3((c1 + c2) / 2, 0, (s1 + s2) / 2).normalized;
+      final ni = no * -1.0;
+      // Top annulus (+Y)
+      tris.add(Triangle(
+        Vertex(position: iT1, normal: Vec3.up, uv: Vec2(u0, 0)),
+        Vertex(position: oT2, normal: Vec3.up, uv: Vec2(u1, 1)),
+        Vertex(position: oT1, normal: Vec3.up, uv: Vec2(u0, 1)),
+      ));
+      tris.add(Triangle(
+        Vertex(position: iT1, normal: Vec3.up, uv: Vec2(u0, 0)),
+        Vertex(position: iT2, normal: Vec3.up, uv: Vec2(u1, 0)),
+        Vertex(position: oT2, normal: Vec3.up, uv: Vec2(u1, 1)),
+      ));
+      // Bottom annulus (-Y)
+      tris.add(Triangle(
+        Vertex(position: iB1, normal: Vec3.down, uv: Vec2(u0, 0)),
+        Vertex(position: oB1, normal: Vec3.down, uv: Vec2(u0, 1)),
+        Vertex(position: oB2, normal: Vec3.down, uv: Vec2(u1, 1)),
+      ));
+      tris.add(Triangle(
+        Vertex(position: iB1, normal: Vec3.down, uv: Vec2(u0, 0)),
+        Vertex(position: oB2, normal: Vec3.down, uv: Vec2(u1, 1)),
+        Vertex(position: iB2, normal: Vec3.down, uv: Vec2(u1, 0)),
+      ));
+      // Outer wall (radially out)
+      tris.add(Triangle(
+        Vertex(position: oB1, normal: no, uv: Vec2(u0, 0)),
+        Vertex(position: oT2, normal: no, uv: Vec2(u1, 1)),
+        Vertex(position: oB2, normal: no, uv: Vec2(u1, 0)),
+      ));
+      tris.add(Triangle(
+        Vertex(position: oB1, normal: no, uv: Vec2(u0, 0)),
+        Vertex(position: oT1, normal: no, uv: Vec2(u0, 1)),
+        Vertex(position: oT2, normal: no, uv: Vec2(u1, 1)),
+      ));
+      // Inner wall (radially in)
+      tris.add(Triangle(
+        Vertex(position: iB1, normal: ni, uv: Vec2(u0, 0)),
+        Vertex(position: iB2, normal: ni, uv: Vec2(u1, 0)),
+        Vertex(position: iT2, normal: ni, uv: Vec2(u1, 1)),
+      ));
+      tris.add(Triangle(
+        Vertex(position: iB1, normal: ni, uv: Vec2(u0, 0)),
+        Vertex(position: iT2, normal: ni, uv: Vec2(u1, 1)),
+        Vertex(position: iT1, normal: ni, uv: Vec2(u0, 1)),
+      ));
+    }
+    return Mesh(
+      tris,
+      AABB(Vec3(-outerRadius, -hh, -outerRadius), Vec3(outerRadius, hh, outerRadius)),
+    );
   }
 
   static Mesh cone({double radius = 0.5, double height = 1.0, int segments = 16}) {
@@ -521,15 +606,16 @@ class MeshGen {
       final x1 = radius * math.cos(a1), z1 = radius * math.sin(a1);
       final x2 = radius * math.cos(a2), z2 = radius * math.sin(a2);
       final sn = Vec3((x1 + x2) / 2, radius / height, (z1 + z2) / 2).normalized;
+      // CCW from outside so winding follows the outward normal.
       tris.add(Triangle(
         Vertex(position: Vec3(x1, 0, z1), normal: sn),
-        Vertex(position: Vec3(x2, 0, z2), normal: sn),
         Vertex(position: apex, normal: sn),
+        Vertex(position: Vec3(x2, 0, z2), normal: sn),
       ));
       tris.add(Triangle(
         const Vertex(position: Vec3(0, 0, 0), normal: Vec3.down),
-        Vertex(position: Vec3(x2, 0, z2), normal: Vec3.down),
         Vertex(position: Vec3(x1, 0, z1), normal: Vec3.down),
+        Vertex(position: Vec3(x2, 0, z2), normal: Vec3.down),
       ));
     }
     return Mesh(tris, AABB(Vec3(-radius, 0, -radius), Vec3(radius, height, radius)));
@@ -549,15 +635,16 @@ class MeshGen {
         final c10 = Vec3(radius * math.cos(t2), 0, radius * math.sin(t2));
         final n00 = (v00 - c00).normalized, n10 = (v10 - c10).normalized;
         final n11 = (v11 - c10).normalized, n01 = (v01 - c00).normalized;
+        // CCW from outside so winding follows the outward normal.
         tris.add(Triangle(
           Vertex(position: v00, normal: n00, uv: Vec2(i / radial, j / tubular)),
-          Vertex(position: v10, normal: n10, uv: Vec2((i + 1) / radial, j / tubular)),
           Vertex(position: v11, normal: n11, uv: Vec2((i + 1) / radial, (j + 1) / tubular)),
+          Vertex(position: v10, normal: n10, uv: Vec2((i + 1) / radial, j / tubular)),
         ));
         tris.add(Triangle(
           Vertex(position: v00, normal: n00, uv: Vec2(i / radial, j / tubular)),
-          Vertex(position: v11, normal: n11, uv: Vec2((i + 1) / radial, (j + 1) / tubular)),
           Vertex(position: v01, normal: n01, uv: Vec2(i / radial, (j + 1) / tubular)),
+          Vertex(position: v11, normal: n11, uv: Vec2((i + 1) / radial, (j + 1) / tubular)),
         ));
       }
     }
@@ -582,17 +669,18 @@ class MeshGen {
         final off = Vec3(0, halfH, 0);
         final v0 = _sphPt(radius, t1, p1) + off, v1 = _sphPt(radius, t2, p1) + off;
         final v2 = _sphPt(radius, t2, p2) + off, v3 = _sphPt(radius, t1, p2) + off;
+        // CCW from outside so winding follows the outward normal.
         if (i != 0) {
           tris.add(Triangle(
             Vertex(position: v0, normal: (v0 - off).normalized),
-            Vertex(position: v1, normal: (v1 - off).normalized),
             Vertex(position: v2, normal: (v2 - off).normalized),
+            Vertex(position: v1, normal: (v1 - off).normalized),
           ));
         }
         tris.add(Triangle(
           Vertex(position: v0, normal: (v0 - off).normalized),
-          Vertex(position: v2, normal: (v2 - off).normalized),
           Vertex(position: v3, normal: (v3 - off).normalized),
+          Vertex(position: v2, normal: (v2 - off).normalized),
         ));
       }
     }
@@ -606,14 +694,14 @@ class MeshGen {
         final v2 = _sphPt(radius, t2, p2) + off, v3 = _sphPt(radius, t1, p2) + off;
         tris.add(Triangle(
           Vertex(position: v0, normal: (v0 - off).normalized),
-          Vertex(position: v1, normal: (v1 - off).normalized),
           Vertex(position: v2, normal: (v2 - off).normalized),
+          Vertex(position: v1, normal: (v1 - off).normalized),
         ));
         if (i != segments - 1) {
           tris.add(Triangle(
             Vertex(position: v0, normal: (v0 - off).normalized),
-            Vertex(position: v2, normal: (v2 - off).normalized),
             Vertex(position: v3, normal: (v3 - off).normalized),
+            Vertex(position: v2, normal: (v2 - off).normalized),
           ));
         }
       }
@@ -628,8 +716,9 @@ class MeshGen {
       final b2 = Vec3(radius * c2, -halfH, radius * s2a);
       final t = Vec3(radius * c1, halfH, radius * s1a);
       final t2 = Vec3(radius * c2, halfH, radius * s2a);
-      tris.add(Triangle(Vertex(position: b, normal: n), Vertex(position: b2, normal: n), Vertex(position: t2, normal: n)));
-      tris.add(Triangle(Vertex(position: b, normal: n), Vertex(position: t2, normal: n), Vertex(position: t, normal: n)));
+      // CCW from outside so winding follows the outward normal.
+      tris.add(Triangle(Vertex(position: b, normal: n), Vertex(position: t2, normal: n), Vertex(position: b2, normal: n)));
+      tris.add(Triangle(Vertex(position: b, normal: n), Vertex(position: t, normal: n), Vertex(position: t2, normal: n)));
     }
     final th = halfH + radius;
     return Mesh(tris, AABB(Vec3(-radius, -th, -radius), Vec3(radius, th, radius)));
@@ -644,10 +733,12 @@ class MeshGen {
       final n = (b - a).cross(c - a).normalized;
       tris.add(Triangle(Vertex(position: a, normal: n), Vertex(position: b, normal: n), Vertex(position: c, normal: n)));
     }
-    face(v0, v1, apex); face(v1, v2, apex); face(v2, v3, apex); face(v3, v0, apex);
-    // Bottom
-    tris.add(Triangle(Vertex(position: v0, normal: Vec3.down), Vertex(position: v3, normal: Vec3.down), Vertex(position: v2, normal: Vec3.down)));
-    tris.add(Triangle(Vertex(position: v0, normal: Vec3.down), Vertex(position: v2, normal: Vec3.down), Vertex(position: v1, normal: Vec3.down)));
+    // Sides wound CCW from outside (apex second) so the derived face normal —
+    // and therefore the winding — points outward, not into the pyramid.
+    face(v0, apex, v1); face(v1, apex, v2); face(v2, apex, v3); face(v3, apex, v0);
+    // Bottom (faces -Y: CCW seen from below)
+    tris.add(Triangle(Vertex(position: v0, normal: Vec3.down), Vertex(position: v2, normal: Vec3.down), Vertex(position: v3, normal: Vec3.down)));
+    tris.add(Triangle(Vertex(position: v0, normal: Vec3.down), Vertex(position: v1, normal: Vec3.down), Vertex(position: v2, normal: Vec3.down)));
     return Mesh(tris, AABB(Vec3(-h, 0, -h), Vec3(h, height, h)));
   }
 

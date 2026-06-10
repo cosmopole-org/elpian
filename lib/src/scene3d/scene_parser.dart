@@ -262,6 +262,9 @@ class SceneParser {
         'tint': json['tint'],
         'emissive': json['emissive'],
         'emissive_strength': json['emissive_strength'],
+        // `normalize`: bounds-based sizing — a number (target world height)
+        // or `{height, ground, center}`; see GltfModel.normalizeTransform.
+        'normalize': json['normalize'],
       };
     }
 

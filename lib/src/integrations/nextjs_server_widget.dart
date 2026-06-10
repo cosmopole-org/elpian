@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../core/event_system.dart';
+import '../core/resources.dart';
 import '../css/css_parser.dart';
 import '../vm/elpian_vm.dart';
 import '../diagnostics/elpian_trace.dart';
@@ -140,6 +141,15 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
   void initState() {
     super.initState();
     _currentRoute = widget.route;
+    // Server-relative resource URLs in the rendered UI ("/icons/x.png")
+    // resolve against the render server's ORIGIN (not its /path prefix).
+    final server = widget.serverBaseUrl;
+    if (server != null && server.isNotEmpty) {
+      final uri = Uri.tryParse(server);
+      if (uri != null && uri.hasScheme) {
+        ElpianResources.baseUrl ??= uri.origin;
+      }
+    }
     _bridge = widget.bridge ?? NextjsBridge();
     _bridge.onNavigate = _handleNavigate;
     _bridge.onSubmit = _handleFormSubmit;

@@ -180,6 +180,20 @@ class HtmlDiv {
   /// panels never went full-screen on phones. Falls back to the inline map (or
   /// the pre-parsed [ElpianNode.style]) when the node carries no class/id.
   static CSSStyle? _childStyle(ElpianNode child) {
+    // `Scope` nodes are re-render boundaries, not layout nodes — they are
+    // layout-transparent by design. For positioning purposes a single-child
+    // Scope chain (the shape every server `scope()` helper and client-component
+    // mount produces) is its content: without this, a draggable window mounted
+    // inside its update scope lost its `position: absolute` (the parent saw a
+    // styleless Scope and laid the window out in flow, full-width).
+    var node = child;
+    while (node.type == 'Scope' && node.children.length == 1) {
+      node = node.children.first;
+    }
+    return _resolvedStyle(node);
+  }
+
+  static CSSStyle? _resolvedStyle(ElpianNode child) {
     final className = child.props['className'];
     final inline = child.props['style'];
     final inlineMap = inline is Map<String, dynamic> ? inline : null;
