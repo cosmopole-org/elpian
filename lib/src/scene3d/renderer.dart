@@ -564,13 +564,20 @@ class Scene3DRenderer {
     // triangle rejection must only happen for triangles entirely outside.
     final clipVerts = [clip0, clip1, clip2];
     final colors = [c0, c1, c2];
-    final clipped = _clipFrustum(clipVerts, colors, nearPlane);
+    // World positions ride along through the clipper (clip coords are affine
+    // in world coords, so the same edge t interpolates them exactly): fog must
+    // be evaluated per clipped piece, not from the source triangle's centre —
+    // a screen-filling ground triangle otherwise paints its *near* clipped
+    // piece with its *far* centre's fog, a sky-coloured wedge over the scene.
+    final worlds = [wp0, wp1, wp2];
+    final clipped = _clipFrustum(clipVerts, colors, worlds, nearPlane);
     if (clipped == null || clipped.verts.isEmpty) return;
 
     // Perspective divide and screen mapping for clipped triangles
     for (var i = 0; i < clipped.verts.length - 2; i++) {
       final cvs = [clipped.verts[0], clipped.verts[i + 1], clipped.verts[i + 2]];
       final cls = [clipped.colors[0], clipped.colors[i + 1], clipped.colors[i + 2]];
+      final cws = [clipped.worlds[0], clipped.worlds[i + 1], clipped.worlds[i + 2]];
 
       final screenPts = <ui.Offset>[];
       var avgDepth = 0.0;
@@ -608,8 +615,8 @@ class Scene3DRenderer {
       final avgG = (cls[0].y + cls[1].y + cls[2].y) / 3.0;
       final avgB = (cls[0].z + cls[1].z + cls[2].z) / 3.0;
 
-      // Apply fog
-      final triCenter = (wp0 + wp1 + wp2) / 3.0;
+      // Apply fog — per clipped piece, from ITS world-space centre.
+      final triCenter = (cws[0] + cws[1] + cws[2]) / 3.0;
       final dist = (triCenter - camera.position).length;
       final fogF = environment.fogFactor(dist);
 
@@ -1095,7 +1102,8 @@ class Scene3DRenderer {
   /// and the four side planes (|x| ≤ m·w, |y| ≤ m·w with a small margin so
   /// screen-edge interpolation artifacts stay just offscreen). Returns a fan
   /// polygon, or null when fully outside.
-  _ClippedResult? _clipFrustum(List<Vec4> verts, List<Vec3> colors, double near) {
+  _ClippedResult? _clipFrustum(
+      List<Vec4> verts, List<Vec3> colors, List<Vec3> worlds, double near) {
     const m = 1.05; // guard-band margin in NDC units
     // Signed "inside" distance per plane; > 0 keeps the vertex.
     final planes = <double Function(Vec4)>[
@@ -1108,10 +1116,12 @@ class Scene3DRenderer {
 
     var pv = verts;
     var pc = colors;
+    var pw = worlds;
     for (final plane in planes) {
       if (pv.isEmpty) return null;
       final ov = <Vec4>[];
       final oc = <Vec3>[];
+      final ow = <Vec3>[];
       for (var i = 0; i < pv.length; i++) {
         final j = (i + 1) % pv.length;
         final di = plane(pv[i]);
@@ -1119,6 +1129,7 @@ class Scene3DRenderer {
         if (di > 0) {
           ov.add(pv[i]);
           oc.add(pc[i]);
+          ow.add(pw[i]);
         }
         if ((di > 0) != (dj > 0)) {
           final t = di / (di - dj);
@@ -1130,13 +1141,15 @@ class Scene3DRenderer {
             vi.w + t * (vj.w - vi.w),
           ));
           oc.add(pc[i].lerp(pc[j], t));
+          ow.add(pw[i].lerp(pw[j], t));
         }
       }
       pv = ov;
       pc = oc;
+      pw = ow;
     }
     if (pv.length < 3) return null;
-    return _ClippedResult(pv, pc);
+    return _ClippedResult(pv, pc, pw);
   }
 
   void _renderParticles(
@@ -1290,7 +1303,8 @@ class Scene3DRenderer {
 class _ClippedResult {
   final List<Vec4> verts;
   final List<Vec3> colors;
-  _ClippedResult(this.verts, this.colors);
+  final List<Vec3> worlds;
+  _ClippedResult(this.verts, this.colors, this.worlds);
 }
 
 /// A projected, lit glTF triangle awaiting batch assembly. Holds screen-space
