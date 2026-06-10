@@ -1019,7 +1019,8 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
       final onData = args['onData']?.toString();
       if (route == null || route.isEmpty) return _hostOk;
       ElpianTrace.mark('host.fetch "$route" -> issuing HTTP');
-      final envelope = await _defaultHttpLoader(route, headers: widget.headers);
+      final loader = widget.loader ?? _defaultHttpLoader;
+      final envelope = await loader(route, headers: widget.headers);
       ElpianTrace.mark('host.fetch "$route" <- HTTP responded');
       if (onData != null && onData.isNotEmpty && vm != null) {
         await vm.callFunctionWithInput(onData, jsonEncode(envelope));
@@ -1080,7 +1081,8 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
       if (route == null || route.isEmpty) return _hostOk;
       final scopeKey = args['scopeKey']?.toString();
       ElpianTrace.mark('host.mountFragment "$route" -> issuing HTTP');
-      final envelope = await _defaultHttpLoader(route, headers: widget.headers);
+      final loader = widget.loader ?? _defaultHttpLoader;
+      final envelope = await loader(route, headers: widget.headers);
       ElpianTrace.mark('host.mountFragment "$route" <- HTTP responded');
       _captureAuth(envelope);
       final nav = envelope['navigation'];
