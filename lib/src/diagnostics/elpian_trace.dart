@@ -14,9 +14,16 @@ import 'package:flutter/foundation.dart';
 class ElpianTrace {
   ElpianTrace._();
 
-  /// Master switch. On in debug builds, or whenever `ELPIAN_TRACE=1` is defined.
-  static bool enabled = kDebugMode ||
-      const bool.fromEnvironment('ELPIAN_TRACE', defaultValue: false);
+  /// Master switch. On in debug builds, or whenever the build defines
+  /// `ELPIAN_TRACE` to a truthy value — accept `1`/`true`/`yes` so both
+  /// `--dart-define=ELPIAN_TRACE=1` and `=true` work (`bool.fromEnvironment`
+  /// alone only recognises the literal `true`).
+  static bool enabled = kDebugMode || _envEnabled;
+
+  static const String _traceEnv =
+      String.fromEnvironment('ELPIAN_TRACE', defaultValue: '');
+  static bool get _envEnabled =>
+      _traceEnv == '1' || _traceEnv == 'true' || _traceEnv == 'yes';
 
   static final Stopwatch _sw = Stopwatch()..start();
   static int _lastMs = 0;

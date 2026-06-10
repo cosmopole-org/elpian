@@ -179,6 +179,24 @@ class HtmlDiv {
   /// `@media` override) was laid out from its inline drag offset alone — so
   /// panels never went full-screen on phones. Falls back to the inline map (or
   /// the pre-parsed [ElpianNode.style]) when the node carries no class/id.
+  /// Like [_childStyle], but sees through transparent `Scope` re-render
+  /// wrappers so a `position: absolute|fixed` element nested directly inside a
+  /// `Scope` is still taken out of flow by its containing Stack.
+  ///
+  /// A client component's resolved root is ALWAYS wrapped by the engine in a
+  /// `Scope` (for scoped re-renders). Without this, a clientComp that renders an
+  /// absolute root — e.g. the stage-shell navbar overlaying the 3D scene — was
+  /// treated as in-flow and collapsed into the stack's base layer (painting
+  /// *behind* the scene, so the navbar/command-menu was invisible).
+  static CSSStyle? _positionalStyle(ElpianNode child) {
+    var n = child;
+    var guard = 0;
+    while (n.type == 'Scope' && n.children.length == 1 && guard++ < 4) {
+      n = n.children.first;
+    }
+    return _childStyle(n);
+  }
+
   static CSSStyle? _childStyle(ElpianNode child) {
     final className = child.props['className'];
     final inline = child.props['style'];
@@ -307,7 +325,7 @@ class HtmlDiv {
     final styles = <CSSStyle?>[];
     var hasPositioned = false;
     for (final child in nodes) {
-      final style = _childStyle(child);
+      final style = _positionalStyle(child);
       styles.add(style);
       final pos = style?.position;
       if (pos == 'absolute' || pos == 'fixed') hasPositioned = true;

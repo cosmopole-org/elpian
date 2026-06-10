@@ -296,12 +296,34 @@ class ElpianEngine {
 
     // Wrap with event handling if node has events
     if (nodeWithStyle.events != null && nodeWithStyle.events!.isNotEmpty) {
-      result = EventEnabledWidget(
-        key: key == null ? null : ValueKey<String>(key),
-        node: nodeWithStyle,
-        parentId: parentId,
-        child: result,
-      );
+      // If the builder made this node a flex child (its `flex`/`flex-grow`
+      // style wrapped it in a [Flexible]/[Expanded]), the event wrapper must go
+      // INSIDE that Flexible — otherwise the Flexible's FlexParentData is applied
+      // to the gesture detector's RenderObject instead of the parent Row/Column,
+      // and Flutter throws "Incorrect use of ParentDataWidget" (the whole
+      // subtree then fails to render — e.g. a navbar/stage-shell button that is
+      // both `flex:1` and tappable). Keep the Flexible outermost; wrap its child.
+      if (result is Flexible) {
+        final flexible = result;
+        result = Flexible(
+          key: flexible.key,
+          flex: flexible.flex,
+          fit: flexible.fit,
+          child: EventEnabledWidget(
+            key: key == null ? null : ValueKey<String>(key),
+            node: nodeWithStyle,
+            parentId: parentId,
+            child: flexible.child,
+          ),
+        );
+      } else {
+        result = EventEnabledWidget(
+          key: key == null ? null : ValueKey<String>(key),
+          node: nodeWithStyle,
+          parentId: parentId,
+          child: result,
+        );
+      }
     } else if (key != null && key.isNotEmpty) {
       result = KeyedSubtree(
         key: ValueKey<String>(key),
