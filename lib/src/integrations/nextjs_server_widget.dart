@@ -606,6 +606,8 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
       'fetch': (name, payload) => _hostFetchInto(record.vm, payload),
       'submit': (name, payload) => _hostSubmitInto(record.vm, payload),
       'navigate': (name, payload) => _hostNavigate(payload),
+      'mountFragment': (name, payload) =>
+          _hostMountFragmentInto(record.vm, payload),
     };
     vm.registerHostHandlers(handlers);
 
@@ -1056,6 +1058,55 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
     return _hostOk;
   }
 
+  /// `askHost('mountFragment', { route, scopeKey, onData? })` — the host-side
+  /// half of nested sub-page loading. Fetches a fragment route, resolves any
+  /// inline `clientComp` nodes in its `component`, and patches the result into
+  /// the `Scope` named by `scopeKey` — bounded, so the rest of the screen keeps
+  /// its widgets (and state) untouched. The calling VM typically painted a
+  /// skeleton into that scope before asking, so the user sees an instant
+  /// placeholder that is swapped for the real view when the network returns.
+  ///
+  /// Unlike `fetch` (which only hands the raw envelope back to the VM), this
+  /// lets a fragment carry nested client components and still mount correctly,
+  /// because resolution happens host-side. `onData`, when given, additionally
+  /// delivers the raw envelope to the VM function of that name.
+  Future<String> _hostMountFragmentInto(
+    VmRuntimeClient? vm,
+    String payload,
+  ) async {
+    try {
+      final args = _firstArgMap(payload);
+      final route = args['route']?.toString();
+      if (route == null || route.isEmpty) return _hostOk;
+      final scopeKey = args['scopeKey']?.toString();
+      ElpianTrace.mark('host.mountFragment "$route" -> issuing HTTP');
+      final envelope = await _defaultHttpLoader(route, headers: widget.headers);
+      ElpianTrace.mark('host.mountFragment "$route" <- HTTP responded');
+      _captureAuth(envelope);
+      final nav = envelope['navigation'];
+      if (nav is Map && nav.isNotEmpty) {
+        _applyServerNavigation(Map<String, dynamic>.from(nav));
+      }
+      final component = envelope['component'];
+      if (component is Map<String, dynamic>) {
+        final packed = envelope['clientComponents'];
+        final resolved = await _resolveClientComponentNodes(
+          component,
+          packedClientComponents:
+              packed is Map<String, dynamic> ? packed : null,
+        );
+        _applyClientRender(resolved, scopeKey);
+      }
+      final onData = args['onData']?.toString();
+      if (onData != null && onData.isNotEmpty && vm != null) {
+        await vm.callFunctionWithInput(onData, jsonEncode(envelope));
+      }
+    } catch (e) {
+      debugPrint('NextjsServerWidget[mountFragment]: $e');
+    }
+    return _hostOk;
+  }
+
   /// `askHost('navigate', navigation)` — apply a server-style navigation
   /// directive (`redirectTo` / `refresh` / `back`) from a client script.
   String _hostNavigate(String payload) {
@@ -1193,6 +1244,8 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
       'fetch': (name, payload) => _hostFetch(payload),
       'submit': (name, payload) => _hostSubmit(payload),
       'navigate': (name, payload) => _hostNavigate(payload),
+      'mountFragment': (name, payload) =>
+          _hostMountFragmentInto(_pageVm, payload),
     };
     vm.registerHostHandlers(handlers);
     // Event routing is wired once in initState (covers page VM + client comps).
