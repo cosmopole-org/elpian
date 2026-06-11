@@ -148,6 +148,22 @@ If a response includes `vmAstJson`, the Elpian VM AST is executed similarly, and
 
 You can observe outputs with `onScriptExecuted` and errors with `onScriptError`.
 
+### Script host API surface
+
+A page script (and every live `clientComp` VM) can call these host APIs via `askHost(name, ...jsonArgs)`:
+
+| API | Payload | Behaviour |
+|-----|---------|-----------|
+| `render` | `viewJson[, scopeKey]` | Replace the screen, or — with `scopeKey` — patch ONLY the subtree whose node `key` matches, bumping enclosing `Scope` tokens so just that region rebuilds. |
+| `fetch` | `{ route, onData }` | GET a fragment route in the background; the decoded envelope is delivered to the VM function named `onData`. |
+| `submit` | `{ route, body, onResult? }` | POST an action route; auth + navigation directives are applied automatically. |
+| `navigate` | `{ redirectTo / refresh / back }` | Apply a server-style navigation directive. |
+| `mountFragment` | `{ route, scopeKey, onData? }` | **Nested sub-page loading:** fetch a fragment route, resolve any inline `clientComp` nodes in its `component`, and patch the result into the `Scope` named by `scopeKey` (bounded — the rest of the screen keeps its widgets and state). The calling script typically paints a skeleton into that scope first, so the user sees an instant placeholder that is swapped for the real view when the network returns. `onData`, when given, additionally receives the raw envelope. |
+
+### Script-first pages with scoped components
+
+The recommended paradigm: the envelope's `component` is an instant **skeleton placeholder**, and `jsCode` is the page renderer. The script composes the page from components, each wrapped in a `Scope` keyed `"<key>__scope"` with an inner patch target keyed `"<key>"`. State lives in the VM; an interaction (a tab switch, a window drag, a HUD tick) re-renders only its own component via `askHost('render', viewJson, '<key>')` — never a global re-render. Sub-pages that need server data render a skeleton into their scope and fill in via `fetch`/`mountFragment` when the response arrives.
+
 ```dart
 NextjsServerWidget(
   serverBaseUrl: 'https://mini.example.com',
