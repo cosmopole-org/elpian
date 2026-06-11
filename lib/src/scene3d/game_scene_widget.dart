@@ -12,8 +12,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
 import 'core.dart';
+import 'gltf/model_cache.dart';
 import 'renderer.dart';
 import 'scene_parser.dart';
+import 'scene_taps.dart';
 import '../models/elpian_node.dart';
 import '../diagnostics/elpian_trace.dart';
 
@@ -395,6 +397,119 @@ class _GameSceneWidgetState extends State<GameSceneWidget>
     _dirty = true;
   }
 
+  // ── Tap-picking ────────────────────────────────────────────────────
+  //
+  // Scene nodes carrying `props: {clickable: true, ...}` (buildings, empty
+  // construction slots) are hit-tested in screen space on tap: each one's
+  // world-space bounding sphere is projected through the SAME view-projection
+  // the renderer used for the frame on screen (cached on [Scene3DRenderer]),
+  // and the nearest sphere whose projected disc contains the tap wins. The
+  // winning node's raw `props` map is handed to [ElpianSceneTaps.handler].
+  //
+  // Taps arrive in WIDGET coordinates. The painter may rasterize at a reduced
+  // `renderScale` and stretch the image to fill the widget (no letterboxing —
+  // it maps the full render rect onto the full widget rect), so projecting
+  // NDC directly into the widget size lands on what the user sees.
+
+  /// Small floor (in logical px) on the projected disc radius so distant or
+  /// tiny markers stay comfortably tappable.
+  static const double _minTapRadiusPx = 12.0;
+
+  void _onTapUp(TapUpDetails details) {
+    final size = context.size;
+    if (size == null || size.isEmpty) return;
+    final props = _pickClickableAt(details.localPosition, size);
+    if (props != null) {
+      ElpianSceneTaps.handler?.call(props);
+    }
+  }
+
+  /// Returns the `props` of the nearest (smallest depth) clickable node whose
+  /// projected bounding disc contains [point] (widget coordinates), or null.
+  Map<String, dynamic>? _pickClickableAt(Offset point, Size size) {
+    Map<String, dynamic>? best;
+    var bestDepth = double.infinity;
+
+    void visit(SceneNode node, Mat4 parent) {
+      if (!node.visible) return;
+      final world = parent * node.localTransform();
+      final props = node.props;
+      if (props != null && props['clickable'] == true) {
+        final (center: c, radius: r) = _worldBounds(node, world);
+        final projected = _renderer.projectSphereToScreen(
+          c, r, size,
+          camera: _scene.camera,
+        );
+        if (projected != null &&
+            (point - projected.center).distance <=
+                math.max(projected.radius, _minTapRadiusPx) &&
+            projected.depth < bestDepth) {
+          bestDepth = projected.depth;
+          best = props;
+        }
+      }
+      for (final child in node.children) {
+        visit(child, world);
+      }
+    }
+
+    for (final node in _scene.nodes) {
+      visit(node, Mat4.identity());
+    }
+    return best;
+  }
+
+  /// World-space bounding sphere for a clickable node.
+  ///
+  /// glTF models that are already loaded use their rest-pose bounds through
+  /// the same `normalize` frame the renderer draws with; still-loading models
+  /// fall back to the placeholder capsule's `normalize` height; primitive
+  /// meshes / anything else use a unit sphere scaled by the node transform.
+  static ({Vec3 center, double radius}) _worldBounds(
+      SceneNode node, Mat4 world) {
+    final url = node.gltfUrl;
+    final extra = node.extra ?? const <String, dynamic>{};
+    if (url != null) {
+      // Peek only — never trigger a network load from a hit-test.
+      final model = GltfModelCache.instance.statusOf(url) == GltfLoadStatus.ready
+          ? GltfModelCache.instance.get(url)
+          : null;
+      if (model != null) {
+        final frame =
+            Scene3DRenderer.normalizeFrame(extra['normalize'], model, world);
+        return (
+          center: frame.transformPoint(model.restCenter),
+          radius: model.restRadius * _maxAxisScale(frame),
+        );
+      }
+      // Mirror the renderer's loading placeholder (capsule of `normalize`
+      // height h, base on the ground).
+      final normalize = extra['normalize'];
+      final h = normalize is num
+          ? normalize.toDouble()
+          : normalize is Map
+              ? ((normalize['height'] as num?)?.toDouble() ?? 1.0)
+              : 1.0;
+      return (
+        center: world.transformPoint(Vec3(0, 0.5 * h, 0)),
+        radius: 0.75 * h * _maxAxisScale(world),
+      );
+    }
+    return (
+      center: world.transformPoint(Vec3.zero),
+      radius: _maxAxisScale(world),
+    );
+  }
+
+  /// Largest basis-vector length of [m] — the conservative uniform scale a
+  /// transform applies to a sphere radius.
+  static double _maxAxisScale(Mat4 m) {
+    final v = m.m;
+    double len(int c) => math.sqrt(
+        v[c] * v[c] + v[c + 1] * v[c + 1] + v[c + 2] * v[c + 2]);
+    return math.max(len(0), math.max(len(4), len(8)));
+  }
+
   @override
   Widget build(BuildContext context) {
     Widget child = CustomPaint(
@@ -409,6 +524,7 @@ class _GameSceneWidgetState extends State<GameSceneWidget>
 
     if (widget.interactive) {
       child = GestureDetector(
+        onTapUp: _onTapUp,
         onScaleStart: _onScaleStart,
         onScaleUpdate: _onScaleUpdate,
         child: child,

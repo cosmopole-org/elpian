@@ -14,6 +14,7 @@ import '../vm/host_handler.dart';
 import '../vm/quickjs_vm.dart';
 import '../vm/scope_patch.dart';
 import '../vm/timer_host_api.dart';
+import '../scene3d/scene_taps.dart';
 import '../vm/vm_runtime_client.dart';
 import 'client_comp_routing.dart';
 import 'nextjs_auth.dart';
@@ -137,6 +138,10 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
   int _clientCompSeq = 0;
   bool _eventRoutingWired = false;
 
+  /// Our default [ElpianSceneTaps] handler, kept so dispose can uninstall it
+  /// without clobbering a handler somebody else installed.
+  void Function(Map<String, dynamic> props)? _sceneTapHandler;
+
   @override
   void initState() {
     super.initState();
@@ -157,6 +162,19 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
     // the page VM. Wiring it here (not only when a page script runs) means a
     // panel with no poller still delivers taps to its window/tab components.
     _wireEventRouting();
+    // Default behaviour for taps on clickable 3D scene nodes (buildings,
+    // construction slots): navigate to the node's `panelHref`. Installed only
+    // when the app hasn't provided its own handler, so we never clobber one.
+    if (ElpianSceneTaps.handler == null) {
+      _sceneTapHandler = (Map<String, dynamic> props) {
+        if (!mounted) return;
+        final href = props['panelHref'];
+        if (href is String && href.isNotEmpty) {
+          _handleNavigate(href);
+        }
+      };
+      ElpianSceneTaps.handler = _sceneTapHandler;
+    }
     _payloadFuture = _loadPayload();
   }
 
@@ -923,6 +941,12 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
 
   @override
   void dispose() {
+    // Uninstall our scene-tap handler (and only ours — an app-provided
+    // handler installed before initState stays untouched).
+    if (_sceneTapHandler != null &&
+        identical(ElpianSceneTaps.handler, _sceneTapHandler)) {
+      ElpianSceneTaps.handler = null;
+    }
     unawaited(_disposePageVm());
     unawaited(_disposeClientCompVms());
     super.dispose();
