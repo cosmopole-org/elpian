@@ -30,8 +30,33 @@ class GltfBinaryLoader {
   static const int _chunkBin = 0x004E4942; // "BIN\0"
 
   /// Parse [bytes] into a [GltfModel], decoding embedded textures.
+  /// glTF extensions this loader can actually honour. Quantized attributes
+  /// (normalized integer accessors) are dequantized by the accessor readers,
+  /// and WebP textures decode through Flutter's image codecs.
+  static const Set<String> _supportedRequiredExtensions = {
+    'KHR_mesh_quantization',
+    'EXT_texture_webp',
+  };
+
   static Future<GltfModel> parse(Uint8List bytes) async {
     final (json, binChunk) = _split(bytes);
+
+    // A model that REQUIRES an extension we can't decode (e.g.
+    // EXT_meshopt_compression) must fail loudly here: decoding its compressed
+    // buffer views as raw vertex data produces garbage geometry at absurd
+    // scale that can pop in late and block the whole scene.
+    final required =
+        (json['extensionsRequired'] as List?)?.cast<String>() ?? const [];
+    final unsupported = [
+      for (final ext in required)
+        if (!_supportedRequiredExtensions.contains(ext)) ext,
+    ];
+    if (unsupported.isNotEmpty) {
+      throw FormatException(
+        'glTF model requires unsupported extensions: ${unsupported.join(', ')}',
+      );
+    }
+
     final buffers = _resolveBuffers(json, binChunk);
     final accessors = (json['accessors'] as List?) ?? const [];
     final bufferViews = (json['bufferViews'] as List?) ?? const [];
