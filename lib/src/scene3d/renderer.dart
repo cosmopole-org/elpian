@@ -128,11 +128,40 @@ class _Frustum {
   }
 }
 
+/// A world-space bounding sphere projected to screen space — the result of
+/// [Scene3DRenderer.projectSphereToScreen]. Used by tap-picking: a tap hits
+/// the sphere when it falls inside the disc at [center] with [radius];
+/// [depth] (NDC z, smaller = nearer) breaks ties between overlapping objects.
+class ProjectedSphere {
+  final ui.Offset center;
+  final double radius;
+  final double depth;
+  const ProjectedSphere(this.center, this.radius, this.depth);
+}
+
 class Scene3DRenderer {
   double _elapsed = 0;
 
   /// View frustum for the current frame, used to cull static nodes.
   _Frustum? _frustum;
+
+  // The camera matrices and surface size of the most recently rendered frame,
+  // cached so screen-space hit-testing (tap-picking) projects through exactly
+  // the same view-projection the user is looking at. See
+  // [projectSphereToScreen].
+  Mat4? _lastVp;
+  Mat4? _lastView;
+  ui.Size? _lastSize;
+
+  /// View-projection matrix used by the most recent [render] call (null until
+  /// the first frame has been rendered).
+  Mat4? get lastViewProjection => _lastVp;
+
+  /// Surface size of the most recent [render] call. Note this is the RENDER
+  /// size — when the host widget rasterizes at a reduced `renderScale`, it is
+  /// smaller than the widget. [projectSphereToScreen] maps NDC into a caller
+  /// supplied target size precisely so that difference doesn't matter.
+  ui.Size? get lastViewportSize => _lastSize;
 
   /// Whether the most recent [render] drew any time-varying content — an
   /// animated camera, a particle system, a keyframe-animated node, or an
@@ -180,6 +209,9 @@ class Scene3DRenderer {
     final proj = camera.projectionMatrix(aspect);
     final vp = proj * view;
     _frustum = _Frustum.fromVp(vp);
+    _lastVp = vp;
+    _lastView = view;
+    _lastSize = size;
 
     final screenTris = <_ScreenTri>[];
     final screenBatches = <_ModelBatch>[];
@@ -304,6 +336,60 @@ class Scene3DRenderer {
   }
 
   int _frameCount = 0;
+
+  /// Projects a world-space bounding sphere ([center], [radius]) to screen
+  /// space using the SAME view/projection matrices as the most recently
+  /// rendered frame, mapping NDC into [targetSize].
+  ///
+  /// [targetSize] should be the size taps are measured in (the widget size).
+  /// Because NDC only depends on the camera and the aspect ratio — not on the
+  /// raster resolution — this transparently compensates for a host widget that
+  /// rasterizes at a reduced `renderScale` and stretches the image to fill
+  /// itself: the projected disc lands where the object appears on screen.
+  ///
+  /// When no frame has been rendered yet, [camera] (if provided) is used to
+  /// build the matrices at [targetSize]'s aspect. Returns null if the sphere's
+  /// centre is behind the camera or no matrices are available.
+  ProjectedSphere? projectSphereToScreen(
+    Vec3 center,
+    double radius,
+    ui.Size targetSize, {
+    Camera3D? camera,
+  }) {
+    if (targetSize.isEmpty) return null;
+    var vp = _lastVp;
+    var view = _lastView;
+    if (vp == null || view == null) {
+      if (camera == null) return null;
+      view = camera.viewMatrix();
+      vp = camera.projectionMatrix(targetSize.width / targetSize.height) * view;
+    }
+
+    ui.Offset? toScreen(Vec3 world) {
+      final clip = vp!.transformVec4(world);
+      if (clip.w <= 1e-4) return null; // behind the camera
+      final ndc = clip.perspectiveDivide();
+      return ui.Offset(
+        (ndc.x * 0.5 + 0.5) * targetSize.width,
+        (0.5 - ndc.y * 0.5) * targetSize.height,
+      );
+    }
+
+    final screenCenter = toScreen(center);
+    if (screenCenter == null) return null;
+    final depth = vp.transformVec4(center).perspectiveDivide().z;
+
+    // Screen radius: project a second point offset by the camera's world-space
+    // right vector (row 0 of the view matrix — orthonormal from lookAt), so the
+    // measured screen distance is unaffected by perspective foreshortening
+    // along the view axis. Works for both perspective and orthographic.
+    final right = Vec3(view.m[0], view.m[4], view.m[8]);
+    final screenEdge = toScreen(center + right * radius);
+    final screenRadius =
+        screenEdge != null ? (screenEdge - screenCenter).distance : 0.0;
+
+    return ProjectedSphere(screenCenter, screenRadius, depth);
+  }
 
   void _drawSkyGradient(ui.Canvas canvas, ui.Size size, Environment3D env) {
     final rect = ui.Rect.fromLTWH(0, 0, size.width, size.height);
@@ -717,7 +803,7 @@ class Scene3DRenderer {
     // Bounds-based normalization: `normalize: 4` (target height) or
     // `normalize: {height, ground, center}`. Applied between the node
     // transform and the model so authors size assets in world units.
-    final normalized = _normalizeFrame(extra['normalize'], model, worldXform);
+    final normalized = normalizeFrame(extra['normalize'], model, worldXform);
     worldXform = normalized;
 
     final globals = model.computeGlobalTransforms(animIdx, time);
@@ -751,7 +837,10 @@ class Scene3DRenderer {
   /// Resolve a `model3d` node's `normalize` request against the model's
   /// rest-pose bounds. Accepts a bare number (target world height) or a map
   /// `{height, ground, center}`; anything else returns [worldXform] unchanged.
-  static Mat4 _normalizeFrame(
+  ///
+  /// Public so tap-picking (GameSceneWidget) can compute the same world frame
+  /// the renderer draws the model in.
+  static Mat4 normalizeFrame(
       dynamic normalize, GltfModel model, Mat4 worldXform) {
     if (normalize == null) return worldXform;
     double? height;

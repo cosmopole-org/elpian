@@ -268,6 +268,13 @@ class SceneParser {
       };
     }
 
+    // Retain the raw `props` map verbatim (interaction metadata such as
+    // `clickable` / `panelHref` emitted by the game server). The renderer
+    // ignores it; GameSceneWidget uses it for tap-picking.
+    final props = json['props'] is Map
+        ? Map<String, dynamic>.from(json['props'] as Map)
+        : null;
+
     return SceneNode(
       type: type,
       id: json['id'] as String?,
@@ -287,6 +294,7 @@ class SceneParser {
       textSize: (json['text_size'] as num?)?.toDouble(),
       gltfUrl: gltfUrl,
       extra: extra,
+      props: props,
       isStatic: json['static'] as bool? ?? false,
     );
   }

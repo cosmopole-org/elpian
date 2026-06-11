@@ -56,6 +56,8 @@ export 'src/scene3d/core.dart';
 export 'src/scene3d/renderer.dart';
 export 'src/scene3d/scene_parser.dart';
 export 'src/scene3d/game_scene_widget.dart';
+// Global hook receiving taps on `clickable` scene nodes (see ElpianSceneTaps).
+export 'src/scene3d/scene_taps.dart';
 // glTF 2.0 / GLB model loading + skeletal animation (real rigged characters).
 export 'src/scene3d/gltf/gltf_model.dart';
 export 'src/scene3d/gltf/model_cache.dart';

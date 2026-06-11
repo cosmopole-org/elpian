@@ -1442,6 +1442,14 @@ class SceneNode {
   String? gltfUrl;
   Map<String, dynamic>? extra;
 
+  /// Raw `props` map from the source JSON node, retained verbatim so the host
+  /// widget can inspect interaction metadata the renderer itself ignores —
+  /// e.g. the game server marks tappable buildings with
+  /// `props: {clickable: true, panelHref: "/buildings/<id>", ...}`.
+  /// Lives on the node (not the render cache), so it survives static-scene
+  /// baking and process-wide scene sharing.
+  Map<String, dynamic>? props;
+
   /// Marks geometry that never moves and is lit by unchanging lights (e.g. a
   /// pre-built static world). The renderer may bake and cache its world-space
   /// lit triangles once and only re-project them each frame. See [renderCache].
@@ -1473,6 +1481,7 @@ class SceneNode {
     this.textSize,
     this.gltfUrl,
     this.extra,
+    this.props,
     this.isStatic = false,
   }) : children = children ?? [];
 
