@@ -168,14 +168,34 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
     if (ElpianSceneTaps.handler == null) {
       _sceneTapHandler = (Map<String, dynamic> props) {
         if (!mounted) return;
-        final href = props['panelHref'];
-        if (href is String && href.isNotEmpty) {
-          _handleNavigate(href);
-        }
+        unawaited(_dispatchSceneTap(props));
       };
       ElpianSceneTaps.handler = _sceneTapHandler;
     }
     _payloadFuture = _loadPayload();
+  }
+
+  /// Deliver a clickable-scene-node tap. The page script gets first refusal:
+  /// when the live page VM defines a global `__onSceneTap(props)` (the window
+  /// manager registers one to open the node's panel as an instant, in-place
+  /// floating window), the tap is handed to it and navigation is skipped.
+  /// Otherwise — no page VM, or no handler defined — fall back to navigating
+  /// to the node's `panelHref` (the original behaviour).
+  Future<void> _dispatchSceneTap(Map<String, dynamic> props) async {
+    final vm = _pageVm;
+    if (vm != null) {
+      try {
+        // Throws when `__onSceneTap` is not defined in the VM.
+        await vm.callFunctionWithInput('__onSceneTap', jsonEncode(props));
+        return;
+      } catch (_) {
+        // fall through to host navigation
+      }
+    }
+    final href = props['panelHref'];
+    if (href is String && href.isNotEmpty && mounted) {
+      _handleNavigate(href);
+    }
   }
 
   @override
