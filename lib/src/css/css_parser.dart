@@ -521,6 +521,10 @@ class CSSParser {
       // Hex colors
       if (colorStr.startsWith('#')) {
         colorStr = colorStr.substring(1);
+        // CSS shorthand: #rgb → #rrggbb, #rgba → #rrggbbaa.
+        if (colorStr.length == 3 || colorStr.length == 4) {
+          colorStr = colorStr.split('').map((c) => '$c$c').join();
+        }
         if (colorStr.length == 6) {
           return Color(int.parse('FF$colorStr', radix: 16));
         } else if (colorStr.length == 8) {

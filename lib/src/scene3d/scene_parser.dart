@@ -83,7 +83,8 @@ class SceneParser {
   // ── Environment ──────────────────────────────────────────────────
 
   static Environment3D _parseEnvironment(Map<String, dynamic> json) {
-    final ambient = _parseColor3(json['ambient_light']);
+    final ambient =
+        _parseColor3(json['ambient_color'] ?? json['ambient_light']);
     return Environment3D(
       ambientColor: ambient ?? const Vec3(0.4, 0.4, 0.5),
       ambientIntensity: _d(json['ambient_intensity'], 0.3),
@@ -228,10 +229,14 @@ class SceneParser {
           .toList();
     }
 
-    // Parse particles
+    // Parse particles. Emitter properties live directly on the node
+    // (per 3D_GRAPHICS.md); a nested `emitter` map is accepted as a
+    // legacy alias and wins when present.
     ParticleEmitter? emitter;
-    if (type == 'particles' && json['emitter'] != null) {
-      emitter = _parseEmitter(json['emitter'] as Map<String, dynamic>);
+    if (type == 'particles') {
+      final nested = json['emitter'];
+      emitter = _parseEmitter(
+          nested is Map<String, dynamic> ? nested : json);
     }
 
     // Parse physics
@@ -386,8 +391,9 @@ class SceneParser {
 
   static ParticleEmitter _parseEmitter(Map<String, dynamic> json) {
     return ParticleEmitter(
-      shape: _parseEmitterShape(json['shape'] as String?),
-      emitRate: _d(json['emit_rate'], 20),
+      shape: _parseEmitterShape(
+          (json['emitter_shape'] ?? json['shape']) as String?),
+      emitRate: _d(json['emission_rate'] ?? json['emit_rate'], 10),
       lifetime: _d(json['lifetime'], 2),
       startColor: _parseColor3(json['start_color']) ?? Vec3.one,
       endColor: _parseColor3(json['end_color']) ?? Vec3.one,
@@ -415,7 +421,8 @@ class SceneParser {
     'ring': EmitterShape.ring,
   };
 
-  static EmitterShape _parseEmitterShape(String? s) => _emitterShapeMap[s] ?? EmitterShape.point;
+  static EmitterShape _parseEmitterShape(String? s) =>
+      _emitterShapeMap[s?.toLowerCase()] ?? EmitterShape.point;
 
   // ── Physics ──────────────────────────────────────────────────────
 

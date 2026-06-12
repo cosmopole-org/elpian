@@ -312,7 +312,7 @@ impl SceneRenderer {
     fn find_camera<'a>(&self, nodes: impl Iterator<Item = &'a JsonNode>) -> CameraState {
         for node in nodes {
             if let JsonNode::Camera(cam) = node {
-                let transform = cam.transform.to_mat4();
+                let transform = self.compute_animated_transform(&cam.transform, &cam.animation);
                 let pos = transform.col(3).truncate();
                 // Extract forward direction (negative Z in camera space)
                 let forward = -(transform.col(2).truncate()).normalize();
@@ -353,7 +353,7 @@ impl SceneRenderer {
         let mut lights = Vec::new();
         for node in nodes {
             if let JsonNode::Light(l) = node {
-                let transform = l.transform.to_mat4();
+                let transform = self.compute_animated_transform(&l.transform, &l.animation);
                 let pos = transform.col(3).truncate();
                 let direction = -(transform.col(2).truncate()).normalize();
                 let color = l.color.as_ref().map(|c| c.to_vec3()).unwrap_or(Vec3::ONE);
@@ -361,7 +361,7 @@ impl SceneRenderer {
 
                 lights.push(LightState {
                     light_type: match l.light_type {
-                        LightType::Point => LightStateType::Point,
+                        LightType::Point | LightType::Area => LightStateType::Point,
                         LightType::Directional => LightStateType::Directional,
                         LightType::Spot => LightStateType::Spot,
                     },
@@ -533,11 +533,15 @@ impl SceneRenderer {
             None => return base_mat,
         };
 
+        let elapsed = self.elapsed_time - anim.delay;
+        if elapsed < 0.0 {
+            return base_mat;
+        }
         let duration = anim.duration.max(0.001);
         let raw_progress = if anim.looping {
-            (self.elapsed_time % duration) / duration
+            (elapsed % duration) / duration
         } else {
-            (self.elapsed_time / duration).min(1.0)
+            (elapsed / duration).min(1.0)
         };
         let t = apply_easing(raw_progress, &anim.easing);
 
@@ -555,7 +559,9 @@ impl SceneRenderer {
                 let from_v = from.to_glam();
                 let to_v = to.to_glam();
                 let pos = from_v.lerp(to_v, t);
-                Mat4::from_translation(pos)
+                // Parent-space offset applied on top of the base transform
+                // (parity with scene3d: `translation(lerp) * base`).
+                Mat4::from_translation(pos) * base_mat
             }
             AnimationType::Scale { from, to } => {
                 let from_v = from.to_glam();
@@ -574,6 +580,58 @@ impl SceneRenderer {
                 let s = min_scale
                     + (max_scale - min_scale) * (0.5 + 0.5 * (t * std::f32::consts::TAU).sin());
                 base_mat * Mat4::from_scale(Vec3::splat(s))
+            }
+            AnimationType::Orbit { radius, height } => {
+                let angle = t * std::f32::consts::TAU;
+                base_mat
+                    * Mat4::from_translation(Vec3::new(
+                        radius * angle.cos(),
+                        *height,
+                        radius * angle.sin(),
+                    ))
+            }
+            AnimationType::Swing { angle, axis } => {
+                let axis_vec = axis.to_glam().normalize_or_zero();
+                if axis_vec == Vec3::ZERO {
+                    return base_mat;
+                }
+                let a = (t * std::f32::consts::TAU).sin() * angle.to_radians();
+                base_mat * Mat4::from_axis_angle(axis_vec, a)
+            }
+            AnimationType::Shake { intensity } => {
+                // Deterministic pseudo-random jitter reseeded each frame from the
+                // elapsed-time millisecond counter (parity with scene3d's Shake).
+                let seed = (elapsed * 1000.0) as u32;
+                let r = |n: u32| {
+                    let mut h = seed.wrapping_add(n.wrapping_mul(0x9E37_79B9));
+                    h ^= h >> 16;
+                    h = h.wrapping_mul(0x7FEB_352D);
+                    h ^= h >> 15;
+                    h = h.wrapping_mul(0x846C_A68B);
+                    h ^= h >> 16;
+                    (h as f32 / u32::MAX as f32) - 0.5
+                };
+                base_mat
+                    * Mat4::from_translation(Vec3::new(
+                        r(1) * intensity,
+                        r(2) * intensity,
+                        r(3) * intensity,
+                    ))
+            }
+            AnimationType::Float { amplitude } => {
+                let y = (elapsed * std::f32::consts::TAU / duration).sin() * amplitude;
+                base_mat * Mat4::from_translation(Vec3::new(0.0, y, 0.0))
+            }
+            AnimationType::Spin { speed } => {
+                let s = speed.to_glam();
+                // Rz * Ry * Rx — same composition as scene3d's Mat4.fromEulerXYZ.
+                base_mat
+                    * Mat4::from_euler(
+                        glam::EulerRot::ZYX,
+                        s.z.to_radians() * elapsed,
+                        s.y.to_radians() * elapsed,
+                        s.x.to_radians() * elapsed,
+                    )
             }
         }
     }
@@ -1996,33 +2054,49 @@ fn fog_factor(position: Vec3, camera: &CameraState, env: &EnvironmentSettings) -
     }
 }
 
+// Curves match scene3d's `applyEasing` (lib/src/scene3d/core.dart) so the same
+// scene JSON animates identically across the Rust and Dart renderers.
 fn apply_easing(progress: f32, easing: &EasingType) -> f32 {
     match easing {
         EasingType::Linear => progress,
-        EasingType::EaseIn => progress * progress,
-        EasingType::EaseOut => progress * (2.0 - progress),
+        EasingType::EaseIn => progress * progress * progress,
+        EasingType::EaseOut => 1.0 - (1.0 - progress).powi(3),
         EasingType::EaseInOut => {
             if progress < 0.5 {
-                2.0 * progress * progress
+                4.0 * progress * progress * progress
             } else {
-                -1.0 + (4.0 - 2.0 * progress) * progress
+                1.0 - (-2.0 * progress + 2.0).powi(3) / 2.0
             }
         }
         EasingType::Bounce => {
             let n1 = 7.5625;
             let d1 = 2.75;
-            if progress < 1.0 / d1 {
-                n1 * progress * progress
-            } else if progress < 2.0 / d1 {
-                let p = progress - 1.5 / d1;
-                n1 * p * p + 0.75
-            } else if progress < 2.5 / d1 {
-                let p = progress - 2.25 / d1;
-                n1 * p * p + 0.9375
+            let mut p = 1.0 - progress;
+            if p < 1.0 / d1 {
+                1.0 - n1 * p * p
+            } else if p < 2.0 / d1 {
+                p -= 1.5 / d1;
+                1.0 - (n1 * p * p + 0.75)
+            } else if p < 2.5 / d1 {
+                p -= 2.25 / d1;
+                1.0 - (n1 * p * p + 0.9375)
             } else {
-                let p = progress - 2.625 / d1;
-                n1 * p * p + 0.984375
+                p -= 2.625 / d1;
+                1.0 - (n1 * p * p + 0.984375)
             }
         }
+        EasingType::Elastic => {
+            if progress <= 0.0 || progress >= 1.0 {
+                progress.clamp(0.0, 1.0)
+            } else {
+                -(2.0f32.powf(10.0 * progress - 10.0))
+                    * ((progress * 10.0 - 10.75) * (std::f32::consts::TAU / 3.0)).sin()
+            }
+        }
+        EasingType::Back => {
+            const C: f32 = 1.70158;
+            (C + 1.0) * progress * progress * progress - C * progress * progress
+        }
+        EasingType::Sine => 0.5 - 0.5 * (progress * std::f32::consts::PI).cos(),
     }
 }
