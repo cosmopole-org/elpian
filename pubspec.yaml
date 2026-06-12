@@ -32,6 +32,8 @@ flutter:
   assets:
     - assets/web_runtime/quickjs_web_runtime.js
     - assets/web_runtime/elpian_wasm_loader.js
+    - assets/web_runtime/vendor/quickjs-emscripten.mjs
+    - assets/web_runtime/vendor/quickjs-emscripten.wasm
     - assets/web_runtime/wasm/elpian_vm/elpian_vm.js
     - assets/web_runtime/wasm/elpian_vm/elpian_vm_bg.wasm
 

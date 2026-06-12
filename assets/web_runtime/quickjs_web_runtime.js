@@ -2,12 +2,23 @@ const quickJsMachines = new Map();
 let quickJsModulePromise = null;
 let quickJsInstancePromise = null;
 
+// The QuickJS engine (ESM glue + wasm) is VENDORED next to this script and
+// loaded same-origin FIRST. The external CDNs are a fallback only: when they
+// were the primary source, any environment where esm.sh/jsdelivr/unpkg are
+// blocked, slow or flaky lost the whole client runtime — page scripts never
+// booted, so window managers/scene-tap handlers were absent and every
+// interaction silently fell back to a full server-route navigation.
+const vendoredModuleUrl = new URL('vendor/quickjs-emscripten.mjs', import.meta.url).href;
+const vendoredWasmUrl = new URL('vendor/quickjs-emscripten.wasm', import.meta.url).href;
+
 async function getQuickJsModule() {
   if (!quickJsModulePromise) {
     quickJsModulePromise = (async () => {
       const candidates = [
-        // Browser-ready ESM entry.
-        'https://esm.sh/quickjs-emscripten@0.31.0?bundle&target=es2022&browser',
+        // Same-origin vendored bundle (ships with the app — no CDN needed).
+        vendoredModuleUrl,
+        // Browser-ready ESM entry (CDN fallback).
+        'https://esm.sh/quickjs-emscripten@0.32.0?bundle&target=es2022&browser',
       ];
 
       let lastError = null;
@@ -32,8 +43,11 @@ async function getQuickJsModule() {
 
 async function getWasmBinary() {
   const wasmCandidates = [
-    'https://cdn.jsdelivr.net/npm/@jitl/quickjs-wasmfile-release-sync@0.31.0/dist/emscripten-module.wasm',
-    'https://unpkg.com/@jitl/quickjs-wasmfile-release-sync@0.31.0/dist/emscripten-module.wasm',
+    // Same-origin vendored binary (matches the vendored module's version).
+    vendoredWasmUrl,
+    // CDN fallbacks.
+    'https://cdn.jsdelivr.net/npm/@jitl/quickjs-wasmfile-release-sync@0.32.0/dist/emscripten-module.wasm',
+    'https://unpkg.com/@jitl/quickjs-wasmfile-release-sync@0.32.0/dist/emscripten-module.wasm',
   ];
 
   let lastError = null;
