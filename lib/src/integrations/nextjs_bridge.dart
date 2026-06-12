@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../core/elpian_engine.dart';
 import '../css/css_parser.dart';
@@ -159,6 +160,15 @@ class NextjsBridge {
   ///     ]
   /// } }
   /// ```
+  ///
+  /// Field `type` selects the rendered control:
+  ///  - `text` (default), `password`, `textarea`, `number` — text inputs
+  ///    (`number` gets a numeric keyboard and digit filtering);
+  ///  - `select` — a dropdown over `options` (a list of strings or
+  ///    `{ "value", "label" }` maps);
+  ///  - `checkbox` — a toggle submitting `"true"`/`"false"`;
+  ///  - `range` — a slider over `min`/`max`/`step`;
+  ///  - `hidden` — never rendered; its `value` is submitted as-is.
   Widget _buildNextjsForm(ElpianNode node, List<Widget> children) {
     final props = node.props;
     final action = props['action']?.toString() ?? '';
@@ -434,18 +444,98 @@ class _NextjsFormWidget extends StatefulWidget {
   State<_NextjsFormWidget> createState() => _NextjsFormWidgetState();
 }
 
+/// A select-field choice: the submitted [value] plus the display [label].
+class _FieldOption {
+  const _FieldOption(this.value, this.label);
+  final String value;
+  final String label;
+}
+
 class _NextjsFormWidgetState extends State<_NextjsFormWidget> {
+  /// Controllers for the typed (text-like) fields.
   final Map<String, TextEditingController> _controllers = {};
+
+  /// Current values of the non-text controls (hidden/select/checkbox/range).
+  final Map<String, String> _values = {};
+
   bool _busy = false;
   String? _error;
+
+  static String _fieldType(Map<String, dynamic> f) =>
+      f['type']?.toString() ?? '';
+
+  static String _fieldName(Map<String, dynamic> f) =>
+      f['name']?.toString() ?? '';
+
+  /// Whether the field is collected through a [TextEditingController].
+  static bool _isTextLike(String type) =>
+      type != 'hidden' && type != 'select' && type != 'checkbox' && type != 'range';
+
+  /// Parse a select field's options: a list of strings or `{value,label}`
+  /// maps. Falls back to splitting a comma-separated `placeholder` so legacy
+  /// servers that crammed the choices into the hint still get a dropdown.
+  static List<_FieldOption> _optionsOf(Map<String, dynamic> f) {
+    final out = <_FieldOption>[];
+    final raw = f['options'];
+    if (raw is List) {
+      for (final o in raw) {
+        if (o is Map) {
+          final v = (o['value'] ?? o['label'] ?? '').toString();
+          out.add(_FieldOption(v, (o['label'] ?? v).toString()));
+        } else if (o != null) {
+          out.add(_FieldOption(o.toString(), o.toString()));
+        }
+      }
+    }
+    if (out.isEmpty) {
+      final placeholder = f['placeholder']?.toString() ?? '';
+      for (final part in placeholder.split(',')) {
+        final v = part.trim();
+        if (v.isNotEmpty) out.add(_FieldOption(v, v));
+      }
+    }
+    return out;
+  }
+
+  static double _numProp(Map<String, dynamic> f, String key, double fallback) {
+    final v = f[key];
+    if (v is num) return v.toDouble();
+    final parsed = double.tryParse(v?.toString() ?? '');
+    return parsed ?? fallback;
+  }
+
+  /// Format a slider value for display/submission (drop a trailing `.0`).
+  static String _fmtRange(double v) =>
+      v == v.roundToDouble() ? v.round().toString() : v.toString();
 
   @override
   void initState() {
     super.initState();
     for (final f in widget.fields) {
-      final name = f['name']?.toString() ?? '';
+      final name = _fieldName(f);
       if (name.isEmpty) continue;
-      _controllers[name] = TextEditingController(text: f['value']?.toString() ?? '');
+      final type = _fieldType(f);
+      final value = f['value']?.toString() ?? '';
+      if (_isTextLike(type)) {
+        _controllers[name] = TextEditingController(text: value);
+      } else if (type == 'select') {
+        final options = _optionsOf(f);
+        final valid = options.any((o) => o.value == value);
+        _values[name] =
+            valid ? value : (options.isNotEmpty ? options.first.value : value);
+      } else if (type == 'checkbox') {
+        _values[name] = (value == 'true' || value == 'on') ? 'true' : 'false';
+      } else if (type == 'range') {
+        final min = _numProp(f, 'min', 0);
+        final max = _numProp(f, 'max', 100);
+        final initial = max > min
+            ? (double.tryParse(value) ?? min).clamp(min, max)
+            : min;
+        _values[name] = _fmtRange(initial.toDouble());
+      } else {
+        // hidden — submit the server-provided value untouched.
+        _values[name] = value;
+      }
     }
   }
 
@@ -463,7 +553,7 @@ class _NextjsFormWidgetState extends State<_NextjsFormWidget> {
       _busy = true;
       _error = null;
     });
-    final values = <String, dynamic>{};
+    final values = <String, dynamic>{..._values};
     _controllers.forEach((k, v) => values[k] = v.text);
     String? error;
     try {
@@ -495,48 +585,204 @@ class _NextjsFormWidgetState extends State<_NextjsFormWidget> {
           borderSide: BorderSide(color: c, width: w),
         );
 
+    InputDecoration decorationOf(Map<String, dynamic> f, String name) =>
+        InputDecoration(
+          hintText: f['placeholder']?.toString() ?? name,
+          hintStyle: const TextStyle(color: hintColor, fontSize: 14),
+          filled: true,
+          fillColor: fieldFill,
+          isDense: true,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          enabledBorder: borderOf(fieldBorder),
+          focusedBorder: borderOf(fieldBorderFocus, 1.5),
+          border: borderOf(fieldBorder),
+        );
+
+    Widget labelOf(String label) => Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Text(label,
+              style: const TextStyle(
+                  color: hintColor, fontSize: 11, fontWeight: FontWeight.w600)),
+        );
+
     final children = <Widget>[];
     for (final f in widget.fields) {
-      final name = f['name']?.toString() ?? '';
+      final name = _fieldName(f);
       if (name.isEmpty) continue;
-      final type = f['type']?.toString() ?? '';
-      final isPassword = type == 'password';
-      final isMultiline = type == 'textarea';
+      final type = _fieldType(f);
+      if (type == 'hidden') continue;
+
       final label = f['label']?.toString();
+      Widget control;
+
+      if (type == 'select') {
+        final options = _optionsOf(f);
+        final current = options.any((o) => o.value == _values[name])
+            ? _values[name]
+            : (options.isNotEmpty ? options.first.value : null);
+        // Same navy-glass DropdownButton treatment as `HtmlSelect` (a
+        // DropdownButtonFormField would need the newest Flutter API).
+        control = Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: fieldFill,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: fieldBorder),
+          ),
+          child: DropdownButton<String>(
+            value: current,
+            isExpanded: true,
+            isDense: true,
+            dropdownColor: fieldFill,
+            iconEnabledColor: gold,
+            underline: const SizedBox.shrink(),
+            style: const TextStyle(color: textColor, fontSize: 14),
+            hint: Text(
+              f['placeholder']?.toString() ?? name,
+              style: const TextStyle(color: hintColor, fontSize: 14),
+            ),
+            items: [
+              for (final o in options)
+                DropdownMenuItem<String>(
+                  value: o.value,
+                  child: Text(o.label, overflow: TextOverflow.ellipsis),
+                ),
+            ],
+            onChanged: _busy
+                ? null
+                : (v) => setState(() => _values[name] = v ?? current ?? ''),
+          ),
+        );
+      } else if (type == 'checkbox') {
+        final checked = _values[name] == 'true';
+        control = InkWell(
+          onTap: _busy
+              ? null
+              : () =>
+                  setState(() => _values[name] = checked ? 'false' : 'true'),
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            decoration: BoxDecoration(
+              color: fieldFill,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: fieldBorder),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Checkbox(
+                  value: checked,
+                  activeColor: gold,
+                  checkColor: const Color(0xFF06122A),
+                  side: const BorderSide(color: hintColor),
+                  onChanged: _busy
+                      ? null
+                      : (v) => setState(
+                          () => _values[name] = v == true ? 'true' : 'false'),
+                ),
+                Flexible(
+                  child: Text(
+                    f['placeholder']?.toString() ?? label ?? name,
+                    style: const TextStyle(color: textColor, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      } else if (type == 'range') {
+        final min = _numProp(f, 'min', 0);
+        final max = _numProp(f, 'max', 100);
+        final step = _numProp(f, 'step', 1);
+        // A degenerate range (no headroom) renders as a fixed-value readout —
+        // a Slider with min == max cannot position its thumb.
+        final hasRoom = max > min;
+        final current = hasRoom
+            ? (double.tryParse(_values[name] ?? '') ?? min).clamp(min, max)
+            : min;
+        final divisions =
+            (step > 0 && hasRoom) ? ((max - min) / step).round() : null;
+        control = Container(
+          decoration: BoxDecoration(
+            color: fieldFill,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: fieldBorder),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Row(
+            children: [
+              Expanded(
+                child: hasRoom
+                    ? SliderTheme(
+                        data: SliderTheme.of(context).copyWith(
+                          activeTrackColor: gold,
+                          inactiveTrackColor: fieldBorder,
+                          thumbColor: gold,
+                          overlayColor: gold.withValues(alpha: 0.15),
+                          trackHeight: 3,
+                        ),
+                        child: Slider(
+                          value: current.toDouble(),
+                          min: min,
+                          max: max,
+                          divisions: divisions,
+                          onChanged: _busy
+                              ? null
+                              : (v) => setState(
+                                  () => _values[name] = _fmtRange(v)),
+                        ),
+                      )
+                    : Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Text(
+                          f['placeholder']?.toString() ?? 'No range available',
+                          style:
+                              const TextStyle(color: hintColor, fontSize: 13),
+                        ),
+                      ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                _values[name] ?? _fmtRange(current.toDouble()),
+                style: const TextStyle(
+                    color: gold, fontSize: 13, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+        );
+      } else {
+        final isPassword = type == 'password';
+        final isMultiline = type == 'textarea';
+        final isNumber = type == 'number';
+        control = TextField(
+          controller: _controllers[name],
+          obscureText: isPassword,
+          maxLines: isMultiline ? 4 : 1,
+          minLines: isMultiline ? 3 : 1,
+          keyboardType: isNumber
+              ? const TextInputType.numberWithOptions(
+                  signed: true, decimal: true)
+              : null,
+          inputFormatters: isNumber
+              ? [FilteringTextInputFormatter.allow(RegExp(r'[0-9.\-]'))]
+              : null,
+          style: const TextStyle(color: textColor, fontSize: 14),
+          cursorColor: gold,
+          onSubmitted: isMultiline ? null : (_) => _busy ? null : _submit(),
+          decoration: decorationOf(f, name),
+        );
+      }
+
       children.add(Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (label != null && label.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text(label,
-                    style: const TextStyle(
-                        color: hintColor, fontSize: 11, fontWeight: FontWeight.w600)),
-              ),
-            TextField(
-              controller: _controllers[name],
-              obscureText: isPassword,
-              maxLines: isMultiline ? 4 : 1,
-              minLines: isMultiline ? 3 : 1,
-              style: const TextStyle(color: textColor, fontSize: 14),
-              cursorColor: gold,
-              onSubmitted: isMultiline ? null : (_) => _busy ? null : _submit(),
-              decoration: InputDecoration(
-                hintText: f['placeholder']?.toString() ?? name,
-                hintStyle: const TextStyle(color: hintColor, fontSize: 14),
-                filled: true,
-                fillColor: fieldFill,
-                isDense: true,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                enabledBorder: borderOf(fieldBorder),
-                focusedBorder: borderOf(fieldBorderFocus, 1.5),
-                border: borderOf(fieldBorder),
-              ),
-            ),
+            if (label != null && label.isNotEmpty) labelOf(label),
+            control,
           ],
         ),
       ));
