@@ -343,15 +343,16 @@ class DartSceneRenderer {
     for (final node in nodes) {
       if (node['type'] == 'camera') {
         final t = _parseTransform(node['transform']);
-        final rotMat = Mat4.fromEulerXYZ(
-          t.rotation.x * math.pi / 180.0,
-          t.rotation.y * math.pi / 180.0,
-          t.rotation.z * math.pi / 180.0,
-        );
-        final forward = rotMat.transformDirection(const Vec3(0, 0, -1)).normalized;
-        final up = rotMat.transformDirection(Vec3.up).normalized;
+        var xform = Mat4.fromTransform(t.position, t.rotation, t.scale);
+        final anim = node['animation'];
+        if (anim is Map<String, dynamic>) {
+          xform = _applyAnimation(xform, anim);
+        }
+        final position = Vec3(xform.m[12], xform.m[13], xform.m[14]);
+        final forward = xform.transformDirection(const Vec3(0, 0, -1)).normalized;
+        final up = xform.transformDirection(Vec3.up).normalized;
         return _Camera(
-          position: t.position,
+          position: position,
           forward: forward,
           up: up,
           fov: (node['fov'] as num?)?.toDouble() ?? 60.0,
@@ -374,15 +375,15 @@ class DartSceneRenderer {
     for (final node in nodes) {
       if (node['type'] == 'light') {
         final t = _parseTransform(node['transform']);
-        final rotMat = Mat4.fromEulerXYZ(
-          t.rotation.x * math.pi / 180.0,
-          t.rotation.y * math.pi / 180.0,
-          t.rotation.z * math.pi / 180.0,
-        );
-        final dir = rotMat.transformDirection(const Vec3(0, 0, -1)).normalized;
+        var xform = Mat4.fromTransform(t.position, t.rotation, t.scale);
+        final anim = node['animation'];
+        if (anim is Map<String, dynamic>) {
+          xform = _applyAnimation(xform, anim);
+        }
+        final dir = xform.transformDirection(const Vec3(0, 0, -1)).normalized;
         lights.add(_Light(
           type: node['light_type'] as String? ?? 'Directional',
-          position: t.position,
+          position: Vec3(xform.m[12], xform.m[13], xform.m[14]),
           direction: dir,
           color: node['color'] != null ? _parseColor3(node['color']) : const Vec3(1, 1, 1),
           intensity: (node['intensity'] as num?)?.toDouble() ?? 1.0,
@@ -416,8 +417,9 @@ class DartSceneRenderer {
           sky = (_parseColor3(node['sky_color_top']), _parseColor3(node['sky_color_bottom']));
         }
         return _Environment(
-          ambientColor:
-              node['ambient_light'] != null ? _parseColor3(node['ambient_light']) : const Vec3(1, 1, 1),
+          ambientColor: (node['ambient_color'] ?? node['ambient_light']) != null
+              ? _parseColor3(node['ambient_color'] ?? node['ambient_light'])
+              : const Vec3(1, 1, 1),
           ambientIntensity: (node['ambient_intensity'] as num?)?.toDouble() ?? 0.3,
           fogEnabled: fogEnabled,
           fogLinear: fogLinear,
@@ -740,12 +742,16 @@ class DartSceneRenderer {
     final duration = (anim['duration'] as num?)?.toDouble() ?? 1.0;
     final looping = anim['looping'] as bool? ?? false;
     final easingStr = anim['easing'] as String? ?? 'Linear';
+    final delay = (anim['delay'] as num?)?.toDouble() ?? 0.0;
+
+    final elapsed = _elapsed - delay;
+    if (elapsed < 0) return base;
 
     double rawProgress;
     if (looping) {
-      rawProgress = (_elapsed % duration) / duration;
+      rawProgress = (elapsed % duration) / duration;
     } else {
-      rawProgress = (_elapsed / duration).clamp(0.0, 1.0);
+      rawProgress = (elapsed / duration).clamp(0.0, 1.0);
     }
     final t = _applyEasing(rawProgress, easingStr);
 
@@ -760,7 +766,7 @@ class DartSceneRenderer {
         final rot = _rotationFromAxisAngle(axisN, angle);
         return base * rot;
       case 'Bounce':
-        final height = (animType['height'] as num?)?.toDouble() ?? 1.0;
+        final height = (animType['height'] as num?)?.toDouble() ?? 1.5;
         final y = math.sin(t * math.pi) * height;
         return base * Mat4.translation(Vec3(0, y, 0));
       case 'Pulse':
@@ -772,12 +778,55 @@ class DartSceneRenderer {
         final from = _parseVec3(animType['from']);
         final to = _parseVec3(animType['to']);
         final pos = from.lerp(to, t);
-        return Mat4.translation(pos);
+        // Parent-space offset on top of the base transform (parity with
+        // scene3d: `translation(lerp) * base`).
+        return Mat4.translation(pos) * base;
       case 'Scale':
         final from = _parseVec3(animType['from']);
         final to = _parseVec3(animType['to']);
         final scl = from.lerp(to, t);
         return base * Mat4.scale(scl);
+      case 'Orbit':
+        final radius = (animType['radius'] as num?)?.toDouble() ?? 3.0;
+        final height = (animType['height'] as num?)?.toDouble() ?? 0.0;
+        final angle = t * 2 * math.pi;
+        return base *
+            Mat4.translation(
+                Vec3(radius * math.cos(angle), height, radius * math.sin(angle)));
+      case 'Swing':
+        final angle = (animType['angle'] as num?)?.toDouble() ?? 45.0;
+        final axis = animType['axis'] != null
+            ? _parseVec3(animType['axis'])
+            : const Vec3(0, 0, 1);
+        final axisN = axis.normalized;
+        if (axisN.length < 0.001) return base;
+        final a = math.sin(t * 2 * math.pi) * angle * math.pi / 180.0;
+        return base * _rotationFromAxisAngle(axisN, a);
+      case 'Shake':
+        final intensity = (animType['intensity'] as num?)?.toDouble() ?? 0.1;
+        final r = math.Random((elapsed * 1000).toInt());
+        return base *
+            Mat4.translation(Vec3(
+              (r.nextDouble() - 0.5) * intensity,
+              (r.nextDouble() - 0.5) * intensity,
+              (r.nextDouble() - 0.5) * intensity,
+            ));
+      case 'Float':
+        final amplitude = (animType['amplitude'] as num?)?.toDouble() ?? 0.5;
+        final y = math.sin(elapsed * 2 * math.pi / duration) * amplitude;
+        return base * Mat4.translation(Vec3(0, y, 0));
+      case 'Spin':
+        final speed = animType['speed'] != null
+            ? _parseVec3(animType['speed'])
+            : const Vec3(0, 90, 0);
+        // Rz * Ry * Rx — same composition as scene3d's Mat4.fromEulerXYZ.
+        return base *
+            _rotationFromAxisAngle(const Vec3(0, 0, 1),
+                    speed.z * math.pi / 180.0 * elapsed) *
+            _rotationFromAxisAngle(const Vec3(0, 1, 0),
+                    speed.y * math.pi / 180.0 * elapsed) *
+            _rotationFromAxisAngle(const Vec3(1, 0, 0),
+                    speed.x * math.pi / 180.0 * elapsed);
       default:
         return base;
     }
@@ -796,18 +845,29 @@ class DartSceneRenderer {
     return Mat4._(m);
   }
 
+  // Curves match scene3d's `applyEasing` (lib/src/scene3d/core.dart) so the
+  // same scene JSON animates identically across renderers.
   double _applyEasing(double p, String easing) {
     switch (easing) {
-      case 'EaseIn': return p * p;
-      case 'EaseOut': return p * (2 - p);
+      case 'EaseIn': return p * p * p;
+      case 'EaseOut': return 1 - (1 - p) * (1 - p) * (1 - p);
       case 'EaseInOut':
-        return p < 0.5 ? 2 * p * p : -1 + (4 - 2 * p) * p;
+        return p < 0.5 ? 4 * p * p * p : 1 - (-2 * p + 2) * (-2 * p + 2) * (-2 * p + 2) / 2;
       case 'Bounce':
         const n1 = 7.5625, d1 = 2.75;
-        if (p < 1 / d1) return n1 * p * p;
-        if (p < 2 / d1) { final q = p - 1.5 / d1; return n1 * q * q + 0.75; }
-        if (p < 2.5 / d1) { final q = p - 2.25 / d1; return n1 * q * q + 0.9375; }
-        final q = p - 2.625 / d1; return n1 * q * q + 0.984375;
+        var q = 1 - p;
+        if (q < 1 / d1) return 1 - n1 * q * q;
+        if (q < 2 / d1) { q -= 1.5 / d1; return 1 - (n1 * q * q + 0.75); }
+        if (q < 2.5 / d1) { q -= 2.25 / d1; return 1 - (n1 * q * q + 0.9375); }
+        q -= 2.625 / d1; return 1 - (n1 * q * q + 0.984375);
+      case 'Elastic':
+        if (p <= 0 || p >= 1) return p.clamp(0.0, 1.0);
+        return -math.pow(2, 10 * p - 10) * math.sin((p * 10 - 10.75) * (2 * math.pi / 3));
+      case 'Back':
+        const c = 1.70158;
+        return (c + 1) * p * p * p - c * p * p;
+      case 'Sine':
+        return 0.5 - 0.5 * math.cos(p * math.pi);
       default: return p; // Linear
     }
   }

@@ -334,7 +334,7 @@ pub struct RigidBodyNode {
 pub struct EnvironmentNode {
     #[serde(default)]
     pub id: Option<String>,
-    #[serde(default)]
+    #[serde(default, alias = "ambient_color")]
     pub ambient_light: Option<ColorDef>,
     #[serde(default = "default_ambient_intensity")]
     pub ambient_intensity: f32,
@@ -660,6 +660,9 @@ pub enum LightType {
     Point,
     Directional,
     Spot,
+    /// Documented in 3D_GRAPHICS.md; shaded as an omnidirectional point
+    /// source (the closest software-rasterizer approximation).
+    Area,
 }
 
 // ── Camera Types ─────────────────────────────────────────────────────
@@ -681,16 +684,106 @@ pub struct AnimationDef {
     pub looping: bool,
     #[serde(default)]
     pub easing: EasingType,
+    /// Seconds to wait before the animation starts (parity with scene3d).
+    #[serde(default)]
+    pub delay: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum AnimationType {
-    Rotate { axis: Vec3Def, degrees: f32 },
-    Translate { from: Vec3Def, to: Vec3Def },
-    Scale { from: Vec3Def, to: Vec3Def },
-    Bounce { height: f32 },
-    Pulse { min_scale: f32, max_scale: f32 },
+    Rotate {
+        #[serde(default = "default_axis_y")]
+        axis: Vec3Def,
+        #[serde(default = "default_degrees")]
+        degrees: f32,
+    },
+    Translate {
+        #[serde(default)]
+        from: Vec3Def,
+        #[serde(default = "default_axis_y")]
+        to: Vec3Def,
+    },
+    Scale {
+        #[serde(default = "default_vec_one")]
+        from: Vec3Def,
+        #[serde(default = "default_vec_two")]
+        to: Vec3Def,
+    },
+    Bounce {
+        #[serde(default = "default_bounce_height")]
+        height: f32,
+    },
+    Pulse {
+        #[serde(default = "default_pulse_min")]
+        min_scale: f32,
+        #[serde(default = "default_pulse_max")]
+        max_scale: f32,
+    },
+    Orbit {
+        #[serde(default = "default_orbit_radius")]
+        radius: f32,
+        #[serde(default)]
+        height: f32,
+    },
+    Swing {
+        #[serde(default = "default_swing_angle")]
+        angle: f32,
+        #[serde(default = "default_axis_z")]
+        axis: Vec3Def,
+    },
+    Shake {
+        #[serde(default = "default_shake_intensity")]
+        intensity: f32,
+    },
+    Float {
+        #[serde(default = "default_float_amplitude")]
+        amplitude: f32,
+    },
+    Spin {
+        #[serde(default = "default_spin_speed")]
+        speed: Vec3Def,
+    },
+}
+
+fn default_axis_y() -> Vec3Def {
+    Vec3Def { x: 0.0, y: 1.0, z: 0.0 }
+}
+fn default_axis_z() -> Vec3Def {
+    Vec3Def { x: 0.0, y: 0.0, z: 1.0 }
+}
+fn default_vec_one() -> Vec3Def {
+    Vec3Def { x: 1.0, y: 1.0, z: 1.0 }
+}
+fn default_vec_two() -> Vec3Def {
+    Vec3Def { x: 2.0, y: 2.0, z: 2.0 }
+}
+fn default_degrees() -> f32 {
+    360.0
+}
+fn default_bounce_height() -> f32 {
+    1.5
+}
+fn default_pulse_min() -> f32 {
+    0.8
+}
+fn default_pulse_max() -> f32 {
+    1.2
+}
+fn default_orbit_radius() -> f32 {
+    3.0
+}
+fn default_swing_angle() -> f32 {
+    45.0
+}
+fn default_shake_intensity() -> f32 {
+    0.1
+}
+fn default_float_amplitude() -> f32 {
+    0.5
+}
+fn default_spin_speed() -> Vec3Def {
+    Vec3Def { x: 0.0, y: 90.0, z: 0.0 }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -701,6 +794,9 @@ pub enum EasingType {
     EaseOut,
     EaseInOut,
     Bounce,
+    Elastic,
+    Back,
+    Sine,
 }
 
 // ── Physics Types ────────────────────────────────────────────────────

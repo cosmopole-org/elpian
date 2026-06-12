@@ -211,7 +211,10 @@ fn pose_primitive(prim: &DecPrimitive, node_global: &Mat4, joints: Option<&[Mat4
     let mut posed_pos = Vec::with_capacity(vcount);
     let mut posed_nrm = Vec::with_capacity(vcount);
 
-    let skinned = joints.is_some() && !prim.joints.is_empty() && !prim.weights.is_empty();
+    // Skinning attributes must cover every vertex — malformed files with short
+    // joint/weight arrays fall back to the rigid node transform instead of panicking.
+    let skinned =
+        joints.is_some() && prim.joints.len() >= vcount && prim.weights.len() >= vcount;
 
     for v in 0..vcount {
         let p = prim.positions[v];

@@ -1,6 +1,6 @@
 # 🌍 Elpian 3D Graphics Reference
 
-Complete reference for Elpian's 3D scene system. Scenes are defined in JSON and rendered via **Bevy** (Rust/GPU with native FFI or WASM) or the **pure-Dart Canvas renderer** (software fallback). The Dart renderer automatically activates when the Rust library is unavailable.
+Complete reference for Elpian's 3D scene system. Scenes are defined in JSON and rendered via the **Rust renderer** (a multithreaded CPU software rasterizer in `rust/src/bevy_scene/`, delivered over native FFI or WASM — despite the module name it does not currently use Bevy or the GPU; see [GAME_ENGINE_ROADMAP.md](GAME_ENGINE_ROADMAP.md)) or the **pure-Dart Canvas renderer** (software fallback). The Dart renderer automatically activates when the Rust library is unavailable.
 
 ---
 
