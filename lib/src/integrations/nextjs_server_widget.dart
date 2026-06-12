@@ -1213,12 +1213,16 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
   }
 
   /// A loose JSON event for QuickJS handlers. Includes pointer coordinates so
-  /// drag components (which read `e.x`/`e.y`) work.
+  /// drag components (which read `e.x`/`e.y`) work, and the input/change value
+  /// so form controls (`input`/`select`/`checkbox`) surface what the user typed
+  /// or chose to their `events.input`/`events.change` handler.
   Map<String, dynamic> _eventToHostJson(ElpianEvent event) {
     final base = <String, dynamic>{'type': event.type};
     if (event is ElpianPointerEvent) {
       base['x'] = event.position.dx;
       base['y'] = event.position.dy;
+    } else if (event is ElpianInputEvent) {
+      base['value'] = event.value;
     }
     return base;
   }
