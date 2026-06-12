@@ -922,7 +922,7 @@ class Scene3DRenderer {
       final px = pos[v * 3], py = pos[v * 3 + 1], pz = pos[v * 3 + 2];
       final Vec3 wp;
       if (skinned) {
-        final sp = _skinPoint(jointMats!, prim.joints!, prim.weights!, v, px, py, pz);
+        final sp = _skinPoint(jointMats, prim.joints!, prim.weights!, v, px, py, pz);
         wp = worldXform.transformPoint(sp);
       } else {
         wp = modelMat.transformPoint(Vec3(px, py, pz));
@@ -933,7 +933,7 @@ class Scene3DRenderer {
         final nx = nrm[v * 3], ny = nrm[v * 3 + 1], nz = nrm[v * 3 + 2];
         Vec3 wn;
         if (skinned) {
-          final sn = _skinNormal(jointMats!, prim.joints!, prim.weights!, v, nx, ny, nz);
+          final sn = _skinNormal(jointMats, prim.joints!, prim.weights!, v, nx, ny, nz);
           wn = worldXform.transformDir(sn).normalized;
         } else {
           wn = modelMat.transformDir(Vec3(nx, ny, nz)).normalized;

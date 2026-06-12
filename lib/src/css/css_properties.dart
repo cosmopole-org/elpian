@@ -109,7 +109,13 @@ class CSSProperties {
         scrollDirection: scrollY ? Axis.vertical : Axis.horizontal,
         child: result,
       );
-    } else if (_clips(overflowX) || _clips(overflowY)) {
+    } else if (_clips(overflowX) ||
+        _clips(overflowY) ||
+        overflowX == Overflow.scroll ||
+        overflowY == Overflow.scroll) {
+      // A scroll/auto overflow that couldn't become scrollable above (its axis
+      // is unbounded) still establishes a clipping container, per the comment
+      // at the top of this block.
       // Clip to the rounded shape when a border radius is set, so a window/card
       // with `borderRadius` + `overflow:hidden` actually rounds its corners
       // (a plain ClipRect leaves square corners poking past the rounded box).
