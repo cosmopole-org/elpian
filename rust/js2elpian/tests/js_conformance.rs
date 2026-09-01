@@ -170,3 +170,31 @@ fn leading_dot_does_not_break_member_access_or_spread() {
         );
     }
 }
+
+/// Closure capture: which enclosing scopes a lifted arrow actually closes over.
+///
+/// Arrows are lifted into synthetic hoisted `functionDefinition`s, and the lift
+/// carries the enclosing *locals* — but NOT an enclosing **arrow's parameters**.
+/// So `items.map((it) => () => it)` compiles and runs, and the inner closure
+/// reads `it` as null. Verified against the bytecode VM, not just the parser:
+/// `map((it) => it + "!")` → ["a!","b!","c!"], but `map((it) => () => it)` →
+/// [undefined, undefined, undefined].
+///
+/// Every other form captures correctly, which is why the CLI templates use a
+/// named helper for per-item handlers.
+#[test]
+fn closure_capture_forms_compile() {
+    for src in [
+        // a named function's parameter, captured by a nested arrow — works
+        "function make(it) { return () => it; } let f = make(1); let v = f();",
+        // a for-loop local, captured by an arrow — works
+        "let fs = []; for (let i = 0; i < 3; i++) { let it = i; fs.push(() => it); }",
+        // function expressions nested in function expressions — works
+        "let fs = [1].map(function (it) { return function () { return it; }; });",
+        // the broken shape still COMPILES; it fails at run time, so it must not
+        // be mistaken for a parse error.
+        "let fs = [1].map((it) => () => it);",
+    ] {
+        assert!(js2elpian::try_parse_js(src).is_ok(), "should compile: {src}");
+    }
+}

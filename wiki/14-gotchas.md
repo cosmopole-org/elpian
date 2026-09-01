@@ -29,6 +29,39 @@ work uses `setTimeout`/`setInterval` calling a named function
 > healthy. Both halves are fixed now (rejection in `js2elpian`, poison recovery
 > in `api.rs`), but if you see that signature, you are on an old build.
 
+### 1b. An arrow nested inside an arrow does not capture the outer's parameter
+
+Compiles cleanly, runs, and reads **null** — no error anywhere:
+
+```ts
+items.map((item) => el('li', { onClick: () => { picked = item; } }, []))
+//                                               ^^^^ null at run time
+```
+
+Arrows are lifted into synthetic hoisted definitions, and the lift carries the
+enclosing *locals* but not an enclosing **arrow's parameters**.
+
+Every other capture form works, so the fix is always small:
+
+```ts
+function row(item) {                       // ✅ a named function's parameter
+  return el('li', { onClick: () => { picked = item; } }, []);
+}
+items.map(row);
+
+for (let i = 0; i < items.length; i++) {   // ✅ a loop-body local
+  const item = items[i];
+  rows.push(el('li', { onClick: () => { picked = item; } }, []));
+}
+
+items.map(function (item) {                // ✅ function expressions
+  return el('li', { onClick: function () { picked = item; } }, []);
+});
+```
+
+Verified against the bytecode VM: `map((it) => it + '!')` gives `["a!","b!","c!"]`,
+but `map((it) => () => it)` gives `[undefined, undefined, undefined]`.
+
 ### 2. There is no `fetch`, `window`, `document`, or `localStorage`
 
 They compile to undefined identifiers and fail at runtime the same way. All I/O
@@ -159,12 +192,41 @@ Serving under `/myapp/` requires `"basePath": "/myapp/"` **and a rebuild** —
 `dist/web` is the engine *plus* `__elpian/` (manifest + VM artifacts). The raw
 Flutter output has no application in it.
 
-### 19. `elpian run dev` serves the *shared* engine directory
+### 19. `elpian run dev` serves the engine directory, not your `dist/web`
 
-It serves `cli/elpian_client/build/web`, not your `dist/web`. Building a
-different project with a different `basePath` re-bases that shared directory out
-from under a running dev server. Give each project an explicit `engineProject`
-if you run more than one.
+It serves `cli/elpian_client/build/elpian-engine/<base>/`. Engines are keyed by
+**base path**, so two projects with different `basePath`s coexist and switching
+between them is a cache hit rather than a rebuild.
+
+> Before this was keyed, every project shared `build/web`: building any project
+> re-based the engine out from under every other one, and the clobbered app then
+> requested its assets at the **domain root** and rendered a blank page with
+> nothing in the app to explain why. If you see a blank Flutter page, check
+> `base href` in the served `index.html` first.
+
+### 19b. A stale Flutter build cache silently drops package assets
+
+After moving or renaming a checkout, `flutter build web` can emit a bundle with
+**none** of `elpian_ui`'s declared assets — no `elpian_wasm_loader.js`, no
+`elpian_vm_bg.wasm` — while still reporting success. The app then loads, fails to
+start the VM, and shows:
+
+```
+Failed to create VM: NoSuchMethodError: method not found: 'elpian_wasm_init'
+```
+
+The pubspec is fine and the files exist; the cached asset manifest still points
+at the old path. Fix:
+
+```sh
+cd cli/elpian_client && flutter clean && flutter pub get
+```
+
+Worth checking directly when a web build misbehaves:
+
+```sh
+find <engine>/assets/packages/elpian_ui/assets/web_runtime -type f | wc -l   # expect 6
+```
 
 ### 20. A stale engine may not be rebuilt when you expect
 
@@ -235,8 +297,10 @@ untrusted code.
 |---|---|
 | Button renders but does nothing | #6 — handler is in `props` not `events` |
 | `async functions are not supported` | #1 — use timers, not `async` |
+| A captured loop item reads as null in a handler | #1b — arrow nested in arrow |
 | Server dies after one bad request | #1 — poisoned lock; you are on a pre-fix build |
-| Assets 404 at the domain root | #17 — `basePath` |
+| Assets 404 at the domain root | #17 — `basePath`, or #19 a clobbered engine |
+| `method not found: 'elpian_wasm_init'` | #19b — stale build cache; `flutter clean` |
 | UI does not update after a state change | #7 — call `render()` |
 | Text field cursor jumps | #11 — re-rendering on input |
 | Handler fires for the wrong item | #8, #9 — closures / missing `key` |

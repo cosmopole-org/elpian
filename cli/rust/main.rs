@@ -270,15 +270,50 @@ fn resolve_source(path: &Path) -> Result<PathBuf> {
     candidates.into_iter().find(|item| item.is_file()).ok_or_else(|| anyhow!("source file not found: {}", path.display()))
 }
 
-fn package_web_export(root: &Path, config: &Config, artifacts: &[Artifact], out: &Path) -> Result<()> {
-    let engine_project = config.engine_project.as_ref().map(|value| absolute(root, value)).unwrap_or_else(|| cli_root().join("elpian_client"));
-    let engine = config.engine_dir.as_ref().map(|value| absolute(root, value)).unwrap_or_else(|| engine_project.join("build/web"));
-    let base = normalize_base(&config.base_path);
+/// Where the built Flutter engine for `base` lives.
+///
+/// Keyed by base path on purpose. `flutter build web` writes to `build/web`, so
+/// a single shared directory meant that building any project re-based the engine
+/// out from under every other project — the previous one then requested its
+/// assets at the domain root and rendered a blank page, with nothing in the app
+/// to indicate why. Giving each base path its own directory lets them coexist,
+/// and makes switching between them a cache hit rather than a rebuild.
+fn engine_dir_for(engine_project: &Path, base: &str) -> PathBuf {
+    let slug: String = base
+        .trim_matches('/')
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    let slug = if slug.is_empty() { "root".to_string() } else { slug };
+    engine_project.join("build/elpian-engine").join(slug)
+}
+
+/// Build the engine for `base` if the cached one is stale. Returns its directory.
+fn ensure_engine(engine_project: &Path, base: &str, force: bool) -> Result<PathBuf> {
+    let engine = engine_dir_for(engine_project, base);
     let marker = engine.join(".elpian_runtime");
-    if config.engine_dir.is_none() && runtime_stale(&engine_project, &marker, &base)? {
-        run_checked(Command::new("flutter").current_dir(&engine_project).args(["build", "web", "--base-href", &base]))?;
+    if force || runtime_stale(engine_project, &marker, base)? {
+        fs::create_dir_all(&engine)?;
+        run_checked(Command::new("flutter").current_dir(engine_project).args([
+            "build",
+            "web",
+            "--base-href",
+            base,
+            "--output",
+            &engine.to_string_lossy(),
+        ]))?;
         fs::write(&marker, format!("elpian_client/lib/main.dart\nbasePath={base}\n"))?;
     }
+    Ok(engine)
+}
+
+fn package_web_export(root: &Path, config: &Config, artifacts: &[Artifact], out: &Path) -> Result<()> {
+    let base = normalize_base(&config.base_path);
+    let engine_project = config.engine_project.as_ref().map(|value| absolute(root, value)).unwrap_or_else(|| cli_root().join("elpian_client"));
+    let engine = match config.engine_dir.as_ref() {
+        Some(value) => absolute(root, value),
+        None => ensure_engine(&engine_project, &base, false)?,
+    };
     if !engine.join("index.html").is_file() { bail!("Flutter engine missing at {}", engine.display()); }
     let web = out.join("web");
     if web.exists() { fs::remove_dir_all(&web)?; }
@@ -295,14 +330,12 @@ fn package_web_export(root: &Path, config: &Config, artifacts: &[Artifact], out:
 
 fn dev(root: &Path, config: Config, host: &str, port: u16, force_engine: bool) -> Result<()> {
     build_project(root, &config, false)?;
-    let engine_project = config.engine_project.as_ref().map(|value| absolute(root, value)).unwrap_or_else(|| cli_root().join("elpian_client"));
-    let engine = config.engine_dir.as_ref().map(|value| absolute(root, value)).unwrap_or_else(|| engine_project.join("build/web"));
     let base = normalize_base(&config.base_path);
-    let marker = engine.join(".elpian_runtime");
-    if config.engine_dir.is_none() && (force_engine || runtime_stale(&engine_project, &marker, &base)?) {
-        run_checked(Command::new("flutter").current_dir(&engine_project).args(["build", "web", "--base-href", &base]))?;
-        fs::write(&marker, format!("elpian_client/lib/main.dart\nbasePath={base}\n"))?;
-    }
+    let engine_project = config.engine_project.as_ref().map(|value| absolute(root, value)).unwrap_or_else(|| cli_root().join("elpian_client"));
+    let engine = match config.engine_dir.as_ref() {
+        Some(value) => absolute(root, value),
+        None => ensure_engine(&engine_project, &base, force_engine)?,
+    };
     let (tx, rx) = mpsc::channel();
     let mut watcher = notify::recommended_watcher(move |event| { if changed(&event) { let _ = tx.send(event); } })?;
     for path in [root.join("src"), root.join("packages"), root.join("elpian.json"), root.join("elpian.config.json")] {
@@ -401,7 +434,29 @@ fn copy_tree(source: &Path, destination: &Path) -> Result<()> {
 }
 
 fn normalize_base(value: &str) -> String { format!("/{}/", value.trim_matches('/')).replace("//", "/") }
-fn cli_root() -> PathBuf { PathBuf::from(env!("CARGO_MANIFEST_DIR")) }
+/// The CLI crate's directory — where the bundled `elpian_client` engine lives.
+///
+/// `CARGO_MANIFEST_DIR` is baked in at COMPILE time, so it goes stale the moment
+/// the checkout is moved or renamed, and Cargo will not rebuild for that (no
+/// source changed). The failure is a bare "No such file or directory" with no
+/// hint of which path. So: trust the baked path only if it still contains the
+/// engine project, otherwise recover it from the running executable, which is at
+/// <cli>/target/<profile>/elpian.
+fn cli_root() -> PathBuf {
+    let baked = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    if baked.join("elpian_client").is_dir() {
+        return baked;
+    }
+    if let Ok(exe) = env::current_exe() {
+        // …/cli/target/release/elpian -> …/cli
+        if let Some(dir) = exe.parent().and_then(|p| p.parent()).and_then(|p| p.parent()) {
+            if dir.join("elpian_client").is_dir() {
+                return dir.to_path_buf();
+            }
+        }
+    }
+    baked
+}
 /// The elpian repository root — the CLI crate now lives inside it.
 fn workspace() -> PathBuf { cli_root().parent().unwrap().to_path_buf() }
 fn absolute(root: &Path, value: &Path) -> PathBuf { if value.is_absolute() { value.to_path_buf() } else { root.join(value) } }
@@ -417,6 +472,14 @@ let name: string = '';
 const items: string[] = ['alpha', 'beta', 'gamma'];
 let picked: string = '-';
 
+function row(item: string) {
+  return el('li', {
+    text: item,
+    style: { cursor: 'pointer', padding: '6' },
+    onClick: () => { picked = item; render(view()); },
+  }, []);
+}
+
 function view() {
   return el('div', { style: { padding: '32', display: 'flex', flexDirection: 'column', gap: 12 } }, [
     el('h1', { text: 'Hello from TypeScript' }, []),
@@ -430,15 +493,15 @@ function view() {
       onClick: () => { count = count + 1; render(view()); },
     }, []),
 
-    // The payoff: a closure captures the loop variable, so each row knows which
-    // item it is. A named handler cannot — it would have to encode the identity
-    // in the key and parse it back out of the event.
-    el('ul', {}, items.map((item) =>
-      el('li', {
-        text: item,
-        style: { cursor: 'pointer', padding: '6' },
-        onClick: () => { picked = item; render(view()); },
-      }, []))),
+    // The payoff: a closure captures the item, so each row knows which one it
+    // is. A named handler cannot — it would have to encode the identity in the
+    // key and parse it back out of the event.
+    //
+    // Note `row` is a named function, not an inline arrow. js2elpian does not
+    // capture an enclosing ARROW's parameter in a nested arrow — `items.map((i)
+    // => () => i)` yields null inside the closure. A named function's parameter
+    // captures correctly, as does a `for`-loop local.
+    el('ul', {}, items.map(row)),
     el('p', { text: 'picked: ' + picked }, []),
 
     // Handlers receive the event. `value` carries an input's current text.
