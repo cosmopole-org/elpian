@@ -22,6 +22,11 @@ name: Build Showcase (web + Android)
 
 on:
   workflow_dispatch:
+    inputs:
+      victor_ref:
+        description: "victor ref to build js2elpian from (branch, tag or SHA)"
+        required: false
+        default: ""
   push:
     branches: [main]
     paths:
@@ -48,6 +53,14 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  # The victor ref to build js2elpian from.
+  #
+  # This is a cross-repository build dependency: elpian's toolchain compiles
+  # through victor's js2elpian. Left implicit it floats on victor's default
+  # branch, so elpian's build changes when victor moves — and a fix that has not
+  # landed on victor@main silently is not used. Pin it here, and override via
+  # workflow_dispatch to test a victor branch before merging it.
+  VICTOR_REF: "main"
   FLUTTER_VERSION: "3.38.3"
 
 jobs:
@@ -72,6 +85,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/victor
+          ref: ${{ github.event.inputs.victor_ref || env.VICTOR_REF }}
           path: victor
           token: ${{ secrets.GITHUB_TOKEN }}
 
