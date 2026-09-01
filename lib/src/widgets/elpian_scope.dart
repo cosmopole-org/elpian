@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/elpian_node.dart';
+import '../scope/scope_contract.dart';
 
 class ElpianScope {
   static Widget build(ElpianNode node, List<Widget> children) {
@@ -48,7 +49,7 @@ class _ElpianScopeWidgetState extends State<_ElpianScopeWidget> {
   }
 
   int _readRenderToken(ElpianNode node) {
-    final raw = node.props['__scopeRenderToken'];
+    final raw = node.props[ScopeContract.renderTokenProp];
     if (raw is num) return raw.toInt();
     if (raw is String) return int.tryParse(raw) ?? 0;
     return 0;

@@ -3,6 +3,9 @@ library elpian_ui;
 // VM - Elpian Rust VM integration
 export 'src/vm/elpian_vm.dart';
 export 'src/vm/elpian_vm_widget.dart';
+export 'src/scope/scoped_components.dart';
+export 'src/scope/scope_patch.dart';
+export 'src/scope/scope_contract.dart';
 export 'src/vm/runtime_kind.dart';
 export 'src/vm/host_handler.dart';
 export 'src/stream/elpian_stream_widget.dart';
@@ -25,7 +28,6 @@ export 'src/core/event_enabled_widget.dart';
 export 'src/models/elpian_node.dart';
 export 'src/models/css_style.dart';
 
-
 // Next.js Integration
 export 'src/integrations/nextjs_bridge.dart';
 export 'src/integrations/nextjs_server_widget.dart';
@@ -43,24 +45,16 @@ export 'src/css/json_stylesheet_parser.dart';
 export 'src/canvas/canvas_api.dart';
 export 'src/canvas/canvas_widget.dart';
 
-// Bevy 3D Scene Renderer
-export 'src/bevy/bevy_scene_widget.dart';
-export 'src/bevy/bevy_scene_controller.dart';
-export 'src/bevy/dart_scene_renderer.dart' hide Vec3, Mat4;
-export 'src/bevy/bevy_scene_api.dart'
-    if (dart.library.js_interop) 'src/bevy/bevy_scene_api_web.dart'
-    show BevySceneApi, BevyFrameData;
-
-// Pure-Dart 3D Game Engine
-export 'src/scene3d/core.dart';
-export 'src/scene3d/renderer.dart';
-export 'src/scene3d/scene_parser.dart';
-export 'src/scene3d/game_scene_widget.dart';
+// Embedded Godot 3D — the `Scene3D` widget, its controller, and the op protocol.
+export 'src/godot/scene3d_widget.dart';
+export 'src/godot/godot_controller.dart';
+export 'src/godot/godot_object.dart';
+export 'src/godot/godot_values.dart';
+export 'src/godot/protocol.dart';
+export 'src/godot/scene_dsl.dart';
+export 'src/godot/godot_binding.dart';
 // Global hook receiving taps on `clickable` scene nodes (see ElpianSceneTaps).
-export 'src/scene3d/scene_taps.dart';
-// glTF 2.0 / GLB model loading + skeletal animation (real rigged characters).
-export 'src/scene3d/gltf/gltf_model.dart';
-export 'src/scene3d/gltf/model_cache.dart';
+export 'src/godot/scene_taps.dart';
 
 // Widgets - Core
 export 'src/widgets/elpian_container.dart';

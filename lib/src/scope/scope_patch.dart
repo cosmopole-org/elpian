@@ -1,3 +1,5 @@
+import 'scope_contract.dart';
+
 /// Scoped re-render application for server-driven / VM-driven Elpian views.
 ///
 /// A `render(view, scopeKey)` host call from a client component (QuickJS / Elpian
@@ -12,6 +14,12 @@
 /// in-place tree mutation they are asked to perform) so the same logic backs
 /// both [ElpianVmWidget] and the Next.js bridge, and so it can be unit-tested
 /// without a Flutter binding.
+///
+/// They live in `src/scope/` rather than `src/vm/` because nothing here is
+/// VM-specific: the input is a UI node tree, and the consumers are the VM
+/// widget, the Next.js bridge and the `Scope` widget in equal measure. Owning
+/// it from `vm/` made `integrations/` reach into the VM for a transform that
+/// has no VM in it.
 class ScopePatch {
   ScopePatch._();
 
@@ -72,7 +80,7 @@ class ScopePatch {
     String? scopeKey,
   ) {
     final key = normalizeKey(scopeKey);
-    if (key == null || tree == null) return view;
+    if (key == null || tree == null) return markRerender(view);
     final replacement = markRerender(ensureKey(view, key));
     final replaced = replaceByKey(tree, key, replacement);
     return replaced ? tree : view;
@@ -95,7 +103,7 @@ class ScopePatch {
     String? scopeKey,
   ) {
     final key = normalizeKey(scopeKey);
-    if (key == null || tree == null) return view;
+    if (key == null || tree == null) return markRerender(view);
     final replacement = markRerender(ensureKey(view, key));
     final replaced = replaceByKey(tree, key, replacement);
     return replaced ? tree : null;
@@ -115,7 +123,7 @@ class ScopePatch {
       return true;
     }
 
-    final isScope = node['type']?.toString() == 'Scope';
+    final isScope = ScopeContract.isScopeNode(node);
     if (isScope) scopeAncestors.add(node);
 
     final children = node['children'];
@@ -130,7 +138,8 @@ class ScopePatch {
       final childMap = child is Map<String, dynamic>
           ? child
           : Map<String, dynamic>.from(child);
-      final replaced = _replace(childMap, targetKey, replacement, scopeAncestors);
+      final replaced =
+          _replace(childMap, targetKey, replacement, scopeAncestors);
       if (!identical(child, childMap)) children[i] = childMap;
       if (replaced) {
         if (isScope) scopeAncestors.removeLast();
@@ -146,17 +155,17 @@ class ScopePatch {
     for (final scopeNode in scopeNodes) {
       final props =
           Map<String, dynamic>.from(scopeNode['props'] as Map? ?? const {});
-      props['__scopeRenderToken'] = ++_tokenCounter;
+      props[ScopeContract.renderTokenProp] = ++_tokenCounter;
       scopeNode['props'] = props;
     }
   }
 
   static void _markTokensInPlace(dynamic node) {
     if (node is! Map) return;
-    if (node['type']?.toString() == 'Scope') {
+    if (ScopeContract.isScopeNode(node)) {
       final props =
           Map<String, dynamic>.from(node['props'] as Map? ?? const {});
-      props['__scopeRenderToken'] = ++_tokenCounter;
+      props[ScopeContract.renderTokenProp] = ++_tokenCounter;
       node['props'] = props;
     }
     final children = node['children'];

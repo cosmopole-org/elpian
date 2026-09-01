@@ -21,11 +21,13 @@ async function loadElpianWasm() {
     globalThis.elpian_wasm_init = wasmModule.elpian_wasm_init;
     globalThis.elpian_wasm_create_vm_from_ast = wasmModule.elpian_wasm_create_vm_from_ast;
     globalThis.elpian_wasm_create_vm_from_code = wasmModule.elpian_wasm_create_vm_from_code;
+    globalThis.elpian_wasm_create_vm_from_bytecode = wasmModule.elpian_wasm_create_vm_from_bytecode;
     globalThis.elpian_wasm_validate_ast = wasmModule.elpian_wasm_validate_ast;
     globalThis.elpian_wasm_execute = wasmModule.elpian_wasm_execute;
     globalThis.elpian_wasm_execute_func = wasmModule.elpian_wasm_execute_func;
     globalThis.elpian_wasm_execute_func_with_input = wasmModule.elpian_wasm_execute_func_with_input;
     globalThis.elpian_wasm_continue_execution = wasmModule.elpian_wasm_continue_execution;
+    globalThis.elpian_wasm_deliver_host_message = wasmModule.elpian_wasm_deliver_host_message;
     globalThis.elpian_wasm_destroy_vm = wasmModule.elpian_wasm_destroy_vm;
     globalThis.elpian_wasm_vm_exists = wasmModule.elpian_wasm_vm_exists;
 

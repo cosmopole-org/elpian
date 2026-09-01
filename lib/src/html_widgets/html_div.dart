@@ -4,6 +4,7 @@ import '../css/css_parser.dart';
 import '../css/css_properties.dart';
 import '../css/stylesheet.dart';
 import '../models/css_style.dart';
+import '../scope/scope_contract.dart';
 
 class HtmlDiv {
   static Widget build(ElpianNode node, List<Widget> children) {
@@ -187,7 +188,7 @@ class HtmlDiv {
     // inside its update scope lost its `position: absolute` (the parent saw a
     // styleless Scope and laid the window out in flow, full-width).
     var node = child;
-    while (node.type == 'Scope' && node.children.length == 1) {
+    while (node.type == ScopeContract.type && node.children.length == 1) {
       node = node.children.first;
     }
     return _resolvedStyle(node);

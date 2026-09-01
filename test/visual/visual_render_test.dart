@@ -156,49 +156,4 @@ void main() {
     expect(file.lengthSync(), greaterThan(0));
   });
 
-  test('scene3d: lit cube + sphere', () async {
-    final renderer = Scene3DRenderer();
-    final camera = Camera3D(position: const Vec3(3, 3, 5), target: Vec3.zero);
-    const env = Environment3D();
-    final lights = [
-      const Light3D(
-        type: LightType.directional,
-        direction: Vec3(-1, -1.5, -1),
-        intensity: 1.2,
-      ),
-    ];
-    final nodes = [
-      SceneNode(
-        type: 'mesh3d',
-        position: const Vec3(-1.2, 0, 0),
-        meshType: 'Cube',
-        meshParams: const {'size': 1.5},
-        material: const Material3D(
-            baseColor: Vec3(0.85, 0.2, 0.25), roughness: 0.4),
-      ),
-      SceneNode(
-        type: 'mesh3d',
-        position: const Vec3(1.3, 0, 0),
-        meshType: 'Sphere',
-        meshParams: const {'radius': 0.9, 'segments': 24},
-        material: const Material3D(
-            baseColor: Vec3(0.2, 0.5, 0.9), roughness: 0.3, metallic: 0.6),
-      ),
-    ];
-
-    final file = await renderCanvasToPng(
-      'scene3d_shapes',
-      const Size(400, 300),
-      (canvas, size) => renderer.render(
-        canvas,
-        size,
-        camera: camera,
-        environment: env,
-        lights: lights,
-        nodes: nodes,
-      ),
-    );
-    expect(file.existsSync(), isTrue);
-    expect(file.lengthSync(), greaterThan(0));
-  });
 }

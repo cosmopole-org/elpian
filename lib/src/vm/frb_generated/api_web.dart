@@ -9,7 +9,9 @@
 /// ```
 library;
 
+import 'dart:async';
 import 'dart:js_interop';
+import 'dart:typed_data';
 
 export 'vm_types.dart' show VmExecResult;
 import 'vm_types.dart';
@@ -24,6 +26,10 @@ external JSBoolean _wasmCreateVmFromAst(JSString machineId, JSString astJson);
 
 @JS('elpian_wasm_create_vm_from_code')
 external JSBoolean _wasmCreateVmFromCode(JSString machineId, JSString code);
+
+@JS('elpian_wasm_create_vm_from_bytecode')
+external JSBoolean _wasmCreateVmFromBytecode(
+    JSString machineId, JSUint8Array bytecode);
 
 @JS('elpian_wasm_validate_ast')
 external JSBoolean _wasmValidateAst(JSString astJson);
@@ -42,6 +48,10 @@ external JSString _wasmExecuteFuncWithInput(
 @JS('elpian_wasm_continue_execution')
 external JSString _wasmContinueExecution(
     JSString machineId, JSString inputJson);
+
+@JS('elpian_wasm_deliver_host_message')
+external JSString _wasmDeliverHostMessage(
+    JSString machineId, JSString messageJson, JSNumber cbId);
 
 @JS('elpian_wasm_destroy_vm')
 external JSBoolean _wasmDestroyVm(JSString machineId);
@@ -76,13 +86,24 @@ class ElpianVmApi {
       'web/index.html, then build wasm with: cd rust && wasm-pack build --target web';
 
   static Future<void> initVmSystem() async {
-    try {
-      _wasmInit();
-      _wasmAvailable = true;
-    } catch (e) {
-      _wasmAvailable = false;
-      _lastError = '$_wasmMissing ($e)';
+    // The wasm-bindgen module and Flutter bootstrap are fetched in parallel.
+    // A fast manifest response can reach here before the module script has
+    // exposed its globals, so wait briefly instead of permanently marking the
+    // runtime unavailable after the first race.
+    Object? lastError;
+    for (var attempt = 0; attempt < 100; attempt++) {
+      try {
+        _wasmInit();
+        _wasmAvailable = true;
+        _lastError = null;
+        return;
+      } catch (error) {
+        lastError = error;
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
     }
+    _wasmAvailable = false;
+    _lastError = '$_wasmMissing ($lastError)';
   }
 
   static Future<bool> createVmFromAst({
@@ -123,6 +144,19 @@ class ElpianVmApi {
       return ok;
     } catch (e) {
       _lastError = 'WASM createVmFromCode failed: $e';
+      return false;
+    }
+  }
+
+  static Future<bool> createVmFromBytecode({
+    required String machineId,
+    required Uint8List bytecode,
+  }) async {
+    if (!_wasmAvailable) return false;
+    try {
+      return _wasmCreateVmFromBytecode(machineId.toJS, bytecode.toJS).toDart;
+    } catch (e) {
+      _lastError = 'WASM createVmFromBytecode failed: $e';
       return false;
     }
   }
@@ -215,6 +249,23 @@ class ElpianVmApi {
       return VmExecResult.fromJsonString(result);
     } catch (e) {
       _lastError = 'WASM continueExecution failed: $e';
+      return _errorResult('wasm_error');
+    }
+  }
+
+  static Future<VmExecResult> deliverHostMessage({
+    required String machineId,
+    required String messageJson,
+    required int cbId,
+  }) async {
+    if (!_wasmAvailable) return _errorResult('wasm_not_available');
+    try {
+      final result =
+          _wasmDeliverHostMessage(machineId.toJS, messageJson.toJS, cbId.toJS)
+              .toDart;
+      return VmExecResult.fromJsonString(result);
+    } catch (e) {
+      _lastError = 'WASM deliverHostMessage failed: $e';
       return _errorResult('wasm_error');
     }
   }
