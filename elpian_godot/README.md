@@ -45,18 +45,55 @@ C++ `GodotController` already speak, so the engine-side interpreter — the
 Dropping JSI removes the C++ layer and its ABI entirely — a method channel
 already lands on the platform thread, which is all the queue needs.
 
-## Build steps (not automated here)
+## The three binary artifacts
 
-Three artifacts are **not** checked in:
+They are **not** checked in — they are large, reproducible from pinned upstream
+versions, and `.gitignore`d so a local build cannot commit them by accident.
+
+**CI builds them for you:** `.github/workflows/build_godot_artifacts.yml`
+produces all three as one bundle, which `build_showcase.yml` restores. That
+workflow runs on its own cadence — a Godot bump or an interpreter change — not
+on every push, because rebuilding them each time would add ~15 minutes for
+nothing.
+
+When the bundle is absent, the showcase build still succeeds and ships the
+placeholder. That is deliberate: the no-engine path is what web and any
+un-provisioned build get, so CI keeps proving it works.
+
+To build them by hand:
 
 1. **The Godot library AAR** → `android/libs/godot-lib.template_release.aar`
-   Take the one from `victor/react-native/modules/elpian-godot/android/libs/`, or
-   build it from a Godot 4 source checkout
-   (`scons platform=android target=template_release`, then `./gradlew generateGodotTemplates`).
+   **Do not build the engine from source.** It is an unmodified upstream
+   release; a source build takes ~an hour to reproduce a binary Godot already
+   publishes. The Android library ships inside the official export templates as
+   `android_source.zip` — unzip it and run `./gradlew :lib:assembleTemplateRelease`.
+   (Victor's checked-in copy under
+   `victor/react-native/modules/elpian-godot/android/libs/` is the same artifact.)
 
-2. **The `elpian_godot` GDExtension** — the reflective `ElpianScene3D` op
-   interpreter. Built from Victor's `bridge/extension`; drop the resulting
-   `.so` files beside `godot-project/elpian_godot.gdextension`.
+2. **The `elpian_godot` GDExtension** → `godot-project/bin/`
+   The reflective `ElpianScene3D` op interpreter, built from Victor's
+   `bridge/extension`:
+
+   ```sh
+   scons platform=android target=template_release arch=arm64 \
+     elpian_capi=../../target/aarch64-linux-android/release/libelpian_godot.a
+   scons platform=linux target=template_release   # ← also required, see below
+   ```
+
+   Two traps:
+
+   * `SConstruct` globs every `src/*.cpp`, including the ElpianVM node, so the
+     Rust C-ABI static library (`cargo build -p elpian-godot-capi`) is needed
+     even though Elpian only uses the `ElpianScene3D` half — `OpSink.gd` runs
+     the op interpreter with no VM, because the single VM lives in the Flutter
+     app.
+   * **A host-platform build is required too.** The headless editor loads the
+     `.gdextension` during import and export, so `linux.x86_64` must exist or
+     the export aborts with what looks like a project error.
+
+   `elpian_godot.gdextension` declares six library slots (four Android ABIs,
+   linux, web). Build what you ship or trim the file — a missing slot for a
+   platform you target fails at runtime, not at build time.
 
 3. **The packed op-sink project** → `android/src/main/assets/godot/embed.pck`
    Open `godot-project/` in the Godot 4 editor and export with the preset in

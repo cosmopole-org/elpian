@@ -35,6 +35,7 @@ on:
 
 permissions:
   contents: read
+  actions: read   # to download the Godot bundle from build_godot_artifacts.yml
 
 env:
   FLUTTER_VERSION: "3.38.3"
@@ -241,6 +242,51 @@ jobs:
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
 
+      # The three Godot binaries come from build_godot_artifacts.yml, which runs
+      # on its own cadence (a Godot bump or an interpreter change) rather than on
+      # every push here. `continue-on-error` is deliberate: when the bundle is
+      # absent the APK still builds and ships the placeholder, so the
+      # graceful-degradation path — what web and any un-provisioned build get —
+      # stays exercised on every run instead of rotting.
+      # Uses the preinstalled gh CLI rather than a third-party download action:
+      # this step pulls a ~21 MB binary into the build, so it is worth keeping
+      # the supply chain to first-party tooling.
+      - name: Restore the Godot artifact bundle (optional)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          run_id=$(gh run list --repo "$GITHUB_REPOSITORY" \
+            --workflow build_godot_artifacts.yml --status success \
+            --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [ -z "$run_id" ]; then
+            echo "::notice::build_godot_artifacts.yml has no successful run yet."
+            exit 0
+          fi
+          gh run download "$run_id" --repo "$GITHUB_REPOSITORY" \
+            --name godot-artifacts-android --dir godot-artifacts
+
+      - name: Install the Godot artifacts into the plugin
+        run: |
+          set -e
+          if [ ! -d godot-artifacts ]; then
+            echo "::notice::No Godot artifact bundle — Scene3D will ship its placeholder."
+            echo "GODOT_ENGINE_PRESENT=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          cat godot-artifacts/MANIFEST.txt || true
+          mkdir -p elpian/elpian_godot/android/libs \
+                   elpian/elpian_godot/android/src/main/assets/godot \
+                   elpian/elpian_godot/godot-project/bin
+          cp godot-artifacts/android/libs/godot-lib.template_release.aar \
+             elpian/elpian_godot/android/libs/
+          cp godot-artifacts/embed.pck \
+             elpian/elpian_godot/android/src/main/assets/godot/embed.pck
+          cp godot-artifacts/godot-project/bin/*.so \
+             elpian/elpian_godot/godot-project/bin/ 2>/dev/null || true
+          echo "GODOT_ENGINE_PRESENT=true" >> "$GITHUB_ENV"
+          find elpian/elpian_godot -name "*.aar" -o -name "embed.pck" | xargs ls -lh
+
       - name: Download the generated showcase
         uses: actions/download-artifact@v4
         with:
@@ -271,10 +317,21 @@ jobs:
             unzip -l "$apk" | grep -q "assets/showcase/client.elpian.bc" \
               || { echo "$apk is missing the showcase bytecode"; exit 1; }
           done
+          # When the bundle was restored the APK must actually carry the engine;
+          # a silently-missing AAR would otherwise look like a successful build.
+          if [ "${GODOT_ENGINE_PRESENT}" = "true" ]; then
+            for apk in build/app/outputs/flutter-apk/app-*-release.apk; do
+              unzip -l "$apk" | grep -q "assets/godot/embed.pck" \
+                || { echo "$apk was built with the engine but has no embed.pck"; exit 1; }
+            done
+            echo "APKs carry the embedded Godot engine."
+          else
+            echo "Built without the Godot engine — Scene3D ships its placeholder."
+          fi
 
       - name: Upload the APKs
         uses: actions/upload-artifact@v4
         with:
-          name: showcase-apk
+          name: showcase-apk${{ env.GODOT_ENGINE_PRESENT == 'true' && '-with-godot' || '-placeholder' }}
           path: elpian/example/build/app/outputs/flutter-apk/app-*-release.apk
           retention-days: 14

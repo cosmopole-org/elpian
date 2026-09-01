@@ -279,8 +279,14 @@ It is deliberately *not* a dependency of `elpian_ui`: the Godot library AAR is
 ~21 MB and an app with no 3D should not pay for it. The example app depends on
 it; a plain `elpian_ui` consumer does not.
 
-See its README for the three artifacts that must be built (the Godot library
-AAR, the `elpian_godot` GDExtension, and the packed op-sink project) and for the
+Three binary artifacts must exist before anything renders — the Godot library
+AAR, the `elpian_godot` GDExtension, and the packed op-sink project.
+`.github/workflows/build_godot_artifacts.yml` builds all three as one bundle
+(downloading the AAR from the official Godot release rather than building the
+engine), and `build_showcase.yml` restores it. When the bundle is absent the
+build still succeeds and ships the placeholder.
+
+See the plugin's README for the by-hand recipe and for the
 `FlutterFragmentActivity` requirement.
 
 **Status:** the Dart side is complete and tested; the native side of

@@ -1,0 +1,217 @@
+name: Build Godot artifacts
+
+# Produces the three binary artifacts `elpian_godot` needs before Scene3D can
+# render anything. They are NOT built by build_showcase.yml, because they change
+# on a completely different cadence — only when Godot is bumped or the
+# reflective interpreter changes — and rebuilding them on every push would add
+# ~15 minutes for nothing.
+#
+#   1. The Godot library AAR      DOWNLOADED, never built. It is an unmodified
+#                                 upstream release; building the engine from
+#                                 source would take ~an hour to reproduce a
+#                                 binary Godot already publishes.
+#   2. The elpian_godot GDExtension  BUILT. This is our code — the reflective
+#                                 ElpianScene3D op interpreter, which lives in
+#                                 the victor repo (bridge/extension).
+#   3. embed.pck                  BUILT. A headless export of
+#                                 elpian_godot/godot-project/. Seconds.
+#
+# The result is uploaded as one bundle that build_showcase.yml restores. When
+# the bundle is absent that workflow still builds and ships the placeholder, so
+# the graceful-degradation path stays exercised rather than rotting.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "elpian_godot/godot-project/**"
+      - ".github/workflows/build_godot_artifacts.yml"
+
+permissions:
+  contents: read
+
+env:
+  # Pinned together — godot-cpp, the editor and the export templates must all
+  # match, or the .gdextension fails its compatibility check at load.
+  GODOT_RELEASE: "4.3-stable"
+  GODOT_TEMPLATE_DIR: "4.3.stable"
+  GODOT_CPP_BRANCH: "godot-4.3-stable"
+  NDK_VERSION: "23.2.8568313"
+
+jobs:
+  android:
+    name: Godot artifacts (Android)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout elpian
+        uses: actions/checkout@v4
+        with:
+          path: elpian
+
+      # The GDExtension source lives in victor (bridge/extension), so a Godot
+      # bump has to land in both repositories.
+      - name: Checkout victor
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/victor
+          path: victor
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Rust (Android targets)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      - name: Install the pinned NDK
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;${NDK_VERSION}"
+
+      - name: Install scons
+        run: pipx install scons || pip install scons
+
+      - name: Clone godot-cpp
+        run: |
+          git clone --depth 1 -b "$GODOT_CPP_BRANCH" \
+            https://github.com/godotengine/godot-cpp \
+            victor/victor/bridge/extension/godot-cpp
+
+      # godot-cpp is nearly all of the build time and only invalidates on a
+      # Godot bump, so cache it on the pinned versions rather than the source.
+      - name: Cache godot-cpp
+        uses: actions/cache@v4
+        with:
+          path: |
+            victor/victor/bridge/extension/godot-cpp/bin
+            victor/victor/bridge/extension/godot-cpp/gen
+            victor/victor/bridge/extension/godot-cpp/src
+            victor/victor/bridge/extension/.sconsign.dblite
+          key: godot-cpp-${{ env.GODOT_CPP_BRANCH }}-${{ env.NDK_VERSION }}-v1
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            victor/victor/target
+          key: cargo-godot-capi-${{ runner.os }}-${{ hashFiles('victor/victor/Cargo.lock') }}
+
+      # ---------------------------------------------------------------------
+      # 2. The GDExtension.
+      #
+      # SConstruct globs every src/*.cpp, which includes the ElpianVM node, so
+      # the Rust C-ABI static library is required even though Elpian only uses
+      # the ElpianScene3D half (OpSink.gd runs the op interpreter with no VM —
+      # the single VM lives in the Flutter app).
+      # ---------------------------------------------------------------------
+      - name: Build the Elpian C-ABI library per Android ABI
+        working-directory: victor/victor
+        run: |
+          TOOLCHAIN="$ANDROID_HOME/ndk/${NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$TOOLCHAIN/aarch64-linux-android21-clang"
+          export CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER="$TOOLCHAIN/armv7a-linux-androideabi21-clang"
+          export CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER="$TOOLCHAIN/x86_64-linux-android21-clang"
+          for target in aarch64-linux-android armv7-linux-androideabi x86_64-linux-android; do
+            cargo build -p elpian-godot-capi --release --target "$target"
+          done
+
+      - name: Build the GDExtension for each Android ABI
+        working-directory: victor/victor/bridge/extension
+        run: |
+          set -e
+          build() {  # <godot arch> <rust target triple>
+            scons platform=android target=template_release arch="$1" \
+              elpian_capi="../../target/$2/release/libelpian_godot.a"
+          }
+          build arm64   aarch64-linux-android
+          build arm32   armv7-linux-androideabi
+          build x86_64  x86_64-linux-android
+          ls -la ../project/bin/
+
+      # The headless editor loads the .gdextension during import and export, so
+      # a HOST library must exist too or the export aborts. Easy to miss: the
+      # failure looks like a project error, not a missing build.
+      - name: Build the GDExtension for the host platform
+        working-directory: victor/victor/bridge/extension
+        run: scons platform=linux target=template_release
+
+      # ---------------------------------------------------------------------
+      # 1. The Godot library AAR + the editor, from the official release.
+      # ---------------------------------------------------------------------
+      - name: Install the Godot editor and export templates
+        run: |
+          curl -sSL -o godot.zip \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_RELEASE}/Godot_v${GODOT_RELEASE}_linux.x86_64.zip"
+          unzip -q godot.zip
+          sudo mv "Godot_v${GODOT_RELEASE}_linux.x86_64" /usr/local/bin/godot
+          curl -sSL -o templates.tpz \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_RELEASE}/Godot_v${GODOT_RELEASE}_export_templates.tpz"
+          mkdir -p "$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_DIR}"
+          unzip -q templates.tpz -d /tmp/templates
+          mv /tmp/templates/templates/* "$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_DIR}/"
+
+      # The Android library ships inside the export templates as
+      # android_source.zip — a gradle project whose release build IS the AAR the
+      # plugin links. This is why the engine is never built from source here.
+      - name: Produce the Godot library AAR from the official templates
+        run: |
+          set -e
+          mkdir -p /tmp/godot-android
+          unzip -o -q "$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_DIR}/android_source.zip" \
+            -d /tmp/godot-android
+          cd /tmp/godot-android
+          chmod +x gradlew || true
+          ./gradlew :lib:assembleTemplateRelease --no-daemon
+          find . -name "*.aar" -print
+          mkdir -p "$GITHUB_WORKSPACE/out/android/libs"
+          cp "$(find . -name 'godot-lib*template_release.aar' | head -1)" \
+             "$GITHUB_WORKSPACE/out/android/libs/godot-lib.template_release.aar"
+          ls -lh "$GITHUB_WORKSPACE/out/android/libs"
+
+      # ---------------------------------------------------------------------
+      # 3. embed.pck — the packed op-sink project.
+      # ---------------------------------------------------------------------
+      - name: Stage the extension libraries into the Godot project
+        run: |
+          mkdir -p elpian/elpian_godot/godot-project/bin
+          cp victor/victor/bridge/project/bin/*.so elpian/elpian_godot/godot-project/bin/
+          ls -la elpian/elpian_godot/godot-project/bin
+
+      - name: Export the op-sink project to embed.pck
+        working-directory: elpian/elpian_godot/godot-project
+        run: |
+          set -e
+          # A first headless open lets the editor import resources; the export
+          # fails on a cold project otherwise.
+          godot --headless --import || true
+          godot --headless --export-pack "Android" "$GITHUB_WORKSPACE/out/embed.pck"
+          ls -lh "$GITHUB_WORKSPACE/out/embed.pck"
+
+      - name: Assemble the bundle
+        run: |
+          mkdir -p out/godot-project/bin
+          cp elpian/elpian_godot/godot-project/bin/*.so out/godot-project/bin/
+          cat > out/MANIFEST.txt <<EOF
+          godot_release=${GODOT_RELEASE}
+          godot_cpp=${GODOT_CPP_BRANCH}
+          ndk=${NDK_VERSION}
+          elpian=${GITHUB_SHA}
+          built=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          EOF
+          cat out/MANIFEST.txt
+          find out -type f -exec ls -lh {} \;
+
+      - name: Upload the Godot artifact bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-artifacts-android
+          path: out
+          retention-days: 90
