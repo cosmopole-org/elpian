@@ -8,6 +8,9 @@ name: Build Showcase (web + Android)
 # the TypeScript→bytecode toolchain and the Scene3D widget all still work
 # together. If the template drifts from the runtime, this goes red.
 #
+# It also publishes the web build to GitHub Pages, replacing the old
+# deploy_web_pages.yml, which published the example app.
+#
 # The two targets differ in one meaningful way:
 #   * **web**   — no Godot artifact exists for the web yet, so `Scene3D` renders
 #     its placeholder and the 2D app is fully live. This is the graceful
@@ -36,6 +39,13 @@ on:
 permissions:
   contents: read
   actions: read   # to download the Godot bundle from build_godot_artifacts.yml
+  pages: write    # the web job publishes the showcase to GitHub Pages
+  id-token: write
+
+# One Pages deployment at a time; supersede an in-flight run.
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
 
 env:
   FLUTTER_VERSION: "3.38.3"
@@ -209,6 +219,36 @@ jobs:
           name: showcase-site
           path: site
           retention-days: 14
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload the Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  # ---------------------------------------------------------------------------
+  # Publish the showcase to GitHub Pages. This replaces deploy_web_pages.yml,
+  # which published the old example app — the showcase supersedes it, and
+  # removing that workflow without this step would have taken the live site
+  # down with it.
+  #
+  # Only from main: a pull request builds and uploads the site but must not
+  # publish it.
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: web
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
 
   # ---------------------------------------------------------------------------
   # Android: the example app, which hosts the showcase and the Scene3D widget.
