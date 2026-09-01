@@ -472,14 +472,6 @@ let name: string = '';
 const items: string[] = ['alpha', 'beta', 'gamma'];
 let picked: string = '-';
 
-function row(item: string) {
-  return el('li', {
-    text: item,
-    style: { cursor: 'pointer', padding: '6' },
-    onClick: () => { picked = item; render(view()); },
-  }, []);
-}
-
 function view() {
   return el('div', { style: { padding: '32', display: 'flex', flexDirection: 'column', gap: 12 } }, [
     el('h1', { text: 'Hello from TypeScript' }, []),
@@ -493,15 +485,15 @@ function view() {
       onClick: () => { count = count + 1; render(view()); },
     }, []),
 
-    // The payoff: a closure captures the item, so each row knows which one it
-    // is. A named handler cannot — it would have to encode the identity in the
-    // key and parse it back out of the event.
-    //
-    // Note `row` is a named function, not an inline arrow. js2elpian does not
-    // capture an enclosing ARROW's parameter in a nested arrow — `items.map((i)
-    // => () => i)` yields null inside the closure. A named function's parameter
-    // captures correctly, as does a `for`-loop local.
-    el('ul', {}, items.map(row)),
+    // The payoff: the closure captures the mapped item, so each row knows which
+    // one it is. A named handler cannot — it would have to encode the identity
+    // in the key and parse it back out of the event.
+    el('ul', {}, items.map((item) =>
+      el('li', {
+        text: item,
+        style: { cursor: 'pointer', padding: '6' },
+        onClick: () => { picked = item; render(view()); },
+      }, []))),
     el('p', { text: 'picked: ' + picked }, []),
 
     // Handlers receive the event. `value` carries an input's current text.

@@ -29,38 +29,22 @@ work uses `setTimeout`/`setInterval` calling a named function
 > healthy. Both halves are fixed now (rejection in `js2elpian`, poison recovery
 > in `api.rs`), but if you see that signature, you are on an old build.
 
-### 1b. An arrow nested inside an arrow does not capture the outer's parameter
+### 1b. Closures capture correctly — but check your toolchain
 
-Compiles cleanly, runs, and reads **null** — no error anywhere:
+Every closure form captures as JavaScript specifies, including an arrow nested
+inside an arrow:
 
 ```ts
 items.map((item) => el('li', { onClick: () => { picked = item; } }, []))
-//                                               ^^^^ null at run time
 ```
 
-Arrows are lifted into synthetic hoisted definitions, and the lift carries the
-enclosing *locals* but not an enclosing **arrow's parameters**.
-
-Every other capture form works, so the fix is always small:
-
-```ts
-function row(item) {                       // ✅ a named function's parameter
-  return el('li', { onClick: () => { picked = item; } }, []);
-}
-items.map(row);
-
-for (let i = 0; i < items.length; i++) {   // ✅ a loop-body local
-  const item = items[i];
-  rows.push(el('li', { onClick: () => { picked = item; } }, []));
-}
-
-items.map(function (item) {                // ✅ function expressions
-  return el('li', { onClick: function () { picked = item; } }, []);
-});
-```
-
-Verified against the bytecode VM: `map((it) => it + '!')` gives `["a!","b!","c!"]`,
-but `map((it) => () => it)` gives `[undefined, undefined, undefined]`.
+> **On an older toolchain this silently read `null`.** Arrows are lifted into
+> synthetic hoisted definitions, drained by `parse_statement` — but a concise
+> body (`=> expr`) never passes through one, so an inner arrow's definition
+> bubbled *past* the outer arrow and was hoisted outside it, losing the outer
+> parameter. It compiled, ran, and produced null with no error anywhere. Fixed in
+> `finish_arrow`, which now drains its own lifts into the arrow's body. If a
+> captured loop item reads as null, you are on an old build.
 
 ### 2. There is no `fetch`, `window`, `document`, or `localStorage`
 
@@ -297,7 +281,7 @@ untrusted code.
 |---|---|
 | Button renders but does nothing | #6 — handler is in `props` not `events` |
 | `async functions are not supported` | #1 — use timers, not `async` |
-| A captured loop item reads as null in a handler | #1b — arrow nested in arrow |
+| A captured loop item reads as null in a handler | #1b — pre-fix toolchain |
 | Server dies after one bad request | #1 — poisoned lock; you are on a pre-fix build |
 | Assets 404 at the domain root | #17 — `basePath`, or #19 a clobbered engine |
 | `method not found: 'elpian_wasm_init'` | #19b — stale build cache; `flutter clean` |

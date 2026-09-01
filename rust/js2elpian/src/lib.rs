@@ -2089,13 +2089,29 @@ impl JsParser {
     /// into a synthetic named closure, returning a reference to it.
     fn finish_arrow(&mut self, params: Vec<String>) -> Value {
         self.expect_punct("=>");
-        let body = if self.at_punct("{") {
+        let mark = self.lifted.len();
+        let mut body = if self.at_punct("{") {
             self.parse_block()
         } else {
             // Concise body `=> expr` is `{ return expr; }`.
             let e = self.parse_expr();
             vec![json!({ "type": "returnOperation", "data": { "value": e } })]
         };
+        // Closures created while parsing THIS arrow's body belong inside it.
+        //
+        // Lifts are normally drained by `parse_statement`, but a concise body
+        // (`=> expr`) never passes through one: the inner closure's definition
+        // then bubbled up to the enclosing statement and was hoisted OUTSIDE
+        // this arrow, so it no longer closed over this arrow's parameters.
+        // `items.map((it) => () => it)` compiled and read `it` as null.
+        //
+        // A block body has already drained through `parse_block`, so this is a
+        // no-op there.
+        if self.lifted.len() > mark {
+            let mut inner: Vec<Value> = self.lifted.split_off(mark);
+            inner.append(&mut body);
+            body = inner;
+        }
         self.make_anon(params, body)
     }
 

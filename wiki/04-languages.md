@@ -109,12 +109,12 @@ Worth knowing, because it explains some behaviour:
 - **Closures capture by reference.** A post-parse transform boxes locals that a
   nested closure mutates into one-element cells, so `arr.forEach(x => sum += x)`
   propagates correctly.
-- ⚠️ **but an arrow nested inside an arrow does NOT capture the outer arrow's
-  parameter.** The lift carries enclosing locals, not enclosing arrow params, so
-  `items.map((it) => () => it)` compiles and returns `undefined` from the inner
-  closure — silently. A named function's parameter, a loop-body local, and
-  `function` expressions all capture correctly. See
-  [`14-gotchas.md`](14-gotchas.md) §1b.
+  An arrow nested inside an arrow captures the outer arrow's parameter too:
+  `items.map((it) => () => it)` works, as do arbitrarily deep chains
+  (`(a) => (b) => (c) => a + b + c`). A concise arrow body does not pass through
+  `parse_statement`, where lifts are normally drained, so `finish_arrow` drains
+  its own — otherwise the inner definition would escape the outer arrow and lose
+  its parameter.
 - **Deep assignment is lowered.** A simple target (`x`, `a.b`, `a[i]`) uses the
   native `assignment` opcode; a nested or computed target (`a.b.c`, `a[i].x`)
   becomes a `__setIndex(base, key, value)` builtin call.

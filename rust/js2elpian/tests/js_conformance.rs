@@ -171,30 +171,57 @@ fn leading_dot_does_not_break_member_access_or_spread() {
     }
 }
 
-/// Closure capture: which enclosing scopes a lifted arrow actually closes over.
+/// An arrow nested inside an arrow must capture the OUTER arrow's parameter.
 ///
-/// Arrows are lifted into synthetic hoisted `functionDefinition`s, and the lift
-/// carries the enclosing *locals* — but NOT an enclosing **arrow's parameters**.
-/// So `items.map((it) => () => it)` compiles and runs, and the inner closure
-/// reads `it` as null. Verified against the bytecode VM, not just the parser:
-/// `map((it) => it + "!")` → ["a!","b!","c!"], but `map((it) => () => it)` →
-/// [undefined, undefined, undefined].
+/// Arrows are lifted into synthetic hoisted definitions. Lifts are drained by
+/// `parse_statement`, but a concise body (`=> expr`) never passes through one —
+/// so an inner arrow's definition used to bubble past the outer arrow and be
+/// hoisted OUTSIDE it, losing the outer parameter. `[1].map((it) => () => it)`
+/// compiled, ran, and read `it` as null, with no error anywhere.
 ///
-/// Every other form captures correctly, which is why the CLI templates use a
-/// named helper for per-item handlers.
+/// Exercised through the real bytecode path, not just the parser: this is a
+/// run-time capture bug, so a compile-only assertion would not have caught it.
 #[test]
-fn closure_capture_forms_compile() {
-    for src in [
-        // a named function's parameter, captured by a nested arrow — works
-        "function make(it) { return () => it; } let f = make(1); let v = f();",
-        // a for-loop local, captured by an arrow — works
-        "let fs = []; for (let i = 0; i < 3; i++) { let it = i; fs.push(() => it); }",
-        // function expressions nested in function expressions — works
-        "let fs = [1].map(function (it) { return function () { return it; }; });",
-        // the broken shape still COMPILES; it fails at run time, so it must not
-        // be mistaken for a parse error.
-        "let fs = [1].map((it) => () => it);",
-    ] {
-        assert!(js2elpian::try_parse_js(src).is_ok(), "should compile: {src}");
-    }
+fn nested_arrow_captures_outer_arrow_param() {
+    let out = run(
+        "cap_nested",
+        "let mk = (it) => () => it; let g = mk('a'); function f() { return g(); }",
+    );
+    assert!(out.contains('a'), "inner arrow lost the outer arrow's param: {out}");
+}
+
+#[test]
+fn deeply_nested_arrows_capture_every_level() {
+    let out = run(
+        "cap_deep",
+        "let c = (a) => (b) => (d) => a + b + d; function f() { return c('x')('y')('z'); }",
+    );
+    assert!(out.contains("xyz"), "expected xyz, got {out}");
+}
+
+#[test]
+fn nested_arrow_captures_enclosing_local_and_param_together() {
+    let out = run(
+        "cap_mixed",
+        "let o = 'O'; let g = (p) => () => o + p; function f() { return g('P')(); }",
+    );
+    assert!(out.contains("OP"), "expected OP, got {out}");
+}
+
+#[test]
+fn nested_arrow_mutation_propagates_by_reference() {
+    let out = run(
+        "cap_mutate",
+        "let t = 0; let add = (n) => () => { t = t + n; }; add(5)(); add(7)(); function f() { return t; }",
+    );
+    assert!(out.contains("12"), "expected 12, got {out}");
+}
+
+/// The forms that already worked must keep working.
+#[test]
+fn other_closure_capture_forms_still_work() {
+    assert!(run("cap_named", "function mk(it) { return () => it; } let g = mk('n'); function f() { return g(); }").contains('n'));
+    assert!(run("cap_loop", "let fs = []; for (let i = 0; i < 1; i++) { let it = 'L'; fs.push(() => it); } function f() { return fs[0](); }").contains('L'));
+    assert!(run("cap_fnexpr", "let g = (function (it) { return function () { return it; }; })('E'); function f() { return g(); }").contains('E'));
+    assert!(run("cap_own", "let m = [1].map((it) => it + 1); function f() { return m[0]; }").contains('2'));
 }
