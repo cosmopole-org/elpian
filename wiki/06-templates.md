@@ -63,9 +63,10 @@ Three things to notice, because they generalise to every client program:
 
 - **State is a module-level variable.** `count` persists across turns for the
   lifetime of the VM instance. There is no component state, no hooks.
-- **Handlers are named by string.** `onClick: 'increment'` names a top-level
-  function. The host looks it up and calls it in a *separate turn*. You cannot
-  pass a closure — the render payload is JSON.
+- **Handlers are closures.** `onClick: () => { … }` captures module state
+  directly, and in a list captures the item. The SDK bridges them to the
+  string-only wire format; a named top-level function still works too. See
+  [`10-events.md`](10-events.md).
 - **Re-render is explicit.** Nothing is reactive. The handler mutates state and
   calls `render(view())` itself.
 

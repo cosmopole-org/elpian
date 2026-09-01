@@ -21,8 +21,40 @@ el('button', { text: 'Save', onClick: 'onSave' }, [])
 // → props: { text: 'Save' },  events: { click: 'onSave' }
 ```
 
-**You cannot pass a closure.** The render payload is JSON; a handler is a name
-the host looks up in the VM.
+### Closures
+
+`on*` also accepts a **closure**, which is what the generated SDK's templates
+use:
+
+```ts
+el('button', { key: 'inc', text: '+1', onClick: () => { count++; render(view()); } }, [])
+```
+
+This matters most in a list, where a closure captures the item and a named
+handler cannot:
+
+```ts
+items.map((item) => el('li', { text: item, onClick: () => { picked = item; render(view()); } }, []))
+```
+
+**The wire format is unchanged** — `events` values are still strings, because
+`render()` serialises with `JSON.stringify`, which silently drops function
+values. The SDK bridges the gap: a node carrying a closure is given a stable
+`key`, its closures are stored in a registry on the guest side, and the wire gets
+the name of one dispatcher, `__elpianEvent`. When the host fires the event it
+calls that dispatcher, which looks the closure back up by `currentTarget` (the
+element id, which *is* the node's key) and the event type.
+
+So both forms work, and they interoperate:
+
+| Form | Emitted `events` value |
+|---|---|
+| `onClick: 'increment'` | `"increment"` — the host calls that VM function |
+| `onClick: () => …` | `"__elpianEvent"` — the SDK dispatches to the closure |
+
+A node with a closure **must** have a key; the SDK assigns a positional one
+(`__el0`, `__el1`, …) when you do not, and resets the counter on each `render()`
+so the keys stay stable across renders.
 
 ---
 

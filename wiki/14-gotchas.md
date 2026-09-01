@@ -83,12 +83,16 @@ your own node builder, you must replicate it.
 
 Mutating a variable does not redraw. Every handler ends with `render(view())`.
 
-### 8. Handlers are names, not closures
+### 8. Handlers cross the wire as names — but the SDK accepts closures
 
-`onClick: 'increment'` is a string naming a top-level function. You cannot
-capture a loop variable. For per-item identity, set a stable `key` on the node
-and read `event.currentTarget` in the handler
-([`10-events.md`](10-events.md), recipe 4).
+The `events` map can only carry strings, because `render()` uses
+`JSON.stringify`. The generated SDK bridges this: an `on*` closure is stored in
+a guest-side registry keyed by the node's `key`, and the wire gets a dispatcher
+name. So `onClick: () => { … }` works and captures loop variables.
+
+If you write your own node builder instead of using the SDK's `el()`, closures
+will be **silently dropped** — `JSON.stringify` removes function values, leaving
+`events: {}` and gotcha #6.
 
 ### 9. Always set `key` on interactive nodes
 
