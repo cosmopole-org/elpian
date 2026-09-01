@@ -1,5 +1,10 @@
-# 🖥️ Elpian VM — Complete AST & API Reference
+# 15 — The Elpian AST & VM API reference
 
+> Moved from the repository root (`VM_LOGIC.md`). This is the exhaustive
+> reference: every expression and statement node, the operator table, the
+> typed-value envelope, the host-call protocol, and `ElpianVmWidget` /
+> `ElpianVmController`. [`02-elpian-vm.md`](02-elpian-vm.md) is the narrative
+> introduction; this is the lookup table.
 This document is the definitive reference for writing Elpian VM code. It covers the AST JSON format, all node types with their exact structures, the typed value system, the host call protocol, arithmetic/comparison operators, and the Dart/FFI API surface.
 
 ---

@@ -5,7 +5,7 @@ links directly to Victor's `js2elpian` compiler, and emits Elpian JavaScript,
 AST, and bytecode without Node.js, npm, or JavaScript tooling.
 
 ```sh
-cargo install --path elpian-cli   # from the elpian repo root
+cargo install --path cli   # from the elpian repo root
 elpian create my-app --template client   # or server / fullstack / showcase
 cd my-app
 elpian run install
@@ -25,7 +25,7 @@ that the CLI may build. `basePath` configures subpath deployments such as
 `/myapp/`.
 
 The default web engine is the standalone Flutter project at
-`elpian-cli/elpian_client` (resolved relative to this crate); it does not import or compile the example application.
+`cli/elpian_client` (resolved relative to this crate); it does not import or compile the example application.
 
 For client and full-stack projects, `elpian run build` creates a self-contained
 static deployment in `dist/web`. Deploy that directory—not the Flutter

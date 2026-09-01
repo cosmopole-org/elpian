@@ -17,7 +17,7 @@ name: Build Showcase (web + Android)
 #     degradation path, built on every run so it cannot silently break.
 #   * **Android** — the example app depends on the in-repo `elpian_godot`
 #     plugin, so the APK carries the native embedded-Godot seam. A real engine
-#     additionally needs three binary artifacts (see elpian_godot/README.md);
+#     additionally needs three binary artifacts (see godot/README.md);
 #     when they are absent the APK still builds and ships the same placeholder.
 
 on:
@@ -27,13 +27,13 @@ on:
     paths:
       - "lib/**"
       - "rust/**"
-      - "elpian-cli/**"
-      - "elpian_godot/**"
+      - "cli/**"
+      - "godot/**"
       - ".github/workflows/build_showcase.yml"
   pull_request:
     paths:
       - "lib/**"
-      - "elpian-cli/**"
+      - "cli/**"
       - ".github/workflows/build_showcase.yml"
 
 permissions:
@@ -74,8 +74,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            elpian/elpian-cli/target
-          key: cargo-${{ runner.os }}-${{ hashFiles('elpian/elpian-cli/Cargo.lock') }}
+            elpian/cli/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('elpian/cli/Cargo.lock') }}
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -85,12 +85,12 @@ jobs:
           cache: true
 
       - name: Build the elpian CLI
-        working-directory: elpian/elpian-cli
+        working-directory: elpian/cli
         run: cargo build --release --locked
 
       - name: Generate the showcase app
         run: |
-          ./elpian/elpian-cli/target/release/elpian create showcase-app --template showcase
+          ./elpian/cli/target/release/elpian create showcase-app --template showcase
           ls -R showcase-app
 
       # basePath must match where the site is served, and it is baked into
@@ -109,11 +109,11 @@ jobs:
 
       - name: Install Elpian packages
         working-directory: showcase-app
-        run: ../elpian/elpian-cli/target/release/elpian run install
+        run: ../elpian/cli/target/release/elpian run install
 
       - name: Compile TypeScript to Elpian bytecode + package the web export
         working-directory: showcase-app
-        run: ../elpian/elpian-cli/target/release/elpian run build --mode both
+        run: ../elpian/cli/target/release/elpian run build --mode both
 
       - name: Assert the build produced what it should
         working-directory: showcase-app
@@ -182,7 +182,7 @@ jobs:
             --out-dir "$GITHUB_WORKSPACE/elpian/assets/web_runtime/wasm/elpian_vm"
 
       - name: Build the Flutter web engine shell
-        working-directory: elpian/elpian-cli/elpian_client
+        working-directory: elpian/cli/elpian_client
         run: |
           flutter pub get
           flutter build web --release --base-href "/${GITHUB_REPOSITORY#*/}/"
@@ -196,7 +196,7 @@ jobs:
       # dist/web is the engine build plus the app's manifest and VM artifacts.
       - name: Assemble the deployable site
         run: |
-          rm -rf site && cp -r elpian/elpian-cli/elpian_client/build/web site
+          rm -rf site && cp -r elpian/cli/elpian_client/build/web site
           cp -r showcase-app/dist/web/__elpian site/__elpian
           test -f site/index.html
           test -f site/__elpian/elpian.manifest.json
@@ -305,17 +305,17 @@ jobs:
             exit 0
           fi
           cat godot-artifacts/MANIFEST.txt || true
-          mkdir -p elpian/elpian_godot/android/libs \
-                   elpian/elpian_godot/android/src/main/assets/godot \
-                   elpian/elpian_godot/godot-project/bin
+          mkdir -p elpian/godot/android/libs \
+                   elpian/godot/android/src/main/assets/godot \
+                   elpian/godot/godot-project/bin
           cp godot-artifacts/android/libs/godot-lib.template_release.aar \
-             elpian/elpian_godot/android/libs/
+             elpian/godot/android/libs/
           cp godot-artifacts/embed.pck \
-             elpian/elpian_godot/android/src/main/assets/godot/embed.pck
+             elpian/godot/android/src/main/assets/godot/embed.pck
           cp godot-artifacts/godot-project/bin/*.so \
-             elpian/elpian_godot/godot-project/bin/ 2>/dev/null || true
+             elpian/godot/godot-project/bin/ 2>/dev/null || true
           echo "GODOT_ENGINE_PRESENT=true" >> "$GITHUB_ENV"
-          find elpian/elpian_godot -name "*.aar" -o -name "embed.pck" | xargs ls -lh
+          find elpian/godot -name "*.aar" -o -name "embed.pck" | xargs ls -lh
 
       - name: Download the generated showcase
         uses: actions/download-artifact@v4

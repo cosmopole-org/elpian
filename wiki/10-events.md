@@ -238,3 +238,25 @@ See [`12-host-apis.md`](12-host-apis.md).
 5. **A handler that throws is retried without arguments**, then swallowed with a
    `debugPrint`. If nothing happens and no error surfaces, check the Flutter
    console for `ElpianVmWidget: Error calling event handler "…"`.
+
+---
+
+## Best practices
+
+1. **Use Event Delegation** - For handling many similar elements
+2. **Stop Propagation Wisely** - Only when necessary
+3. **Debounce/Throttle** - For high-frequency events (scroll, resize, input)
+4. **Clean Up Listeners** - Remove listeners when elements are destroyed
+5. **Use Type-Safe Events** - Check event types before accessing properties
+6. **Log Selectively** - Use global handler for debugging, not production
+7. **Prevent Default Carefully** - Only when you need to override default behavior
+
+## Performance
+
+- Avoid adding too many event listeners
+- Use event delegation for repeated elements
+- Throttle/debounce high-frequency events
+- Remove unused event listeners
+- Use passive listeners when possible
+
+*(Carried over from the root `EVENT_SYSTEM.md`, now removed.)*

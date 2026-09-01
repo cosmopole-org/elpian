@@ -1,5 +1,9 @@
-# Next.js + Elpian Integration (Black-Box Client)
+# 17 — The Next.js integration
 
+> Moved from the repository root (`NEXTJS_INTEGRATION.md`). The
+> server-driven bridge: request modes, navigation commands, and the
+> `clientComp` + inline `jsCode` pattern. Implemented in
+> `lib/src/integrations/`.
 Elpian now includes a **black-box Next.js client**: developers only provide a Next.js server base URL and route, then `NextjsServerWidget` handles:
 
 - route requests

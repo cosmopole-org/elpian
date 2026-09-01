@@ -29,7 +29,7 @@ system:
 ├───────────────────────────────────────────────────────────────────────┤
 │  L4  Toolchain (Rust, build time)                                     │
 │      oxc: parse TS → strip types → JS                                 │
-│      elpian-cli: resolve imports, bundle modules into one source      │
+│      cli: resolve imports, bundle modules into one source            │
 │      js2elpian: JS → Elpian AST JSON → bytecode (.elpian.bc)          │
 ├───────────────────────────────────────────────────────────────────────┤
 │  L3  Elpian VM (Rust) — rust/src/sdk/                                 │
@@ -130,37 +130,42 @@ elpian/                        the Flutter host package (`elpian_ui`) + the VM
 │       ├── parser/            JSON → node parsing
 │       ├── stream/            streaming widget
 │       └── diagnostics/       diagnostics helpers
-├── rust/                      the Elpian VM crate (`elpian-vm`)
+├── rust/                      the Elpian VM (`elpian-vm`) + a Cargo workspace
+│   ├── js2elpian/             JS → Elpian AST → bytecode
+│   ├── dart2elpian/           Dart subset → JS subset
+│   ├── dart/                  Dart/Flutter runtime extras
+│   ├── capi/                  elpian-godot-capi, linked by the GDExtension
+│   ├── prelude/               guest preludes (godot.js, ui.js, net.js, …)
 │   ├── src/sdk/               executor, compiler, program, stdlib, governance
 │   ├── src/api.rs             the public VM API (create/execute/govern)
 │   ├── src/api/{ffi,wasm}.rs  native and web embedding surfaces
 │   └── src/bin/elpian-server.rs  the HTTP server VM
 ├── rust_builder/              Flutter plugin: the native VM library
-├── elpian_godot/              Flutter plugin: the embedded Godot engine
+├── godot/                     Flutter plugin: the embedded Godot engine
 │   ├── android/               Kotlin — platform view, op queue, Godot fragment
 │   ├── ios/                   Swift — platform view, op queue, runtime seam
 │   └── godot-project/         runs inside Godot: OpSink.gd + the GDExtension
-├── elpian-cli/                the `elpian` CLI — its own crate, inside this repo
+├── cli/                       the `elpian` CLI — its own crate, inside this repo
 │   ├── rust/main.rs           the entire CLI in one file
 │   ├── elpian_client/         the standalone Flutter web shell it serves
 │   └── README.md
 ├── example/                   a full Flutter example app
 ├── test/                      60+ widget/layout/VM tests (executable specs)
-├── benchmarks/                performance harnesses + reports
+├── bench/                     performance harnesses + reports
 ├── wiki/                      this documentation
 └── *.md                       deep reference docs (VM_LOGIC.md is the big one)
 
-victor/victor/                 the compiler front-ends (a sibling project)
-├── js2elpian/                 JS → Elpian AST → bytecode
-└── dart2elpian/               Dart subset → JS subset
+victor/                        a sibling project — only the GDExtension C++
+                               source (bridge/extension) is still needed, and
+                               only to build the Godot binaries.
 ```
 
 > **Note on the CLI's location.** The CLI is a *separate crate* that happens to
 > live in this repository, not part of the `elpian_ui` package. Its
 > `elpian_client` web shell depends on `elpian_ui` by relative path
 > (`path: ../..`), and its `Cargo.toml` resolves `js2elpian` at
-> `../../victor/victor/js2elpian` — so a **sibling `victor` checkout is still
-> required** to build it.
+> `../rust/js2elpian`. Everything it needs is in this repository — **no sibling
+> checkout is required.**
 
 ## The three delivery stories (choose deliberately)
 

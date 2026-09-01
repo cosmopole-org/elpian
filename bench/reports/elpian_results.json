@@ -1,0 +1,106 @@
+{
+  "suite": "Elpian UI Performance Benchmarks",
+  "runner": "flutter test (Dart VM)",
+  "timestamp": "2026-09-01T18:49:31.742168",
+  "benchmarks": [
+    {
+      "scenario": "S1_BasicJsonBuild",
+      "fps": 3504.8,
+      "avg_build_ms": 0.29,
+      "p50_ms": 0.1,
+      "p90_ms": 0.19,
+      "p99_ms": 1.35,
+      "worst_frame_ms": 45.59,
+      "jank_rate_pct": 0.3,
+      "total_frames": 300
+    },
+    {
+      "scenario": "S2_ComplexDashboard",
+      "fps": 1184.9,
+      "avg_build_ms": 0.84,
+      "p50_ms": 0.61,
+      "p90_ms": 1.33,
+      "p99_ms": 9.46,
+      "worst_frame_ms": 9.46,
+      "jank_rate_pct": 0.0,
+      "total_frames": 100
+    },
+    {
+      "scenario": "S3_AnimationBuild",
+      "fps": 1672.2,
+      "avg_build_ms": 0.6,
+      "p50_ms": 0.53,
+      "p90_ms": 0.72,
+      "p99_ms": 2.87,
+      "worst_frame_ms": 4.16,
+      "jank_rate_pct": 0.0,
+      "total_frames": 200
+    },
+    {
+      "scenario": "S4_ListBuild",
+      "fps": 293.7,
+      "avg_build_ms": 3.41,
+      "p50_ms": 2.03,
+      "p90_ms": 4.76,
+      "p99_ms": 39.25,
+      "worst_frame_ms": 39.25,
+      "jank_rate_pct": 2.0,
+      "total_frames": 50
+    },
+    {
+      "scenario": "S5_WidgetBuild",
+      "fps": 2550.6,
+      "avg_build_ms": 0.39,
+      "p50_ms": 0.38,
+      "p90_ms": 0.61,
+      "p99_ms": 1.27,
+      "worst_frame_ms": 1.27,
+      "jank_rate_pct": 0.0,
+      "total_frames": 60
+    },
+    {
+      "scenario": "S5_PumpLayout",
+      "fps": 56.7,
+      "avg_build_ms": 17.64,
+      "p50_ms": 11.32,
+      "p90_ms": 13.75,
+      "p99_ms": 327.21,
+      "worst_frame_ms": 327.21,
+      "jank_rate_pct": 6.7,
+      "total_frames": 60
+    },
+    {
+      "scenario": "S6_RapidRerender",
+      "fps": 455.5,
+      "avg_build_ms": 2.2,
+      "p50_ms": 2.08,
+      "p90_ms": 3.14,
+      "p99_ms": 5.29,
+      "worst_frame_ms": 5.29,
+      "jank_rate_pct": 0.0,
+      "total_frames": 150
+    },
+    {
+      "scenario": "S7_CSSParseThroughput",
+      "fps": 36135.0,
+      "avg_build_ms": 0.03,
+      "p50_ms": 0.02,
+      "p90_ms": 0.03,
+      "p99_ms": 0.23,
+      "worst_frame_ms": 1.97,
+      "jank_rate_pct": 0.0,
+      "total_frames": 500
+    },
+    {
+      "scenario": "S8_MixedHtmlFlutter",
+      "fps": 5613.6,
+      "avg_build_ms": 0.18,
+      "p50_ms": 0.05,
+      "p90_ms": 0.15,
+      "p99_ms": 4.91,
+      "worst_frame_ms": 4.91,
+      "jank_rate_pct": 0.0,
+      "total_frames": 100
+    }
+  ]
+}

@@ -108,7 +108,7 @@ packages:
   elpian_godot:
     dependency: "direct main"
     description:
-      path: "../elpian_godot"
+      path: "../godot"
       relative: true
     source: path
     version: "0.1.0"

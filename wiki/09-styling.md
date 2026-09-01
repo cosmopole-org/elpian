@@ -262,3 +262,38 @@ Values may be numbers or strings; the parser accepts both (`padding: 24` and
   fallback (viewport-resolved) is used, which is usually not what you meant.
 - **A subtree containing a 3D scene is treated as viewport-locked** and will not
   document-scroll — see [`07-ui-model.md`](07-ui-model.md).
+
+---
+
+## Converting CSS to JSON
+
+Use the built-in converter:
+
+```dart
+final cssText = '''
+  .card {
+    padding: 16px;
+    background-color: #FFFFFF;
+  }
+  
+  h1 {
+    font-size: 32px;
+  }
+''';
+
+final jsonStylesheet = JsonStylesheetParser.cssToJson(cssText);
+engine.loadStylesheet(jsonStylesheet);
+```
+
+This comprehensive JSON stylesheet system makes it easy to build consistent, maintainable, and responsive UIs entirely from JSON!
+
+## Stylesheet best practices
+
+1. **Use Semantic Class Names** - `.card`, `.button`, `.header`
+2. **Create Utility Classes** - `.m-2`, `.p-3`, `.text-center`
+3. **Leverage Variables** - Define colors and spacing once
+4. **Use Media Queries** - Build responsive designs
+5. **Combine Classes** - `className: "card shadow rounded"`
+6. **Separate Concerns** - Keep styles in stylesheet, structure in UI JSON
+
+*(Carried over from the root `JSON_STYLESHEET.md`, now removed.)*

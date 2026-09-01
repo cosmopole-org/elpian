@@ -5,17 +5,17 @@ compiler and development runner. It uses Oxc's Rust TypeScript front-end, links
 directly to the `js2elpian` compiler, and emits Elpian JavaScript, AST and
 bytecode **without Node.js, npm, or any JavaScript tooling**.
 
-Source: `elpian-cli/rust/main.rs` (the whole CLI is one file).
+Source: `cli/rust/main.rs` (the whole CLI is one file).
 
 ## Install
 
 ```sh
-cargo install --path /path/to/elpian-cli
+cargo install --path cli
 ```
 
 The binary is named `elpian` (`[[bin]] name = "elpian"`). It depends on
-`js2elpian` by path (`../victor/victor/js2elpian`), so the sibling `victor`
-checkout must be present to build it.
+`js2elpian` at `../rust/js2elpian`, which is vendored in this repository — no
+sibling checkout is needed.
 
 ## The whole surface
 
@@ -151,7 +151,7 @@ from:
 | `engineProject` | A Flutter **project** the CLI may build (`flutter build web --base-href <basePath>`) |
 | `engineDir` | An **already-built** Flutter web export — the CLI will not build it |
 
-Defaults to the standalone project at `elpian-cli/elpian_client`, whose build
+Defaults to the standalone project at `cli/elpian_client`, whose build
 output is `<engineProject>/build/web`. That shell imports no example
 application: at runtime it fetches `/__elpian/elpian.manifest.json`, downloads
 the declared bytecode or AST, and executes it in the Elpian WASM VM.
@@ -178,7 +178,7 @@ the marker is missing, if its `basePath=` line does not match, or if
 ```
 
 > **The dev server serves the shared engine directory**
-> (`elpian-cli/elpian_client/build/web`), not the project's `dist/web`. Building
+> (`cli/elpian_client/build/web`), not the project's `dist/web`. Building
 > a *different* project with a different `basePath` re-bases that shared
 > directory out from under a running server. Give each project an explicit
 > `engineProject` if you run more than one.

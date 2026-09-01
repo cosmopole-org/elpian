@@ -157,7 +157,7 @@ Flutter output has no application in it.
 
 ### 19. `elpian run dev` serves the *shared* engine directory
 
-It serves `elpian-cli/elpian_client/build/web`, not your `dist/web`. Building a
+It serves `cli/elpian_client/build/web`, not your `dist/web`. Building a
 different project with a different `basePath` re-bases that shared directory out
 from under a running dev server. Give each project an explicit `engineProject`
 if you run more than one.

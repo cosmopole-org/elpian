@@ -22,7 +22,7 @@ compiler entirely.
 ## TypeScript
 
 TypeScript is the CLI's default authoring language. It is handled in two stages
-(`elpian-cli/rust/main.rs`, `transpile_typescript`):
+(`cli/rust/main.rs`, `transpile_typescript`):
 
 1. **`oxc` parses and transforms it.** `SourceType::from_path` picks the dialect
    from the extension, a `SemanticBuilder` runs (with `with_enum_eval(true)`),
@@ -52,7 +52,7 @@ benefit, but do not rely on them for validation.
 
 ## JavaScript — the `js2elpian` supported surface
 
-This is the authoritative list. From `victor/victor/js2elpian/src/lib.rs`.
+This is the authoritative list. From `rust/js2elpian/src/lib.rs`.
 
 ### Operators — the full tower
 
@@ -259,9 +259,9 @@ compiles. It is purely a *language* layer — runtime intrinsics still go throug
 generics with runtime reification, named/optional parameters beyond the basics,
 `part`/`library`, the Dart core library beyond what maps to the universal stdlib.
 
-> Note: the Dart front-end lives in the sibling `victor` project and is **not
-> wired into the `elpian` CLI**. The CLI compiles TypeScript/JavaScript only.
-> Use `dart2elpian` directly if you need the Dart path.
+> Note: `dart2elpian` is vendored at `rust/dart2elpian/` but is **not wired into
+> the `elpian` CLI**. The CLI compiles TypeScript/JavaScript only. Use the crate
+> directly if you need the Dart path.
 
 ---
 

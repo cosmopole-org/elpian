@@ -1,5 +1,9 @@
-# 🎨 Elpian 2D Graphics & UI Reference
+# 16 — Widget, element & CSS reference
 
+> Moved from the repository root (`2D_GRAPHICS.md`). Per-widget and
+> per-element detail, the CSS property reference and the widget summary
+> table. [`08-widgets.md`](08-widgets.md) is the catalogue with guidance;
+> this is the exhaustive listing.
 Complete reference for Elpian's 2D rendering engine. All UI is defined in JSON and rendered as native Flutter widgets. Elpian supports three rendering modes: **Flutter DSL widgets**, **HTML5 semantic elements**, and a **Canvas 2D drawing API**.
 
 ---
