@@ -94,7 +94,8 @@ Exhaustive lists (every widget prop, every CSS property) live in the source:
   `FEATURES.md`, `EVENT_SYSTEM.md`, `JSON_STYLESHEET.md`, `CANVAS_API.md`,
   `2D_GRAPHICS.md`, `NEXTJS_INTEGRATION.md`, `QUICKSTART.md`. (`3D_GRAPHICS.md`
   documents the *removed* in-house renderers — see `11-canvas-and-3d.md` instead.)
-- **Embedded Godot (native side):** `../elpian_godot/` — the Android platform
-  view, the op queue, and the Godot-side `OpSink.gd`.
+- **Embedded Godot (native side):** `elpian_godot/` — the Android and iOS
+  platform views, the op queues, and the Godot-side `OpSink.gd`. A separate
+  plugin package so an app with no 3D does not carry the ~21 MB Godot AAR.
 - **Tests as executable specs:** `test/` (60+ files — layout, CSS, scope,
   Godot ops/DSL, events, Next.js integration).

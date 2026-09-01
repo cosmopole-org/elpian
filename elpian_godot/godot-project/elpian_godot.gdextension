@@ -1,0 +1,11 @@
+[configuration]
+entry_symbol = "elpian_godot_library_init"
+compatibility_minimum = "4.3"
+reloadable = false
+[libraries]
+android.arm64 = "res://bin/libelpian_godot.android.arm64.so"
+android.arm32 = "res://bin/libelpian_godot.android.arm32.so"
+android.x86_64 = "res://bin/libelpian_godot.android.x86_64.so"
+android.x86_32 = "res://bin/libelpian_godot.android.x86_32.so"
+linux.x86_64 = "res://bin/libelpian_godot.linux.x86_64.so"
+web.wasm32 = "res://bin/libelpian_godot.web.wasm32.wasm"

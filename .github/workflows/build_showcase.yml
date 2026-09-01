@@ -12,9 +12,10 @@ name: Build Showcase (web + Android)
 #   * **web**   — no Godot artifact exists for the web yet, so `Scene3D` renders
 #     its placeholder and the 2D app is fully live. This is the graceful
 #     degradation path, built on every run so it cannot silently break.
-#   * **Android** — builds the `elpian_godot` plugin. A real engine additionally
-#     needs three binary artifacts (see elpian_godot/README.md); when they are
-#     absent the APK still builds and ships the same placeholder.
+#   * **Android** — the example app depends on the in-repo `elpian_godot`
+#     plugin, so the APK carries the native embedded-Godot seam. A real engine
+#     additionally needs three binary artifacts (see elpian_godot/README.md);
+#     when they are absent the APK still builds and ships the same placeholder.
 
 on:
   workflow_dispatch:
@@ -24,6 +25,7 @@ on:
       - "lib/**"
       - "rust/**"
       - "elpian-cli/**"
+      - "elpian_godot/**"
       - ".github/workflows/build_showcase.yml"
   pull_request:
     paths:
@@ -220,16 +222,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: elpian
-
-      # The embedded-Godot plugin. Sits beside elpian/ because the example app
-      # depends on it by relative path.
-      - name: Checkout elpian_godot
-        uses: actions/checkout@v4
-        continue-on-error: true
-        with:
-          repository: ${{ github.repository_owner }}/elpian_godot
-          path: elpian_godot
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Java
         uses: actions/setup-java@v4
