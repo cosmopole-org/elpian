@@ -1,49 +1,40 @@
-/// FFI layer that exposes the VM API as C-compatible functions
-/// for dart:ffi on native platforms.
-///
-/// All functions use C strings (null-terminated UTF-8) for data exchange.
-/// The VmExecResult is serialized as JSON across the boundary.
-///
-/// Memory: Strings returned from Rust must be freed by calling `elpian_free_string`.
+//! Stable C ABI used by the Flutter engine on native platforms.
+
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 
 use serde_json::json;
 
 use super::{
-    continue_execution, create_vm_from_ast, create_vm_from_code, destroy_vm, execute_vm,
-    execute_vm_func, execute_vm_func_with_input, init_vm_system, validate_ast, vm_exists,
-    VmExecResult,
+    continue_execution, create_vm_from_ast, create_vm_from_bytecode, create_vm_from_code,
+    deliver_host_message, destroy_vm, execute_vm, execute_vm_func, execute_vm_func_with_input,
+    init_vm_system, validate_ast, vm_exists, VmExecResult,
 };
 
-/// Helper: convert C string pointer to Rust String.
-unsafe fn c_str_to_string(ptr: *const c_char) -> String {
+unsafe fn read_string(ptr: *const c_char) -> String {
     if ptr.is_null() {
-        return String::new();
+        String::new()
+    } else {
+        CStr::from_ptr(ptr).to_string_lossy().into_owned()
     }
-    CStr::from_ptr(ptr).to_string_lossy().into_owned()
 }
 
-/// Helper: convert Rust String to C string pointer.
-/// Caller must free with `elpian_free_string`.
-fn string_to_c_str(s: String) -> *mut c_char {
-    CString::new(s).unwrap_or_default().into_raw()
+fn return_string(value: String) -> *mut c_char {
+    CString::new(value.replace('\0', "")).unwrap().into_raw()
 }
 
-/// Helper: serialize VmExecResult to JSON C string.
-fn result_to_c_str(r: VmExecResult) -> *mut c_char {
-    let json = json!({
-        "hasHostCall": r.has_host_call,
-        "hostCallData": r.host_call_data,
-        "resultValue": r.result_value,
-    });
-    string_to_c_str(json.to_string())
+fn return_result(result: VmExecResult) -> *mut c_char {
+    return_string(
+        json!({
+            "hasHostCall": result.has_host_call,
+            "hostCallData": result.host_call_data,
+            "resultValue": result.result_value,
+        })
+        .to_string(),
+    )
 }
 
-// ── Public FFI Functions ────────────────────────────────────────────
-
-/// Free a string previously returned by any elpian_* function.
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn elpian_free_string(ptr: *mut c_char) {
     if !ptr.is_null() {
         unsafe {
@@ -52,113 +43,118 @@ pub extern "C" fn elpian_free_string(ptr: *mut c_char) {
     }
 }
 
-/// Initialize the VM subsystem.
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn elpian_init() {
     init_vm_system();
 }
 
-/// Create a VM from AST JSON. Returns 1 on success, 0 on failure.
-#[unsafe(no_mangle)]
-pub extern "C" fn elpian_create_vm_from_ast(
-    machine_id: *const c_char,
-    ast_json: *const c_char,
+#[no_mangle]
+pub extern "C" fn elpian_create_vm_from_ast(id: *const c_char, ast: *const c_char) -> i32 {
+    bool_to_i32(create_vm_from_ast(unsafe { read_string(id) }, unsafe {
+        read_string(ast)
+    }))
+}
+
+#[no_mangle]
+pub extern "C" fn elpian_create_vm_from_code(id: *const c_char, code: *const c_char) -> i32 {
+    bool_to_i32(create_vm_from_code(unsafe { read_string(id) }, unsafe {
+        read_string(code)
+    }))
+}
+
+#[no_mangle]
+pub extern "C" fn elpian_create_vm_from_bytecode(
+    id: *const c_char,
+    bytes: *const u8,
+    length: usize,
 ) -> i32 {
-    let mid = unsafe { c_str_to_string(machine_id) };
-    let ast = unsafe { c_str_to_string(ast_json) };
-    if create_vm_from_ast(mid, ast) {
-        1
-    } else {
-        0
+    if bytes.is_null() && length != 0 {
+        return 0;
     }
-}
-
-/// Create a VM from source code. Returns 1 on success, 0 on failure.
-#[unsafe(no_mangle)]
-pub extern "C" fn elpian_create_vm_from_code(
-    machine_id: *const c_char,
-    code: *const c_char,
-) -> i32 {
-    let mid = unsafe { c_str_to_string(machine_id) };
-    let c = unsafe { c_str_to_string(code) };
-    if create_vm_from_code(mid, c) {
-        1
+    let bytecode = if length == 0 {
+        Vec::new()
     } else {
-        0
-    }
+        unsafe { std::slice::from_raw_parts(bytes, length) }.to_vec()
+    };
+    bool_to_i32(create_vm_from_bytecode(
+        unsafe { read_string(id) },
+        bytecode,
+    ))
 }
 
-/// Validate AST JSON. Returns 1 if valid, 0 if not.
-#[unsafe(no_mangle)]
-pub extern "C" fn elpian_validate_ast(ast_json: *const c_char) -> i32 {
-    let ast = unsafe { c_str_to_string(ast_json) };
-    if validate_ast(ast) {
-        1
-    } else {
-        0
-    }
+#[no_mangle]
+pub extern "C" fn elpian_validate_ast(ast: *const c_char) -> i32 {
+    bool_to_i32(validate_ast(unsafe { read_string(ast) }))
 }
 
-/// Execute a VM's main program. Returns JSON string (must be freed).
-#[unsafe(no_mangle)]
-pub extern "C" fn elpian_execute(machine_id: *const c_char) -> *mut c_char {
-    let mid = unsafe { c_str_to_string(machine_id) };
-    result_to_c_str(execute_vm(mid))
+#[no_mangle]
+pub extern "C" fn elpian_execute(id: *const c_char) -> *mut c_char {
+    return_result(execute_vm(unsafe { read_string(id) }))
 }
 
-/// Execute a named function. Returns JSON string (must be freed).
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn elpian_execute_func(
-    machine_id: *const c_char,
-    func_name: *const c_char,
-    cb_id: i64,
+    id: *const c_char,
+    name: *const c_char,
+    callback_id: i64,
 ) -> *mut c_char {
-    let mid = unsafe { c_str_to_string(machine_id) };
-    let fname = unsafe { c_str_to_string(func_name) };
-    result_to_c_str(execute_vm_func(mid, fname, cb_id))
+    return_result(execute_vm_func(
+        unsafe { read_string(id) },
+        unsafe { read_string(name) },
+        callback_id,
+    ))
 }
 
-/// Execute a named function with input. Returns JSON string (must be freed).
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn elpian_execute_func_with_input(
-    machine_id: *const c_char,
-    func_name: *const c_char,
-    input_json: *const c_char,
-    cb_id: i64,
+    id: *const c_char,
+    name: *const c_char,
+    input: *const c_char,
+    callback_id: i64,
 ) -> *mut c_char {
-    let mid = unsafe { c_str_to_string(machine_id) };
-    let fname = unsafe { c_str_to_string(func_name) };
-    let input = unsafe { c_str_to_string(input_json) };
-    result_to_c_str(execute_vm_func_with_input(mid, fname, input, cb_id))
+    return_result(execute_vm_func_with_input(
+        unsafe { read_string(id) },
+        unsafe { read_string(name) },
+        unsafe { read_string(input) },
+        callback_id,
+    ))
 }
 
-/// Continue execution after host call. Returns JSON string (must be freed).
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn elpian_continue_execution(
-    machine_id: *const c_char,
-    input_json: *const c_char,
+    id: *const c_char,
+    input: *const c_char,
 ) -> *mut c_char {
-    let mid = unsafe { c_str_to_string(machine_id) };
-    let input = unsafe { c_str_to_string(input_json) };
-    result_to_c_str(continue_execution(mid, input))
+    return_result(continue_execution(unsafe { read_string(id) }, unsafe {
+        read_string(input)
+    }))
 }
 
-/// Destroy a VM. Returns 1 if found and destroyed, 0 if not found.
-#[unsafe(no_mangle)]
-pub extern "C" fn elpian_destroy_vm(machine_id: *const c_char) -> i32 {
-    let mid = unsafe { c_str_to_string(machine_id) };
-    if destroy_vm(mid) {
-        1
-    } else {
-        0
-    }
+#[no_mangle]
+pub extern "C" fn elpian_deliver_host_message(
+    id: *const c_char,
+    message: *const c_char,
+    callback_id: i64,
+) -> *mut c_char {
+    return_result(deliver_host_message(
+        unsafe { read_string(id) },
+        unsafe { read_string(message) },
+        callback_id,
+    ))
 }
 
-/// Check if a VM exists. Returns 1 if exists, 0 if not.
-#[unsafe(no_mangle)]
-pub extern "C" fn elpian_vm_exists(machine_id: *const c_char) -> i32 {
-    let mid = unsafe { c_str_to_string(machine_id) };
-    if vm_exists(mid) {
+#[no_mangle]
+pub extern "C" fn elpian_destroy_vm(id: *const c_char) -> i32 {
+    bool_to_i32(destroy_vm(unsafe { read_string(id) }))
+}
+
+#[no_mangle]
+pub extern "C" fn elpian_vm_exists(id: *const c_char) -> i32 {
+    bool_to_i32(vm_exists(unsafe { read_string(id) }))
+}
+
+fn bool_to_i32(value: bool) -> i32 {
+    if value {
         1
     } else {
         0

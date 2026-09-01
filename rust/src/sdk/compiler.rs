@@ -1,4 +1,8 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    rc::Rc,
+};
 
 use serde_json::{json, Value};
 
@@ -22,6 +26,12 @@ fn serialize_expr(val: serde_json::Value) -> Vec<u8> {
     // log(&val.to_string());
     let mut result: Vec<u8> = vec![];
     match val["type"].as_str().unwrap() {
+        // The first-class null literal (tag 0x00). Every front-end lowers its
+        // own "absent value" spelling (`null`, `undefined`, `nil`, `None`, …)
+        // to this one neutral literal at compile time.
+        "null" => {
+            result.push(0);
+        }
         "i16" => {
             result.push(1);
             result.append(
@@ -88,16 +98,54 @@ fn serialize_expr(val: serde_json::Value) -> Vec<u8> {
             result.append(&mut i32::to_be_bytes(tt_bytes.len() as i32).to_vec());
             result.append(&mut tt_bytes);
         }
+        "typeTest" => {
+            // Reified `is` / `as`. Layout: [0xed][cast flag][value][type name].
+            // `cast` is 0 for `is` (yields a bool) and 1 for `as` (yields the
+            // value, trapping on a mismatch). The type name is the base type as a
+            // length-prefixed string.
+            result.push(0xed);
+            result.push(if val["data"]["cast"].as_bool().unwrap_or(false) { 1 } else { 0 });
+            result.append(&mut serialize_expr(val["data"]["value"].clone()));
+            let type_bytes = val["data"]["typeName"].as_str().unwrap_or("").as_bytes().to_vec();
+            result.append(&mut i32::to_be_bytes(type_bytes.len() as i32).to_vec());
+            result.append(&mut type_bytes.clone());
+        }
         "object" => {
             result.push(8);
             result.append(&mut i64::to_be_bytes(-2).to_vec());
-            result.append(&mut i32::to_be_bytes(val["data"]["value"].as_object().unwrap().iter().len() as i32).to_vec());
-            for (k, v) in val["data"]["value"].as_object().unwrap().iter() {
-                result.push(7);
-                let mut key_bytes = k.as_bytes().to_vec();
-                result.append(&mut i32::to_be_bytes(key_bytes.len() as i32).to_vec());
-                result.append(&mut key_bytes);
-                result.append(&mut serialize_expr(v.clone()));
+            // Two authoring forms are accepted. The classic `data.value` map is an
+            // unordered `{ key: expr }` object. The `data.entries` array is the
+            // *ordered* form that additionally supports **spread entries**
+            // (`{ "spread": <expr> }`, which merges another object's members in
+            // place). Each property — including a spread — is one serialized pair:
+            // a spread emits the reserved spread-key marker (0x1a) where the key
+            // literal would go, so the object builder recognises it and merges
+            // rather than inserts. `props_len` counts entries, not the expanded
+            // member count.
+            if let Some(entries) = val["data"].get("entries").and_then(|e| e.as_array()) {
+                result.append(&mut i32::to_be_bytes(entries.len() as i32).to_vec());
+                for entry in entries.iter() {
+                    if let Some(spread) = entry.get("spread") {
+                        result.push(0x1a); // spread-key marker (no operand)
+                        result.append(&mut serialize_expr(spread.clone()));
+                    } else {
+                        result.push(7);
+                        let key = entry["key"].as_str().unwrap();
+                        let mut key_bytes = key.as_bytes().to_vec();
+                        result.append(&mut i32::to_be_bytes(key_bytes.len() as i32).to_vec());
+                        result.append(&mut key_bytes);
+                        result.append(&mut serialize_expr(entry["value"].clone()));
+                    }
+                }
+            } else {
+                result.append(&mut i32::to_be_bytes(val["data"]["value"].as_object().unwrap().iter().len() as i32).to_vec());
+                for (k, v) in val["data"]["value"].as_object().unwrap().iter() {
+                    result.push(7);
+                    let mut key_bytes = k.as_bytes().to_vec();
+                    result.append(&mut i32::to_be_bytes(key_bytes.len() as i32).to_vec());
+                    result.append(&mut key_bytes);
+                    result.append(&mut serialize_expr(v.clone()));
+                }
             }
         }
         "array" => {
@@ -116,6 +164,31 @@ fn serialize_expr(val: serde_json::Value) -> Vec<u8> {
         "not" => {
             result.push(0xfc);
             result.append(&mut serialize_expr(val["data"]["value"].clone()));
+        }
+        "logical" => {
+            // Short-circuit `&&` / `||` / `??`. Layout: [0xef][flag][op1][op2],
+            // where `flag` is 0 for `&&`, 1 for `||`, and 2 for the null-coalescing
+            // `??` (Dart / JS): evaluate `op1` and, only if it is null, evaluate
+            // `op2`. The "skip the right operand" target is recovered at decode time
+            // as a unit index (the unit just past `op2`), so no byte offsets are
+            // baked here.
+            let flag = match val["data"]["operation"].as_str().unwrap() {
+                "||" => 1u8,
+                "??" => 2u8,
+                _ => 0u8, // "&&"
+            };
+            result.push(0xef);
+            result.push(flag);
+            result.append(&mut serialize_expr(val["data"]["operand1"].clone()));
+            result.append(&mut serialize_expr(val["data"]["operand2"].clone()));
+        }
+        "ternary" => {
+            // `c ? a : b`. Layout: [0xee][cond][consequent][alternate]. The
+            // branch boundaries are recovered as unit indices at decode time.
+            result.push(0xee);
+            result.append(&mut serialize_expr(val["data"]["condition"].clone()));
+            result.append(&mut serialize_expr(val["data"]["consequent"].clone()));
+            result.append(&mut serialize_expr(val["data"]["alternate"].clone()));
         }
         "arithmetic" => {
             match val["data"]["operation"].as_str().unwrap() {
@@ -203,8 +276,85 @@ fn serialize_expr(val: serde_json::Value) -> Vec<u8> {
             });
             result.append(&mut serialize_expr(input.clone()));
         }
+        "spread" => {
+            // Spread element (`...value`): a universal "expand this collection in
+            // place" marker. Valid inside an array literal, an object literal
+            // (via the `entries` form), and a call's argument list. Layout:
+            // [0x19][inner value expression]. At run time the inner value is
+            // wrapped in a spread marker that the enclosing array/object/call
+            // builder flattens. `value` is the collection to expand.
+            result.push(0x19);
+            result.append(&mut serialize_expr(val["data"]["value"].clone()));
+        }
+        "template" => {
+            // Interpolated / template string: an ordered list of `parts`, each an
+            // arbitrary value expression, concatenated using the VM's display
+            // coercion (a string contributes itself verbatim; other values their
+            // text form). Literal text segments are simply string-literal parts.
+            // Layout: [0x1b][part count: i32][part expression]*.
+            result.push(0x1b);
+            let parts = val["data"]["parts"].as_array().unwrap();
+            result.append(&mut i32::to_be_bytes(parts.len() as i32).to_vec());
+            for part in parts.iter() {
+                result.append(&mut serialize_expr(part.clone()));
+            }
+        }
         _ => {
             panic!("unknown val type");
+        }
+    }
+    result
+}
+
+/// Serialize the metadata + inline expressions of a `destructure` statement.
+/// Layout produced (statement opcode 0x1c): `[0x1c][flags][binding count: i32]`
+/// then, for each binding, its fixed metadata record, then the **source**
+/// value expression, then the default-value expression of every binding that
+/// declares one, in binding order. The executor evaluates the source first and
+/// each default next, binding by key (object) or position (array).
+///
+/// `flags` bit 0 selects array (1) vs object (0) form. Per-binding metadata:
+///   object: `[bind flags][key len: i32][key][name len: i32][name]`
+///   array:  `[bind flags][name len: i32][name]`
+/// where a binding's flags are bit0 = has default, bit1 = is rest, bit2 = is
+/// hole (array only; no name/key follows).
+fn serialize_destructure(data: &Value) -> Vec<u8> {
+    let mut result: Vec<u8> = vec![];
+    result.push(0x1c);
+    let is_array = data["isArray"].as_bool().unwrap_or(false);
+    result.push(if is_array { 1 } else { 0 });
+    let bindings = data["bindings"].as_array().unwrap();
+    result.append(&mut i32::to_be_bytes(bindings.len() as i32).to_vec());
+    for b in bindings.iter() {
+        let is_hole = b.get("hole").and_then(|v| v.as_bool()).unwrap_or(false);
+        let is_rest = b.get("rest").and_then(|v| v.as_bool()).unwrap_or(false);
+        let has_default = b.get("default").is_some();
+        let mut flags = 0u8;
+        if has_default { flags |= 1; }
+        if is_rest { flags |= 2; }
+        if is_hole { flags |= 4; }
+        result.push(flags);
+        if is_hole {
+            continue;
+        }
+        if !is_array {
+            // Object bindings carry the source key; it defaults to the bound name.
+            let name = b["name"].as_str().unwrap();
+            let key = b.get("key").and_then(|k| k.as_str()).unwrap_or(name);
+            let mut key_bytes = key.as_bytes().to_vec();
+            result.append(&mut i32::to_be_bytes(key_bytes.len() as i32).to_vec());
+            result.append(&mut key_bytes);
+        }
+        let name = b["name"].as_str().unwrap();
+        let mut name_bytes = name.as_bytes().to_vec();
+        result.append(&mut i32::to_be_bytes(name_bytes.len() as i32).to_vec());
+        result.append(&mut name_bytes);
+    }
+    // Source expression, then each present default in binding order.
+    result.append(&mut serialize_expr(data["source"].clone()));
+    for b in bindings.iter() {
+        if let Some(def) = b.get("default") {
+            result.append(&mut serialize_expr(def.clone()));
         }
     }
     result
@@ -253,6 +403,185 @@ fn serialize_condition_chain(
     result.append(&mut body.clone());
     result.append(&mut after_body);
     (result, baps)
+}
+
+// ---- free-variable (closure capture) analysis ------------------------------
+//
+// A closure only needs to snapshot the enclosing locals it actually references
+// — not the whole scope chain. For each `functionDefinition` the compiler walks
+// the body and computes the set of identifiers it uses that are *not* bound
+// within it (its own params, `let`/`const`/`var` declarations, and nested
+// function names), unioned transitively with the free variables of any nested
+// closures (so an upvalue needed only by an inner closure still flows through).
+// This list is serialised with the function; at runtime the executor captures
+// just these names from the enclosing frames (see `capture_named`) instead of
+// cloning every local — far cheaper to create a closure, and a smaller frame to
+// seed on every call. Names that turn out to be globals simply aren't found in
+// the enclosing scopes and resolve normally, exactly as before.
+
+/// Identifiers bound *at this function's own level*: nested-function names and
+/// `let`/`const`/`var` declarations, including those inside its `if`/`loop`/
+/// `switch` blocks — but never descending into a nested function's body (that is
+/// a separate scope). References to these resolve locally, so they are not free.
+fn collect_bound(node: &Value, bound: &mut std::collections::BTreeSet<String>) {
+    match node["type"].as_str().unwrap_or("") {
+        "definition" => {
+            if let Some(n) = node["data"]["leftSide"]["data"]["name"].as_str() {
+                bound.insert(n.to_string());
+            }
+        }
+        "functionDefinition" => {
+            if let Some(n) = node["data"]["name"].as_str() {
+                bound.insert(n.to_string());
+            }
+            // Do not descend: the nested function's locals are its own scope.
+        }
+        "ifStmt" => {
+            let d = &node["data"];
+            if let Some(b) = d["body"].as_array() { for s in b { collect_bound(s, bound); } }
+            if d.get("elseifStmt").is_some() { collect_bound(&d["elseifStmt"], bound); }
+            if let Some(e) = d.get("elseStmt") {
+                if let Some(b) = e["data"]["body"].as_array() { for s in b { collect_bound(s, bound); } }
+            }
+        }
+        "loopStmt" => {
+            if let Some(b) = node["data"]["body"].as_array() { for s in b { collect_bound(s, bound); } }
+        }
+        "tryStmt" => {
+            if let Some(b) = node["data"]["body"].as_array() { for s in b { collect_bound(s, bound); } }
+            if let Some(b) = node["data"]["catchBody"].as_array() { for s in b { collect_bound(s, bound); } }
+        }
+        "switchStmt" => {
+            if let Some(cases) = node["data"]["cases"].as_array() {
+                for c in cases {
+                    if let Some(b) = c["body"]["body"].as_array() { for s in b { collect_bound(s, bound); } }
+                }
+            }
+        }
+        "destructure" => {
+            // Every non-hole binding introduces a name at this scope level.
+            if let Some(bindings) = node["data"]["bindings"].as_array() {
+                for b in bindings {
+                    if b.get("hole").and_then(|v| v.as_bool()).unwrap_or(false) { continue; }
+                    if let Some(n) = b["name"].as_str() { bound.insert(n.to_string()); }
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Identifiers *referenced* in `node` (and the free variables of nested
+/// closures, which must flow through this scope). A `definition`'s left side is
+/// a binding, not a use; a nested `functionDefinition` contributes its own free
+/// set rather than its raw identifiers.
+fn collect_used(node: &Value, used: &mut std::collections::BTreeSet<String>) {
+    match node["type"].as_str().unwrap_or("") {
+        "identifier" => {
+            if let Some(n) = node["data"]["name"].as_str() { used.insert(n.to_string()); }
+        }
+        "functionDefinition" => {
+            let nparams = node["data"]["params"].as_array().cloned().unwrap_or_default();
+            let nbody = node["data"]["body"].as_array().cloned().unwrap_or_default();
+            for f in free_vars(&nparams, &nbody) { used.insert(f); }
+        }
+        "indexer" => {
+            collect_used(&node["data"]["target"], used);
+            collect_used(&node["data"]["index"], used);
+        }
+        "functionCall" => {
+            collect_used(&node["data"]["callee"], used);
+            if let Some(args) = node["data"]["args"].as_array() { for a in args { collect_used(a, used); } }
+        }
+        "arithmetic" | "logical" => {
+            collect_used(&node["data"]["operand1"], used);
+            collect_used(&node["data"]["operand2"], used);
+        }
+        "ternary" => {
+            collect_used(&node["data"]["condition"], used);
+            collect_used(&node["data"]["consequent"], used);
+            collect_used(&node["data"]["alternate"], used);
+        }
+        "not" | "cast" | "typeTest" => collect_used(&node["data"]["value"], used),
+        "definition" => collect_used(&node["data"]["rightSide"], used),
+        "assignment" => {
+            collect_used(&node["data"]["leftSide"], used);
+            collect_used(&node["data"]["rightSide"], used);
+        }
+        "returnOperation" => collect_used(&node["data"]["value"], used),
+        "object" => {
+            if let Some(entries) = node["data"].get("entries").and_then(|e| e.as_array()) {
+                for entry in entries {
+                    if let Some(spread) = entry.get("spread") { collect_used(spread, used); }
+                    else { collect_used(&entry["value"], used); }
+                }
+            }
+            if let Some(obj) = node["data"]["value"].as_object() {
+                for (_k, v) in obj { collect_used(v, used); }
+            }
+        }
+        "array" => {
+            if let Some(arr) = node["data"]["value"].as_array() {
+                for v in arr { collect_used(v, used); }
+            }
+        }
+        "spread" => collect_used(&node["data"]["value"], used),
+        "template" => {
+            if let Some(parts) = node["data"]["parts"].as_array() {
+                for p in parts { collect_used(p, used); }
+            }
+        }
+        "destructure" => {
+            collect_used(&node["data"]["source"], used);
+            if let Some(bindings) = node["data"]["bindings"].as_array() {
+                for b in bindings {
+                    if let Some(def) = b.get("default") { collect_used(def, used); }
+                }
+            }
+        }
+        "ifStmt" => {
+            let d = &node["data"];
+            collect_used(&d["condition"], used);
+            if let Some(b) = d["body"].as_array() { for s in b { collect_used(s, used); } }
+            if d.get("elseifStmt").is_some() { collect_used(&d["elseifStmt"], used); }
+            if let Some(e) = d.get("elseStmt") {
+                if let Some(b) = e["data"]["body"].as_array() { for s in b { collect_used(s, used); } }
+            }
+        }
+        "loopStmt" => {
+            collect_used(&node["data"]["condition"], used);
+            if let Some(b) = node["data"]["body"].as_array() { for s in b { collect_used(s, used); } }
+        }
+        "throwOperation" => collect_used(&node["data"]["value"], used),
+        "tryStmt" => {
+            // The catch binding (`errName`) is a runtime scope binding; treating
+            // its uses as free at worst captures an outer same-named variable
+            // needlessly, which is harmless.
+            if let Some(b) = node["data"]["body"].as_array() { for s in b { collect_used(s, used); } }
+            if let Some(b) = node["data"]["catchBody"].as_array() { for s in b { collect_used(s, used); } }
+        }
+        "switchStmt" => {
+            collect_used(&node["data"]["value"], used);
+            if let Some(cases) = node["data"]["cases"].as_array() {
+                for c in cases {
+                    collect_used(&c["value"], used);
+                    if let Some(b) = c["body"]["body"].as_array() { for s in b { collect_used(s, used); } }
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// The free variables of a function: identifiers it (transitively) references,
+/// minus everything bound at its own level (params, locals, nested-fn names).
+fn free_vars(params: &[Value], body: &[Value]) -> Vec<String> {
+    let mut bound: std::collections::BTreeSet<String> =
+        params.iter().filter_map(|p| p.as_str().map(|s| s.to_string())).collect();
+    for stmt in body { collect_bound(stmt, &mut bound); }
+    let mut used: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for stmt in body { collect_used(stmt, &mut used); }
+    used.into_iter().filter(|n| !bound.contains(n)).collect()
 }
 
 pub fn compile_ast(program: serde_json::Value, start_point: usize) -> Vec<u8> {
@@ -324,6 +653,63 @@ pub fn compile_ast(program: serde_json::Value, start_point: usize) -> Vec<u8> {
             "returnOperation" => {
                 result.push(0x14);
                 result.append(&mut serialize_expr(operation["data"]["value"].clone()).to_vec());
+            }
+            // Throw statement: evaluate the value expression and raise it. The
+            // nearest enclosing `tryStmt`'s catch body receives it; with no
+            // handler the run traps. Layout: [0x1e][value expression].
+            "throwOperation" => {
+                result.push(0x1e);
+                result.append(&mut serialize_expr(operation["data"]["value"].clone()).to_vec());
+            }
+            // Try/catch statement — the VM's neutral exception mechanism. Both
+            // the protected body and the handler are plain statement ranges; the
+            // handler binds the thrown value under `errName`. Layout:
+            // [0x1d][errName][body_start][body_end][catch_start][catch_end]
+            // [body...][catch...] (all i64 byte offsets, rewritten to unit
+            // indices at decode).
+            "tryStmt" => {
+                result.push(0x1d);
+                let err_name = operation["data"]["errName"].as_str().unwrap_or("e");
+                let mut name_bytes = err_name.as_bytes().to_vec();
+                result.append(&mut i32::to_be_bytes(name_bytes.len() as i32).to_vec());
+                result.append(&mut name_bytes);
+                let body_start = start_point + result.len() + 8 * 4;
+                let body = compile_ast(
+                    json!({ "body": operation["data"]["body"].clone() }),
+                    body_start,
+                );
+                let body_end = body_start + body.len();
+                let catch_body = compile_ast(
+                    json!({ "body": operation["data"]["catchBody"].clone() }),
+                    body_end,
+                );
+                let catch_end = body_end + catch_body.len();
+                result.append(&mut i64::to_be_bytes(body_start as i64).to_vec());
+                result.append(&mut i64::to_be_bytes(body_end as i64).to_vec());
+                result.append(&mut i64::to_be_bytes(body_end as i64).to_vec());
+                result.append(&mut i64::to_be_bytes(catch_end as i64).to_vec());
+                result.append(&mut body.clone());
+                result.append(&mut catch_body.clone());
+            }
+            "destructure" => {
+                // Destructuring binding: evaluate one source value and bind a list
+                // of names from its members (object keys) or positions (array
+                // indices), with optional per-binding defaults and a trailing rest
+                // binding. A native statement opcode so every front-end shares one
+                // implementation. See `serialize_destructure`.
+                result.append(&mut serialize_destructure(&operation["data"]));
+            }
+            "continueStmt" => {
+                result.push(0x17);
+            }
+            "breakStmt" => {
+                result.push(0x18);
+            }
+            // A bare short-circuit / conditional expression statement (e.g.
+            // `ready && start()`): evaluate it for its side effects; the produced
+            // value is discarded like any other expression-statement result.
+            "logical" | "ternary" => {
+                result.append(&mut serialize_expr(operation.clone()));
             }
             "ifStmt" => {
                 let (mut compiled_code, baps) =
@@ -401,6 +787,20 @@ pub fn compile_ast(program: serde_json::Value, start_point: usize) -> Vec<u8> {
                     result.append(&mut len_bytes);
                     result.append(&mut str_bytes);
                 }
+                // Free-variable (closure capture) list: the enclosing names this
+                // function references, so the runtime captures only these rather
+                // than cloning the whole enclosing scope.
+                let empty_params = vec![];
+                let frees = free_vars(
+                    operation["data"]["params"].as_array().unwrap_or(&empty_params),
+                    operation["data"]["body"].as_array().unwrap_or(&empty_params),
+                );
+                result.append(&mut i32::to_be_bytes(frees.len() as i32).to_vec());
+                for f in frees.iter() {
+                    let mut str_bytes = f.as_bytes().to_vec();
+                    result.append(&mut i32::to_be_bytes(str_bytes.len() as i32).to_vec());
+                    result.append(&mut str_bytes);
+                }
                 let func_start = start_point + result.len() + 8 + 8;
                 let body = compile_ast(operation["data"].clone(), func_start);
                 let func_end = func_start + body.len();
@@ -464,6 +864,13 @@ pub fn compile_ast(program: serde_json::Value, start_point: usize) -> Vec<u8> {
                     let mut len_bytes = i32::to_be_bytes(str_bytes.len() as i32).to_vec();
                     result.append(&mut len_bytes);
                     result.append(&mut str_bytes);
+                    // The executor reads the index expression *before* the value
+                    // (AssignVarExtractName → AssignVarExtractIndex → ...Value), so
+                    // `a[i] = v` / `a.b = v` must serialize the index here. Without
+                    // it the operands desync and the index stays unset.
+                    result.append(&mut serialize_expr(
+                        operation["data"]["leftSide"]["data"]["index"].clone(),
+                    ));
                     result.append(&mut serialize_expr(operation["data"]["rightSide"].clone()));
                 }
             }
