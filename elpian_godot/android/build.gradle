@@ -1,0 +1,53 @@
+// The embedded-Godot Android module.
+//
+// Depends on the Godot library AAR (`libs/godot-lib.template_release.aar`),
+// which is the same artifact Victor's React Native module ships. It is ~21 MB,
+// which is why this lives in its own plugin package rather than in `elpian_ui`:
+// an app with no 3D pays nothing.
+group 'dev.elpian.godot'
+version '0.1.0'
+
+buildscript {
+    ext.kotlin_version = '1.9.22'
+    repositories { google(); mavenCentral() }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.1.0'
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
+}
+
+rootProject.allprojects {
+    repositories { google(); mavenCentral() }
+}
+
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+
+android {
+    namespace 'dev.elpian.godot'
+    compileSdk 34
+
+    defaultConfig {
+        // Godot 4 requires 21+; the AAR's own manifest raises this if needed.
+        minSdk 21
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = '17' }
+
+    sourceSets {
+        main.java.srcDirs += 'src/main/kotlin'
+        // `godot/embed.pck` — the packed op-sink project, exported from
+        // `godot-project/`. See README.md for the export step.
+        main.assets.srcDirs += 'src/main/assets'
+    }
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
+    implementation 'androidx.fragment:fragment-ktx:1.6.2'
+    implementation fileTree(dir: 'libs', include: ['*.aar'])
+}

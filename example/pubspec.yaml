@@ -13,6 +13,11 @@ dependencies:
   cupertino_icons: ^1.0.8
   elpian_ui:
     path: ../
+  # The embedded Godot engine. Deliberately depended on HERE and not by
+  # elpian_ui: the Godot library AAR is ~21 MB, and an app with no 3D
+  # should not pay for it. Without this, Scene3D renders its placeholder.
+  elpian_godot:
+    path: ../elpian_godot
 
 dev_dependencies:
   flutter_test:

@@ -35,3 +35,6 @@ migrate_working_dir/
 # under benchmarks/reports/presentmon/.
 /benchmarks/reports/elpian_results.json
 /benchmarks/reports/elpian_windows_results.json
+
+# The old example APK was committed by the removed build_android_apk.yml.
+elpian_example.apk

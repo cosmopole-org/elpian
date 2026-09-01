@@ -8,13 +8,17 @@ name: Build Showcase (web + Android)
 # the TypeScript→bytecode toolchain and the Scene3D widget all still work
 # together. If the template drifts from the runtime, this goes red.
 #
+# It also publishes the web build to GitHub Pages, replacing the old
+# deploy_web_pages.yml, which published the example app.
+#
 # The two targets differ in one meaningful way:
 #   * **web**   — no Godot artifact exists for the web yet, so `Scene3D` renders
 #     its placeholder and the 2D app is fully live. This is the graceful
 #     degradation path, built on every run so it cannot silently break.
-#   * **Android** — builds the `elpian_godot` plugin. A real engine additionally
-#     needs three binary artifacts (see elpian_godot/README.md); when they are
-#     absent the APK still builds and ships the same placeholder.
+#   * **Android** — the example app depends on the in-repo `elpian_godot`
+#     plugin, so the APK carries the native embedded-Godot seam. A real engine
+#     additionally needs three binary artifacts (see elpian_godot/README.md);
+#     when they are absent the APK still builds and ships the same placeholder.
 
 on:
   workflow_dispatch:
@@ -23,14 +27,25 @@ on:
     paths:
       - "lib/**"
       - "rust/**"
+      - "elpian-cli/**"
+      - "elpian_godot/**"
       - ".github/workflows/build_showcase.yml"
   pull_request:
     paths:
       - "lib/**"
+      - "elpian-cli/**"
       - ".github/workflows/build_showcase.yml"
 
 permissions:
   contents: read
+  actions: read   # to download the Godot bundle from build_godot_artifacts.yml
+  pages: write    # the web job publishes the showcase to GitHub Pages
+  id-token: write
+
+# One Pages deployment at a time; supersede an in-flight run.
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
 
 env:
   FLUTTER_VERSION: "3.38.3"
@@ -50,16 +65,9 @@ jobs:
         with:
           path: elpian
 
-      # The CLI and the js2elpian compiler live in sibling repositories; the
-      # CLI's Cargo.toml resolves js2elpian by relative path, so the layout on
-      # disk must match a local checkout.
-      - name: Checkout elpian-cli
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/elpian-cli
-          path: elpian-cli
-          token: ${{ secrets.GITHUB_TOKEN }}
-
+      # The CLI now lives inside this repository (elpian/elpian-cli). Only the
+      # js2elpian compiler is external, and the CLI's Cargo.toml resolves it by
+      # relative path, so victor must sit beside the elpian checkout.
       - name: Checkout victor (js2elpian)
         uses: actions/checkout@v4
         with:
@@ -76,8 +84,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            elpian-cli/target
-          key: cargo-${{ runner.os }}-${{ hashFiles('elpian-cli/Cargo.lock') }}
+            elpian/elpian-cli/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('elpian/elpian-cli/Cargo.lock') }}
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -87,12 +95,12 @@ jobs:
           cache: true
 
       - name: Build the elpian CLI
-        working-directory: elpian-cli
+        working-directory: elpian/elpian-cli
         run: cargo build --release --locked
 
       - name: Generate the showcase app
         run: |
-          ./elpian-cli/target/release/elpian create showcase-app --template showcase
+          ./elpian/elpian-cli/target/release/elpian create showcase-app --template showcase
           ls -R showcase-app
 
       # basePath must match where the site is served, and it is baked into
@@ -111,11 +119,11 @@ jobs:
 
       - name: Install Elpian packages
         working-directory: showcase-app
-        run: ../elpian-cli/target/release/elpian run install
+        run: ../elpian/elpian-cli/target/release/elpian run install
 
       - name: Compile TypeScript to Elpian bytecode + package the web export
         working-directory: showcase-app
-        run: ../elpian-cli/target/release/elpian run build --mode both
+        run: ../elpian/elpian-cli/target/release/elpian run build --mode both
 
       - name: Assert the build produced what it should
         working-directory: showcase-app
@@ -160,13 +168,6 @@ jobs:
         with:
           path: elpian
 
-      - name: Checkout elpian-cli
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/elpian-cli
-          path: elpian-cli
-          token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -191,7 +192,7 @@ jobs:
             --out-dir "$GITHUB_WORKSPACE/elpian/assets/web_runtime/wasm/elpian_vm"
 
       - name: Build the Flutter web engine shell
-        working-directory: elpian-cli/elpian_client
+        working-directory: elpian/elpian-cli/elpian_client
         run: |
           flutter pub get
           flutter build web --release --base-href "/${GITHUB_REPOSITORY#*/}/"
@@ -205,7 +206,7 @@ jobs:
       # dist/web is the engine build plus the app's manifest and VM artifacts.
       - name: Assemble the deployable site
         run: |
-          rm -rf site && cp -r elpian-cli/elpian_client/build/web site
+          rm -rf site && cp -r elpian/elpian-cli/elpian_client/build/web site
           cp -r showcase-app/dist/web/__elpian site/__elpian
           test -f site/index.html
           test -f site/__elpian/elpian.manifest.json
@@ -218,6 +219,36 @@ jobs:
           name: showcase-site
           path: site
           retention-days: 14
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload the Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  # ---------------------------------------------------------------------------
+  # Publish the showcase to GitHub Pages. This replaces deploy_web_pages.yml,
+  # which published the old example app — the showcase supersedes it, and
+  # removing that workflow without this step would have taken the live site
+  # down with it.
+  #
+  # Only from main: a pull request builds and uploads the site but must not
+  # publish it.
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: web
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
 
   # ---------------------------------------------------------------------------
   # Android: the example app, which hosts the showcase and the Scene3D widget.
@@ -232,16 +263,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: elpian
-
-      # The embedded-Godot plugin. Sits beside elpian/ because the example app
-      # depends on it by relative path.
-      - name: Checkout elpian_godot
-        uses: actions/checkout@v4
-        continue-on-error: true
-        with:
-          repository: ${{ github.repository_owner }}/elpian_godot
-          path: elpian_godot
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -260,6 +281,51 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      # The three Godot binaries come from build_godot_artifacts.yml, which runs
+      # on its own cadence (a Godot bump or an interpreter change) rather than on
+      # every push here. `continue-on-error` is deliberate: when the bundle is
+      # absent the APK still builds and ships the placeholder, so the
+      # graceful-degradation path — what web and any un-provisioned build get —
+      # stays exercised on every run instead of rotting.
+      # Uses the preinstalled gh CLI rather than a third-party download action:
+      # this step pulls a ~21 MB binary into the build, so it is worth keeping
+      # the supply chain to first-party tooling.
+      - name: Restore the Godot artifact bundle (optional)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          run_id=$(gh run list --repo "$GITHUB_REPOSITORY" \
+            --workflow build_godot_artifacts.yml --status success \
+            --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [ -z "$run_id" ]; then
+            echo "::notice::build_godot_artifacts.yml has no successful run yet."
+            exit 0
+          fi
+          gh run download "$run_id" --repo "$GITHUB_REPOSITORY" \
+            --name godot-artifacts-android --dir godot-artifacts
+
+      - name: Install the Godot artifacts into the plugin
+        run: |
+          set -e
+          if [ ! -d godot-artifacts ]; then
+            echo "::notice::No Godot artifact bundle — Scene3D will ship its placeholder."
+            echo "GODOT_ENGINE_PRESENT=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          cat godot-artifacts/MANIFEST.txt || true
+          mkdir -p elpian/elpian_godot/android/libs \
+                   elpian/elpian_godot/android/src/main/assets/godot \
+                   elpian/elpian_godot/godot-project/bin
+          cp godot-artifacts/android/libs/godot-lib.template_release.aar \
+             elpian/elpian_godot/android/libs/
+          cp godot-artifacts/embed.pck \
+             elpian/elpian_godot/android/src/main/assets/godot/embed.pck
+          cp godot-artifacts/godot-project/bin/*.so \
+             elpian/elpian_godot/godot-project/bin/ 2>/dev/null || true
+          echo "GODOT_ENGINE_PRESENT=true" >> "$GITHUB_ENV"
+          find elpian/elpian_godot -name "*.aar" -o -name "embed.pck" | xargs ls -lh
 
       - name: Download the generated showcase
         uses: actions/download-artifact@v4
@@ -291,10 +357,21 @@ jobs:
             unzip -l "$apk" | grep -q "assets/showcase/client.elpian.bc" \
               || { echo "$apk is missing the showcase bytecode"; exit 1; }
           done
+          # When the bundle was restored the APK must actually carry the engine;
+          # a silently-missing AAR would otherwise look like a successful build.
+          if [ "${GODOT_ENGINE_PRESENT}" = "true" ]; then
+            for apk in build/app/outputs/flutter-apk/app-*-release.apk; do
+              unzip -l "$apk" | grep -q "assets/godot/embed.pck" \
+                || { echo "$apk was built with the engine but has no embed.pck"; exit 1; }
+            done
+            echo "APKs carry the embedded Godot engine."
+          else
+            echo "Built without the Godot engine — Scene3D ships its placeholder."
+          fi
 
       - name: Upload the APKs
         uses: actions/upload-artifact@v4
         with:
-          name: showcase-apk
+          name: showcase-apk${{ env.GODOT_ENGINE_PRESENT == 'true' && '-with-godot' || '-placeholder' }}
           path: elpian/example/build/app/outputs/flutter-apk/app-*-release.apk
           retention-days: 14

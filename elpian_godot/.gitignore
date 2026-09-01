@@ -1,0 +1,9 @@
+# Binary artifacts produced by .github/workflows/build_godot_artifacts.yml.
+# They are large (the Godot AAR alone is ~21 MB), are reproducible from pinned
+# upstream versions, and would otherwise be committed by a local build.
+android/libs/*.aar
+android/src/main/assets/godot/
+godot-project/bin/
+
+# Godot editor state
+godot-project/.godot/

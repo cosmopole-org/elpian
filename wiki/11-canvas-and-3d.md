@@ -266,10 +266,28 @@ el('Scene3D', {
 
 ## Getting a real engine
 
-`elpian_ui` ships the Dart side only. Add the **`elpian_godot`** package for the
-engine. See its README for the three artifacts that must be built (the Godot
-library AAR, the `elpian_godot` GDExtension, and the packed op-sink project) and
-for the `FlutterFragmentActivity` requirement.
+`elpian_ui` ships the Dart side only. The engine lives in the **`elpian_godot`**
+package at the repo root; depend on it from your app:
+
+```yaml
+dependencies:
+  elpian_ui:    { path: ../ }
+  elpian_godot: { path: ../elpian_godot }   # ← turns the placeholder into a viewport
+```
+
+It is deliberately *not* a dependency of `elpian_ui`: the Godot library AAR is
+~21 MB and an app with no 3D should not pay for it. The example app depends on
+it; a plain `elpian_ui` consumer does not.
+
+Three binary artifacts must exist before anything renders — the Godot library
+AAR, the `elpian_godot` GDExtension, and the packed op-sink project.
+`.github/workflows/build_godot_artifacts.yml` builds all three as one bundle
+(downloading the AAR from the official Godot release rather than building the
+engine), and `build_showcase.yml` restores it. When the bundle is absent the
+build still succeeds and ships the placeholder.
+
+See the plugin's README for the by-hand recipe and for the
+`FlutterFragmentActivity` requirement.
 
 **Status:** the Dart side is complete and tested; the native side of
 `elpian_godot` has not yet been compiled. iOS is not implemented — `Scene3D`

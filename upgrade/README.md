@@ -29,9 +29,16 @@ steps, risks, and rollback.
 - **Flutter/Dart:** **NOT installed** in the cloud container. You CANNOT compile or
   run Dart here. → Dart changes must be mechanical/low-risk, reviewed by inspection,
   and verified on a real machine or CI. Add pure-logic Dart unit tests where possible.
-- **CI:** `.github/workflows/build_windows.yml` builds Windows release **only on push
-  to `main`** (does not trigger on the working branch). Don't rely on it for branch CI.
+- **CI:** `.github/workflows/build_showcase.yml` builds the showcase for web and
+  Android and publishes to Pages; `build_godot_artifacts.yml` builds the Godot
+  binaries. The Windows and old-example workflows were removed.
 - **Working branch:** `claude/funny-tesla-vzF9A`. Never push to `main` without explicit permission.
+
+> **Stale notice.** This is a working document from an earlier session. Parts of
+> it no longer describe the repository: the Bevy renderer and the pure-Dart 3D
+> engine have both been removed (3D is now embedded Godot via `Scene3D`), and
+> Flutter *is* available in the current environment. Treat it as history; see
+> `wiki/` for current documentation.
 
 ## The headline facts (read these first)
 

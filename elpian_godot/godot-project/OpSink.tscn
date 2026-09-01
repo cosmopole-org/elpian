@@ -1,0 +1,4 @@
+[gd_scene load_steps=2 format=3 uid="uid://copsink0001"]
+[ext_resource type="Script" path="res://OpSink.gd" id="1"]
+[node name="OpSink" type="Node3D"]
+script = ExtResource("1")
