@@ -1,0 +1,3 @@
+Populated at build time by .github/workflows/build_showcase.yml:
+  client.elpian.bc      the compiled showcase program
+  elpian.manifest.json  its manifest

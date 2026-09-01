@@ -12,9 +12,10 @@ import '../diagnostics/elpian_trace.dart';
 import '../vm/host_api_catalog.dart';
 import '../vm/host_handler.dart';
 import '../vm/quickjs_vm.dart';
-import '../vm/scope_patch.dart';
+import '../scope/scope_patch.dart';
 import '../vm/timer_host_api.dart';
-import '../scene3d/scene_taps.dart';
+import '../godot/scene_taps.dart';
+import '../scope/scope_contract.dart';
 import '../vm/vm_runtime_client.dart';
 import 'client_comp_routing.dart';
 import 'nextjs_auth.dart';
@@ -698,7 +699,7 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
     String mountId,
   ) {
     return <String, dynamic>{
-      'type': 'Scope',
+      'type': ScopeContract.type,
       'key': '${mountId}__scope',
       'props': <String, dynamic>{},
       'children': <dynamic>[content],

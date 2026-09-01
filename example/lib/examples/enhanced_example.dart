@@ -78,18 +78,19 @@ class _EnhancedDemoPageState extends State<EnhancedDemoPage> {
 
   void _setupDOMExample() {
     // Create elements using DOM API
-    final container = _dom.createElement('div', id: 'main-container', classes: ['container']);
-    
+    final container =
+        _dom.createElement('div', id: 'main-container', classes: ['container']);
+
     final title = _dom.createElement('h1');
     title.textContent = 'DOM API Example';
     title.addClass('text-center');
-    
+
     final card1 = _dom.createElement('div', classes: ['card']);
     card1.setStyle('background-color', '#E3F2FD');
-    
+
     final cardText = _dom.createElement('p');
     cardText.textContent = 'This card was created using the DOM API';
-    
+
     card1.appendChild(cardText);
     container.appendChild(title);
     container.appendChild(card1);
@@ -229,7 +230,9 @@ class _EnhancedDemoPageState extends State<EnhancedDemoPage> {
       ],
     };
 
-    return _engine.renderFromJson(json);
+    return _engine.renderFromJson(
+      isolateComponentChildren(json, 'enhanced-widgets'),
+    );
   }
 
   Widget _buildHTML5Tab() {
@@ -309,7 +312,9 @@ class _EnhancedDemoPageState extends State<EnhancedDemoPage> {
       ],
     };
 
-    return _engine.renderFromJson(json);
+    return _engine.renderFromJson(
+      isolateComponentChildren(json, 'enhanced-html5'),
+    );
   }
 
   Widget _buildDOMAPITab() {
@@ -327,7 +332,7 @@ class _EnhancedDemoPageState extends State<EnhancedDemoPage> {
             final newCard = _dom.createElement('div', classes: ['card']);
             newCard.setStyle('background-color', '#FFF3E0');
             newCard.textContent = 'Dynamically created card';
-            
+
             setState(() {});
           },
           child: const Text('Create New Element'),
@@ -473,6 +478,8 @@ class _EnhancedDemoPageState extends State<EnhancedDemoPage> {
       ],
     };
 
-    return _engine.renderFromJson(json);
+    return _engine.renderFromJson(
+      isolateComponentChildren(json, 'enhanced-grid-flex'),
+    );
   }
 }

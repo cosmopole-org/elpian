@@ -81,16 +81,11 @@ class ElpianEngine {
     _registry.register('AppBar', ElpianAppBar.build);
     _registry.register('Canvas', ElpianCanvasWidget.build);
     _registry.register('CachedCanvas', ElpianCachedCanvas.build);
-    _registry.register('Scope', ElpianScope.build);
+    _registry.register(ScopeContract.type, ElpianScope.build);
 
-    // Bevy 3D Scene Renderer
-    _registry.register('BevyScene', BevySceneWidget.build);
-    _registry.register('Bevy3D', BevySceneWidget.build);
-    _registry.register('Scene3D', BevySceneWidget.build);
-
-    // Pure-Dart 3D Game Scene Renderer
-    _registry.register('GameScene', GameSceneWidget.build);
-    _registry.register('Game3D', GameSceneWidget.build);
+    // Embedded Godot 3D
+    _registry.register('Scene3D', Scene3D.build);
+    _registry.register('scene3d', Scene3D.build);
 
     // Flutter widgets - Additional
     _registry.register('Wrap', ElpianWrap.build);
@@ -391,9 +386,7 @@ class ElpianEngine {
     return _containsScene(root, 0);
   }
 
-  static const _sceneTypes = {
-    'GameScene', 'BevyScene', 'scene3d', 'Scene3D', 'mesh3d', 'model3d',
-  };
+  static const _sceneTypes = {'Scene3D', 'scene3d'};
 
   /// Whether [node]'s subtree contains a 3D scene node (bounded-depth walk).
   bool _containsScene(Map<String, dynamic> node, int depth) {

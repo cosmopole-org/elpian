@@ -320,6 +320,24 @@ function column(children, style) {
   };
 }
 
+function scopedComponent(child, key) {
+  child.key = child.key || key;
+  return {
+    type: 'Scope',
+    key: key + '__scope',
+    props: {},
+    children: [child]
+  };
+}
+
+function isolateComponents(children, namespace) {
+  const scoped = [];
+  for (let i = 0; i < children.length; i += 1) {
+    scoped.push(scopedComponent(children[i], namespace + '-component-' + i));
+  }
+  return scoped;
+}
+
 function expanded(child, flex) {
   return {
     type: 'Expanded',
@@ -1329,7 +1347,7 @@ function viewTree() {
             children: [
               container(
                 [
-                  column(contentChildren, {
+                  column(isolateComponents(contentChildren, 'calculator'), {
                     gap: uiTokens.outerGap,
                     alignItems: 'stretch'
                   })
@@ -1356,8 +1374,20 @@ function viewTree() {
   );
 }
 
+let calculatorMounted = false;
+
 function rerender() {
-  askHost('render', JSON.stringify(viewTree()));
+  const tree = viewTree();
+  tree.key = 'calculator-root';
+  if (calculatorMounted) {
+    askHost('render', JSON.stringify(tree), 'calculator-root');
+  } else {
+    calculatorMounted = true;
+    askHost(
+      'render',
+      JSON.stringify(scopedComponent(tree, 'calculator-root'))
+    );
+  }
 }
 
 function d0() { appendDigit('0'); }

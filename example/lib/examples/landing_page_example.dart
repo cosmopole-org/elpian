@@ -4,7 +4,7 @@ import 'package:elpian_ui/elpian_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'game_scene_example.dart';
+import 'scene3d_example.dart';
 
 void main() {
   runApp(const LandingPageApp());
@@ -25,7 +25,7 @@ class LandingPageApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const GameSceneExample(),
+      home: const Scene3DExample(),
     );
   }
 }
@@ -53,13 +53,17 @@ class _LandingPageState extends State<LandingPage> {
       final jsonString = await _loadLandingPageJson();
       final json = jsonDecode(jsonString) as Map<String, dynamic>;
       setState(() {
-        _renderedPage = _engine.renderFromJson(json);
+        _renderedPage = _engine.renderFromJson(
+          isolateComponentChildren(json, 'landing'),
+        );
         _error = null;
       });
     } catch (e) {
       // Fallback: use inline JSON definition
       setState(() {
-        _renderedPage = _engine.renderFromJson(_buildInlineLandingPage());
+        _renderedPage = _engine.renderFromJson(
+          isolateComponentChildren(_buildInlineLandingPage(), 'landing'),
+        );
         _error = null;
       });
     }

@@ -352,7 +352,14 @@ class _ElpianDemoPageState extends State<ElpianDemoPage> {
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(16.0),
-              child: _engine.renderFromJson(_examples[_selectedExample]['json']),
+              child: _engine.renderFromJson(
+                isolateComponentChildren(
+                  Map<String, dynamic>.from(
+                    _examples[_selectedExample]['json'] as Map,
+                  ),
+                  'gallery-$_selectedExample',
+                ),
+              ),
             ),
           ),
         ],

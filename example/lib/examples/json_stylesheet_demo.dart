@@ -51,7 +51,7 @@ class _StylesheetDemoPageState extends State<StylesheetDemoPage> {
             'fontFamily': 'Roboto',
           }
         },
-        
+
         // Typography
         {
           'selector': 'h1',
@@ -89,7 +89,7 @@ class _StylesheetDemoPageState extends State<StylesheetDemoPage> {
             'margin': '0 0 12 0',
           }
         },
-        
+
         // Components - Cards
         {
           'selector': '.card',
@@ -125,7 +125,7 @@ class _StylesheetDemoPageState extends State<StylesheetDemoPage> {
             ],
           }
         },
-        
+
         // Buttons
         {
           'selector': '.btn',
@@ -176,7 +176,7 @@ class _StylesheetDemoPageState extends State<StylesheetDemoPage> {
             'fontWeight': '600',
           }
         },
-        
+
         // Layout helpers
         {
           'selector': '.container',
@@ -217,7 +217,7 @@ class _StylesheetDemoPageState extends State<StylesheetDemoPage> {
             'alignItems': 'center',
           }
         },
-        
+
         // Grid
         {
           'selector': '.grid',
@@ -243,7 +243,7 @@ class _StylesheetDemoPageState extends State<StylesheetDemoPage> {
             'gridGap': 16,
           }
         },
-        
+
         // Spacing utilities
         {
           'selector': '.m-0',
@@ -277,7 +277,7 @@ class _StylesheetDemoPageState extends State<StylesheetDemoPage> {
           'selector': '.p-3',
           'styles': {'padding': '24'}
         },
-        
+
         // Text utilities
         {
           'selector': '.text-center',
@@ -299,7 +299,7 @@ class _StylesheetDemoPageState extends State<StylesheetDemoPage> {
           'selector': '.text-italic',
           'styles': {'fontStyle': 'italic'}
         },
-        
+
         // Color utilities
         {
           'selector': '.bg-primary',
@@ -329,7 +329,7 @@ class _StylesheetDemoPageState extends State<StylesheetDemoPage> {
           'selector': '.text-white',
           'styles': {'color': '#FFFFFF'}
         },
-        
+
         // Borders
         {
           'selector': '.border',
@@ -345,7 +345,7 @@ class _StylesheetDemoPageState extends State<StylesheetDemoPage> {
           'selector': '.rounded-lg',
           'styles': {'borderRadius': 16}
         },
-        
+
         // Shadows
         {
           'selector': '.shadow-sm',
@@ -384,7 +384,7 @@ class _StylesheetDemoPageState extends State<StylesheetDemoPage> {
           }
         },
       ],
-      
+
       // Media queries for responsive design
       'mediaQueries': [
         {
@@ -410,7 +410,7 @@ class _StylesheetDemoPageState extends State<StylesheetDemoPage> {
           ]
         },
       ],
-      
+
       // CSS Variables
       'variables': {
         'primary-color': '#2196F3',
@@ -496,7 +496,7 @@ class _StylesheetDemoPageState extends State<StylesheetDemoPage> {
           'type': 'p',
           'props': {'text': 'All styles defined in JSON stylesheet'},
         },
-        
+
         // Cards
         {
           'type': 'h2',
@@ -512,7 +512,9 @@ class _StylesheetDemoPageState extends State<StylesheetDemoPage> {
             },
             {
               'type': 'p',
-              'props': {'text': 'This card uses the .card class from the stylesheet'},
+              'props': {
+                'text': 'This card uses the .card class from the stylesheet'
+              },
             },
           ],
         },
@@ -530,7 +532,7 @@ class _StylesheetDemoPageState extends State<StylesheetDemoPage> {
             },
           ],
         },
-        
+
         // Buttons
         {
           'type': 'h2',
@@ -573,7 +575,9 @@ class _StylesheetDemoPageState extends State<StylesheetDemoPage> {
       ],
     };
 
-    return _engine.renderFromJson(json);
+    return _engine.renderFromJson(
+      isolateComponentChildren(json, 'stylesheet-components'),
+    );
   }
 
   Widget _buildGridTab() {
@@ -585,7 +589,6 @@ class _StylesheetDemoPageState extends State<StylesheetDemoPage> {
           'type': 'h1',
           'props': {'text': 'Grid Layouts'},
         },
-        
         {
           'type': 'h2',
           'props': {'text': '3-Column Grid'},
@@ -593,22 +596,23 @@ class _StylesheetDemoPageState extends State<StylesheetDemoPage> {
         {
           'type': 'div',
           'props': {'className': 'grid'},
-          'children': List.generate(6, (i) => {
-            'type': 'div',
-            'props': {'className': 'card text-center'},
-            'children': [
-              {
-                'type': 'h3',
-                'props': {'text': 'Item ${i + 1}'},
-              },
-              {
-                'type': 'p',
-                'props': {'text': 'Grid item content'},
-              },
-            ],
-          }),
+          'children': List.generate(
+              6,
+              (i) => {
+                    'type': 'div',
+                    'props': {'className': 'card text-center'},
+                    'children': [
+                      {
+                        'type': 'h3',
+                        'props': {'text': 'Item ${i + 1}'},
+                      },
+                      {
+                        'type': 'p',
+                        'props': {'text': 'Grid item content'},
+                      },
+                    ],
+                  }),
         },
-        
         {
           'type': 'h2',
           'props': {'text': '2-Column Grid'},
@@ -616,21 +620,25 @@ class _StylesheetDemoPageState extends State<StylesheetDemoPage> {
         {
           'type': 'div',
           'props': {'className': 'grid-2'},
-          'children': List.generate(4, (i) => {
-            'type': 'div',
-            'props': {'className': 'card'},
-            'children': [
-              {
-                'type': 'h3',
-                'props': {'text': 'Column ${i + 1}'},
-              },
-            ],
-          }),
+          'children': List.generate(
+              4,
+              (i) => {
+                    'type': 'div',
+                    'props': {'className': 'card'},
+                    'children': [
+                      {
+                        'type': 'h3',
+                        'props': {'text': 'Column ${i + 1}'},
+                      },
+                    ],
+                  }),
         },
       ],
     };
 
-    return _engine.renderFromJson(json);
+    return _engine.renderFromJson(
+      isolateComponentChildren(json, 'stylesheet-grid'),
+    );
   }
 
   Widget _buildUtilitiesTab() {
@@ -642,7 +650,7 @@ class _StylesheetDemoPageState extends State<StylesheetDemoPage> {
           'type': 'h1',
           'props': {'text': 'Utility Classes'},
         },
-        
+
         // Spacing
         {
           'type': 'h2',
@@ -656,26 +664,35 @@ class _StylesheetDemoPageState extends State<StylesheetDemoPage> {
               'type': 'div',
               'props': {'className': 'card p-1'},
               'children': [
-                {'type': 'p', 'props': {'text': 'Padding 1'}},
+                {
+                  'type': 'p',
+                  'props': {'text': 'Padding 1'}
+                },
               ],
             },
             {
               'type': 'div',
               'props': {'className': 'card p-2'},
               'children': [
-                {'type': 'p', 'props': {'text': 'Padding 2'}},
+                {
+                  'type': 'p',
+                  'props': {'text': 'Padding 2'}
+                },
               ],
             },
             {
               'type': 'div',
               'props': {'className': 'card p-3'},
               'children': [
-                {'type': 'p', 'props': {'text': 'Padding 3'}},
+                {
+                  'type': 'p',
+                  'props': {'text': 'Padding 3'}
+                },
               ],
             },
           ],
         },
-        
+
         // Colors
         {
           'type': 'h2',
@@ -689,33 +706,45 @@ class _StylesheetDemoPageState extends State<StylesheetDemoPage> {
               'type': 'div',
               'props': {'className': 'bg-primary p-2 rounded'},
               'children': [
-                {'type': 'p', 'props': {'text': 'Primary', 'className': 'text-white'}},
+                {
+                  'type': 'p',
+                  'props': {'text': 'Primary', 'className': 'text-white'}
+                },
               ],
             },
             {
               'type': 'div',
               'props': {'className': 'bg-success p-2 rounded'},
               'children': [
-                {'type': 'p', 'props': {'text': 'Success', 'className': 'text-white'}},
+                {
+                  'type': 'p',
+                  'props': {'text': 'Success', 'className': 'text-white'}
+                },
               ],
             },
             {
               'type': 'div',
               'props': {'className': 'bg-danger p-2 rounded'},
               'children': [
-                {'type': 'p', 'props': {'text': 'Danger', 'className': 'text-white'}},
+                {
+                  'type': 'p',
+                  'props': {'text': 'Danger', 'className': 'text-white'}
+                },
               ],
             },
             {
               'type': 'div',
               'props': {'className': 'bg-warning p-2 rounded'},
               'children': [
-                {'type': 'p', 'props': {'text': 'Warning', 'className': 'text-white'}},
+                {
+                  'type': 'p',
+                  'props': {'text': 'Warning', 'className': 'text-white'}
+                },
               ],
             },
           ],
         },
-        
+
         // Shadows
         {
           'type': 'h2',
@@ -729,21 +758,30 @@ class _StylesheetDemoPageState extends State<StylesheetDemoPage> {
               'type': 'div',
               'props': {'className': 'shadow-sm p-2 rounded'},
               'children': [
-                {'type': 'p', 'props': {'text': 'Small Shadow'}},
+                {
+                  'type': 'p',
+                  'props': {'text': 'Small Shadow'}
+                },
               ],
             },
             {
               'type': 'div',
               'props': {'className': 'shadow p-2 rounded'},
               'children': [
-                {'type': 'p', 'props': {'text': 'Medium Shadow'}},
+                {
+                  'type': 'p',
+                  'props': {'text': 'Medium Shadow'}
+                },
               ],
             },
             {
               'type': 'div',
               'props': {'className': 'shadow-lg p-2 rounded'},
               'children': [
-                {'type': 'p', 'props': {'text': 'Large Shadow'}},
+                {
+                  'type': 'p',
+                  'props': {'text': 'Large Shadow'}
+                },
               ],
             },
           ],
@@ -751,6 +789,8 @@ class _StylesheetDemoPageState extends State<StylesheetDemoPage> {
       ],
     };
 
-    return _engine.renderFromJson(json);
+    return _engine.renderFromJson(
+      isolateComponentChildren(json, 'stylesheet-utilities'),
+    );
   }
 }

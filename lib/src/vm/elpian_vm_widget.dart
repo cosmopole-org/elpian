@@ -8,7 +8,7 @@ import '../core/event_system.dart';
 import 'elpian_vm.dart';
 import 'quickjs_vm.dart';
 import 'runtime_kind.dart';
-import 'scope_patch.dart';
+import '../scope/scope_patch.dart';
 import 'wasm_vm.dart';
 import 'vm_runtime_client.dart';
 import 'host_api_catalog.dart';
@@ -63,6 +63,9 @@ class ElpianVmWidget extends StatefulWidget {
   /// AST JSON to run in the VM (mutually exclusive with [code]).
   final String? astJson;
 
+  /// Precompiled Elpian bytecode (mutually exclusive with [code]/[astJson]).
+  final Uint8List? bytecode;
+
   /// Runtime backend used to execute [code]/[astJson].
   ///
   /// - [ElpianRuntime.elpian]: Rust VM sandbox (default), expects AST for [astJson].
@@ -104,6 +107,7 @@ class ElpianVmWidget extends StatefulWidget {
     required this.machineId,
     this.code,
     this.astJson,
+    this.bytecode,
     this.engine,
     this.stylesheet,
     this.loadingWidget,
@@ -114,8 +118,8 @@ class ElpianVmWidget extends StatefulWidget {
     this.entryFunction,
     this.entryInput,
     this.runtime = ElpianRuntime.elpian,
-  }) : assert(code != null || astJson != null,
-            'Either code or astJson must be provided');
+  }) : assert(code != null || astJson != null || bytecode != null,
+            'Either code, astJson, or bytecode must be provided');
 
   /// Create a widget from AST JSON.
   const ElpianVmWidget.fromAst({
@@ -132,7 +136,8 @@ class ElpianVmWidget extends StatefulWidget {
     this.entryFunction,
     this.entryInput,
     this.runtime = ElpianRuntime.elpian,
-  }) : code = null;
+  })  : code = null,
+        bytecode = null;
 
   /// Create a widget from source code.
   const ElpianVmWidget.fromCode({
@@ -149,7 +154,26 @@ class ElpianVmWidget extends StatefulWidget {
     this.entryFunction,
     this.entryInput,
     this.runtime = ElpianRuntime.elpian,
-  }) : astJson = null;
+  })  : astJson = null,
+        bytecode = null;
+
+  /// Create a widget from precompiled Victor/Elpian bytecode.
+  const ElpianVmWidget.fromBytecode({
+    super.key,
+    required this.machineId,
+    required Uint8List this.bytecode,
+    this.engine,
+    this.stylesheet,
+    this.loadingWidget,
+    this.errorBuilder,
+    this.onPrintln,
+    this.onUpdateApp,
+    this.hostHandlers,
+    this.entryFunction,
+    this.entryInput,
+    this.runtime = ElpianRuntime.elpian,
+  })  : code = null,
+        astJson = null;
 
   @override
   State<ElpianVmWidget> createState() => _ElpianVmWidgetState();
@@ -331,7 +355,9 @@ class _ElpianVmWidgetState extends State<ElpianVmWidget>
       if (widget.runtime == ElpianRuntime.elpian) {
         await ElpianVm.initialize();
         ElpianVm? vm;
-        if (widget.code != null) {
+        if (widget.bytecode != null) {
+          vm = await ElpianVm.fromBytecode(widget.machineId, widget.bytecode!);
+        } else if (widget.code != null) {
           vm = await ElpianVm.fromCode(widget.machineId, widget.code!);
         } else if (widget.astJson != null) {
           vm = await ElpianVm.fromAst(widget.machineId, widget.astJson!);

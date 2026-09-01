@@ -74,6 +74,28 @@ class ElpianVm implements VmRuntimeClient {
     return ElpianVm(machineId: machineId);
   }
 
+  /// Create a VM directly from precompiled Victor/Elpian bytecode.
+  static Future<ElpianVm?> fromBytecode(
+      String machineId, Uint8List bytecode) async {
+    final success = await ElpianVmApi.createVmFromBytecode(
+      machineId: machineId,
+      bytecode: bytecode,
+    );
+    if (!success) return null;
+    return ElpianVm(machineId: machineId);
+  }
+
+  /// Invoke the guest's optional `onHostMessage` handler.
+  Future<String> deliverHostMessage(String messageJson) async {
+    _cbCounter++;
+    final result = await ElpianVmApi.deliverHostMessage(
+      machineId: machineId,
+      messageJson: messageJson,
+      cbId: _cbCounter,
+    );
+    return _processExecutionLoop(result);
+  }
+
   /// Register a handler for a specific host API function.
   ///
   /// Register a handler for any host API name used by the VM runtime.
@@ -161,7 +183,11 @@ class ElpianVm implements VmRuntimeClient {
       final hostCallData =
           jsonDecode(result.hostCallData) as Map<String, dynamic>;
       final apiName = hostCallData['apiName'] as String;
-      final payload = hostCallData['payload'] as String;
+      // Victor preserves payloads as typed JSON values, whereas the legacy VM
+      // often serialized them before building the host-call envelope. Keep the
+      // Dart HostCallHandler contract stable for both forms.
+      final rawPayload = hostCallData['payload'];
+      final payload = rawPayload is String ? rawPayload : jsonEncode(rawPayload);
 
       // Route to the appropriate handler
       String response;

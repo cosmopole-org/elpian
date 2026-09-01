@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:elpian_ui/src/vm/scope_patch.dart';
+import 'package:elpian_ui/src/scope/scope_patch.dart';
 
 void main() {
   group('ScopePatch.normalizeKey', () {
@@ -28,7 +28,11 @@ void main() {
             'key': 'navbar__scope',
             'props': <String, dynamic>{},
             'children': [
-              {'type': 'span', 'key': 'navbar', 'props': {'text': 'nav'}}
+              {
+                'type': 'span',
+                'key': 'navbar',
+                'props': {'text': 'nav'}
+              }
             ],
           },
           {
@@ -36,7 +40,11 @@ void main() {
             'key': 'hud__scope',
             'props': <String, dynamic>{},
             'children': [
-              {'type': 'span', 'key': 'hud', 'props': {'text': 'old'}}
+              {
+                'type': 'span',
+                'key': 'hud',
+                'props': {'text': 'old'}
+              }
             ],
           },
         ],
@@ -81,13 +89,13 @@ void main() {
     test('every apply produces a strictly increasing token', () {
       final t1 = tree();
       ScopePatch.apply(t1, {'type': 'span'}, 'hud');
-      final token1 =
-          ((t1['children'] as List)[1] as Map)['props']['__scopeRenderToken'] as int;
+      final token1 = ((t1['children'] as List)[1] as Map)['props']
+          ['__scopeRenderToken'] as int;
 
       final t2 = tree();
       ScopePatch.apply(t2, {'type': 'span'}, 'hud');
-      final token2 =
-          ((t2['children'] as List)[1] as Map)['props']['__scopeRenderToken'] as int;
+      final token2 = ((t2['children'] as List)[1] as Map)['props']
+          ['__scopeRenderToken'] as int;
 
       expect(token2, greaterThan(token1));
     });
@@ -95,8 +103,14 @@ void main() {
 
   group('ScopePatch.applyBounded', () {
     test('no scope key → returns the view (legitimate full render)', () {
-      final view = {'type': 'div', 'key': 'x'};
+      final view = {
+        'type': 'Scope',
+        'key': 'x',
+        'props': <String, dynamic>{},
+      };
       expect(ScopePatch.applyBounded(tree(), view, null), same(view));
+      final props = view['props']! as Map<String, dynamic>;
+      expect(props['__scopeRenderToken'], isA<int>());
     });
 
     test('null tree → returns the view (first seed)', () {
@@ -117,7 +131,8 @@ void main() {
         () {
       final t = tree();
       final before = jsonEncode(t);
-      final result = ScopePatch.applyBounded(t, {'type': 'span'}, 'does-not-exist');
+      final result =
+          ScopePatch.applyBounded(t, {'type': 'span'}, 'does-not-exist');
       // Signals "miss": caller must keep the current screen, not globalize.
       expect(result, isNull);
       // And the tree was left untouched.

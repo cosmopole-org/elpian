@@ -1,69 +1,16 @@
 [package]
-name = "elpian_vm"
+name = "elpian-vm"
 version = "0.1.0"
 edition = "2021"
+description = "Elpian AST-based bytecode VM — a pure executor. Ingests Elpian AST JSON / bytecode (produced by front-end crates such as js2elpian / dart2elpian) and executes it, yielding host calls to the embedding runtime."
 
 [lib]
 crate-type = ["cdylib", "staticlib", "rlib"]
 
-# wasm-pack post-processes the compiled module with `wasm-opt` (Binaryen).
-# Modern rustc/LLVM emit WebAssembly bulk-memory ops (memory.copy/memory.fill)
-# and other post-MVP features by default for wasm32-unknown-unknown, but the
-# `wasm-opt` bundled with wasm-pack validates against the MVP feature set, so it
-# rejects the module with "Bulk memory operations require bulk memory".
-# Enable the feature set rustc relies on so wasm-opt can still validate AND
-# optimize the module (instead of disabling optimization entirely).
-[package.metadata.wasm-pack.profile.release]
-wasm-opt = [
-    "-O",
-    "--enable-bulk-memory",
-    "--enable-nontrapping-float-to-int",
-    "--enable-mutable-globals",
-    "--enable-sign-ext",
-    "--enable-reference-types",
-    "--enable-multivalue",
-    # The module is compiled with `-C target-feature=+simd128` (see
-    # .cargo/config.toml), so wasm-opt must accept + optimize v128 ops too.
-    "--enable-simd",
-]
-
 [dependencies]
-serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
-once_cell = "1.18"
-glam = { version = "0.29", features = ["serde"] }
-base64 = "0.22"
+serde_json = "1.0"
+once_cell = "1.19"
 
-# Note: glam works natively on WASM without extra dependencies
-
-# Native targets (A4/A5): rayon for the tiled multithreaded rasterizer and
-# parking_lot for a faster scene-manager mutex. Threads are unavailable on
-# wasm32-unknown-unknown, so both are cfg-gated and the code keeps serial/std
-# fallbacks under cfg(target_arch = "wasm32").
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-rayon = "1.10"
-parking_lot = "0.12"
-
-# Web target (wasm-bindgen for WASM builds)
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "0.2"
-
-[dev-dependencies]
-criterion = "0.5"
-
-[[bench]]
-name = "render"
-harness = false
-
-[profile.release]
-lto = true
-codegen-units = 1
-opt-level = 3
-strip = true
-
-# Benchmarks (Criterion) inherit release-level optimization so numbers reflect
-# the shipped configuration. See upgrade/V-verification-and-benchmarking.md.
-[profile.bench]
-lto = true
-codegen-units = 1
-opt-level = 3
