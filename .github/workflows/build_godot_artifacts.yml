@@ -11,8 +11,10 @@ name: Build Godot artifacts
 #                                 source would take ~an hour to reproduce a
 #                                 binary Godot already publishes.
 #   2. The elpian_godot GDExtension  BUILT. This is our code — the reflective
-#                                 ElpianScene3D op interpreter, which lives in
-#                                 the victor repo (bridge/extension).
+#                                 ElpianScene3D op interpreter. Its C++ source
+#                                 is the one thing still in victor
+#                                 (bridge/extension); the Rust crate it links,
+#                                 elpian-godot-capi, is now in rust/capi.
 #   3. embed.pck                  BUILT. A headless export of
 #                                 elpian_godot/godot-project/. Seconds.
 #
@@ -24,7 +26,7 @@ on:
   workflow_dispatch:
     inputs:
       victor_ref:
-        description: "victor ref to build js2elpian from (branch, tag or SHA)"
+        description: "victor ref for the GDExtension C++ source (branch, tag or SHA)"
         required: false
         default: ""
   push:
@@ -37,13 +39,11 @@ permissions:
   contents: read
 
 env:
-  # The victor ref to build js2elpian from.
-  #
-  # This is a cross-repository build dependency: elpian's toolchain compiles
-  # through victor's js2elpian. Left implicit it floats on victor's default
-  # branch, so elpian's build changes when victor moves — and a fix that has not
-  # landed on victor@main silently is not used. Pin it here, and override via
-  # workflow_dispatch to test a victor branch before merging it.
+  # The victor ref supplying the GDExtension C++ source (bridge/extension) —
+  # the last cross-repository build dependency, now that the VM, the compiler
+  # front-ends and the capi crate are all vendored into rust/. Pinned rather
+  # than floating on victor's default branch; override via workflow_dispatch to
+  # test a victor branch before merging it.
   VICTOR_REF: "main"
   # Pinned together — godot-cpp, the editor and the export templates must all
   # match, or the .gdextension fails its compatibility check at load.
@@ -63,8 +63,9 @@ jobs:
         with:
           path: elpian
 
-      # The GDExtension source lives in victor (bridge/extension), so a Godot
-      # bump has to land in both repositories.
+      # Only the GDExtension C++ source still lives in victor
+      # (bridge/extension). Its Rust dependency, elpian-godot-capi, is now
+      # in-repo, so this is the last cross-repo tie.
       - name: Checkout victor
         uses: actions/checkout@v4
         with:
@@ -115,8 +116,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            victor/victor/target
-          key: cargo-godot-capi-${{ runner.os }}-${{ hashFiles('victor/victor/Cargo.lock') }}
+            elpian/rust/target
+          key: cargo-godot-capi-${{ runner.os }}-${{ hashFiles('elpian/rust/Cargo.lock') }}
 
       # ---------------------------------------------------------------------
       # 2. The GDExtension.
@@ -127,7 +128,7 @@ jobs:
       # the single VM lives in the Flutter app).
       # ---------------------------------------------------------------------
       - name: Build the Elpian C-ABI library per Android ABI
-        working-directory: victor/victor
+        working-directory: elpian/rust
         run: |
           TOOLCHAIN="$ANDROID_HOME/ndk/${NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64/bin"
           export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$TOOLCHAIN/aarch64-linux-android21-clang"
@@ -143,7 +144,7 @@ jobs:
           set -e
           build() {  # <godot arch> <rust target triple>
             scons platform=android target=template_release arch="$1" \
-              elpian_capi="../../target/$2/release/libelpian_godot.a"
+              elpian_capi="$GITHUB_WORKSPACE/elpian/rust/target/$2/release/libelpian_godot.a"
           }
           build arm64   aarch64-linux-android
           build arm32   armv7-linux-androideabi

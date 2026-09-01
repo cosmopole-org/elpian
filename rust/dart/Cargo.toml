@@ -1,0 +1,23 @@
+[package]
+name = "dart"
+version = "0.1.0"
+edition = "2021"
+description = "Optional Dart/Flutter extras for the Elpian VM. Provides the dart:* foundational-library binding surface (dart:ui, dart:typed_data, dart:isolate, ...), the framework/widget layer, and a two-layer capability/resource governor, all serviced over Elpian's askHost pause/resume seam. Language semantics (numbers, ~/, ??, reified is/as, JSON/UTF-8/Base64 codecs) live natively in the VM; this crate is the host-side surface that only ships when the `dart` feature is enabled (the --include-dart build). No JIT: valid for the iOS App Store and compiles to wasm32."
+
+[lib]
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[features]
+# The `dart` feature is the `--include-dart` switch: when enabled (the default)
+# the crate compiles its full Dart/Flutter host surface. Building with
+# `--no-default-features` yields an empty crate, so a VM binary/wasm that does
+# not want the Dart extras links (essentially) nothing.
+default = ["dart"]
+dart = []
+
+[dependencies]
+js2elpian = { path = "../js2elpian" }
+dart2elpian = { path = "../dart2elpian" }
+elpian-vm = { path = ".." }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"

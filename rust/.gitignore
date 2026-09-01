@@ -31,3 +31,6 @@ target
 .flutter-plugins-dependencies
 /build/
 /coverage/
+
+# Vendored crates share the workspace target dir.
+/target/
