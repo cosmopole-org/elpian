@@ -136,25 +136,29 @@ elpian/                        the Flutter host package (`elpian_ui`) + the VM
 │   ├── src/api/{ffi,wasm}.rs  native and web embedding surfaces
 │   └── src/bin/elpian-server.rs  the HTTP server VM
 ├── rust_builder/              Flutter plugin scaffolding for the native lib
+├── elpian-cli/                the `elpian` CLI — its own crate, inside this repo
+│   ├── rust/main.rs           the entire CLI in one file
+│   ├── elpian_client/         the standalone Flutter web shell it serves
+│   └── README.md
 ├── example/                   a full Flutter example app
 ├── test/                      60+ widget/layout/VM tests (executable specs)
 ├── benchmarks/                performance harnesses + reports
+├── wiki/                      this documentation
 └── *.md                       deep reference docs (VM_LOGIC.md is the big one)
-
-elpian-cli/                    the `elpian` CLI (separate crate)
-├── rust/main.rs               the entire CLI in one file
-├── elpian_client/             the standalone Flutter web shell it serves
-└── README.md
 
 victor/victor/                 the compiler front-ends (a sibling project)
 ├── js2elpian/                 JS → Elpian AST → bytecode
 └── dart2elpian/               Dart subset → JS subset
+
+elpian_godot/                  the embedded Godot native plugin (Android + iOS)
 ```
 
-> **Note on the CLI's location.** `elpian_client` — the Flutter web shell — lives
-> under `elpian-cli/`, not under `elpian/`, because it is the CLI's engine, not
-> part of the `elpian_ui` package. It depends on `elpian_ui` by relative path
-> (`path: ../../elpian`).
+> **Note on the CLI's location.** The CLI is a *separate crate* that happens to
+> live in this repository, not part of the `elpian_ui` package. Its
+> `elpian_client` web shell depends on `elpian_ui` by relative path
+> (`path: ../..`), and its `Cargo.toml` resolves `js2elpian` at
+> `../../victor/victor/js2elpian` — so a **sibling `victor` checkout is still
+> required** to build it.
 
 ## The three delivery stories (choose deliberately)
 

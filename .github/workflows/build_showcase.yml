@@ -23,10 +23,12 @@ on:
     paths:
       - "lib/**"
       - "rust/**"
+      - "elpian-cli/**"
       - ".github/workflows/build_showcase.yml"
   pull_request:
     paths:
       - "lib/**"
+      - "elpian-cli/**"
       - ".github/workflows/build_showcase.yml"
 
 permissions:
@@ -50,16 +52,9 @@ jobs:
         with:
           path: elpian
 
-      # The CLI and the js2elpian compiler live in sibling repositories; the
-      # CLI's Cargo.toml resolves js2elpian by relative path, so the layout on
-      # disk must match a local checkout.
-      - name: Checkout elpian-cli
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/elpian-cli
-          path: elpian-cli
-          token: ${{ secrets.GITHUB_TOKEN }}
-
+      # The CLI now lives inside this repository (elpian/elpian-cli). Only the
+      # js2elpian compiler is external, and the CLI's Cargo.toml resolves it by
+      # relative path, so victor must sit beside the elpian checkout.
       - name: Checkout victor (js2elpian)
         uses: actions/checkout@v4
         with:
@@ -76,8 +71,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            elpian-cli/target
-          key: cargo-${{ runner.os }}-${{ hashFiles('elpian-cli/Cargo.lock') }}
+            elpian/elpian-cli/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('elpian/elpian-cli/Cargo.lock') }}
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -87,12 +82,12 @@ jobs:
           cache: true
 
       - name: Build the elpian CLI
-        working-directory: elpian-cli
+        working-directory: elpian/elpian-cli
         run: cargo build --release --locked
 
       - name: Generate the showcase app
         run: |
-          ./elpian-cli/target/release/elpian create showcase-app --template showcase
+          ./elpian/elpian-cli/target/release/elpian create showcase-app --template showcase
           ls -R showcase-app
 
       # basePath must match where the site is served, and it is baked into
@@ -111,11 +106,11 @@ jobs:
 
       - name: Install Elpian packages
         working-directory: showcase-app
-        run: ../elpian-cli/target/release/elpian run install
+        run: ../elpian/elpian-cli/target/release/elpian run install
 
       - name: Compile TypeScript to Elpian bytecode + package the web export
         working-directory: showcase-app
-        run: ../elpian-cli/target/release/elpian run build --mode both
+        run: ../elpian/elpian-cli/target/release/elpian run build --mode both
 
       - name: Assert the build produced what it should
         working-directory: showcase-app
@@ -160,13 +155,6 @@ jobs:
         with:
           path: elpian
 
-      - name: Checkout elpian-cli
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/elpian-cli
-          path: elpian-cli
-          token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -191,7 +179,7 @@ jobs:
             --out-dir "$GITHUB_WORKSPACE/elpian/assets/web_runtime/wasm/elpian_vm"
 
       - name: Build the Flutter web engine shell
-        working-directory: elpian-cli/elpian_client
+        working-directory: elpian/elpian-cli/elpian_client
         run: |
           flutter pub get
           flutter build web --release --base-href "/${GITHUB_REPOSITORY#*/}/"
@@ -205,7 +193,7 @@ jobs:
       # dist/web is the engine build plus the app's manifest and VM artifacts.
       - name: Assemble the deployable site
         run: |
-          rm -rf site && cp -r elpian-cli/elpian_client/build/web site
+          rm -rf site && cp -r elpian/elpian-cli/elpian_client/build/web site
           cp -r showcase-app/dist/web/__elpian site/__elpian
           test -f site/index.html
           test -f site/__elpian/elpian.manifest.json

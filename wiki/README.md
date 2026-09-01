@@ -87,8 +87,8 @@ Exhaustive lists (every widget prop, every CSS property) live in the source:
   `lib/src/html_widgets/`, `lib/src/css/`, `lib/src/canvas/`, `lib/src/godot/`. Public surface: `lib/elpian_ui.dart`.
 - **Compilers:** `../victor/victor/js2elpian/src/lib.rs` (JS→AST→bytecode),
   `../victor/victor/dart2elpian/src/lib.rs` (Dart→JS subset).
-- **CLI:** `../elpian-cli/rust/main.rs` (single file), `../elpian-cli/README.md`.
-- **Web shell:** `../elpian-cli/elpian_client/` (the standalone Flutter project
+- **CLI:** `elpian-cli/rust/main.rs` (single file), `elpian-cli/README.md`.
+- **Web shell:** `elpian-cli/elpian_client/` (the standalone Flutter project
   the CLI builds and serves).
 - **Deep docs already in-repo:** `VM_LOGIC.md` (the complete AST/API reference),
   `FEATURES.md`, `EVENT_SYSTEM.md`, `JSON_STYLESHEET.md`, `CANVAS_API.md`,

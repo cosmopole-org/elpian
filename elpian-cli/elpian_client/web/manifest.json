@@ -1,0 +1,9 @@
+{
+  "name": "Elpian",
+  "short_name": "Elpian",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#10141D",
+  "theme_color": "#10141D",
+  "description": "Dynamic Elpian WASM client"
+}
