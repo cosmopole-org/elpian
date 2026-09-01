@@ -33,7 +33,7 @@ a `.gitignore` (`dist/`, `.elpian/`), and a `README.md`.
 ### What runs where
 
 The **client VM** runs inside the browser, compiled to WASM, hosted by the
-standalone Flutter shell at `elpian-cli/elpian_client`. That shell:
+standalone Flutter shell at `cli/elpian_client`. That shell:
 
 1. Fetches `/__elpian/elpian.manifest.json` (cache-busted with a nonce).
 2. Reads `client.format` (`bytecode` \| `ast`) and `client.url`.

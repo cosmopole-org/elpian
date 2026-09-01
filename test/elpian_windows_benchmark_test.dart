@@ -326,9 +326,9 @@ void main() {
     // ignore: avoid_print
     print('╚══════════════════════════════════════════════════════════════╝');
 
-    final outDir  = Directory('benchmarks/reports');
+    final outDir  = Directory('bench/reports');
     if (!outDir.existsSync()) outDir.createSync(recursive: true);
-    final outFile = File('benchmarks/reports/elpian_windows_results.json');
+    final outFile = File('bench/reports/elpian_windows_results.json');
     outFile.writeAsStringSync(const JsonEncoder.withIndent('  ').convert({
       'suite'     : 'Elpian Windows Benchmark',
       'runner'    : 'flutter test (Dart VM, real ElpianEngine)',

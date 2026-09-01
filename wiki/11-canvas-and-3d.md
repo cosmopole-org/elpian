@@ -272,7 +272,7 @@ package at the repo root; depend on it from your app:
 ```yaml
 dependencies:
   elpian_ui:    { path: ../ }
-  elpian_godot: { path: ../elpian_godot }   # ← turns the placeholder into a viewport
+  elpian_godot: { path: ../godot }   # ← turns the placeholder into a viewport
 ```
 
 It is deliberately *not* a dependency of `elpian_ui`: the Godot library AAR is

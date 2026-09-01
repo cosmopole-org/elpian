@@ -56,6 +56,9 @@ are enforced.
 | [`12-host-apis.md`](12-host-apis.md) | Call the host: the full `askHost` API catalog (core, timers, DOM, canvas) and writing custom handlers. |
 | [`13-recipes.md`](13-recipes.md) | Copy working patterns: a counter, a form, a fetch-and-list, a server endpoint, a sandboxed child VM. |
 | [`14-gotchas.md`](14-gotchas.md) | **The mistakes to never make.** Read this before writing code. |
+| [`15-ast-reference.md`](15-ast-reference.md) | Look up an AST node, an operator, or the VM's Dart/FFI surface. |
+| [`16-widget-reference.md`](16-widget-reference.md) | Look up a widget prop, an HTML element, or a CSS property. |
+| [`17-nextjs-integration.md`](17-nextjs-integration.md) | Render Next.js server payloads — request modes, navigation, `clientComp`. |
 
 ## How an agent should use this skill
 
@@ -85,16 +88,18 @@ Exhaustive lists (every widget prop, every CSS property) live in the source:
 - **Flutter host:** `lib/src/vm/` (widget + runtimes + host handlers),
   `lib/src/core/` (engine, registry, events, DOM), `lib/src/widgets/`,
   `lib/src/html_widgets/`, `lib/src/css/`, `lib/src/canvas/`, `lib/src/godot/`. Public surface: `lib/elpian_ui.dart`.
-- **Compilers:** `../victor/victor/js2elpian/src/lib.rs` (JS→AST→bytecode),
-  `../victor/victor/dart2elpian/src/lib.rs` (Dart→JS subset).
-- **CLI:** `elpian-cli/rust/main.rs` (single file), `elpian-cli/README.md`.
-- **Web shell:** `elpian-cli/elpian_client/` (the standalone Flutter project
+- **Compilers:** `rust/js2elpian/src/lib.rs` (JS→AST→bytecode),
+  `rust/dart2elpian/src/lib.rs` (Dart→JS subset) — vendored in-repo.
+- **CLI:** `cli/rust/main.rs` (single file), `cli/README.md`.
+- **Web shell:** `cli/elpian_client/` (the standalone Flutter project
   the CLI builds and serves).
-- **Deep docs already in-repo:** `VM_LOGIC.md` (the complete AST/API reference),
-  `FEATURES.md`, `EVENT_SYSTEM.md`, `JSON_STYLESHEET.md`, `CANVAS_API.md`,
-  `2D_GRAPHICS.md`, `NEXTJS_INTEGRATION.md`, `QUICKSTART.md`. (`3D_GRAPHICS.md`
-  documents the *removed* in-house renderers — see `11-canvas-and-3d.md` instead.)
-- **Embedded Godot (native side):** `elpian_godot/` — the Android and iOS
+- **The old root-level documents are gone.** What was still true in them was
+  folded in here: `VM_LOGIC.md` → chapter 15, `2D_GRAPHICS.md` → chapter 16,
+  `NEXTJS_INTEGRATION.md` → chapter 17, and the guidance sections of
+  `EVENT_SYSTEM.md` / `JSON_STYLESHEET.md` into chapters 10 and 9. The rest
+  described removed subsystems (Bevy, the Dart 3D renderer, the TPS demo) or was
+  superseded.
+- **Embedded Godot (native side):** `godot/` — the Android and iOS
   platform views, the op queues, and the Godot-side `OpSink.gd`. A separate
   plugin package so an app with no 3D does not carry the ~21 MB Godot AAR.
 - **Tests as executable specs:** `test/` (60+ files — layout, CSS, scope,

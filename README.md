@@ -64,7 +64,7 @@ final widget = ElpianEngine().renderFromJson({
 | **HTML Rendering** | 70+ HTML5 semantic elements &mdash; `div`, `section`, `form`, `table`, `video`, and more |
 | **CSS Engine** | 150+ CSS properties &mdash; flexbox, grid, transforms, animations, filters, variables |
 | **Canvas 2D** | Full 2D graphics API with paths, shapes, gradients, text, and transforms |
-| **3D Scene Graphs** | JSON-defined 3D worlds rendered via **Bevy** (Rust/GPU) or a pure-Dart fallback |
+| **3D Scenes** | An embedded **Godot 4** engine as a `Scene3D` widget, driven reflectively |
 | **Elpian VM** | Sandboxed Rust bytecode VM with FFI (native) and WASM (web) for scripting UI logic |
 | **Next.js Bridge** | Server-driven Next.js payloads (`component` + `stylesheet`) rendered natively by Elpian clients |
 
@@ -220,41 +220,30 @@ element?.addEventListener('click', () => print('Clicked!'));
 final node = element?.toElpianNode();
 ```
 
-### 3D Scene Graphs
+### 3D Scenes — embedded Godot
 
-```json
-{
-  "world": [
-    {
-      "type": "mesh3d",
-      "mesh": {"Box": {"width": 2.0, "height": 2.0, "depth": 2.0}},
-      "material": {"color": [0.2, 0.6, 1.0, 1.0]},
-      "transform": {"translation": [0.0, 1.0, 0.0]}
-    },
-    {
-      "type": "light",
-      "light_type": "Point",
-      "intensity": 1500.0,
-      "transform": {"translation": [4.0, 8.0, 4.0]}
-    },
-    {
-      "type": "camera",
-      "transform": {"translation": [0.0, 5.0, 10.0]}
-    }
-  ]
-}
+3D is a real **Godot 4** engine embedded as a `Scene3D` widget. Build the world
+declaratively and drive it afterwards with the full reflective Godot API:
+
+```dart
+Scene3D(
+  initialScene: const {
+    'environment': {'bg': '#0d1117'},
+    'camera':      {'position': [0, 3, 8], 'rotation': [-18, 0, 0], 'fov': 55},
+    'lights':  [{'type': 'directional', 'shadow': true, 'rotation': [-50, -30, 0]}],
+    'nodes':   [{'type': 'mesh', 'shape': 'torus', 'id': 'ring', 'color': '#6699ff'}],
+  },
+  onReady: (scene) => scene.require('ring').set('scale', const Vector3(1.4, 1.4, 1.4)),
+)
 ```
 
-Mesh primitives: **Box**, **Sphere**, **Plane**, **Cylinder**, **Capsule**, **Torus**
-Materials: PBR with color, metallic, roughness
-Lighting: Point, Directional, Spot with shadows
+Coverage is complete by construction: the engine side runs a *reflective*
+interpreter addressing Godot by name through `ClassDB`, so every node class,
+method, property and signal is reachable — including ones added in future Godot
+versions. Where no Godot artifact is present, `Scene3D` renders a placeholder and
+the surrounding 2D app is unaffected.
 
-**Two 3D backends.** The same scene JSON runs on either the Flutter-Impeller
-`GameScene` renderer or the Rust/Bevy `BevyScene` software renderer (native FFI /
-WASM, with a pure-Dart fallback). The example app's third-person shooter is
-playable on both from an A/B launcher — see `example/lib/examples/` and the
-`TPS_BEVY_MIGRATION_PLAN.md` for the parity work (materials, environment, lights,
-procedural textures, static-world caching, and streamed glTF/GLB skeletal models).
+See [`wiki/11-canvas-and-3d.md`](wiki/11-canvas-and-3d.md).
 
 ### VM-Driven UI
 
@@ -435,14 +424,17 @@ InkWell, GestureDetector, Tooltip, Dismissible, Draggable, DragTarget, Opacity, 
 
 ## &#x1F30D; Platform Support
 
-| Platform | 2D / HTML / CSS | Canvas 2D | 3D (Bevy GPU) | 3D (Dart) | VM |
-|:--------:|:---------------:|:---------:|:-------------:|:---------:|:--:|
-| Android | &#x2705; | &#x2705; | &#x2705; FFI | &#x2705; | &#x2705; FFI |
-| iOS | &#x2705; | &#x2705; | &#x2705; FFI | &#x2705; | &#x2705; FFI |
-| Web | &#x2705; | &#x2705; | &#x2705; WASM | &#x2705; | &#x2705; WASM |
-| macOS | &#x2705; | &#x2705; | &#x2705; FFI | &#x2705; | &#x2705; FFI |
-| Linux | &#x2705; | &#x2705; | &#x2705; FFI | &#x2705; | &#x2705; FFI |
-| Windows | &#x2705; | &#x2705; | &#x2705; FFI | &#x2705; | &#x2705; FFI |
+| Platform | 2D / HTML / CSS | Canvas 2D | 3D (embedded Godot) | VM |
+|:--------:|:---------------:|:---------:|:-------------------:|:--:|
+| Android | &#x2705; | &#x2705; | &#x2705; platform view | &#x2705; FFI |
+| iOS | &#x2705; | &#x2705; | &#x2705; platform view | &#x2705; FFI |
+| Web | &#x2705; | &#x2705; | placeholder | &#x2705; WASM |
+| macOS | &#x2705; | &#x2705; | placeholder | &#x2705; FFI |
+| Linux | &#x2705; | &#x2705; | placeholder | &#x2705; FFI |
+| Windows | &#x2705; | &#x2705; | placeholder | &#x2705; FFI |
+
+3D needs the `godot/` plugin plus its binary artifacts; without them `Scene3D`
+degrades to a placeholder rather than failing.
 
 ---
 
@@ -460,12 +452,16 @@ elpian/
 │   │   ├── canvas/                 # 2D Canvas API
 │   │   ├── widgets/                # 60+ Flutter widget builders
 │   │   ├── html_widgets/           # 70+ HTML element builders
-│   │   ├── bevy/                   # Bevy 3D scene integration (Rust FFI)
-│   │   ├── scene3d/                # Pure-Dart 3D renderer (fallback)
+│   │   ├── godot/                  # Embedded Godot 3D: Scene3D + op protocol
+│   │   ├── scope/                  # Re-render boundaries
 │   │   ├── integrations/           # Next.js + server-driven rendering adapters
 │   │   └── vm/                     # Elpian VM + QuickJS integration
 │   └── example/                    # 13 demo applications
-├── rust/                           # Rust VM + Bevy crate (compiler, executor, FFI)
+├── rust/                           # Rust VM workspace: VM, js2elpian, dart2elpian,
+│                                   #   dart, capi, guest preludes
+├── cli/                            # The `elpian` CLI + its Flutter web shell
+├── godot/                          # Embedded-Godot plugin (Android + iOS)
+├── wiki/                           # All documentation
 ├── rust_builder/                   # Flutter FFI plugin (all platforms)
 ├── test/                           # Unit & integration tests
 ├── web/                            # Web assets, WASM loader, PWA manifest
@@ -477,17 +473,31 @@ elpian/
 
 ## &#x1F4D6; Documentation
 
-| Document | Description |
-|:---------|:------------|
-| [QUICKSTART.md](QUICKSTART.md) | &#x26A1; Getting started guide |
-| [FEATURES.md](FEATURES.md) | &#x1F4CB; Complete feature set reference |
-| [EVENT_SYSTEM.md](EVENT_SYSTEM.md) | &#x1F4E1; Event handling & propagation |
-| [JSON_STYLESHEET.md](JSON_STYLESHEET.md) | &#x1F3A8; JSON stylesheet system |
-| [CANVAS_API.md](CANVAS_API.md) | &#x1F58C;&#xFE0F; 2D Canvas drawing API |
-| [VM_LOGIC.md](VM_LOGIC.md) | &#x1F9F0; Rust VM AST & API reference |
-| [2D_GRAPHICS.md](2D_GRAPHICS.md) | &#x1F5BC;&#xFE0F; 2D UI element reference |
-| [3D_GRAPHICS.md](3D_GRAPHICS.md) | &#x1F4E6; 3D scene graph reference |
-| [NEXTJS_INTEGRATION.md](NEXTJS_INTEGRATION.md) | &#x1F519; Next.js server payloads rendered by Elpian |
+All documentation now lives in **[`wiki/`](wiki/)** — a single, current set of
+chapters written to be read start-to-finish or dipped into. The scattered
+root-level documents it replaced are gone; what was still true in them was
+folded in.
+
+| Chapter | Read it when you need to… |
+|:--------|:--------------------------|
+| [`wiki/README.md`](wiki/README.md) | Find your way in — start here |
+| [`01-architecture.md`](wiki/01-architecture.md) | Understand the layers and the repo map |
+| [`02-elpian-vm.md`](wiki/02-elpian-vm.md) | Know how the VM executes |
+| [`03-governance.md`](wiki/03-governance.md) | Sandbox untrusted code |
+| [`04-languages.md`](wiki/04-languages.md) | Write guest TypeScript / JS / Dart |
+| [`05-cli.md`](wiki/05-cli.md) | Drive the `elpian` CLI |
+| [`06-templates.md`](wiki/06-templates.md) | Pick a project template |
+| [`07-ui-model.md`](wiki/07-ui-model.md) | Emit UI from a guest program |
+| [`08-widgets.md`](wiki/08-widgets.md) | Pick a widget or HTML tag |
+| [`09-styling.md`](wiki/09-styling.md) | Style it — CSS, stylesheets, media queries |
+| [`10-events.md`](wiki/10-events.md) | Handle input |
+| [`11-canvas-and-3d.md`](wiki/11-canvas-and-3d.md) | Draw 2D, or embed Godot via `Scene3D` |
+| [`12-host-apis.md`](wiki/12-host-apis.md) | Call the host / write custom handlers |
+| [`13-recipes.md`](wiki/13-recipes.md) | Copy working patterns |
+| [`14-gotchas.md`](wiki/14-gotchas.md) | **The mistakes to never make** |
+| [`15-ast-reference.md`](wiki/15-ast-reference.md) | Look up an AST node or VM API |
+| [`16-widget-reference.md`](wiki/16-widget-reference.md) | Look up a widget prop or CSS property |
+| [`17-nextjs-integration.md`](wiki/17-nextjs-integration.md) | Render Next.js server payloads |
 
 ---
 

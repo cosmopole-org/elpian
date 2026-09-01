@@ -416,10 +416,10 @@ void main() {
     }
     printLine('╚══════════════════════════════════════════════════════════════════╝');
 
-    // Write JSON output to benchmarks/reports/
-    final outDir = Directory('benchmarks/reports');
+    // Write JSON output to bench/reports/
+    final outDir = Directory('bench/reports');
     if (!outDir.existsSync()) outDir.createSync(recursive: true);
-    final outFile = File('benchmarks/reports/elpian_results.json');
+    final outFile = File('bench/reports/elpian_results.json');
     final report = {
       'suite': 'Elpian UI Performance Benchmarks',
       'runner': 'flutter test (Dart VM)',

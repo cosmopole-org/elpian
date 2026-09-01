@@ -4,6 +4,20 @@ version = "0.1.0"
 edition = "2021"
 description = "Elpian AST-based bytecode VM — a pure executor. Ingests Elpian AST JSON / bytecode (produced by front-end crates such as js2elpian / dart2elpian) and executes it, yielding host calls to the embedding runtime."
 
+[workspace]
+# The VM and its compiler front-ends, vendored from victor so this repository
+# builds without a sibling checkout. The root package (elpian-vm) is implicitly
+# a member; it stays at rust/ so rust_builder's CMake, the CLI's elpian-server
+# manifest path and the wasm-pack working directory keep resolving.
+members = ["js2elpian", "dart2elpian", "dart", "capi"]
+
+# capi inherits these; carried over from victor's workspace so the vendored
+# crates keep their original metadata.
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "BSD-3-Clause"
+
 [lib]
 crate-type = ["cdylib", "staticlib", "rlib"]
 

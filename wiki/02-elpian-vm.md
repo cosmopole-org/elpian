@@ -233,7 +233,7 @@ export 'src/vm/frb_generated/api.dart'
 
 ## Deeper reference
 
-`VM_LOGIC.md` in the repo root is the complete AST and API reference: every
-expression node, every statement node, the operator table, the full host-call
-protocol, and worked end-to-end examples. Read it when you need to emit or debug
-Elpian AST JSON directly.
+[`15-ast-reference.md`](15-ast-reference.md) is the complete AST and API
+reference: every expression node, every statement node, the operator table, the
+full host-call protocol, and worked end-to-end examples. Read it when you need to
+emit or debug Elpian AST JSON directly.
