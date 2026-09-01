@@ -270,15 +270,50 @@ fn resolve_source(path: &Path) -> Result<PathBuf> {
     candidates.into_iter().find(|item| item.is_file()).ok_or_else(|| anyhow!("source file not found: {}", path.display()))
 }
 
-fn package_web_export(root: &Path, config: &Config, artifacts: &[Artifact], out: &Path) -> Result<()> {
-    let engine_project = config.engine_project.as_ref().map(|value| absolute(root, value)).unwrap_or_else(|| cli_root().join("elpian_client"));
-    let engine = config.engine_dir.as_ref().map(|value| absolute(root, value)).unwrap_or_else(|| engine_project.join("build/web"));
-    let base = normalize_base(&config.base_path);
+/// Where the built Flutter engine for `base` lives.
+///
+/// Keyed by base path on purpose. `flutter build web` writes to `build/web`, so
+/// a single shared directory meant that building any project re-based the engine
+/// out from under every other project — the previous one then requested its
+/// assets at the domain root and rendered a blank page, with nothing in the app
+/// to indicate why. Giving each base path its own directory lets them coexist,
+/// and makes switching between them a cache hit rather than a rebuild.
+fn engine_dir_for(engine_project: &Path, base: &str) -> PathBuf {
+    let slug: String = base
+        .trim_matches('/')
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    let slug = if slug.is_empty() { "root".to_string() } else { slug };
+    engine_project.join("build/elpian-engine").join(slug)
+}
+
+/// Build the engine for `base` if the cached one is stale. Returns its directory.
+fn ensure_engine(engine_project: &Path, base: &str, force: bool) -> Result<PathBuf> {
+    let engine = engine_dir_for(engine_project, base);
     let marker = engine.join(".elpian_runtime");
-    if config.engine_dir.is_none() && runtime_stale(&engine_project, &marker, &base)? {
-        run_checked(Command::new("flutter").current_dir(&engine_project).args(["build", "web", "--base-href", &base]))?;
+    if force || runtime_stale(engine_project, &marker, base)? {
+        fs::create_dir_all(&engine)?;
+        run_checked(Command::new("flutter").current_dir(engine_project).args([
+            "build",
+            "web",
+            "--base-href",
+            base,
+            "--output",
+            &engine.to_string_lossy(),
+        ]))?;
         fs::write(&marker, format!("elpian_client/lib/main.dart\nbasePath={base}\n"))?;
     }
+    Ok(engine)
+}
+
+fn package_web_export(root: &Path, config: &Config, artifacts: &[Artifact], out: &Path) -> Result<()> {
+    let base = normalize_base(&config.base_path);
+    let engine_project = config.engine_project.as_ref().map(|value| absolute(root, value)).unwrap_or_else(|| cli_root().join("elpian_client"));
+    let engine = match config.engine_dir.as_ref() {
+        Some(value) => absolute(root, value),
+        None => ensure_engine(&engine_project, &base, false)?,
+    };
     if !engine.join("index.html").is_file() { bail!("Flutter engine missing at {}", engine.display()); }
     let web = out.join("web");
     if web.exists() { fs::remove_dir_all(&web)?; }
@@ -295,14 +330,12 @@ fn package_web_export(root: &Path, config: &Config, artifacts: &[Artifact], out:
 
 fn dev(root: &Path, config: Config, host: &str, port: u16, force_engine: bool) -> Result<()> {
     build_project(root, &config, false)?;
-    let engine_project = config.engine_project.as_ref().map(|value| absolute(root, value)).unwrap_or_else(|| cli_root().join("elpian_client"));
-    let engine = config.engine_dir.as_ref().map(|value| absolute(root, value)).unwrap_or_else(|| engine_project.join("build/web"));
     let base = normalize_base(&config.base_path);
-    let marker = engine.join(".elpian_runtime");
-    if config.engine_dir.is_none() && (force_engine || runtime_stale(&engine_project, &marker, &base)?) {
-        run_checked(Command::new("flutter").current_dir(&engine_project).args(["build", "web", "--base-href", &base]))?;
-        fs::write(&marker, format!("elpian_client/lib/main.dart\nbasePath={base}\n"))?;
-    }
+    let engine_project = config.engine_project.as_ref().map(|value| absolute(root, value)).unwrap_or_else(|| cli_root().join("elpian_client"));
+    let engine = match config.engine_dir.as_ref() {
+        Some(value) => absolute(root, value),
+        None => ensure_engine(&engine_project, &base, force_engine)?,
+    };
     let (tx, rx) = mpsc::channel();
     let mut watcher = notify::recommended_watcher(move |event| { if changed(&event) { let _ = tx.send(event); } })?;
     for path in [root.join("src"), root.join("packages"), root.join("elpian.json"), root.join("elpian.config.json")] {
@@ -401,7 +434,29 @@ fn copy_tree(source: &Path, destination: &Path) -> Result<()> {
 }
 
 fn normalize_base(value: &str) -> String { format!("/{}/", value.trim_matches('/')).replace("//", "/") }
-fn cli_root() -> PathBuf { PathBuf::from(env!("CARGO_MANIFEST_DIR")) }
+/// The CLI crate's directory — where the bundled `elpian_client` engine lives.
+///
+/// `CARGO_MANIFEST_DIR` is baked in at COMPILE time, so it goes stale the moment
+/// the checkout is moved or renamed, and Cargo will not rebuild for that (no
+/// source changed). The failure is a bare "No such file or directory" with no
+/// hint of which path. So: trust the baked path only if it still contains the
+/// engine project, otherwise recover it from the running executable, which is at
+/// <cli>/target/<profile>/elpian.
+fn cli_root() -> PathBuf {
+    let baked = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    if baked.join("elpian_client").is_dir() {
+        return baked;
+    }
+    if let Ok(exe) = env::current_exe() {
+        // …/cli/target/release/elpian -> …/cli
+        if let Some(dir) = exe.parent().and_then(|p| p.parent()).and_then(|p| p.parent()) {
+            if dir.join("elpian_client").is_dir() {
+                return dir.to_path_buf();
+            }
+        }
+    }
+    baked
+}
 /// The elpian repository root — the CLI crate now lives inside it.
 fn workspace() -> PathBuf { cli_root().parent().unwrap().to_path_buf() }
 fn absolute(root: &Path, value: &Path) -> PathBuf { if value.is_absolute() { value.to_path_buf() } else { root.join(value) } }
@@ -410,42 +465,162 @@ fn write_json(path: &Path, value: &serde_json::Value) -> Result<()> { fs::write(
 fn run_checked(command: &mut Command) -> Result<()> { let status = command.status()?; if !status.success() { bail!("command exited {status}"); } Ok(()) }
 fn validate_package_name(name: &str) -> Result<()> { if name.is_empty() || name.contains("..") || name.starts_with('/') || name.ends_with('/') { bail!("invalid package name: {name}"); } Ok(()) }
 
-const CLIENT_TEMPLATE: &str = r#"import { el, render } from '@elpian/sdk';
+const CLIENT_TEMPLATE: &str = r##"import { el, render } from '@elpian/sdk';
+
 let count: number = 0;
+let name: string = '';
+const items: string[] = ['alpha', 'beta', 'gamma'];
+let picked: string = '-';
+
 function view() {
-  return el('div', { style: { padding: '32', color: '#172033' } }, [
+  return el('div', { style: { padding: '32', display: 'flex', flexDirection: 'column', gap: 12 } }, [
     el('h1', { text: 'Hello from TypeScript' }, []),
     el('p', { text: 'This UI is running as Elpian bytecode.' }, []),
-    el('button', { text: 'Count: ' + count, onClick: 'increment' }, []),
+
+    // Handlers are closures. They capture module state directly, so there is no
+    // need for a top-level function per button.
+    el('button', {
+      key: 'inc',
+      text: 'Count: ' + count,
+      onClick: () => { count = count + 1; render(view()); },
+    }, []),
+
+    // The payoff: the closure captures the mapped item, so each row knows which
+    // one it is. A named handler cannot — it would have to encode the identity
+    // in the key and parse it back out of the event.
+    el('ul', {}, items.map((item) =>
+      el('li', {
+        text: item,
+        style: { cursor: 'pointer', padding: '6' },
+        onClick: () => { picked = item; render(view()); },
+      }, []))),
+    el('p', { text: 'picked: ' + picked }, []),
+
+    // Handlers receive the event. `value` carries an input's current text.
+    el('input', {
+      key: 'name',
+      value: name,
+      placeholder: 'your name',
+      onInput: (event) => { name = '' + event.value; },
+    }, []),
+    el('button', {
+      key: 'greet',
+      text: 'Greet',
+      onClick: () => { picked = name.length > 0 ? 'hello, ' + name : 'type a name first'; render(view()); },
+    }, []),
   ]);
 }
-function increment() { count = count + 1; render(view()); }
+
 render(view());
-"#;
+"##;
 const SERVER_TEMPLATE: &str = r#"export function hello(input: { name?: string }) {
   const name = input.name || 'world';
   return { message: 'Hello, ' + name + ', from the Elpian server VM!' };
 }
 "#;
-const SDK_TEMPLATE: &str = r#"export type ElpianNode = { type: string; props: Record<string, unknown>; events?: Record<string, string>; children?: ElpianNode[] };
-export function el(type: string, props: Record<string, unknown>, children: ElpianNode[]): ElpianNode {
-  // The host reads handlers from a top-level `events` map keyed by the
-  // lowercase event name ("click"), not from `onClick` inside props.
+const SDK_TEMPLATE: &str = r##"export type ElpianEvent = {
+  type: string;
+  target: string;
+  currentTarget: string;
+  value?: unknown;
+  data?: unknown;
+  [k: string]: unknown;
+};
+export type ElpianHandler = string | ((event: ElpianEvent) => void);
+export type ElpianNode = {
+  type: string;
+  key?: string;
+  props: Record<string, unknown>;
+  events?: Record<string, string>;
+  children?: ElpianNode[];
+};
+
+// ---------------------------------------------------------------------------
+// Handler registry — what lets `onClick` take a closure.
+//
+// The host reads handlers from a top-level `events` map whose values must be
+// STRINGS naming a VM function: it calls that function by name in a later turn.
+// A closure cannot cross that seam — `render()` serialises the tree with
+// JSON.stringify, which silently drops function values, leaving `events: {}`
+// and a widget that renders perfectly and ignores every tap.
+//
+// So closures are kept on this side. Each node carrying one is given a stable
+// key, its closures are stored under that key, and the wire gets the name of a
+// single dispatcher. When the host fires an event it calls that dispatcher,
+// which looks the closure back up by `currentTarget` (the element id, which is
+// the node's key) and the event type.
+// ---------------------------------------------------------------------------
+
+const __handlers: Record<string, Record<string, (event: ElpianEvent) => void>> = {};
+let __seq = 0;
+
+/** The single VM function the host ever calls back for a closure handler. */
+export function __elpianEvent(event: ElpianEvent): void {
+  const byNode = __handlers['' + event.currentTarget];
+  if (byNode == null) { return; }
+  const fn = byNode[event.type];
+  if (fn == null) { return; }
+  fn(event);
+}
+
+export function el(
+  type: string,
+  props: Record<string, unknown>,
+  children: ElpianNode[],
+): ElpianNode {
   const rest: Record<string, unknown> = {};
   const events: Record<string, string> = {};
-  for (const key in props) {
-    const value = props[key];
-    if (typeof value === 'string' && key.length > 2 && key.slice(0, 2) === 'on') {
-      events[key.slice(2).toLowerCase()] = value;
-    } else {
-      rest[key] = value;
+  const closures: Record<string, (event: ElpianEvent) => void> = {};
+  let hasClosure = false;
+
+  for (const name in props) {
+    const value = props[name];
+    if (name === 'key') { continue; }
+    if (name.length > 2 && name.slice(0, 2) === 'on') {
+      const event = name.slice(2).toLowerCase();
+      if (typeof value === 'string') {
+        // A named top-level function still works, unchanged.
+        events[event] = value;
+      } else if (typeof value === 'function') {
+        closures[event] = value as (e: ElpianEvent) => void;
+        hasClosure = true;
+      }
+      continue;
+    }
+    rest[name] = value;
+  }
+
+  // The element id the host reports as `currentTarget` is the node's key, so a
+  // node with a closure must have one. An explicit key wins; otherwise take a
+  // positional one, which is stable across renders because the counter resets
+  // on every render().
+  let key = props['key'];
+  if (hasClosure && (key == null || key === '')) {
+    key = '__el' + __seq;
+    __seq = __seq + 1;
+  }
+
+  if (hasClosure) {
+    __handlers['' + key] = closures;
+    for (const event in closures) {
+      events[event] = '__elpianEvent';
     }
   }
-  return { type, props: rest, events, children };
+
+  const node: ElpianNode = { type: type, props: rest, events: events, children: children };
+  if (key != null) { node.key = '' + key; }
+  return node;
 }
+
 declare function askHost(name: string, payload: unknown): unknown;
-export function render(node: ElpianNode): void { askHost('render', JSON.stringify(node)); }
-"#;
+
+export function render(node: ElpianNode): void {
+  askHost('render', JSON.stringify(node));
+  // Reset so the next view() build reproduces the same positional keys and
+  // overwrites this render's closures rather than accumulating them.
+  __seq = 0;
+}
+"##;
 
 const SHOWCASE_TEMPLATE: &str = r##"import { el, render } from '@elpian/sdk';
 
@@ -566,11 +741,11 @@ function statCard(label: string, value: string, accent: string) {
   ]);
 }
 
-function pill(label: string, active: boolean, handler: string) {
+function pill(label: string, active: boolean) {
   return el('button', {
     key: 'tab-' + label,
     text: label,
-    onClick: handler,
+    onClick: () => { tab = label; render(view()); },
     style: {
       padding: '10', borderRadius: 999,
       backgroundColor: active ? '#2f6bff' : '#1a2130',
@@ -584,7 +759,10 @@ function bodyRow(body: Body) {
   const isSelected = body.id === selected;
   return el('div', {
     key: 'row-' + body.id,
-    onClick: 'selectBody',
+    // A closure captures `body`, so the row knows which one it is. The named
+    // form had to encode the id into the key and slice it back out of
+    // event.currentTarget.
+    onClick: () => { selected = body.id; log('selected ' + body.id); render(view()); },
     style: {
       display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 10,
       padding: '10', borderRadius: 10, cursor: 'pointer',
@@ -607,9 +785,9 @@ function scenePanel() {
     el('h3', { text: 'Bodies', style: { color: '#dfe6f2', fontSize: 15, margin: '0' } }, []),
     el('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } }, rows),
     el('div', { style: { display: 'flex', flexDirection: 'row', gap: 8, marginTop: 8 } }, [
-      el('button', { key: 'recolor', text: 'Recolour', onClick: 'recolour',
+      el('button', { key: 'recolor', text: 'Recolour', onClick: () => recolour(),
         style: { flex: 1, padding: '12', borderRadius: 10, backgroundColor: '#2f6bff', color: '#fff', fontWeight: '600' } }, []),
-      el('button', { key: 'grow', text: 'Grow', onClick: 'grow',
+      el('button', { key: 'grow', text: 'Grow', onClick: () => grow(),
         style: { flex: 1, padding: '12', borderRadius: 10, backgroundColor: '#1a2130', color: '#cbd4e4', fontWeight: '600' } }, []),
     ]),
   ]);
@@ -620,19 +798,19 @@ function lightingPanel() {
     el('h3', { text: 'Lighting', style: { color: '#dfe6f2', fontSize: 15, margin: '0' } }, []),
     el('span', { text: 'Key energy: ' + (lightEnergy / 10), style: { color: '#95a0b4', fontSize: 13 } }, []),
     el('div', { style: { display: 'flex', flexDirection: 'row', gap: 8 } }, [
-      el('button', { key: 'dim', text: '– Dimmer', onClick: 'dimmer',
+      el('button', { key: 'dim', text: '– Dimmer', onClick: () => dimmer(),
         style: { flex: 1, padding: '12', borderRadius: 10, backgroundColor: '#1a2130', color: '#cbd4e4' } }, []),
-      el('button', { key: 'bright', text: 'Brighter +', onClick: 'brighter',
+      el('button', { key: 'bright', text: 'Brighter +', onClick: () => brighter(),
         style: { flex: 1, padding: '12', borderRadius: 10, backgroundColor: '#1a2130', color: '#cbd4e4' } }, []),
     ]),
     el('span', { text: 'Orbit spread: ' + spin + '°', style: { color: '#95a0b4', fontSize: 13 } }, []),
     el('div', { style: { display: 'flex', flexDirection: 'row', gap: 8 } }, [
-      el('button', { key: 'spin-', text: 'Tighten', onClick: 'tighten',
+      el('button', { key: 'spin-', text: 'Tighten', onClick: () => tighten(),
         style: { flex: 1, padding: '12', borderRadius: 10, backgroundColor: '#1a2130', color: '#cbd4e4' } }, []),
-      el('button', { key: 'spin+', text: 'Spread', onClick: 'spread',
+      el('button', { key: 'spin+', text: 'Spread', onClick: () => spread(),
         style: { flex: 1, padding: '12', borderRadius: 10, backgroundColor: '#1a2130', color: '#cbd4e4' } }, []),
     ]),
-    el('button', { key: 'floor', text: showFloor ? 'Hide floor' : 'Show floor', onClick: 'toggleFloor',
+    el('button', { key: 'floor', text: showFloor ? 'Hide floor' : 'Show floor', onClick: () => toggleFloor(),
       style: { padding: '12', borderRadius: 10, backgroundColor: showFloor ? '#2f6bff' : '#1a2130', color: '#fff', fontWeight: '600' } }, []),
   ]);
 }
@@ -711,9 +889,9 @@ function view() {
       },
     }, [
       el('div', { style: { display: 'flex', flexDirection: 'row', gap: 8 } }, [
-        pill('scene', tab === 'scene', 'tabScene'),
-        pill('lighting', tab === 'lighting', 'tabLighting'),
-        pill('events', tab === 'events', 'tabEvents'),
+        pill('scene', tab === 'scene'),
+        pill('lighting', tab === 'lighting'),
+        pill('events', tab === 'events'),
       ]),
       panel(),
     ]),
@@ -728,19 +906,6 @@ function view() {
 function log(message: string) {
   events.unshift(message);
   if (events.length > 6) { events.pop(); }
-}
-
-function tabScene() { tab = 'scene'; render(view()); }
-function tabLighting() { tab = 'lighting'; render(view()); }
-function tabEvents() { tab = 'events'; render(view()); }
-
-function selectBody(event) {
-  const target = event.currentTarget;
-  if (typeof target === 'string' && target.slice(0, 4) === 'row-') {
-    selected = target.slice(4);
-    log('selected ' + selected);
-    render(view());
-  }
 }
 
 function recolour() {

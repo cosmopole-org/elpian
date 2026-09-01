@@ -29,6 +29,23 @@ work uses `setTimeout`/`setInterval` calling a named function
 > healthy. Both halves are fixed now (rejection in `js2elpian`, poison recovery
 > in `api.rs`), but if you see that signature, you are on an old build.
 
+### 1b. Closures capture correctly — but check your toolchain
+
+Every closure form captures as JavaScript specifies, including an arrow nested
+inside an arrow:
+
+```ts
+items.map((item) => el('li', { onClick: () => { picked = item; } }, []))
+```
+
+> **On an older toolchain this silently read `null`.** Arrows are lifted into
+> synthetic hoisted definitions, drained by `parse_statement` — but a concise
+> body (`=> expr`) never passes through one, so an inner arrow's definition
+> bubbled *past* the outer arrow and was hoisted outside it, losing the outer
+> parameter. It compiled, ran, and produced null with no error anywhere. Fixed in
+> `finish_arrow`, which now drains its own lifts into the arrow's body. If a
+> captured loop item reads as null, you are on an old build.
+
 ### 2. There is no `fetch`, `window`, `document`, or `localStorage`
 
 They compile to undefined identifiers and fail at runtime the same way. All I/O
@@ -83,12 +100,16 @@ your own node builder, you must replicate it.
 
 Mutating a variable does not redraw. Every handler ends with `render(view())`.
 
-### 8. Handlers are names, not closures
+### 8. Handlers cross the wire as names — but the SDK accepts closures
 
-`onClick: 'increment'` is a string naming a top-level function. You cannot
-capture a loop variable. For per-item identity, set a stable `key` on the node
-and read `event.currentTarget` in the handler
-([`10-events.md`](10-events.md), recipe 4).
+The `events` map can only carry strings, because `render()` uses
+`JSON.stringify`. The generated SDK bridges this: an `on*` closure is stored in
+a guest-side registry keyed by the node's `key`, and the wire gets a dispatcher
+name. So `onClick: () => { … }` works and captures loop variables.
+
+If you write your own node builder instead of using the SDK's `el()`, closures
+will be **silently dropped** — `JSON.stringify` removes function values, leaving
+`events: {}` and gotcha #6.
 
 ### 9. Always set `key` on interactive nodes
 
@@ -155,12 +176,41 @@ Serving under `/myapp/` requires `"basePath": "/myapp/"` **and a rebuild** —
 `dist/web` is the engine *plus* `__elpian/` (manifest + VM artifacts). The raw
 Flutter output has no application in it.
 
-### 19. `elpian run dev` serves the *shared* engine directory
+### 19. `elpian run dev` serves the engine directory, not your `dist/web`
 
-It serves `cli/elpian_client/build/web`, not your `dist/web`. Building a
-different project with a different `basePath` re-bases that shared directory out
-from under a running dev server. Give each project an explicit `engineProject`
-if you run more than one.
+It serves `cli/elpian_client/build/elpian-engine/<base>/`. Engines are keyed by
+**base path**, so two projects with different `basePath`s coexist and switching
+between them is a cache hit rather than a rebuild.
+
+> Before this was keyed, every project shared `build/web`: building any project
+> re-based the engine out from under every other one, and the clobbered app then
+> requested its assets at the **domain root** and rendered a blank page with
+> nothing in the app to explain why. If you see a blank Flutter page, check
+> `base href` in the served `index.html` first.
+
+### 19b. A stale Flutter build cache silently drops package assets
+
+After moving or renaming a checkout, `flutter build web` can emit a bundle with
+**none** of `elpian_ui`'s declared assets — no `elpian_wasm_loader.js`, no
+`elpian_vm_bg.wasm` — while still reporting success. The app then loads, fails to
+start the VM, and shows:
+
+```
+Failed to create VM: NoSuchMethodError: method not found: 'elpian_wasm_init'
+```
+
+The pubspec is fine and the files exist; the cached asset manifest still points
+at the old path. Fix:
+
+```sh
+cd cli/elpian_client && flutter clean && flutter pub get
+```
+
+Worth checking directly when a web build misbehaves:
+
+```sh
+find <engine>/assets/packages/elpian_ui/assets/web_runtime -type f | wc -l   # expect 6
+```
 
 ### 20. A stale engine may not be rebuilt when you expect
 
@@ -231,8 +281,10 @@ untrusted code.
 |---|---|
 | Button renders but does nothing | #6 — handler is in `props` not `events` |
 | `async functions are not supported` | #1 — use timers, not `async` |
+| A captured loop item reads as null in a handler | #1b — pre-fix toolchain |
 | Server dies after one bad request | #1 — poisoned lock; you are on a pre-fix build |
-| Assets 404 at the domain root | #17 — `basePath` |
+| Assets 404 at the domain root | #17 — `basePath`, or #19 a clobbered engine |
+| `method not found: 'elpian_wasm_init'` | #19b — stale build cache; `flutter clean` |
 | UI does not update after a state change | #7 — call `render()` |
 | Text field cursor jumps | #11 — re-rendering on input |
 | Handler fires for the wrong item | #8, #9 — closures / missing `key` |
