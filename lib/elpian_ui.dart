@@ -1,5 +1,15 @@
 library elpian_ui;
 
+// Governance — the control plane over every mini app: what it may do
+// (capabilities), how much it may spend (limits + meters), whether it runs
+// (lifecycle), and how a mini app that spawns others is accountable for them
+// (the tree). Enforced inside the VM; this is the host's handle on it.
+export 'src/vm/governance/models.dart';
+export 'src/vm/governance/governor.dart';
+export 'src/vm/governance/elpian_governor.dart';
+export 'src/vm/governance/host_side_governor.dart';
+export 'src/vm/host_api_catalog.dart';
+
 // VM - Elpian Rust VM integration
 export 'src/vm/elpian_vm.dart';
 export 'src/vm/elpian_vm_widget.dart';

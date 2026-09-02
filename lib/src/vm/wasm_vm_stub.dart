@@ -1,10 +1,19 @@
 import 'elpian_vm.dart';
+import 'governance/host_side_governor.dart';
 import 'vm_runtime_client.dart';
 
 class WasmVm implements VmRuntimeClient {
   WasmVm({required this.machineId});
 
   final String machineId;
+
+  /// Nothing runs here, so nothing is governed. Reporting
+  /// `GovernanceSupport.none` keeps a host from believing a mini app on this
+  /// platform is sandboxed when the runtime is not even present.
+  @override
+  final UnenforcedGovernor governor = const UnenforcedGovernor(
+    'the WASM runtime is not available on this platform',
+  );
 
   static Future<void> initialize() async {}
 

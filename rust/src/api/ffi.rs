@@ -36,6 +36,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use serde_json::json;
 
+use super::govern;
 use super::{
     continue_execution, create_vm_from_ast, create_vm_from_bytecode, create_vm_from_code,
     deliver_host_message, destroy_vm, execute_vm, execute_vm_func, execute_vm_func_with_input,
@@ -301,4 +302,171 @@ pub unsafe extern "C" fn elpian_vm_exists(id: *const c_char) -> i32 {
 
 fn bool_to_i32(value: bool) -> i32 {
     i32::from(value)
+}
+
+// ---- The governance control plane ------------------------------------------
+//
+// Everything below crosses as JSON: one narrow ABI covers limits, meters,
+// capabilities, lifecycle and the VM tree without a struct per call. The shapes
+// are documented on `crate::api::govern`.
+//
+// This surface existed in Rust from the start and was simply never exported, so
+// a Flutter host could create and run mini apps but could not budget, meter,
+// gate or pause one. Every function returns a JSON string the caller frees with
+// `elpian_free_string`; failures are reported in band as `{"error": "..."}`
+// rather than as a NULL a caller might mistake for an empty result.
+
+/// Run a governance call, returning its JSON. Panics are contained and reported
+/// as `{"error": "..."}` so the shape a caller parses never changes.
+fn govern_call(what: &str, body: impl FnOnce() -> serde_json::Value) -> *mut c_char {
+    let fallback =
+        return_string(json!({ "error": format!("{what} stopped by a fault") }).to_string());
+    guard(what, fallback, || return_string(body().to_string()))
+}
+
+macro_rules! govern_export {
+    // One machine id in, JSON out.
+    ($name:ident, $call:path) => {
+        /// # Safety
+        /// See the module-level contract.
+        #[no_mangle]
+        pub unsafe extern "C" fn $name(id: *const c_char) -> *mut c_char {
+            let id = read_string(id);
+            govern_call(stringify!($name), || $call(&id))
+        }
+    };
+}
+
+govern_export!(elpian_limits, govern::limits_json);
+govern_export!(elpian_usage, govern::usage_json);
+govern_export!(elpian_subtree_usage, govern::subtree_usage_json);
+govern_export!(elpian_local_capabilities, govern::local_capabilities_json);
+govern_export!(
+    elpian_effective_capabilities,
+    govern::effective_capabilities_json
+);
+govern_export!(elpian_state, govern::state_json);
+govern_export!(elpian_pause, govern::pause_json);
+govern_export!(elpian_resume, govern::resume_json);
+govern_export!(elpian_terminate, govern::terminate_json);
+govern_export!(elpian_tree, govern::tree_json);
+govern_export!(elpian_terminate_tree, govern::terminate_tree_json);
+govern_export!(elpian_pause_tree, govern::pause_tree_json);
+govern_export!(elpian_destroy_tree, govern::destroy_tree_json);
+govern_export!(elpian_snapshot, govern::snapshot_json);
+
+/// Apply a resource-limit policy. `limits_json` is a limits object; absent or
+/// null fields mean unbounded.
+///
+/// # Safety
+/// See the module-level contract.
+#[no_mangle]
+pub unsafe extern "C" fn elpian_set_limits(
+    id: *const c_char,
+    limits_json: *const c_char,
+) -> *mut c_char {
+    let (id, limits) = (read_string(id), read_string(limits_json));
+    govern_call("elpian_set_limits", || {
+        govern::set_limits_json(&id, &limits)
+    })
+}
+
+/// Grant or revoke one capability by its stable name (`"network"`, `"dom"`, …).
+/// Records a local grant and recomputes the effective set across the subtree.
+///
+/// # Safety
+/// See the module-level contract.
+#[no_mangle]
+pub unsafe extern "C" fn elpian_set_capability(
+    id: *const c_char,
+    capability: *const c_char,
+    allowed: i32,
+) -> *mut c_char {
+    let (id, capability) = (read_string(id), read_string(capability));
+    govern_call("elpian_set_capability", || {
+        govern::set_capability_json(&id, &capability, allowed != 0)
+    })
+}
+
+/// Set several capabilities at once from a `{"name": bool}` map. Names absent
+/// from the map keep their current value.
+///
+/// # Safety
+/// See the module-level contract.
+#[no_mangle]
+pub unsafe extern "C" fn elpian_set_capabilities(
+    id: *const c_char,
+    caps_json: *const c_char,
+) -> *mut c_char {
+    let (id, caps) = (read_string(id), read_string(caps_json));
+    govern_call("elpian_set_capabilities", || {
+        govern::set_capabilities_json(&id, &caps)
+    })
+}
+
+/// Deny everything, then grant only the names in the JSON array — the starting
+/// posture for an untrusted mini app.
+///
+/// # Safety
+/// See the module-level contract.
+#[no_mangle]
+pub unsafe extern "C" fn elpian_sandbox_capabilities(
+    id: *const c_char,
+    granted_json: *const c_char,
+) -> *mut c_char {
+    let (id, granted) = (read_string(id), read_string(granted_json));
+    govern_call("elpian_sandbox_capabilities", || {
+        govern::sandbox_capabilities_json(&id, &granted)
+    })
+}
+
+/// Whether one host API is currently permitted for this VM.
+///
+/// # Safety
+/// See the module-level contract.
+#[no_mangle]
+pub unsafe extern "C" fn elpian_capability_allows(
+    id: *const c_char,
+    api_name: *const c_char,
+) -> *mut c_char {
+    let (id, api) = (read_string(id), read_string(api_name));
+    govern_call("elpian_capability_allows", || {
+        govern::capability_allows_json(&id, &api)
+    })
+}
+
+/// Charge the storage governor on behalf of the host's filesystem.
+///
+/// # Safety
+/// See the module-level contract.
+#[no_mangle]
+pub unsafe extern "C" fn elpian_charge_storage(id: *const c_char, delta: i64) -> *mut c_char {
+    let id = read_string(id);
+    govern_call("elpian_charge_storage", || {
+        govern::charge_storage_json(&id, delta)
+    })
+}
+
+/// Make `child` a child of `parent` in the VM tree.
+///
+/// # Safety
+/// See the module-level contract.
+#[no_mangle]
+pub unsafe extern "C" fn elpian_adopt(
+    parent_id: *const c_char,
+    child_id: *const c_char,
+) -> *mut c_char {
+    let (parent, child) = (read_string(parent_id), read_string(child_id));
+    govern_call("elpian_adopt", || govern::adopt_json(&parent, &child))
+}
+
+/// Sweep every tree and destroy any branch whose aggregate usage has broken its
+/// own root's budget. A host calls this periodically — once a frame, or on a
+/// timer — to enforce the "handle it or share its fate" rule.
+#[no_mangle]
+pub extern "C" fn elpian_enforce_tree_budgets() -> *mut c_char {
+    govern_call(
+        "elpian_enforce_tree_budgets",
+        govern::enforce_tree_budgets_json,
+    )
 }

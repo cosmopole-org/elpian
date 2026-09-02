@@ -3,6 +3,7 @@
 use serde_json::json;
 use wasm_bindgen::prelude::*;
 
+use super::govern;
 use super::{
     continue_execution, create_vm_from_ast, create_vm_from_bytecode, create_vm_from_code,
     deliver_host_message, destroy_vm, execute_vm, execute_vm_func, execute_vm_func_with_input,
@@ -90,4 +91,81 @@ pub fn elpian_wasm_destroy_vm(machine_id: String) -> bool {
 #[wasm_bindgen]
 pub fn elpian_wasm_vm_exists(machine_id: String) -> bool {
     vm_exists(machine_id)
+}
+
+// ---- The governance control plane ------------------------------------------
+//
+// The twin of the C ABI's governance surface, so a mini app running on the web
+// is governed exactly as it is natively. Everything crosses as a JSON string;
+// the shapes are documented on `crate::api::govern`. Failures are reported in
+// band as `{"error": "..."}`.
+
+macro_rules! wasm_govern {
+    ($name:ident, $call:path) => {
+        #[wasm_bindgen]
+        pub fn $name(machine_id: String) -> String {
+            $call(&machine_id).to_string()
+        }
+    };
+}
+
+wasm_govern!(elpian_wasm_limits, govern::limits_json);
+wasm_govern!(elpian_wasm_usage, govern::usage_json);
+wasm_govern!(elpian_wasm_subtree_usage, govern::subtree_usage_json);
+wasm_govern!(
+    elpian_wasm_local_capabilities,
+    govern::local_capabilities_json
+);
+wasm_govern!(
+    elpian_wasm_effective_capabilities,
+    govern::effective_capabilities_json
+);
+wasm_govern!(elpian_wasm_state, govern::state_json);
+wasm_govern!(elpian_wasm_pause, govern::pause_json);
+wasm_govern!(elpian_wasm_resume, govern::resume_json);
+wasm_govern!(elpian_wasm_terminate, govern::terminate_json);
+wasm_govern!(elpian_wasm_tree, govern::tree_json);
+wasm_govern!(elpian_wasm_terminate_tree, govern::terminate_tree_json);
+wasm_govern!(elpian_wasm_pause_tree, govern::pause_tree_json);
+wasm_govern!(elpian_wasm_destroy_tree, govern::destroy_tree_json);
+wasm_govern!(elpian_wasm_snapshot, govern::snapshot_json);
+
+#[wasm_bindgen]
+pub fn elpian_wasm_set_limits(machine_id: String, limits_json: String) -> String {
+    govern::set_limits_json(&machine_id, &limits_json).to_string()
+}
+
+#[wasm_bindgen]
+pub fn elpian_wasm_set_capability(machine_id: String, capability: String, allowed: bool) -> String {
+    govern::set_capability_json(&machine_id, &capability, allowed).to_string()
+}
+
+#[wasm_bindgen]
+pub fn elpian_wasm_set_capabilities(machine_id: String, caps_json: String) -> String {
+    govern::set_capabilities_json(&machine_id, &caps_json).to_string()
+}
+
+#[wasm_bindgen]
+pub fn elpian_wasm_sandbox_capabilities(machine_id: String, granted_json: String) -> String {
+    govern::sandbox_capabilities_json(&machine_id, &granted_json).to_string()
+}
+
+#[wasm_bindgen]
+pub fn elpian_wasm_capability_allows(machine_id: String, api_name: String) -> String {
+    govern::capability_allows_json(&machine_id, &api_name).to_string()
+}
+
+#[wasm_bindgen]
+pub fn elpian_wasm_charge_storage(machine_id: String, delta: i32) -> String {
+    govern::charge_storage_json(&machine_id, delta as i64).to_string()
+}
+
+#[wasm_bindgen]
+pub fn elpian_wasm_adopt(parent_id: String, child_id: String) -> String {
+    govern::adopt_json(&parent_id, &child_id).to_string()
+}
+
+#[wasm_bindgen]
+pub fn elpian_wasm_enforce_tree_budgets() -> String {
+    govern::enforce_tree_budgets_json().to_string()
 }

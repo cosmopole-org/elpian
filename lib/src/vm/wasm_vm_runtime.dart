@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -5,6 +6,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:wasm_run_flutter/wasm_run_flutter.dart';
 
 import 'elpian_vm.dart';
+import 'governance/host_side_governor.dart';
 import 'vm_runtime_client.dart';
 
 class WasmVm implements VmRuntimeClient {
@@ -22,6 +24,22 @@ class WasmVm implements VmRuntimeClient {
   static bool _runtimeInitialized = false;
 
   WasmVm({required this.machineId});
+
+  static const String _label = 'WasmVm';
+
+  /// Governs this instance at the host-call seam.
+  ///
+  /// Fuel metering gives this backend a real instruction budget.
+  ///
+  ///
+  @override
+  late final HostSideGovernor governor = HostSideGovernor(
+    machineId: machineId,
+    enforcesInstructionBudget: true,
+    onTerminate: () {
+      unawaited(dispose());
+    },
+  );
 
   static Future<void> initialize() async {
     if (_runtimeInitialized) return;
@@ -182,6 +200,20 @@ class WasmVm implements VmRuntimeClient {
   }
 
   String _dispatchHostCall(String apiName, String payload) {
+    // The capability gate. Every host call a mini app makes crosses here, so
+    // this is where a QuickJS/WASM guest is bounded — the engine itself gives
+    // Dart no other seam. A denied call gets the typed null the Elpian VM
+    // produces for the same case, so a guest sees one behaviour across all
+    // three runtimes.
+    final refusal = governor.checkAndCharge(apiName, bytes: payload.length);
+    if (refusal != null) {
+      assert(() {
+        debugPrint('$_label[$machineId]: $apiName refused — $refusal');
+        return true;
+      }());
+      return '{"type":"null","data":{"value":null}}';
+    }
+
     final handler = _hostHandlers[apiName];
     if (handler != null) {
       final result = handler(apiName, payload);

@@ -29,6 +29,7 @@ use crate::sdk::vm::VM;
 pub mod catalog;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod ffi;
+pub mod govern;
 // The browser API, built on wasm-bindgen, and meaningful only for the
 // wasm-pack target. `target_arch = "wasm32"` alone also matches
 // wasm32-unknown-emscripten, which is how the Godot web GDExtension is built:

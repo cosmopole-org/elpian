@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_js/flutter_js.dart';
 
 import 'elpian_vm.dart';
+import 'governance/host_side_governor.dart';
 import 'vm_runtime_client.dart';
 
 /// A QuickJS-backed runtime that mirrors [ElpianVm]'s host API lifecycle.
@@ -18,6 +20,22 @@ class QuickJsVm implements VmRuntimeClient {
   String? _bootCode;
 
   QuickJsVm({required this.machineId});
+
+  static const String _label = 'QuickJs';
+
+  /// Governs this instance at the host-call seam.
+  ///
+  /// This engine exposes no interrupt hook through its Dart API, so an
+  /// instruction budget cannot be enforced here — `governanceSupport` says so
+  /// rather than implying protection that is not there.
+  @override
+  late final HostSideGovernor governor = HostSideGovernor(
+    machineId: machineId,
+    enforcesInstructionBudget: false,
+    onTerminate: () {
+      unawaited(dispose());
+    },
+  );
 
   static Future<void> initialize() async {
     // flutter_js runtime is initialized per VM instance.
@@ -162,6 +180,20 @@ class QuickJsVm implements VmRuntimeClient {
   }
 
   String _dispatchHostCall(String apiName, String payload) {
+    // The capability gate. Every host call a mini app makes crosses here, so
+    // this is where a QuickJS/WASM guest is bounded — the engine itself gives
+    // Dart no other seam. A denied call gets the typed null the Elpian VM
+    // produces for the same case, so a guest sees one behaviour across all
+    // three runtimes.
+    final refusal = governor.checkAndCharge(apiName, bytes: payload.length);
+    if (refusal != null) {
+      assert(() {
+        debugPrint('$_label[$machineId]: $apiName refused — $refusal');
+        return true;
+      }());
+      return '{"type":"null","data":{"value":null}}';
+    }
+
     final handler = _hostHandlers[apiName];
     if (handler != null) {
       final result = handler(apiName, payload);

@@ -227,6 +227,16 @@ class ElpianVmApi {
     }
   }
 
+  /// The loaded native library, for callers that resolve their own symbols
+  /// (see `governance/native_bindings.dart`). Null when the library is absent.
+  static ffi.DynamicLibrary? get library => _tryGetApi()?._lib;
+
+  /// Release a string the native side allocated. Exposed for the same reason
+  /// as [library]: one loader, one allocator, no second copy.
+  static void freeNativeString(ffi.Pointer<Utf8> ptr) {
+    _tryGetApi()?._freeString?.call(ptr);
+  }
+
   /// Try to get the singleton API instance. Returns null if the native
   /// library could not be loaded (sets [lastError] with the reason).
   static ElpianVmApi? _tryGetApi() {

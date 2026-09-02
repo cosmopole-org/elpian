@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'frb_generated/api.dart'
     if (dart.library.js_interop) 'frb_generated/api_web.dart';
+import 'governance/elpian_governor.dart';
 import 'vm_runtime_client.dart';
 
 /// Callback for handling host function calls from the Rust VM.
@@ -31,6 +32,23 @@ class ElpianVm implements VmRuntimeClient {
   int _cbCounter = 0;
 
   ElpianVm({required this.machineId});
+
+  /// Governs this mini app: budgets, capabilities and lifecycle.
+  ///
+  /// ```dart
+  /// final vm = await ElpianVm.fromCode('weather', source);
+  /// await vm!.governor.sandbox({ElpianCapability.render, ElpianCapability.dom});
+  /// await vm.governor.setLimits(ElpianLimits.sandboxed);
+  /// ...
+  /// final used = await vm.governor.subtreeUsage();
+  /// ```
+  @override
+  late final ElpianVmGovernor governor = ElpianVmGovernor(machineId);
+
+  /// Governs the spawn tree this mini app belongs to — adoption, subtree
+  /// lifecycle, and the aggregate-budget sweep. Stateless, so a host may hold
+  /// one and address any mini app by id.
+  static const ElpianTreeGovernor treeGovernor = ElpianTreeGovernor();
 
   /// Whether the VM is currently executing.
   bool get isRunning => _isRunning;
