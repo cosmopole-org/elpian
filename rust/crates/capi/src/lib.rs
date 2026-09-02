@@ -38,9 +38,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde_json::{json, Value};
 
-pub mod manager;
+pub mod godot_surface;
 
-pub use manager::{BridgeFn, GuestLang, VmManager, ROOT_VM};
+pub use elpian_runtime::{BridgeFn, GuestLang, HostSurface, VmManager, ROOT_VM};
+pub use godot_surface::GodotSurface;
 
 /// The `godot.dart` guest prelude, compiled ahead of the user program so the
 /// `GD`/`GObj` reflective surface, the `VMs` orchestration facade and the
@@ -324,6 +325,7 @@ fn new_runtime(
         };
         let machine = format!("godot-vm-{}", NEXT_MACHINE.fetch_add(1, Ordering::Relaxed));
         match VmManager::new_root_lang(
+            Box::new(GodotSurface),
             machine,
             source,
             lang,

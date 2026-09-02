@@ -14,6 +14,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use elpian_godot::GodotSurface;
 use elpian_godot::{GuestLang, VmManager};
 use serde_json::{json, Value};
 
@@ -84,8 +85,16 @@ impl Mock {
 
 fn boot_js(id: &str, source: &str) -> (VmManager, Rc<RefCell<Mock>>) {
     let mock = Rc::new(RefCell::new(Mock::default()));
-    let mut mgr = VmManager::new_root_lang(id.to_string(), source, GuestLang::Js, true, 0, 0)
-        .expect("JS guest must compile");
+    let mut mgr = VmManager::new_root_lang(
+        Box::new(GodotSurface),
+        id.to_string(),
+        source,
+        GuestLang::Js,
+        true,
+        0,
+        0,
+    )
+    .expect("JS guest must compile");
     let hooked = mock.clone();
     mgr.set_bridge(Some(Box::new(move |name, args| {
         let mut m = hooked.borrow_mut();

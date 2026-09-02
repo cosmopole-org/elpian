@@ -20,6 +20,7 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
 
+use elpian_godot::GodotSurface;
 use elpian_godot::{VmManager, ROOT_VM};
 use serde_json::{json, Value};
 
@@ -87,6 +88,7 @@ fn boot(root_source: &str) -> (VmManager, Rc<RefCell<MockEngine>>) {
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
     let mock = Rc::new(RefCell::new(MockEngine::default()));
     let mut mgr = VmManager::new_root(
+        Box::new(GodotSurface),
         format!(
             "multi-vm-{}",
             NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
@@ -458,6 +460,7 @@ fn spawn_is_rejected_when_the_node_is_outside_the_parent_sandbox() {
     let mock = Rc::new(RefCell::new(MockEngine::default()));
     mock.borrow_mut().chk_reject.insert(ns(1, 1));
     let mut mgr = VmManager::new_root(
+        Box::new(GodotSurface),
         "multi-vm-reject".to_string(),
         &format!(
             r#"
@@ -607,6 +610,7 @@ fn free_ops_are_namespaced_like_their_defs() {
     .replace("__CHILD__", &format!("{:?}", child_src));
     let mock = Rc::new(RefCell::new(MockEngine::default()));
     let mut mgr = VmManager::new_root_lang(
+        Box::new(GodotSurface),
         "multi-vm-free-ns".into(),
         &root_src,
         GuestLang::Js,

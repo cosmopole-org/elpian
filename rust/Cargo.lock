@@ -39,6 +39,16 @@ name = "elpian-godot-capi"
 version = "0.1.0"
 dependencies = [
  "elpian-dart-runtime",
+ "elpian-runtime",
+ "elpian-vm",
+ "serde_json",
+]
+
+[[package]]
+name = "elpian-runtime"
+version = "0.1.0"
+dependencies = [
+ "elpian-dart-runtime",
  "elpian-vm",
  "serde_json",
 ]

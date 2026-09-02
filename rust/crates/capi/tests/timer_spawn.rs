@@ -1,12 +1,22 @@
 //! Repro: a one-shot GTimer scheduled in the same turn as VMs.spawn must
 //! still fire (the sheet-close queueFree and toast dismiss depend on it).
+use elpian_godot::GodotSurface;
 use elpian_godot::{GuestLang, VmManager};
 use serde_json::{json, Value};
 use std::cell::RefCell;
 use std::rc::Rc;
 
 fn boot(id: &str, src: &str) -> VmManager {
-    let mut mgr = VmManager::new_root_lang(id.into(), src, GuestLang::Js, true, 0, 0).unwrap();
+    let mut mgr = VmManager::new_root_lang(
+        Box::new(GodotSurface),
+        id.into(),
+        src,
+        GuestLang::Js,
+        true,
+        0,
+        0,
+    )
+    .unwrap();
     let calls: Rc<RefCell<u64>> = Rc::new(RefCell::new(0));
     let c = calls.clone();
     mgr.set_bridge(Some(Box::new(move |_n, a| {
@@ -75,8 +85,16 @@ fn one_shot_timer_beside_spawn_in_dispatch_turn_fires() {
         }
         main();
     "#;
-    let mut mgr =
-        VmManager::new_root_lang("timer-spawn-c".into(), src, GuestLang::Js, true, 0, 0).unwrap();
+    let mut mgr = VmManager::new_root_lang(
+        Box::new(GodotSurface),
+        "timer-spawn-c".into(),
+        src,
+        GuestLang::Js,
+        true,
+        0,
+        0,
+    )
+    .unwrap();
     let ops: Rc<RefCell<Vec<Value>>> = Rc::new(RefCell::new(Vec::new()));
     let sink = ops.clone();
     mgr.set_bridge(Some(Box::new(move |_n, a| {
@@ -137,8 +155,16 @@ fn one_shot_timer_scheduled_in_callable_dispatch_turn_fires() {
         }
         main();
     "#;
-    let mut mgr =
-        VmManager::new_root_lang("timer-spawn-b".into(), src, GuestLang::Js, true, 0, 0).unwrap();
+    let mut mgr = VmManager::new_root_lang(
+        Box::new(GodotSurface),
+        "timer-spawn-b".into(),
+        src,
+        GuestLang::Js,
+        true,
+        0,
+        0,
+    )
+    .unwrap();
     let ops: Rc<RefCell<Vec<Value>>> = Rc::new(RefCell::new(Vec::new()));
     let sink = ops.clone();
     mgr.set_bridge(Some(Box::new(move |_n, a| {

@@ -2,6 +2,7 @@
 //! js2elpian subset and RUNS on the Elpian VM — mounting the VReact app over
 //! godot.js + net.js + ui.js + react.js.
 
+use elpian_godot::GodotSurface;
 use elpian_godot::{GuestLang, VmManager};
 use serde_json::{json, Value};
 use std::sync::{Arc, Mutex};
@@ -63,9 +64,16 @@ const GUEST: &str = include_str!("tritonix_guest.js");
 #[test]
 fn tritonix_client_compiles_and_mounts() {
     let mock = Arc::new(Mutex::new(Mock::default()));
-    let mut mgr =
-        VmManager::new_root_lang("tritonix".to_string(), GUEST, GuestLang::Js, true, 0, 0)
-            .expect("tritonix guest must COMPILE in the js2elpian subset");
+    let mut mgr = VmManager::new_root_lang(
+        Box::new(GodotSurface),
+        "tritonix".to_string(),
+        GUEST,
+        GuestLang::Js,
+        true,
+        0,
+        0,
+    )
+    .expect("tritonix guest must COMPILE in the js2elpian subset");
     let hooked = mock.clone();
     mgr.set_bridge(Some(Box::new(move |name, args| {
         let mut m = hooked.lock().unwrap();
@@ -109,6 +117,7 @@ app.push(VUI.button('Play', { kind: 'filled' }));\n";
 fn tritonix_ui_kit_skin_engages() {
     let mock = Arc::new(Mutex::new(Mock::default()));
     let mut mgr = VmManager::new_root_lang(
+        Box::new(GodotSurface),
         "tritonix-skin".to_string(),
         SKIN_GUEST,
         GuestLang::Js,

@@ -115,15 +115,7 @@ use elpian_vm::sdk::capabilities::Capability;
 use elpian_vm::sdk::limits::{ResourceLimits, ResourceUsage};
 use serde_json::{json, Map, Value};
 
-use crate::{compose_godot_program, compose_godot_program_js};
-
-/// Compose the language's prelude ahead of a user program.
-fn compose_for(lang: GuestLang, user_source: &str) -> String {
-    match lang {
-        GuestLang::Dart => compose_godot_program(user_source),
-        GuestLang::Js => compose_godot_program_js(user_source),
-    }
-}
+use crate::HostSurface;
 
 /// The engine-bridge seam: `(api_name, args) -> reply`. The C ABI wraps the
 /// GDExtension's callback into this; tests plug a mock engine in directly.
@@ -184,6 +176,9 @@ enum Command {
 
 /// State shared between the manager and every per-VM host hook.
 struct Shared {
+    /// What the embedding host provides: preludes, op names, containment.
+    /// Everything that used to be hardcoded to Godot lives behind this.
+    surface: Box<dyn HostSurface>,
     bridge: RefCell<Option<BridgeFn>>,
     meta: RefCell<HashMap<u64, VmMeta>>,
     by_machine: RefCell<HashMap<String, u64>>,
@@ -274,6 +269,30 @@ impl Shared {
         let mut slot = self.bridge.borrow_mut();
         slot.as_mut().and_then(|f| f(api_name, args))
     }
+
+    /// Run `body` with a mutable view of the bridge, for the surface hooks that
+    /// need to ask the host a question directly.
+    fn with_bridge<T>(
+        &self,
+        body: impl FnOnce(&mut dyn FnMut(&str, &[Value]) -> Option<Value>) -> T,
+    ) -> T {
+        let mut slot = self.bridge.borrow_mut();
+        match slot.as_mut() {
+            Some(f) => body(&mut **f),
+            None => body(&mut |_: &str, _: &[Value]| None),
+        }
+    }
+}
+
+/// Whether `name` is a UI op seam — `<host>.op` or `<host>.batch`.
+///
+/// The set of hosts is closed and small: a surface a guest can drive has to
+/// have a prelude that speaks its vocabulary, so a new one is never a surprise.
+fn is_ui_seam(name: &str) -> bool {
+    matches!(
+        name,
+        "godot.op" | "godot.batch" | "flutter.op" | "flutter.batch" | "rn.op" | "rn.batch"
+    )
 }
 
 fn vm_error(msg: &str) -> Value {
@@ -418,72 +437,30 @@ impl HookEnv {
     fn handle(&self, name: &str, args: &[Value]) -> Option<Value> {
         match name {
             n if n.starts_with("vm.") => Some(self.service_vm(n, args)),
-            "godot.op" => {
-                let mut op = args.first().cloned().unwrap_or(Value::Null);
-                sanitize_op(&mut op, self.vm, self.shared.sandbox_of(self.vm));
-                self.shared.forward("godot.op", &[op])
-            }
-            "godot.batch" => {
-                let mut ops = args.first().cloned().unwrap_or(Value::Null);
+            // The UI seams. Every host surface — a Godot scene, a Flutter
+            // widget tree, a React Native view tree — speaks the same wire
+            // vocabulary: `{"ref": id}` handles and `{"cb": n}` callables. So
+            // one sanitize-and-forward covers all of them: callables and
+            // handles are namespaced into the calling VM's id space and the op
+            // is stamped with that VM's sandbox root (`__sbx`).
+            //
+            // A sandboxed VM can therefore only touch surface objects inside
+            // its own assigned subtree, and events route back to the VM that
+            // registered them, whichever surface they came from. This was three
+            // near-identical arms, one per host.
+            n if is_ui_seam(n) => {
                 let sandbox = self.shared.sandbox_of(self.vm);
-                if let Value::Array(list) = &mut ops {
-                    for op in list {
-                        sanitize_op(op, self.vm, sandbox);
+                let mut payload = args.first().cloned().unwrap_or(Value::Null);
+                if n.ends_with(".batch") {
+                    if let Value::Array(list) = &mut payload {
+                        for op in list {
+                            sanitize_op(op, self.vm, sandbox);
+                        }
                     }
+                } else {
+                    sanitize_op(&mut payload, self.vm, sandbox);
                 }
-                self.shared.forward("godot.batch", &[ops])
-            }
-            // The Flutter UI seam is the exact twin of the Godot seam: a
-            // `flutter.op`/`flutter.batch` op array crosses to the C++
-            // `FlutterController`, which drives an embedded Flutter engine. The
-            // ops carry the same wire vocabulary the Godot bridge uses —
-            // `{"ref": id}` for the parent Godot node a Flutter view mounts
-            // under, `{"callable": n}`/`"cb"` for widget event handlers — so the
-            // identical `sanitize_op` applies: callables/handles are namespaced
-            // into the calling VM's id space and the op is stamped with the VM's
-            // sandbox root (`__sbx`). A sandboxed VM can therefore only mount a
-            // Flutter surface under a node inside its own subtree, exactly as
-            // for native Godot nodes, and widget-event callbacks route back to
-            // the owning VM through the shared dispatch queue.
-            "flutter.op" => {
-                let mut op = args.first().cloned().unwrap_or(Value::Null);
-                sanitize_op(&mut op, self.vm, self.shared.sandbox_of(self.vm));
-                self.shared.forward("flutter.op", &[op])
-            }
-            "flutter.batch" => {
-                let mut ops = args.first().cloned().unwrap_or(Value::Null);
-                let sandbox = self.shared.sandbox_of(self.vm);
-                if let Value::Array(list) = &mut ops {
-                    for op in list {
-                        sanitize_op(op, self.vm, sandbox);
-                    }
-                }
-                self.shared.forward("flutter.batch", &[ops])
-            }
-            // The React Native UI seam is the third twin of the Godot seam: an
-            // `rn.op`/`rn.batch` op array crosses to the JavaScript host, which
-            // drives a real React Native / Expo widget tree (2D) and embedded
-            // Godot `Scene3D` worlds (3D). It speaks the identical wire
-            // vocabulary — `{"ref": id}` handles, `"cb"` callback ids — so the
-            // same `sanitize_op` applies: handles/callables are namespaced into
-            // the calling VM's id space and the op is stamped with the VM's
-            // sandbox root (`__sbx`). A sandboxed child VM can therefore only
-            // touch widgets inside its own assigned subtree, exactly as for
-            // native Godot nodes, and widget events route back to the owning VM.
-            "rn.op" => {
-                let mut op = args.first().cloned().unwrap_or(Value::Null);
-                sanitize_op(&mut op, self.vm, self.shared.sandbox_of(self.vm));
-                self.shared.forward("rn.op", &[op])
-            }
-            "rn.batch" => {
-                let mut ops = args.first().cloned().unwrap_or(Value::Null);
-                let sandbox = self.shared.sandbox_of(self.vm);
-                if let Value::Array(list) = &mut ops {
-                    for op in list {
-                        sanitize_op(op, self.vm, sandbox);
-                    }
-                }
-                self.shared.forward("rn.batch", &[ops])
+                self.shared.forward(n, &[payload])
             }
             other => self.shared.forward(other, args),
         }
@@ -678,14 +655,22 @@ impl HookEnv {
                 if target_sbx == 0 {
                     return Value::Bool(true); // target is unrestricted already
                 }
-                let mut op = json!({ "grant": encode_handle(env.vm, handle), "sbx": target_sbx });
+                // Granting a child access to one handle is a host operation:
+                // only the host knows what a handle addresses.
                 let caller_sbx = env.shared.sandbox_of(env.vm);
-                if caller_sbx != 0 {
-                    op["__sbx"] = json!(caller_sbx);
-                }
-                env.shared
-                    .forward("godot.op", &[op])
-                    .unwrap_or(Value::Bool(false))
+                let granted = env.shared.with_bridge(|bridge| {
+                    env.shared.surface.grant_handle(
+                        bridge,
+                        env.vm,
+                        encode_handle(env.vm, handle),
+                        if caller_sbx != 0 {
+                            caller_sbx
+                        } else {
+                            target_sbx
+                        },
+                    )
+                });
+                Value::Bool(granted)
             }),
             "vm.info" => {
                 let meta = self.shared.meta.borrow();
@@ -786,16 +771,15 @@ impl HookEnv {
         // controller's handle map.
         let node = encode_handle(self.vm, node);
         // Containment: the assigned node must lie inside the parent's own
-        // sandbox — verified by the engine bridge, which knows the real tree.
-        let mut chk = json!({ "chk": node });
+        // sandbox. Only the host knows its real tree, so it is asked.
         let caller_sbx = self.shared.sandbox_of(self.vm);
-        if caller_sbx != 0 {
-            chk["__sbx"] = json!(caller_sbx);
-        }
-        match self.shared.forward("godot.op", &[chk]) {
-            Some(Value::Bool(true)) => {}
-            Some(other) if other.as_bool() == Some(true) => {}
-            _ => return vm_error("vm.spawn: assigned node is not inside the parent's sandbox"),
+        let contained = self.shared.with_bridge(|bridge| {
+            self.shared
+                .surface
+                .verify_containment(bridge, node, caller_sbx)
+        });
+        if !contained {
+            return vm_error("vm.spawn: assigned node is not inside the parent's sandbox");
         }
 
         let label = get("label").as_str().unwrap_or("child").to_string();
@@ -820,7 +804,7 @@ impl HookEnv {
         let vm_id = self.shared.next_vm.get();
         self.shared.next_vm.set(vm_id + 1);
         let machine = format!("{}-c{}", self.shared.base, vm_id);
-        let program = compose_for(lang, source);
+        let program = self.shared.surface.compose(lang, source);
         let mut rt = match compile_guest(machine.clone(), &program, lang, meter) {
             Ok(rt) => rt,
             Err(e) => return vm_error(&format!("vm.spawn: child failed to compile: {e}")),
@@ -894,6 +878,7 @@ impl VmManager {
     /// whole-scene access and every capability; `max_host_calls` /
     /// `max_bytes_moved` bound its resource meter (0 = unbounded).
     pub fn new_root(
+        surface: Box<dyn HostSurface>,
         base_machine: String,
         user_source: &str,
         prepend: bool,
@@ -901,6 +886,7 @@ impl VmManager {
         max_bytes_moved: u64,
     ) -> Result<Self, String> {
         Self::new_root_lang(
+            surface,
             base_machine,
             user_source,
             GuestLang::Dart,
@@ -915,6 +901,7 @@ impl VmManager {
     /// matching prelude (`godot.dart` / `godot.js`) composed ahead unless
     /// `prepend` is false. Children spawned by the tree inherit the language.
     pub fn new_root_lang(
+        surface: Box<dyn HostSurface>,
         base_machine: String,
         user_source: &str,
         lang: GuestLang,
@@ -923,7 +910,7 @@ impl VmManager {
         max_bytes_moved: u64,
     ) -> Result<Self, String> {
         let program = if prepend {
-            compose_for(lang, user_source)
+            surface.compose(lang, user_source)
         } else {
             user_source.to_string()
         };
@@ -935,6 +922,7 @@ impl VmManager {
             .map_err(|e| format!("compile failed: {e}"))?;
 
         let shared = Rc::new(Shared {
+            surface,
             bridge: RefCell::new(None),
             meta: RefCell::new(HashMap::new()),
             by_machine: RefCell::new(HashMap::new()),
@@ -991,27 +979,35 @@ impl VmManager {
         result
     }
 
-    /// Deliver a host-side invocation. `__godotDispatch` routes a namespaced
-    /// callback to its owning VM; `__godotEvent` broadcasts an engine
-    /// lifecycle event to every live VM; anything else goes to the root VM.
+    /// Deliver a host-side invocation.
+    ///
+    /// The surface's dispatch function routes a namespaced callback back to the
+    /// VM that registered it; its event function broadcasts a host lifecycle
+    /// event to every live VM. Anything else goes to the root VM.
+    ///
+    /// Both names come from [`HostSurface`] rather than being hardcoded to
+    /// Godot's `__godotDispatch` / `__godotEvent`, so a Flutter or React Native
+    /// host uses its own.
     pub fn invoke(&mut self, fn_name: &str, arg: Value) {
+        let dispatch = self.shared.surface.dispatch_fn().to_string();
+        let event = self.shared.surface.event_fn().to_string();
         match fn_name {
-            "__godotDispatch" => {
+            n if n == dispatch => {
                 let global = arg.get(0).and_then(|v| v.as_i64()).unwrap_or(0);
                 let cb_args = arg.get(1).cloned().unwrap_or(Value::Null);
                 let (vm, local) = decode_cb(global);
                 if self.deliverable(vm) {
                     if let Some(rt) = self.rts.get_mut(&vm) {
-                        rt.deliver_event("__godotDispatch", json!([local, cb_args]));
+                        rt.deliver_event(&dispatch, json!([local, cb_args]));
                     }
                 }
             }
-            "__godotEvent" => {
+            n if n == event => {
                 let order = self.shared.order.borrow().clone();
                 for vm in order {
                     if self.deliverable(vm) {
                         if let Some(rt) = self.rts.get_mut(&vm) {
-                            rt.deliver_event("__godotEvent", arg.clone());
+                            rt.deliver_event(&event, arg.clone());
                         }
                     }
                 }
@@ -1077,7 +1073,10 @@ impl VmManager {
                 match boot {
                     Ok(_) => {
                         if let Some(rt) = self.rts.get_mut(&vm) {
-                            rt.deliver_event("__godotEvent", json!(["_ready", Value::Null]));
+                            rt.deliver_event(
+                                self.shared.surface.event_fn(),
+                                json!(["_ready", Value::Null]),
+                            );
                         }
                     }
                     Err(e) => {
