@@ -46,6 +46,31 @@ items.map((item) => el('li', { onClick: () => { picked = item; } }, []))
 > `finish_arrow`, which now drains its own lifts into the arrow's body. If a
 > captured loop item reads as null, you are on an old build.
 
+### 1c. A guest property named `type` is ordinary — but check your toolchain
+
+`{ type: 'directional', energy: lightEnergy / 10 }` is a perfectly normal object.
+Scene-DSL nodes are built almost entirely out of `type` keys.
+
+> **On an older toolchain this corrupted every other value in the same object
+> literal.** The closure-capture transform walks the AST generically and decided
+> "is this JSON object a node?" by testing for the presence of a `type` key. An
+> object literal's property map is keyed by *your* property names, so a `type`
+> property made the map look like a node: the walker handed it to the rewriter,
+> matched no node kind, and never descended into the sibling values. A captured
+> variable read there kept its unrewritten form and evaluated to its **box**, so
+> `lightEnergy / 10` became `[14] / 10` and trapped the VM with
+>
+> ```
+> elpian error: array can not be divisioned with other types
+> ```
+>
+> while `n + 0` silently produced `[14, 0]`. The trap fired at the *top level*,
+> before the first `render()`, so the host had no view at all — the spinner
+> flashed and the screen went white, with nothing in the app to explain it.
+> Fixed by requiring `type` to be a **string** to count as a node tag. It only
+> bit variables that were actually boxed, which is why a cut-down repro of the
+> same code could pass while the real program failed.
+
 ### 2. There is no `fetch`, `window`, `document`, or `localStorage`
 
 They compile to undefined identifiers and fail at runtime the same way. All I/O
@@ -154,6 +179,27 @@ If you register handlers for both names on the same button, both fire.
 `Scene3D` / `scene3d` within 6 levels of the root disables document scrolling for
 the whole screen — a scene cannot be measured for intrinsic height. Put scrolling
 UI *beside* a scene, not around it.
+
+### 15b. `flex` only means something inside a flex container
+
+```ts
+❌ el('div', { style: { padding: '14' } }, [           // not display:flex
+     el('div', { style: { flex: 1 } }, [ … ]),        // flex is meaningless here
+   ])
+✅ el('div', { style: { display: 'flex', flexDirection: 'column', padding: '14' } }, [
+     el('div', { style: { flex: 1 } }, [ … ]),
+   ])
+```
+
+CSS ignores `flex` on a child of a non-flex parent. Flutter is far less
+forgiving: `flex` becomes a `Flexible`, and a `Flexible` that is not a direct
+child of a `Row`/`Column` throws while applying parent data, which **aborts the
+build of the entire subtree** — a white screen whose reported error points
+nowhere near the offending node.
+
+The engine now degrades instead: a `Flexible` about to be placed somewhere other
+than a flex parent is unwrapped, so a misplaced `flex` is a cosmetic no-op. Set
+`display: 'flex'` on the parent to actually get the behaviour you wanted.
 
 ### 16. `%` sizing needs a bounded parent
 
@@ -284,6 +330,8 @@ untrusted code.
 | A captured loop item reads as null in a handler | #1b — pre-fix toolchain |
 | Server dies after one bad request | #1 — poisoned lock; you are on a pre-fix build |
 | Assets 404 at the domain root | #17 — `basePath`, or #19 a clobbered engine |
+| Blank screen, spinner flashed first | #1c (guest trapped before first render) or #15b (stray `flex`) |
+| `array can not be divisioned with other types` | #1c — pre-fix toolchain |
 | `method not found: 'elpian_wasm_init'` | #19b — stale build cache; `flutter clean` |
 | UI does not update after a state change | #7 — call `render()` |
 | Text field cursor jumps | #11 — re-rendering on input |

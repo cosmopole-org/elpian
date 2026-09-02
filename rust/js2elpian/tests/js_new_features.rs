@@ -213,3 +213,54 @@ fn user_method_named_like_a_js_builtin_is_not_rewritten() {
         function f(){ let b = new Bag(); return b.includes(5); }";  // 7 + 5 = 12
     assert_eq!(run("js-user-includes", js), "12");
 }
+
+// ---------------------------------------------------------------------------
+// A guest property named `type` must not be mistaken for an AST node tag.
+//
+// The closure-capture transform walks the AST generically and used the mere
+// presence of a `type` key to tell a typed node from a plain container map. An
+// object literal's property map is keyed by the *guest's* property names, so
+// `{ type: 'x', v: captured }` looked like a node: the walker handed it to
+// `rewrite`, matched no node kind, and never descended into the sibling values.
+// The variable's declaration was boxed while that read was not, so the read
+// evaluated to the box itself — `[14] / 10` trapped the VM ("array can not be
+// divisioned with other types") and `[14] + 0` silently yielded `[14, 0]`.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn type_named_property_does_not_shadow_the_node_tag() {
+    // `n` is boxed because the nested closure assigns to it.
+    let js = "function f(){ let n = 14; let bump = () => { n = n + 1; }; \
+              let o = { type: 'directional', v: n }; return o.v; }";
+    assert_eq!(run("ty1", js), "14");
+}
+
+#[test]
+fn type_named_property_arithmetic_is_not_array_concatenation() {
+    let js = "function f(){ let n = 14; let bump = () => { n = n + 1; }; \
+              let o = { type: 'd', v: n + 0 }; return o.v; }";
+    assert_eq!(run("ty2", js), "14");
+}
+
+#[test]
+fn type_named_property_division_does_not_trap() {
+    // The exact shape from the showcase template's light list.
+    let js = "function f(){ let e = 14; let dim = () => { e = e - 2; }; \
+              let o = { type: 'directional', energy: e / 10 }; return o.energy; }";
+    assert_eq!(run("ty3", js), "1.4");
+}
+
+#[test]
+fn type_named_property_nested_in_an_array_of_objects() {
+    let js = "function f(){ let e = 14; let dim = () => { e = e - 2; }; \
+              let lights = [{ type: 'omni', energy: 2 }, { type: 'spot', energy: e }]; \
+              return lights[1].energy; }";
+    assert_eq!(run("ty4", js), "14");
+}
+
+#[test]
+fn type_named_property_still_reads_back_as_itself() {
+    let js = "function f(){ let n = 1; let bump = () => { n = n + 1; }; \
+              let o = { type: 'mesh', v: n }; return o.type; }";
+    assert_eq!(run("ty5", js), "\"mesh\"");
+}
