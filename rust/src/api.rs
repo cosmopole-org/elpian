@@ -26,6 +26,7 @@ use serde_json::{json, Value};
 use crate::sdk::compiler;
 use crate::sdk::vm::VM;
 
+pub mod catalog;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod ffi;
 // The browser API, built on wasm-bindgen, and meaningful only for the
@@ -78,7 +79,11 @@ fn lock_tolerant<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 ///   round-trip that returns the host's reply. The host -> guest direction is
 ///   delivered by [`deliver_host_message`].
 /// * `log` — diagnostics.
-fn all_host_apis() -> Vec<String> {
+///
+/// This list is the single source of truth for the host surface. The Dart
+/// catalog (`lib/src/vm/host_api_catalog.dart`) is generated from it by the
+/// `gen-host-api-catalog` binary — do not maintain a second copy by hand.
+pub fn all_host_apis() -> Vec<String> {
     // Every native host name the VM may emit must appear here, or a call to it
     // is not treated as a native `askHost` target.
     [
@@ -508,20 +513,16 @@ pub fn usage(machine_id: &str) -> Option<ResourceUsage> {
     lock_tolerant(&VMS).get(machine_id).map(|vm| vm.usage())
 }
 
-/// Toggle one capability (network, storage, clock, …) for a VM.
-pub fn set_capability(machine_id: &str, cap: Capability, allowed: bool) -> bool {
-    let vms = lock_tolerant(&VMS);
-    match vms.get(machine_id) {
-        Some(vm) => {
-            vm.set_capability(cap, allowed);
-            true
-        }
-        None => false,
-    }
-}
-
-/// Replace a VM's whole capability set (e.g. install a sandbox `deny_all`).
-pub fn set_capabilities(machine_id: &str, caps: CapabilitySet) -> bool {
+/// Push an already-resolved *effective* capability set straight into a VM's
+/// executor, with no hierarchy involvement.
+///
+/// Private on purpose. The tree's second invariant is that a VM's effective set
+/// is the intersection of the local grants along its ancestor path, so the only
+/// legitimate source of an effective set is [`VmHierarchy::effective_caps`].
+/// The public setters below record a *local grant* and then recompute what each
+/// affected VM may actually do; a caller reaching past them could hand a child
+/// a capability its parent does not hold.
+fn push_effective_caps(machine_id: &str, caps: CapabilitySet) -> bool {
     let vms = lock_tolerant(&VMS);
     match vms.get(machine_id) {
         Some(vm) => {
@@ -530,6 +531,53 @@ pub fn set_capabilities(machine_id: &str, caps: CapabilitySet) -> bool {
         }
         None => false,
     }
+}
+
+/// Recompute the effective capability set for `machine_id` and every VM below
+/// it, and push each into its executor. Call after any change to a local grant
+/// on the path, so an on-the-fly revoke reaches the whole affected subtree at
+/// once.
+fn refresh_effective_caps(machine_id: &str) -> bool {
+    let updates: Vec<(String, CapabilitySet)> = {
+        let h = lock_tolerant(&HIERARCHY);
+        h.subtree(machine_id)
+            .into_iter()
+            .map(|id| {
+                let eff = h.effective_caps(&id);
+                (id, eff)
+            })
+            .collect()
+    };
+    let mut any = false;
+    for (id, eff) in updates {
+        any |= push_effective_caps(&id, eff);
+    }
+    any
+}
+
+/// Grant or revoke one capability (network, storage, clock, …) for a VM.
+///
+/// This records a **local grant** and then recomputes the effective set for the
+/// VM and its whole descendant subtree. Granting locally what an ancestor
+/// denies is recorded but stays ineffective until the ancestor grants it too —
+/// the tree's rule that a parent which lacks a permission can never confer it.
+///
+/// Before this went through the hierarchy it wrote straight into the executor,
+/// so a host call after `adopt_vm` could hand a child a capability its parent
+/// did not hold, silently defeating the intersection rule.
+pub fn set_capability(machine_id: &str, cap: Capability, allowed: bool) -> bool {
+    lock_tolerant(&HIERARCHY).set_local_capability(machine_id, cap, allowed);
+    refresh_effective_caps(machine_id)
+}
+
+/// Replace a VM's whole local capability set (e.g. install a sandbox
+/// `deny_all`), then recompute the effective set for it and its subtree.
+///
+/// Like [`set_capability`], this sets *local grants*: what the VM may actually
+/// do is still the intersection with every ancestor.
+pub fn set_capabilities(machine_id: &str, caps: CapabilitySet) -> bool {
+    lock_tolerant(&HIERARCHY).set_local_caps(machine_id, caps);
+    refresh_effective_caps(machine_id)
 }
 
 /// Whether a VM currently permits the given host API.
@@ -649,14 +697,16 @@ static HIERARCHY: Lazy<Mutex<VmHierarchy>> = Lazy::new(|| Mutex::new(VmHierarchy
 /// resulting effective capability set into the child's executor. Fails on
 /// cycles or if the child already has a parent.
 pub fn adopt_vm(parent_id: &str, child_id: &str) -> bool {
-    let effective = {
+    {
         let mut h = lock_tolerant(&HIERARCHY);
         if !h.adopt(parent_id, child_id) {
             return false;
         }
-        h.effective_caps(child_id)
-    };
-    set_capabilities(child_id, effective);
+    }
+    // The child's local grants are unchanged; what changed is its ancestry, so
+    // it and everything below it need their effective sets recomputed against
+    // the new path.
+    refresh_effective_caps(child_id);
     true
 }
 
@@ -682,28 +732,12 @@ pub fn vm_is_ancestor_or_self(ancestor: &str, machine_id: &str) -> bool {
     lock_tolerant(&HIERARCHY).is_ancestor_or_self(ancestor, machine_id)
 }
 
-/// Toggle one *locally granted* capability of a VM, then recompute and push
-/// the **effective** capability set (local ∧ ancestors) for the VM and its
-/// whole descendant subtree — so an on-the-fly change takes effect everywhere
-/// below immediately. Note that granting locally what an ancestor denies is
-/// recorded but stays ineffective until the ancestor grants it too.
+/// The explicit spelling of [`set_capability`], for call sites that want to be
+/// unambiguous that they are setting a *local grant* rather than an effective
+/// set. Identical behaviour: both record the grant and recompute the effective
+/// set (local ∧ ancestors) across the VM's whole descendant subtree.
 pub fn set_local_capability(machine_id: &str, cap: Capability, allowed: bool) -> bool {
-    let updates: Vec<(String, CapabilitySet)> = {
-        let mut h = lock_tolerant(&HIERARCHY);
-        h.set_local_capability(machine_id, cap, allowed);
-        h.subtree(machine_id)
-            .into_iter()
-            .map(|id| {
-                let eff = h.effective_caps(&id);
-                (id, eff)
-            })
-            .collect()
-    };
-    let mut any = false;
-    for (id, eff) in updates {
-        any |= set_capabilities(&id, eff);
-    }
-    any
+    set_capability(machine_id, cap, allowed)
 }
 
 /// A VM's locally granted capability set (allow-all when never restricted).

@@ -35,31 +35,64 @@ pub enum Capability {
     /// VMs, steering their lifecycle, limits and permissions. The gate of the
     /// multi-VM tree: a VM without it cannot create or control children.
     VmManage,
+    /// Reading and mutating the host's document tree (`dom.*`).
+    Dom,
+    /// The 2D drawing surface (`canvas.*`).
+    Canvas,
+    /// Submitting a UI tree to the host renderer (`render`, `updateApp`).
+    Render,
+    /// Scheduling deferred work on the host clock (`setTimeout`, `setInterval`,
+    /// `clearTimeout`, `clearInterval`). Separate from [`Capability::Clock`]:
+    /// reading the time and being able to schedule against it are different
+    /// grants.
+    Timers,
+    /// Reading the host environment (`env.get`) — viewport, locale, platform.
+    Environment,
+    /// Offloading guest compute onto the host's worker pool (`task.*`). Its own
+    /// gate because it spends host threads, not just guest instructions.
+    Tasks,
+    /// The embedder-defined message pipe (`host.send`, `host.request`).
+    HostMessaging,
     /// Any host API not mapped to a more specific capability.
     Other,
 }
 
 impl Capability {
-    /// Map a host-API name to the capability that gates it. Family prefixes
-    /// (`gpu.`, `net.`, `fs.`, `time.`, `random.`) are matched so new APIs in a
-    /// family inherit the right gate automatically.
+    /// Map a host-API name to the capability that gates it.
+    ///
+    /// Family prefixes (`gpu.`, `net.`, `fs.`, `time.`, `random.`, `dom.`,
+    /// `canvas.`, `task.`, `host.`) are matched so new APIs in a family inherit
+    /// the right gate automatically. The handful of unprefixed legacy names the
+    /// Flutter engine speaks are mapped individually.
+    ///
+    /// Every name the host actually serves should land on a specific gate.
+    /// [`Capability::Other`] is the fail-safe for anything unrecognised, not a
+    /// bucket to park real APIs in: when `dom.*`, `canvas.*`, `render` and the
+    /// timers all shared it, a host could not deny a mini app the document tree
+    /// without also denying it rendering and timers, which made the gate
+    /// unusable in practice.
     pub fn for_api(api_name: &str) -> Capability {
-        if api_name == "log" {
-            Capability::Logging
-        } else if api_name == "vm.import" {
-            Capability::ModuleImport
-        } else if let Some(family) = api_name.split('.').next() {
-            match family {
-                "gpu" => Capability::Gpu,
-                "net" => Capability::Network,
-                "fs" => Capability::Storage,
-                "time" => Capability::Clock,
-                "random" => Capability::Randomness,
-                "vm" => Capability::VmManage,
+        match api_name {
+            // Unprefixed legacy names from the Flutter engine surface.
+            "log" | "println" => Capability::Logging,
+            "render" | "updateApp" => Capability::Render,
+            "env.get" => Capability::Environment,
+            "setTimeout" | "setInterval" | "clearTimeout" | "clearInterval" => Capability::Timers,
+            "vm.import" => Capability::ModuleImport,
+            _ => match api_name.split('.').next() {
+                Some("gpu") => Capability::Gpu,
+                Some("net") => Capability::Network,
+                Some("fs") => Capability::Storage,
+                Some("time") => Capability::Clock,
+                Some("random") => Capability::Randomness,
+                Some("vm") => Capability::VmManage,
+                Some("dom") => Capability::Dom,
+                Some("canvas") => Capability::Canvas,
+                Some("task") => Capability::Tasks,
+                Some("host") => Capability::HostMessaging,
+                // `stringify` and anything the host adds without a family.
                 _ => Capability::Other,
-            }
-        } else {
-            Capability::Other
+            },
         }
     }
 
@@ -74,6 +107,13 @@ impl Capability {
             Capability::Clock => "clock",
             Capability::Randomness => "randomness",
             Capability::VmManage => "vm_manage",
+            Capability::Dom => "dom",
+            Capability::Canvas => "canvas",
+            Capability::Render => "render",
+            Capability::Timers => "timers",
+            Capability::Environment => "environment",
+            Capability::Tasks => "tasks",
+            Capability::HostMessaging => "host_messaging",
             Capability::Other => "other",
         }
     }
@@ -94,13 +134,20 @@ impl Capability {
             "clock" => Capability::Clock,
             "randomness" => Capability::Randomness,
             "vm_manage" => Capability::VmManage,
+            "dom" => Capability::Dom,
+            "canvas" => Capability::Canvas,
+            "render" => Capability::Render,
+            "timers" => Capability::Timers,
+            "environment" => Capability::Environment,
+            "tasks" => Capability::Tasks,
+            "host_messaging" => Capability::HostMessaging,
             "other" => Capability::Other,
             _ => return None,
         })
     }
 
     /// Every capability, for enumeration / bulk toggling.
-    pub fn all() -> [Capability; 9] {
+    pub fn all() -> [Capability; 16] {
         [
             Capability::Logging,
             Capability::Gpu,
@@ -110,6 +157,13 @@ impl Capability {
             Capability::Clock,
             Capability::Randomness,
             Capability::VmManage,
+            Capability::Dom,
+            Capability::Canvas,
+            Capability::Render,
+            Capability::Timers,
+            Capability::Environment,
+            Capability::Tasks,
+            Capability::HostMessaging,
             Capability::Other,
         ]
     }
@@ -186,6 +240,39 @@ impl CapabilitySet {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_flutter_engine_surface_is_individually_gateable() {
+        // The point of splitting `Other`: a host must be able to deny the
+        // document tree without also denying rendering, timers or the clock.
+        let mut caps = CapabilitySet::allow_all();
+        caps.revoke(Capability::Dom);
+
+        assert!(!caps.allows_api("dom.querySelector"));
+        assert!(!caps.allows_api("dom.setStyle"));
+        assert!(caps.allows_api("canvas.ctx.create"));
+        assert!(caps.allows_api("render"));
+        assert!(caps.allows_api("setTimeout"));
+        assert!(caps.allows_api("env.get"));
+    }
+
+    #[test]
+    fn engine_surface_names_map_to_specific_gates() {
+        assert_eq!(Capability::for_api("dom.appendChild"), Capability::Dom);
+        assert_eq!(Capability::for_api("canvas.ctx.fill"), Capability::Canvas);
+        assert_eq!(Capability::for_api("render"), Capability::Render);
+        assert_eq!(Capability::for_api("updateApp"), Capability::Render);
+        assert_eq!(Capability::for_api("setTimeout"), Capability::Timers);
+        assert_eq!(Capability::for_api("clearInterval"), Capability::Timers);
+        assert_eq!(Capability::for_api("env.get"), Capability::Environment);
+        assert_eq!(Capability::for_api("task.spawn"), Capability::Tasks);
+        assert_eq!(Capability::for_api("host.send"), Capability::HostMessaging);
+        // `println` is diagnostic output, the same class of effect as `log`.
+        assert_eq!(Capability::for_api("println"), Capability::Logging);
+        // `Other` stays the fail-safe for genuinely unrecognised names.
+        assert_eq!(Capability::for_api("stringify"), Capability::Other);
+        assert_eq!(Capability::for_api("something_new"), Capability::Other);
+    }
 
     #[test]
     fn api_names_map_to_capabilities() {
