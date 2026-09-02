@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../canvas/canvas_context_store.dart';
 import '../models/elpian_node.dart';
+import '../core/elpian_services.dart';
 
 class ElpianCachedCanvas {
   static Widget build(ElpianNode node, List<Widget> children) {
@@ -15,7 +15,7 @@ class ElpianCachedCanvas {
       return const SizedBox.shrink();
     }
 
-    final ctx = CanvasContextStore.instance.get(contextId);
+    final ctx = ElpianServices.current.canvasContexts.get(contextId);
     if (ctx != null && width != null && height != null) {
       ctx.setSize(width, height);
     }
@@ -52,7 +52,7 @@ class CachedCanvasWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ctx = CanvasContextStore.instance.get(contextId);
+    final ctx = ElpianServices.current.canvasContexts.get(contextId);
     if (ctx == null) return const SizedBox.shrink();
 
     return ValueListenableBuilder<int>(
@@ -96,7 +96,7 @@ class _CachedCanvasPainter extends CustomPainter {
       canvas.drawRect(Offset.zero & size, paint);
     }
 
-    final ctx = CanvasContextStore.instance.get(contextId);
+    final ctx = ElpianServices.current.canvasContexts.get(contextId);
     if (ctx == null) return;
 
     final picture = ctx.getPicture();

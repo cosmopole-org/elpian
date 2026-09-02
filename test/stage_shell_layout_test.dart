@@ -18,11 +18,11 @@ void main() {
   const mobile = Size(412, 915);
 
   setUp(() {
-    GlobalStylesheetManager().clear();
+    GlobalStylesheetManager.shared.clear();
     CSSParser.viewportOverride = mobile;
   });
   tearDown(() {
-    GlobalStylesheetManager().clear();
+    GlobalStylesheetManager.shared.clear();
     CSSParser.viewportOverride = null;
   });
 

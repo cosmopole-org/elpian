@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../css/stylesheet.dart';
+import '../core/elpian_services.dart';
 
 /// JSON-based CSS stylesheet parser
 /// Allows defining stylesheets in JSON format
@@ -46,7 +47,7 @@ class JsonStylesheetParser {
         }
       }
       mediaGroups.forEach((query, sheet) {
-        GlobalStylesheetManager().addMediaQuery(query, sheet);
+        ElpianServices.current.stylesheets.addMediaQuery(query, sheet);
       });
     }
 
@@ -106,7 +107,7 @@ class JsonStylesheetParser {
       }
     }
 
-    GlobalStylesheetManager().addMediaQuery(query, mqStylesheet);
+    ElpianServices.current.stylesheets.addMediaQuery(query, mqStylesheet);
   }
 
   /// Parse CSS variables

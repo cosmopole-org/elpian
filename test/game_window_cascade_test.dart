@@ -4,7 +4,7 @@ import 'package:elpian_ui/elpian_ui.dart';
 void main() {
   test('game-window cascade: !important media override beats inline at 412w',
       () {
-    final mgr = GlobalStylesheetManager()..clear();
+    final mgr = GlobalStylesheetManager.shared..clear();
     mgr.global.addRule('.game-window', {
       'position': 'absolute',
       'top': 96,

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/elpian_node.dart';
+import '../core/elpian_services.dart';
 import '../css/css_properties.dart';
-import '../core/event_dispatcher.dart';
 
 /// An `<input>` element (text / number / password / checkbox / radio).
 ///
@@ -66,7 +66,7 @@ class _HtmlInputState extends State<HtmlInput> {
         value: _checked,
         onChanged: (newValue) {
           setState(() => _checked = newValue ?? false);
-          EventDispatcher().dispatchChange(_elementId, _checked);
+          ElpianServices.current.events.dispatchChange(_elementId, _checked);
         },
       );
     } else if (_type == 'radio') {
@@ -76,7 +76,7 @@ class _HtmlInputState extends State<HtmlInput> {
       result = RadioGroup<Object?>(
         groupValue: groupValue,
         onChanged: (newValue) {
-          EventDispatcher().dispatchChange(_elementId, newValue);
+          ElpianServices.current.events.dispatchChange(_elementId, newValue);
         },
         child: Radio<Object?>(value: value),
       );
@@ -109,8 +109,9 @@ class _HtmlInputState extends State<HtmlInput> {
           ),
         ),
         onChanged: (value) =>
-            EventDispatcher().dispatchInput(_elementId, value),
-        onSubmitted: (value) => EventDispatcher().dispatchSubmit(_elementId),
+            ElpianServices.current.events.dispatchInput(_elementId, value),
+        onSubmitted: (value) =>
+            ElpianServices.current.events.dispatchSubmit(_elementId),
       );
     }
 

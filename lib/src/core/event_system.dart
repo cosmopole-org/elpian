@@ -455,9 +455,10 @@ mixin ElpianEventTarget {
 
 /// Global event bus for broadcasting events
 class EventBus with ElpianEventTarget {
-  static final EventBus _instance = EventBus._internal();
-  factory EventBus() => _instance;
-  EventBus._internal();
+  EventBus();
+
+  /// The bus every un-scoped caller sees.
+  static final EventBus shared = EventBus();
 
   /// Broadcast event to all subscribers
   void broadcast(ElpianEvent event) {

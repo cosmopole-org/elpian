@@ -4,9 +4,10 @@ import '../models/elpian_node.dart';
 typedef WidgetBuilder = Widget Function(ElpianNode node, List<Widget> children);
 
 class WidgetRegistry {
-  static final WidgetRegistry _instance = WidgetRegistry._internal();
-  factory WidgetRegistry() => _instance;
-  WidgetRegistry._internal();
+  WidgetRegistry();
+
+  /// The registry every un-scoped caller sees.
+  static final WidgetRegistry shared = WidgetRegistry();
 
   final Map<String, WidgetBuilder> _registry = {};
 

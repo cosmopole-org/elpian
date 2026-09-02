@@ -5,12 +5,16 @@ import '../models/elpian_node.dart';
 
 /// Event dispatcher that handles event propagation through the widget tree
 class EventDispatcher {
-  static final EventDispatcher _instance = EventDispatcher._internal();
-  factory EventDispatcher() => _instance;
-  EventDispatcher._internal();
+  EventDispatcher();
+
+  /// The dispatcher every un-scoped caller sees.
+  static final EventDispatcher shared = EventDispatcher();
 
   final Map<String, ElpianNode> _nodeRegistry = {};
   final Map<String, String?> _parentRegistry = {};
+
+  /// This dispatcher's own bus. Deliberately not `EventBus.shared`: a
+  /// dispatcher belongs to one mini app, and so does everything it broadcasts.
   final EventBus _eventBus = EventBus();
 
   /// Global event callback for all events

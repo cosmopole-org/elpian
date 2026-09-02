@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/elpian_node.dart';
+import '../core/elpian_services.dart';
 import '../css/css_properties.dart';
-import '../core/event_dispatcher.dart';
 
 /// A `<select>` dropdown.
 ///
@@ -119,7 +119,7 @@ class _HtmlSelectState extends State<HtmlSelect> {
       onChanged: (newValue) {
         if (newValue == null) return;
         setState(() => _value = newValue);
-        EventDispatcher().dispatchChange(_elementId, newValue);
+        ElpianServices.current.events.dispatchChange(_elementId, newValue);
       },
     );
 

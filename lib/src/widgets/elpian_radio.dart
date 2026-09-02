@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/elpian_node.dart';
-import '../core/event_dispatcher.dart';
+import '../core/elpian_services.dart';
 
 class ElpianRadio {
   static Widget build(ElpianNode node, List<Widget> children) {
@@ -14,7 +14,7 @@ class ElpianRadio {
     return RadioGroup<Object?>(
       groupValue: groupValue,
       onChanged: (newValue) {
-        final dispatcher = EventDispatcher();
+        final dispatcher = ElpianServices.current.events;
         dispatcher.dispatchChange(elementId, newValue);
       },
       child: Radio<Object?>(value: value),

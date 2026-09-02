@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../canvas/canvas_api.dart';
 import '../canvas/canvas_context_store.dart';
 import '../core/dom_api.dart';
+import '../core/elpian_services.dart';
 import 'host_api_catalog.dart';
 
 typedef RenderHostCallback = void Function(
@@ -23,8 +24,28 @@ class HostHandler {
   /// wants to see what its mini apps are asking for.
   final void Function(String apiName, bool advertised)? onUnservicedApi;
 
+  /// Called when [onAuthorize] refuses a call — the hook a super app uses to
+  /// log or surface what a mini app tried to reach for.
+  final void Function(String apiName)? onCallRefused;
+
   final ElpianDOM dom;
   final CanvasAPIExecutor canvas;
+
+  /// The mini app this handler serves. Its canvas store is the one guests
+  /// reach, and its [ElpianServices.appId] namespaces every id they choose.
+  final ElpianServices services;
+
+  /// Where `canvas.ctx.*` calls land.
+  ///
+  /// This used to be the process-wide `CanvasContextStore.instance`, keyed by
+  /// an id the *guest* supplies. `create(id: "main")` returned the existing
+  /// context if that id was taken, so one mini app asking for an obvious name
+  /// was handed another's pixels and command list. Now each mini app has its
+  /// own store, and [_scoped] prefixes every id with the app it belongs to, so
+  /// a collision cannot cross an app boundary even if the stores were shared.
+  CanvasContextStore get _canvasContexts => services.canvasContexts;
+
+  String _scoped(String id) => services.scopeId(id);
 
   HostHandler({
     this.onRender,
@@ -32,12 +53,38 @@ class HostHandler {
     this.onPrintln,
     this.onGetEnvironment,
     this.onUnservicedApi,
+    this.onAuthorize,
+    this.onCallRefused,
     ElpianDOM? dom,
     CanvasAPIExecutor? canvas,
+    ElpianServices? services,
   })  : dom = dom ?? ElpianDOM(),
-        canvas = canvas ?? CanvasAPIExecutor();
+        canvas = canvas ?? CanvasAPIExecutor(),
+        services = services ?? ElpianServices.shared;
+
+  /// Consulted before every host call. Return false to refuse it.
+  ///
+  /// The Elpian VM gates `askHost` by capability before a call ever reaches
+  /// Dart, so this is a second gate rather than the only one. It matters for
+  /// two reasons: the QuickJS and WASM backends have no such gate of their
+  /// own, and a super-app host may want a policy the VM's capability families
+  /// cannot express — a per-mini-app allowlist, a consent prompt, a kill
+  /// switch. Left null, every call the handler implements is serviced.
+  final bool Function(String apiName)? onAuthorize;
 
   String handleHostCall(String apiName, String payload) {
+    if (onAuthorize != null && !onAuthorize!(apiName)) {
+      onCallRefused?.call(apiName);
+      assert(() {
+        debugPrint(
+            'HostHandler[${services.appId}]: $apiName refused by policy');
+        return true;
+      }());
+      // The typed null the VM produces for a denied capability, so a guest sees
+      // one behaviour whether the refusal came from the VM or from here.
+      return _nullResponse();
+    }
+
     if (VmHostApiCatalog.domApiNames.contains(apiName)) {
       return _handleDomApi(apiName, payload);
     }
@@ -366,32 +413,36 @@ class HostHandler {
           final id = args['id']?.toString();
           final width = _toDouble(args['width']) ?? 0;
           final height = _toDouble(args['height']) ?? 0;
-          final ctx = CanvasContextStore.instance.create(
-            id: id,
+          final ctx = _canvasContexts.create(
+            id: (id == null || id.isEmpty) ? null : _scoped(id),
             width: width,
             height: height,
           );
-          return _makeResponse('string', ctx.id);
+          // Hand back the id the guest asked for, not the namespaced one it is
+          // stored under: the guest passes its own id to every later
+          // `canvas.ctx.*` call, and those scope it again on the way in.
+          // Returning the scoped id would double-prefix on the next lookup.
+          return _makeResponse('string', id ?? ctx.id);
         }
       case 'canvas.ctx.dispose':
         {
           final id = args['id']?.toString();
           if (id != null && id.isNotEmpty) {
-            CanvasContextStore.instance.dispose(id);
+            _canvasContexts.dispose(_scoped(id));
           }
           return _makeResponse('i16', 0);
         }
       case 'canvas.ctx.clear':
         {
           final id = args['id']?.toString();
-          final ctx = id == null ? null : CanvasContextStore.instance.get(id);
+          final ctx = id == null ? null : _canvasContexts.get(_scoped(id));
           ctx?.clear();
           return _makeResponse('i16', 0);
         }
       case 'canvas.ctx.setSize':
         {
           final id = args['id']?.toString();
-          final ctx = id == null ? null : CanvasContextStore.instance.get(id);
+          final ctx = id == null ? null : _canvasContexts.get(_scoped(id));
           if (ctx != null) {
             final width = _toDouble(args['width']) ?? ctx.width;
             final height = _toDouble(args['height']) ?? ctx.height;
@@ -402,7 +453,7 @@ class HostHandler {
       case 'canvas.ctx.addCommand':
         {
           final id = args['id']?.toString();
-          final ctx = id == null ? null : CanvasContextStore.instance.get(id);
+          final ctx = id == null ? null : _canvasContexts.get(_scoped(id));
           if (ctx == null) return _makeResponse('i16', 0);
           final commandJson = args['command'] ?? args;
           if (commandJson is Map) {
@@ -415,7 +466,7 @@ class HostHandler {
       case 'canvas.ctx.addCommands':
         {
           final id = args['id']?.toString();
-          final ctx = id == null ? null : CanvasContextStore.instance.get(id);
+          final ctx = id == null ? null : _canvasContexts.get(_scoped(id));
           if (ctx == null) return _makeResponse('i16', 0);
           final raw = args['commands'];
           if (raw is List) {

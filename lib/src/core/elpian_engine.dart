@@ -1,20 +1,45 @@
 import 'package:flutter/material.dart';
-import 'package:elpian_ui/elpian_ui.dart';
-import '../widgets/elpian_canvas_widget.dart';
-import '../widgets/elpian_cached_canvas.dart';
-import '../widgets/elpian_scope.dart';
+
+// Explicit relative imports rather than the package's own public barrel.
+// `elpian_engine.dart` used to `import 'package:elpian_ui/elpian_ui.dart'`,
+// i.e. a file inside `src/` reaching back through the library's public
+// entrypoint — a cycle that defeats tree-shaking and makes the dependency
+// graph unreadable.
+import '../css/css_parser.dart';
+import '../css/json_stylesheet_parser.dart';
+import '../css/stylesheet.dart';
+import '../godot/scene3d_widget.dart';
+import '../html_widgets/html_widgets.dart';
+import '../models/css_style.dart';
+import '../models/elpian_node.dart';
+import '../widgets/widgets.dart';
+import '../scope/scope_contract.dart';
+import 'elpian_services.dart';
+import 'event_dispatcher.dart';
+import 'event_enabled_widget.dart';
+import 'event_system.dart';
+import 'widget_registry.dart';
 
 // HTML Widgets
 
 class ElpianEngine {
-  final WidgetRegistry _registry = WidgetRegistry();
-  final EventDispatcher _eventDispatcher = EventDispatcher();
-  final GlobalStylesheetManager _stylesheetManager = GlobalStylesheetManager();
+  /// The mini app this engine renders for.
+  ///
+  /// Defaults to [ElpianServices.shared], which is what a single-app embedder
+  /// wants and what these services used to be unconditionally. A super app
+  /// gives each mini app its own set so nothing leaks between them.
+  final ElpianServices services;
+
   String? _currentParentId;
 
-  ElpianEngine() {
+  ElpianEngine({ElpianServices? services})
+      : services = services ?? ElpianServices.shared {
     _registerDefaultWidgets();
   }
+
+  WidgetRegistry get _registry => services.registry;
+  EventDispatcher get _eventDispatcher => services.events;
+  GlobalStylesheetManager get _stylesheetManager => services.stylesheets;
 
   /// Set global event handler to receive all events
   void setGlobalEventHandler(ElpianEventListener handler) {
@@ -233,7 +258,14 @@ class ElpianEngine {
     _registry.register('area', HtmlArea.build);
   }
 
-  Widget render(ElpianNode node, {String? parentId}) {
+  Widget render(ElpianNode node, {String? parentId}) =>
+      services.runScoped(() => _render(node, parentId: parentId));
+
+  /// The render itself, always run inside this engine's service scope so
+  /// builders capture the right mini app's dispatcher, stylesheets and canvas
+  /// store as they build. See [ElpianServices] for why capture-at-build rather
+  /// than lookup-at-dispatch.
+  Widget _render(ElpianNode node, {String? parentId}) {
     final builder = _registry.get(node.type);
 
     if (builder == null) {
@@ -291,7 +323,7 @@ class ElpianEngine {
 
     // Render children with parent ID
     final children = nodeWithStyle.children
-        .map((child) => render(child, parentId: _currentParentId))
+        .map((child) => _render(child, parentId: _currentParentId))
         .toList();
 
     // Restore previous parent

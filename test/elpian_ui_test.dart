@@ -85,7 +85,7 @@ void main() {
 
   group('Widget Registry Tests', () {
     test('Can register and retrieve widgets', () {
-      final registry = WidgetRegistry();
+      final registry = WidgetRegistry.shared;
 
       registry.register('Test', (node, children) {
         return const SizedBox();
@@ -96,7 +96,7 @@ void main() {
     });
 
     test('Can unregister widgets', () {
-      final registry = WidgetRegistry();
+      final registry = WidgetRegistry.shared;
 
       registry.register('Test', (node, children) {
         return const SizedBox();

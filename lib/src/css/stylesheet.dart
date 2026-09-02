@@ -269,10 +269,10 @@ class KeyframeFrame {
 
 /// Global stylesheet manager
 class GlobalStylesheetManager {
-  static final GlobalStylesheetManager _instance =
-      GlobalStylesheetManager._internal();
-  factory GlobalStylesheetManager() => _instance;
-  GlobalStylesheetManager._internal();
+  GlobalStylesheetManager();
+
+  /// The stylesheet manager every un-scoped caller sees.
+  static final GlobalStylesheetManager shared = GlobalStylesheetManager();
 
   final CSSStylesheet _globalStylesheet = CSSStylesheet();
   final List<MediaQuery> _mediaQueries = [];

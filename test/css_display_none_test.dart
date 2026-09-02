@@ -30,12 +30,12 @@ Map<String, dynamic> _tree() => {
 
 void main() {
   setUp(() {
-    GlobalStylesheetManager().clear();
+    GlobalStylesheetManager.shared.clear();
     CSSParser.viewportOverride = null;
   });
 
   tearDown(() {
-    GlobalStylesheetManager().clear();
+    GlobalStylesheetManager.shared.clear();
     CSSParser.viewportOverride = null;
   });
 
@@ -71,7 +71,7 @@ void main() {
   testWidgets(
       'display:none from a matching @media rule hides; non-matching shows',
       (tester) async {
-    final mgr = GlobalStylesheetManager();
+    final mgr = GlobalStylesheetManager.shared;
     final mobile = CSSStylesheet();
     mobile.addRule('.desktop-only', {'display': 'none !important'});
     mgr.addMediaQuery('(max-width: 820px)', mobile);

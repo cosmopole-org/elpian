@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import '../models/elpian_node.dart';
+import '../core/elpian_services.dart';
 import '../css/css_parser.dart';
 import '../css/css_properties.dart';
-import '../css/stylesheet.dart';
 import '../models/css_style.dart';
 import '../scope/scope_contract.dart';
 
@@ -243,7 +243,7 @@ class HtmlDiv {
       final classes = className is String
           ? className.split(' ')
           : (className as List?)?.cast<String>();
-      final computed = GlobalStylesheetManager().getComputedStyleMap(
+      final computed = ElpianServices.current.stylesheets.getComputedStyleMap(
         tagName: child.type,
         id: child.key,
         classes: classes,

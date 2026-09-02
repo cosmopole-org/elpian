@@ -8,14 +8,14 @@ import 'package:elpian_ui/elpian_ui.dart';
 import 'package:elpian_ui/src/core/event_dispatcher.dart' as ed;
 
 void main() {
-  final dispatcher = ed.EventDispatcher();
+  final dispatcher = ed.EventDispatcher.shared;
 
   setUp(() {
-    GlobalStylesheetManager().clear();
+    GlobalStylesheetManager.shared.clear();
   });
   tearDown(() {
     dispatcher.globalEventHandler = null;
-    GlobalStylesheetManager().clear();
+    GlobalStylesheetManager.shared.clear();
   });
 
   testWidgets('select dispatches a change event with the chosen value',

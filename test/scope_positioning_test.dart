@@ -8,11 +8,11 @@ import 'package:elpian_ui/elpian_ui.dart';
 
 void main() {
   setUp(() {
-    GlobalStylesheetManager().clear();
+    GlobalStylesheetManager.shared.clear();
     CSSParser.viewportOverride = const Size(1366, 900);
   });
   tearDown(() {
-    GlobalStylesheetManager().clear();
+    GlobalStylesheetManager.shared.clear();
     CSSParser.viewportOverride = null;
   });
 

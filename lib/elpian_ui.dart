@@ -1,5 +1,11 @@
 library elpian_ui;
 
+// Super app — the mini-app layer: what an app declares, what it is granted,
+// what it actually gets, and the host that owns its runtime, its isolated
+// state and its children.
+export 'src/superapp/mini_app.dart';
+export 'src/superapp/mini_app_host.dart';
+
 // Governance — the control plane over every mini app: what it may do
 // (capabilities), how much it may spend (limits + meters), whether it runs
 // (lifecycle), and how a mini app that spawns others is accountable for them
@@ -31,6 +37,7 @@ export 'src/core/widget_registry.dart';
 export 'src/core/dom_api.dart';
 export 'src/core/event_system.dart';
 export 'src/core/resources.dart';
+export 'src/core/elpian_services.dart';
 export 'src/core/event_dispatcher.dart';
 export 'src/core/event_enabled_widget.dart';
 

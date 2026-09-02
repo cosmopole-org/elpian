@@ -12,7 +12,7 @@ void main() {
     // Register a stylesheet rule. The element below also carries inline styles;
     // the engine must merge BOTH (inline wins on conflict) and keep
     // stylesheet-only fields (D2 lossless merge).
-    final mgr = GlobalStylesheetManager()..clear();
+    final mgr = GlobalStylesheetManager.shared..clear();
     mgr.global.addRule('.card', {
       'backgroundColor': '#2c3e50',
       'padding': '20',
