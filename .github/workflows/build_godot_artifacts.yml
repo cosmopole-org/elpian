@@ -183,22 +183,28 @@ jobs:
           unzip -q templates.tpz -d /tmp/templates
           mv /tmp/templates/templates/* "$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_DIR}/"
 
-      # The Android library ships inside the export templates as
-      # android_source.zip — a gradle project whose release build IS the AAR the
-      # plugin links. This is why the engine is never built from source here.
-      - name: Produce the Godot library AAR from the official templates
+      # The AAR ships **prebuilt** inside android_source.zip, at
+      # libs/release/godot-lib.template_release.aar. Unzip and copy; there is
+      # nothing to build, which is the whole point of taking it from the
+      # official templates.
+      #
+      # This step used to run `./gradlew :lib:assembleTemplateRelease` there and
+      # could only ever fail — android_source.zip is Godot's Android *app*
+      # template (a `com.android.application` root project whose settings.gradle
+      # includes only `:assetPacks:installTime`), so there is no `:lib` module:
+      #
+      #   Cannot locate tasks that match ':lib:assembleTemplateRelease'
+      #   as project 'lib' not found in root project 'godot-android'.
+      - name: Take the Godot library AAR from the official templates
         run: |
           set -e
-          mkdir -p /tmp/godot-android
+          mkdir -p /tmp/godot-android "$GITHUB_WORKSPACE/out/android/libs"
           unzip -o -q "$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_DIR}/android_source.zip" \
             -d /tmp/godot-android
-          cd /tmp/godot-android
-          chmod +x gradlew || true
-          ./gradlew :lib:assembleTemplateRelease --no-daemon
-          find . -name "*.aar" -print
-          mkdir -p "$GITHUB_WORKSPACE/out/android/libs"
-          cp "$(find . -name 'godot-lib*template_release.aar' | head -1)" \
-             "$GITHUB_WORKSPACE/out/android/libs/godot-lib.template_release.aar"
+          aar=/tmp/godot-android/libs/release/godot-lib.template_release.aar
+          test -f "$aar" || { echo "::error::no prebuilt AAR in android_source.zip"; \
+            find /tmp/godot-android -name '*.aar' -print; exit 1; }
+          cp "$aar" "$GITHUB_WORKSPACE/out/android/libs/godot-lib.template_release.aar"
           ls -lh "$GITHUB_WORKSPACE/out/android/libs"
 
       # ---------------------------------------------------------------------
@@ -320,9 +326,34 @@ jobs:
       # Rust C-ABI library is required even though only the ElpianScene3D half is
       # used here. emcc is the linker for this target and comes from the emsdk
       # the setup step put on PATH.
+      # `-Clink-arg=-O0` is load-bearing, and not an optimisation choice.
+      #
+      # Cargo builds every crate-type a package declares, so asking for this
+      # staticlib also links a cdylib — a wasm SIDE_MODULE — for elpian-vm,
+      # dart2elpian, js2elpian and dart. Nothing consumes those; only
+      # libelpian_godot.a is fed to scons, and an `ar` archive needs no linking
+      # at all.
+      #
+      # Each of those pointless links runs emcc's binaryen post-link step, which
+      # forwards the wasm features found in the objects to `wasm-opt`. Current
+      # rustc (LLVM 20+) emits `bulk-memory-opt` and `call-indirect-overlong`,
+      # which the binaryen in emsdk 3.1.64 does not know:
+      #
+      #   Unknown option '--enable-bulk-memory-opt'
+      #
+      # The emscripten version is pinned by Godot's ABI and cannot float to
+      # match rustc, so the fix is to stop the throwaway links from invoking
+      # binaryen: emcc skips the post-link entirely at -O0, and the last -O wins.
+      # Codegen is untouched — link args do not reach the objects the archive is
+      # built from — so the staticlib is still a release build.
       - name: Build the Elpian C-ABI library for wasm32
         working-directory: elpian/rust
-        run: cargo build -p elpian-godot-capi --release --target wasm32-unknown-emscripten
+        env:
+          RUSTFLAGS: -Clink-arg=-O0
+        run: |
+          set -e
+          cargo build -p elpian-godot-capi --release --target wasm32-unknown-emscripten
+          ls -lh target/wasm32-unknown-emscripten/release/libelpian_godot.a
 
       - name: Build the GDExtension for the web
         working-directory: victor/victor/bridge/extension
@@ -370,6 +401,14 @@ jobs:
           godot --headless --export-release "Web" \
             "$GITHUB_WORKSPACE/out/godot/elpian_godot.html"
           ls -lh "$GITHUB_WORKSPACE/out/godot"
+          # extensions_support=true + thread_support=false selects the
+          # web_dlink_nothreads_release template, whose engine is split into
+          # elpian_godot.wasm plus a side module. A missing side module loads as
+          # a blank canvas, so fail here instead.
+          for f in elpian_godot.js elpian_godot.wasm elpian_godot.pck elpian_godot.side.wasm; do
+            test -f "$GITHUB_WORKSPACE/out/godot/$f" \
+              || { echo "::error::web export is missing $f"; exit 1; }
+          done
 
       # The page glue boots the engine itself instead of loading the exported
       # HTML shell, because the canvas has to be the one Flutter put in the

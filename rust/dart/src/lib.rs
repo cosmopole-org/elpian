@@ -76,8 +76,10 @@ pub mod typed_data;
 // wasm32-unknown-unknown module (see its module docs). Emitting it on native
 // targets exports `elpian_init` into every cdylib, which collides with the
 // VM's own native FFI entry point of the same name — a real duplicate-symbol
-// link error, not a warning. Gate it to the target it was written for.
-#[cfg(target_arch = "wasm32")]
+// link error, not a warning. Gate it to the target it was written for, which
+// `target_arch = "wasm32"` alone does not: that also matches
+// wasm32-unknown-emscripten, the target the Godot web GDExtension links.
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 pub mod wasm_api;
 #[cfg(feature = "dart")]
 pub mod widgets;

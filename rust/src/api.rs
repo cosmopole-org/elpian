@@ -28,7 +28,11 @@ use crate::sdk::vm::VM;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod ffi;
-#[cfg(target_arch = "wasm32")]
+// The browser API, built on wasm-bindgen, and meaningful only for the
+// wasm-pack target. `target_arch = "wasm32"` alone also matches
+// wasm32-unknown-emscripten, which is how the Godot web GDExtension is built:
+// that dragged wasm-bindgen into a link that can never use it.
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 pub mod wasm;
 
 /// Thread-safe registry of live VMs keyed by `machineId`.
