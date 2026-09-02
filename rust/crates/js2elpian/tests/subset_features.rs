@@ -99,20 +99,17 @@ if (d.hello() !== "hi") { throw "wrong"; }
 // Telling a class component from a function component
 // ---------------------------------------------------------------------------
 //
-// This is where the SDK's class-component design was decided, so the result is
-// worth stating plainly. **None** of the usual discriminators exist here:
+// This is where the SDK's class-component design was decided.
 //
-//   * `Type.prototype` is null, so no prototype marker;
-//   * static fields and static methods do not inherit to a subclass;
-//   * a class object cannot be assigned to, so it cannot carry its own flag.
+// `Type.prototype` is null and a class object cannot be assigned to, so neither
+// a prototype marker nor a flag stuck onto the class is available. `instanceof`
+// works but only on an *instance*, and constructing one speculatively is not an
+// option: `new fn(props)` on a function component would run its body, and its
+// hooks, before we knew what it was.
 //
-// `instanceof` does work — but only on an *instance*, and constructing one
-// speculatively is not an option: `new fn(props)` on a function component would
-// run its body, and its hooks, before we knew what it was.
-//
-// So a class component is handed over explicitly, with `GUI.component(...)`,
-// rather than detected. Each of these tests will start failing the day the
-// front-end grows the feature it probes, which is the signal to simplify.
+// What is available — after the front-end change that came out of this survey —
+// is **inherited statics**. `Component` declares one, every subclass sees it,
+// and the reconciler can ask a class what it is without touching an instance.
 
 #[test]
 fn a_constructor_has_no_prototype_property() {
@@ -147,56 +144,42 @@ if (!(d instanceof Base)) { throw "instanceof failed"; }
 }
 
 #[test]
-fn a_static_field_does_not_inherit_to_a_subclass() {
-    let r = accepts(
-        "sub-static",
+fn statics_inherit_through_a_chain_and_can_be_overridden() {
+    // The whole point of the front-end change: a subclass sees its ancestors'
+    // statics, at any depth, and may replace one.
+    assert_accepts(
+        "sub-static-chain",
+        "static inheritance",
         r#"
-class Base { static isComponent = true; }
+class Base { static kind = "component"; static make() { return "made"; } }
 class Derived extends Base {}
-if (Derived.isComponent === true) { throw "statics inherit after all"; }
+class Deeper extends Derived { static extra = 1; }
+class Override extends Base { static kind = "overridden"; }
+if (Base.kind !== "component") { throw "base field"; }
+if (Derived.kind !== "component") { throw "field did not inherit"; }
+if (Deeper.kind !== "component") { throw "field did not inherit two levels"; }
+if (Deeper.extra !== 1) { throw "a subclass lost its own static"; }
+if (Override.kind !== "overridden") { throw "a subclass could not override"; }
+if (Derived.make() !== "made") { throw "method did not inherit"; }
 "#,
-    );
-    assert!(
-        r.is_ok(),
-        "a static field now inherits to a subclass — the SDK's class-component \
-         discriminator can be simplified to read one: {r:?}"
     );
 }
 
 #[test]
-fn a_static_method_does_not_inherit_either() {
-    // The remaining candidate: if a static *method* inherits where a static
-    // field does not, a class component can be recognised by asking the class
-    // itself, with no instance and no speculative construction.
-    // Reading it off the subclass yields a non-function, and calling that
-    // traps the VM rather than throwing — so the limit is asserted from here
-    // rather than probed with try/catch inside the guest.
-    let r = accepts(
-        "sub-staticfn",
+fn a_static_is_readable_as_a_value_off_a_subclass() {
+    // How the SDK tells a class component from a function one:
+    // `__isType(Type.__guiComponent, …)` with no instance and no speculative
+    // construction.
+    assert_accepts(
+        "sub-static-value",
+        "reading an inherited static as a value",
         r#"
-class Base { static kind() { return "component"; } }
+class Base { static marker = true; static build() { return 1; } }
 class Derived extends Base {}
-Derived.kind();
+if (Derived.marker !== true) { throw "field not readable"; }
+if (!__isType(Derived.build, "function")) { throw "method not readable as a value"; }
 "#,
     );
-    assert!(
-        r.is_err(),
-        "a static method now inherits — the discriminator can use one instead \
-         of GUI.component(...)"
-    );
-}
-
-#[test]
-fn a_static_is_not_readable_off_a_subclass() {
-    let r = accepts(
-        "sub-staticfn-read",
-        r#"
-class Base { static kind() { return "component"; } }
-class Derived extends Base {}
-if (__isType(Derived.kind, "function")) { throw "readable after all"; }
-"#,
-    );
-    assert!(r.is_ok(), "a static is now readable off a subclass: {r:?}");
 }
 
 #[test]

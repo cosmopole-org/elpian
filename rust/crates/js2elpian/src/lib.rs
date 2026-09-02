@@ -545,10 +545,17 @@ struct JsParser {
     /// While parsing a class method body, the parent class name (if the class
     /// `extends` one) so `super.m(...)` can resolve to the parent's method.
     class_parent: Option<String>,
-    /// Class names that declared at least one `static` member, with the per-class
-    /// holder object `__static_<Name>`. A `C.member` access where `C` is such a
-    /// class is rewritten to read off that holder (see [`JsParser::parse_postfix`]).
-    class_statics: HashSet<String>,
+    /// Each class that has any static members — its own or inherited — mapped to
+    /// the member names its holder object `__static_<Name>` carries. A
+    /// `C.member` access where `C` is such a class is rewritten to read off that
+    /// holder (see [`JsParser::parse_postfix`]).
+    ///
+    /// Inheritance is resolved here, at compile time, rather than by walking a
+    /// `__parent` link at run time: the compiler already knows both classes, and
+    /// a chain walk would cost every static read. It also means a subclass that
+    /// declares no statics of its own still gets a holder, which is what makes
+    /// `class Derived extends Base {}` see `Base`'s statics at all.
+    class_statics: HashMap<String, serde_json::Map<String, Value>>,
     /// The constructor parameter list recorded for each class, so a derived class
     /// with no explicit constructor can synthesise one that forwards those args to
     /// `super` (JS's implicit-constructor behaviour).
@@ -704,7 +711,7 @@ impl JsParser {
             lifted: Vec::new(),
             anon_counter: 0,
             class_parent: None,
-            class_statics: HashSet::new(),
+            class_statics: HashMap::new(),
             class_ctor_params: HashMap::new(),
             user_members,
         }
@@ -1122,18 +1129,22 @@ impl JsParser {
         //    `C` is a class with statics is rewritten to read off that holder (see
         //    `parse_postfix`). Static methods are shared top-level functions, like
         //    instance methods.
-        if !static_methods.is_empty() || !static_fields.is_empty() {
-            let mut static_map = serde_json::Map::new();
-            // Inherit the parent's static holder so `Child.staticOfParent` resolves.
-            if let Some(p) = &parent {
-                if self.class_statics.contains(p) {
-                    static_map.insert("__parent".to_string(), js_ident(&format!("__static_{}", p)));
-                }
-            }
+        // A class needs a holder when it declares statics *or* inherits any. The
+        // second half is what was missing: `class Derived extends Base {}` got no
+        // holder, so `Derived.staticOfBase` was never rewritten and read as null.
+        let inherited: Option<&serde_json::Map<String, Value>> =
+            parent.as_ref().and_then(|p| self.class_statics.get(p));
+        if !static_methods.is_empty() || !static_fields.is_empty() || inherited.is_some() {
+            // Start from the parent's resolved map. It already contains *its*
+            // ancestors' entries, so a chain of any depth is flattened here once
+            // rather than walked on every read.
+            let mut static_map = inherited.cloned().unwrap_or_default();
             for (mname, params, body) in static_methods.into_iter() {
                 let fname = format!("__sm_{}__{}", name, mname);
                 out.push(json!({ "type": "functionDefinition", "data": {
                     "name": fname, "params": params, "body": body } }));
+                // Overrides the inherited entry of the same name, which is what
+                // a subclass redeclaring a static means.
                 static_map.insert(mname, js_ident(&fname));
             }
             for (fname, val) in static_fields.into_iter() {
@@ -1141,9 +1152,9 @@ impl JsParser {
             }
             out.push(js_def(
                 &format!("__static_{}", name),
-                json!({ "type": "object", "data": { "value": Value::Object(static_map) } }),
+                json!({ "type": "object", "data": { "value": Value::Object(static_map.clone()) } }),
             ));
-            self.class_statics.insert(name.clone());
+            self.class_statics.insert(name.clone(), static_map);
         }
 
         out
@@ -1904,7 +1915,7 @@ impl JsParser {
                 if e["type"] == "identifier"
                     && !self
                         .class_statics
-                        .contains(e["data"]["name"].as_str().unwrap_or(""))
+                        .contains_key(e["data"]["name"].as_str().unwrap_or(""))
                 {
                     if let Some(ns) = e["data"]["name"].as_str() {
                         if is_js_namespace(ns) {
@@ -1935,7 +1946,7 @@ impl JsParser {
                 if e["type"] == "identifier"
                     && e["data"]["name"]
                         .as_str()
-                        .map(|n| self.class_statics.contains(n))
+                        .map(|n| self.class_statics.contains_key(n))
                         .unwrap_or(false)
                 {
                     let cname = e["data"]["name"].as_str().unwrap().to_string();
