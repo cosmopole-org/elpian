@@ -13,7 +13,7 @@ PLATFORM="${1:?usage: build_apple.sh <ios|macos> <output-dir>}"
 OUT_DIR="${2:?usage: build_apple.sh <ios|macos> <output-dir>}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MANIFEST="$SCRIPT_DIR/../../rust/crates/elpian-vm/Cargo.toml"
+MANIFEST="$SCRIPT_DIR/../../rust/crates/elpian-ffi/Cargo.toml"
 TARGET_DIR="$SCRIPT_DIR/../../rust/target"
 
 if ! command -v cargo >/dev/null 2>&1; then

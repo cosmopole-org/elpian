@@ -1,4 +1,9 @@
-//! Stable C ABI used by the Flutter engine on native platforms.
+//! The stable C ABI the Flutter engine links against on native platforms.
+//!
+//! This lives in its own package rather than inside `elpian-vm` because it
+//! needs to see *both* the VM and `elpian-runtime` — and the runtime depends on
+//! the VM, so the ABI could not sit under it without a cycle. Moving it out is
+//! what lets a Flutter guest reach the multi-VM manager (see [`crate::manager`]).
 //!
 //! # Panic containment
 //!
@@ -36,8 +41,8 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use serde_json::json;
 
-use super::govern;
-use super::{
+use vm::api::govern;
+use vm::api::{
     continue_execution, create_vm_from_ast, create_vm_from_bytecode, create_vm_from_code,
     deliver_host_message, destroy_vm, execute_vm, execute_vm_func, execute_vm_func_with_input,
     init_vm_system, validate_ast, vm_exists, VmExecResult,

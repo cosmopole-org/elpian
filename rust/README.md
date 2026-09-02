@@ -17,7 +17,9 @@ member crates and read as though the VM contained them.
 | `js2elpian` | JavaScript → Elpian AST / bytecode. |
 | `dart2elpian` | Dart → the JS subset `js2elpian` compiles. |
 | `elpian-dart-runtime` | The `dart:*` host surface and the Flutter widget layer, plus a Dart-level capability/resource governor. Was named `dart`, which read as a language, a directory and a dependency at once. |
-| `capi` (`elpian-godot-capi`) | The C ABI the Godot GDExtension embeds, wrapping the multi-VM `VmManager`. |
+| `elpian-runtime` | The host-neutral multi-VM manager: `vm.spawn`, the sandbox rules, aggregate budgets, per-VM callback namespacing. The embedder supplies the surface (Godot, Flutter, …) through the `HostSurface` trait. |
+| `elpian-ffi` | The C ABI Flutter links against. Produces `libelpian_vm.{so,dll,a}` — the artifact name the Dart bindings open — exporting the VM surface, the governance control plane, and the multi-VM manager. |
+| `capi` (`elpian-godot-capi`) | The C ABI the Godot GDExtension embeds: `GodotSurface` plus the `elpian_godot_*` exports. |
 
 `cli/` is a separate Cargo project with its own lockfile; CI builds and tests it
 alongside this workspace (see `.github/workflows/verify.yml`).
@@ -29,7 +31,7 @@ cargo test --workspace                 # everything
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all
 
-cargo build --release                  # what Flutter links on desktop
+cargo build --release -p elpian-ffi    # what Flutter links: libelpian_vm
 cargo run --bin gen-host-api-catalog -- ../lib/src/vm/host_api_catalog.dart
 
 # The browser VM. wasm-pack needs a package, not the virtual root:

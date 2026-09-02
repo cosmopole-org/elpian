@@ -54,7 +54,7 @@ android {
 //     rustup target add aarch64-linux-android armv7-linux-androideabi \
 //                       x86_64-linux-android i686-linux-android
 ext {
-    rustManifest = file("${projectDir}/../../rust/crates/elpian-vm/Cargo.toml")
+    rustManifest = file("${projectDir}/../../rust/crates/elpian-ffi/Cargo.toml")
     // Matches Flutter's own default ABI set.
     androidAbis = ["arm64-v8a", "armeabi-v7a", "x86_64"]
 }
@@ -67,6 +67,7 @@ tasks.register("buildElpianVm", Exec) {
     outputs.dir(outDir)
     inputs.file(rustManifest)
     inputs.dir(file("${projectDir}/../../rust/crates/elpian-vm/src"))
+    inputs.dir(file("${projectDir}/../../rust/crates/elpian-ffi/src"))
 
     doFirst { outDir.mkdirs() }
 

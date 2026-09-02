@@ -1104,7 +1104,50 @@ impl VmManager {
                 }
             }
 
-            // 3. Trap detection: a VM stopped by its own governor (e.g. a hung
+            // 3. Host-side termination: a VM the *embedder* stopped through the
+            //    governance API rather than through this manager — Dart's
+            //    `ElpianTreeGovernor.terminateTree`, say, or a policy sweep in
+            //    `enforce_tree_budgets`. Both are legitimate ways to kill a VM,
+            //    and only one of them went through `remove_subtree`, so without
+            //    this the manager's own view stayed stale: `vm_alive` kept
+            //    reporting a VM the registry had already dropped.
+            //    Both destruction (the VM is gone from the registry) and
+            //    termination (it is still registered but will never run again)
+            //    count as dead here.
+            let vanished: Vec<u64> = {
+                let meta = self.shared.meta.borrow();
+                meta.iter()
+                    .filter(|(_, m)| !m.dead)
+                    // A VM stopped by its own governor is *not* this case: it
+                    // has a trap reason, and step 4 below notifies its parent
+                    // before marking it dead. Sweeping it here would kill it
+                    // silently and the parent would never be told.
+                    .filter(|(_, m)| vm_api::trap_reason(&m.machine_id).is_none())
+                    .filter(|(_, m)| {
+                        !vm_api::vm_exists(m.machine_id.clone())
+                            || matches!(
+                                vm_api::run_state(&m.machine_id),
+                                None | Some(vm_api::RunState::Terminated)
+                                    | Some(vm_api::RunState::TerminateRequested)
+                            )
+                    })
+                    .map(|(vm, _)| *vm)
+                    .collect()
+            };
+            for vm in vanished {
+                progressed = true;
+                {
+                    let mut meta = self.shared.meta.borrow_mut();
+                    if let Some(m) = meta.get_mut(&vm) {
+                        m.dead = true;
+                    }
+                }
+                self.rts.remove(&vm);
+                self.shared
+                    .log(format!("vm {vm} was terminated by the host"));
+            }
+
+            // 4. Trap detection: a VM stopped by its own governor (e.g. a hung
             //    child cut off by its per-turn instruction cap). The parent is
             //    notified once and decides; the VM stays queryable until then.
             let trapped: Vec<(u64, String)> = {

@@ -112,7 +112,9 @@ jobs:
       # instead of skipping themselves.
       - name: Build the native VM library
         working-directory: rust
-        run: cargo build --release
+        # elpian-ffi is the package that produces libelpian_vm, the artifact
+        # the Dart bindings open.
+        run: cargo build --release -p elpian-ffi
 
       - name: Resolve dependencies
         run: |

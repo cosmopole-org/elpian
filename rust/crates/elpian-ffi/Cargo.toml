@@ -1,0 +1,20 @@
+[package]
+name = "elpian-ffi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The C ABI Flutter links against. Produces libelpian_vm, exporting the VM's creation/execution surface, the governance control plane, and — through elpian-runtime — the multi-VM manager, so a guest can spawn child mini apps."
+
+[lib]
+# The artifact name Flutter's bindings open: `libelpian_vm.so`,
+# `elpian_vm.dll`, `libelpian_vm.a`. Keeping it means the Dart side is
+# unchanged by moving the ABI out of the elpian-vm package.
+name = "elpian_vm"
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[dependencies]
+# Aliased: this package's own library is *named* `elpian_vm` (the artifact
+# Flutter opens), so the dependency needs a different name in scope.
+vm = { package = "elpian-vm", path = "../elpian-vm" }
+elpian-runtime = { path = "../elpian-runtime" }
+serde_json = "1.0"

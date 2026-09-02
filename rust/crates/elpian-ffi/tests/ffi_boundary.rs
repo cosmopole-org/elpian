@@ -23,8 +23,8 @@
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 
-use elpian_vm::api;
-use elpian_vm::api::ffi::{
+use ::vm::api;
+use elpian_vm::abi::{
     elpian_create_vm_from_ast, elpian_destroy_vm, elpian_execute, elpian_free_string,
     elpian_last_error,
 };
@@ -257,12 +257,12 @@ fn post_fault_introspection_survives_the_poisoned_registry() {
 /// use a plain `.lock().unwrap()`.
 #[test]
 fn no_registry_lock_bypasses_the_poison_recovery() {
-    let source = include_str!("../src/api.rs");
+    let source = include_str!("../../elpian-vm/src/api.rs");
     for (n, line) in source.lines().enumerate() {
         let line = line.trim();
         assert!(
             !(line.contains("VMS.lock()") || line.contains("HIERARCHY.lock()")),
-            "src/api.rs:{}: take the registry through `lock_tolerant`, not `{}` — \
+            "elpian-vm/src/api.rs:{}: take the registry through `lock_tolerant`, not `{}` — \
              a guest panic poisons this mutex and every later call would fail \
              for the life of the process",
             n + 1,

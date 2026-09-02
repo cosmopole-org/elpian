@@ -6,7 +6,11 @@ license.workspace = true
 description = "Elpian AST-based bytecode VM — a pure executor. Ingests Elpian AST JSON / bytecode (produced by front-end crates such as js2elpian / dart2elpian) and executes it, yielding host calls to the embedding runtime."
 
 [lib]
-crate-type = ["cdylib", "staticlib", "rlib"]
+# An rlib only. The C ABI moved to the `elpian-ffi` package, which is what
+# produces `libelpian_vm.{so,dll,a}` now — two packages cannot both claim that
+# artifact name, and the ABI needs to see `elpian-runtime`, which depends on
+# this crate.
+crate-type = ["rlib"]
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
