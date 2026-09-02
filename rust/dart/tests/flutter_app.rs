@@ -7,7 +7,7 @@ use dart::binding::{PointerEvent, PointerPhase};
 use dart::{DartCapabilitySet, DartRuntime, ResourceMeter};
 use serde_json::Value;
 
-const DEMO: &str = include_str!("../flutter/demo_app.dart");
+const DEMO: &str = include_str!("../../../guest-sdk/dart/demo_app.dart");
 
 fn ops(frame: &Value) -> &Vec<Value> {
     frame["root"]["ops"].as_array().expect("ops array")

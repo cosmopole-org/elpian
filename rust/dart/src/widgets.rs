@@ -474,7 +474,7 @@ pub fn compose(app_source: &str) -> String {
 /// `import`s; it defines the widget classes, painting value types, layout
 /// protocol, and the engine binding. Compiled through the same front-end as the
 /// app itself.
-pub const FLUTTER_LIB: &str = include_str!("../flutter/flutter.dart");
+pub const FLUTTER_LIB: &str = include_str!("../../../guest-sdk/dart/flutter.dart");
 
 /// Remove Dart library directives (`import`/`export`/`library`/`part`) from a
 /// source file. The Elpian front-end has no module system: an app's
