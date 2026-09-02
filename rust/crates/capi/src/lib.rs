@@ -45,23 +45,23 @@ pub use manager::{BridgeFn, GuestLang, VmManager, ROOT_VM};
 /// The `godot.dart` guest prelude, compiled ahead of the user program so the
 /// `GD`/`GObj` reflective surface, the `VMs` orchestration facade and the
 /// marshaling vocabulary are in scope.
-pub const GODOT_PRELUDE: &str = include_str!("../../../guest-sdk/dart/godot.dart");
+pub const GODOT_PRELUDE: &str = include_str!("../../../../guest-sdk/dart/godot.dart");
 
 /// The `godot.js` guest prelude — the JavaScript twin of `godot.dart`. Same
 /// wire protocol, same `GD`/`GObj`/`VMs` surface, expressed in the Elpian-JS
 /// subset the `js2elpian` front-end compiles.
-pub const GODOT_PRELUDE_JS: &str = include_str!("../../../guest-sdk/js/godot.js");
+pub const GODOT_PRELUDE_JS: &str = include_str!("../../../../guest-sdk/js/godot.js");
 
 /// The Victor UI kit (`ui.js`) — a full widget toolkit in JavaScript built on
 /// Godot `Control` nodes over the bridge. Composed ahead of a JS guest when
 /// its source imports it (`import 'ui.js';`).
-pub const GODOT_UI_KIT_JS: &str = include_str!("../../../guest-sdk/js/ui.js");
+pub const GODOT_UI_KIT_JS: &str = include_str!("../../../../guest-sdk/js/ui.js");
 
 /// Victor networking (`net.js`) — HTTP (Godot `HTTPRequest` + a cookie jar),
 /// WebSocket (`WebSocketPeer` pumped on a guest timer) and a Socket.IO v4
 /// client, all in the Elpian-JS subset. Composed ahead of a JS guest when its
 /// source imports it (`import 'net.js';`); it depends only on `godot.js`.
-pub const GODOT_NET_JS: &str = include_str!("../../../guest-sdk/js/net.js");
+pub const GODOT_NET_JS: &str = include_str!("../../../../guest-sdk/js/net.js");
 
 /// Caspar protocol client (`caspar.js`) — the Caspar-node signed binary action
 /// protocol over a `StreamPeerTCP` (framing, dev login, RSA request signing
@@ -69,7 +69,7 @@ pub const GODOT_NET_JS: &str = include_str!("../../../guest-sdk/js/net.js");
 /// plus `CaspiNet`, the CaspiGames service-discovery layer. Composed ahead of
 /// a JS guest when its source imports it (`import 'caspar.js';`); it depends
 /// only on `godot.js`.
-pub const GODOT_CASPAR_JS: &str = include_str!("../../../guest-sdk/js/caspar.js");
+pub const GODOT_CASPAR_JS: &str = include_str!("../../../../guest-sdk/js/caspar.js");
 
 /// The Flutter UI bridge (`flutter.js`) — the `FL` facade that drives a real
 /// `libflutter` engine embedded in the GDExtension over the `flutter.op` seam
@@ -77,7 +77,7 @@ pub const GODOT_CASPAR_JS: &str = include_str!("../../../guest-sdk/js/caspar.js"
 /// of a JS guest when its source imports it (`import 'flutter.js';`); it depends
 /// only on `godot.js` (it reuses that prelude's callback registry so widget
 /// events route back through the same namespaced-dispatch path).
-pub const GODOT_FLUTTER_JS: &str = include_str!("../../../guest-sdk/js/flutter.js");
+pub const GODOT_FLUTTER_JS: &str = include_str!("../../../../guest-sdk/js/flutter.js");
 
 /// VReact (`react.js`) — a React-compatible runtime (element factory, the full
 /// hook surface, and a keyed reconciler that mutates retained Godot nodes)
@@ -86,7 +86,7 @@ pub const GODOT_FLUTTER_JS: &str = include_str!("../../../guest-sdk/js/flutter.j
 /// it implies the UI kit even if `ui.js` is not imported explicitly. This is
 /// what a compiled Next.js-on-Victor program (see `templates/victor-nextjs/`)
 /// runs on.
-pub const GODOT_REACT_JS: &str = include_str!("../../../guest-sdk/js/react.js");
+pub const GODOT_REACT_JS: &str = include_str!("../../../../guest-sdk/js/react.js");
 
 /// The React Native bridge (`reactnative.js`) — the `RN` facade that drives a
 /// **real React Native / Expo widget tree** (2D) plus embedded Godot `Scene3D`
@@ -98,7 +98,7 @@ pub const GODOT_REACT_JS: &str = include_str!("../../../guest-sdk/js/react.js");
 /// `godot.js` (it reuses that prelude's callback registry and marshaling so
 /// widget events route through the same namespaced-dispatch path, and so the
 /// contents of a `Scene3D` drive Godot with the ordinary `GD`/`G3` surface).
-pub const GODOT_REACTNATIVE_JS: &str = include_str!("../../../guest-sdk/js/reactnative.js");
+pub const GODOT_REACTNATIVE_JS: &str = include_str!("../../../../guest-sdk/js/reactnative.js");
 
 /// Service a guest host call: `(user, api_name, args_json)` → reply JSON.
 /// Return NULL (or leave unregistered) to decline — the guest then sees `null`.

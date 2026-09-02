@@ -9,5 +9,5 @@ description = "JavaScript → Elpian compiler. Lowers a practical JS subset to E
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
-elpian-vm = { path = ".." }
+elpian-vm = { path = "../elpian-vm" }
 serde_json = "1.0"

@@ -28,7 +28,7 @@ Two properties worth knowing:
   is no parser in the runtime. (`.elpian.js` is shipped too, but purely as a
   readable/debug artifact — the browser never parses it.)
 - The executor **decodes bytecode once** at construction into an addressable op
-  list (`rust/src/sdk/program.rs`). A program that re-runs its render path every
+  list (`rust/crates/elpian-vm/src/sdk/program.rs`). A program that re-runs its render path every
   frame pays decode cost only once — the file's own comment notes that
   re-decoding "dominated the per-frame cost" before this change.
 
@@ -114,7 +114,7 @@ template's functions must be synchronous and side-effect-free.
 
 ## Run states and traps
 
-`rust/src/api.rs` exposes lifecycle and introspection:
+`rust/crates/elpian-vm/src/api.rs` exposes lifecycle and introspection:
 
 ```rust
 pub fn run_state(machine_id: &str) -> Option<RunState>;
@@ -165,7 +165,7 @@ Governance calls are listed in [`03-governance.md`](03-governance.md).
 
 ## The universal stdlib
 
-`rust/src/sdk/stdlib/mod.rs` binds ~200 builtins available to **every** front-end,
+`rust/crates/elpian-vm/src/sdk/stdlib/mod.rs` binds ~200 builtins available to **every** front-end,
 so JS and Dart guests get identical behaviour. They are global functions, not
 methods on a prototype chain (though the JS front-end maps common method
 spellings onto them — `arr.includes(x)` → `contains`, `arr.filter(f)` → `where`).
@@ -218,9 +218,9 @@ isInstance isNull isNotEmpty compareTo tryNum method parentMethod superMethod ne
 
 | Surface | File | Target |
 |---|---|---|
-| Native FFI | `rust/src/api/ffi.rs` | Android, iOS, macOS, Linux, Windows (via `rust_builder/`) |
-| WASM | `rust/src/api/wasm.rs` | Web (`wasm-bindgen`) |
-| HTTP server | `rust/src/bin/elpian-server.rs` | Server-side VMs, one per request |
+| Native FFI | `rust/crates/elpian-vm/src/api/ffi.rs` | Android, iOS, macOS, Linux, Windows (via `rust_builder/`) |
+| WASM | `rust/crates/elpian-vm/src/api/wasm.rs` | Web (`wasm-bindgen`) |
+| HTTP server | `rust/crates/elpian-vm/src/bin/elpian-server.rs` | Server-side VMs, one per request |
 
 On the Flutter side these are selected by conditional import in
 `lib/elpian_ui.dart`:

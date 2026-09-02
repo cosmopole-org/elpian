@@ -65,8 +65,8 @@ use std::rc::Rc;
 // which front-end compiles guest source, and that is confined to
 // [`GuestLang`] + [`compile_guest`] — swap the front-end there and nothing
 // else changes.
-use dart::governance::{DartCapabilitySet as GuestCapabilitySet, ResourceMeter};
-use dart::runtime::DartRuntime as GuestRuntime;
+use elpian_dart_runtime::governance::{DartCapabilitySet as GuestCapabilitySet, ResourceMeter};
+use elpian_dart_runtime::runtime::DartRuntime as GuestRuntime;
 
 /// Which front-end compiles a guest program. Both lower to the same Elpian
 /// AST → bytecode and speak the identical bridge protocol; the language only

@@ -3,11 +3,11 @@
 //! `demo_app.dart` (MaterialApp/Scaffold/AppBar/Card/Row/Column/ElevatedButton/
 //! StatefulWidget) compiles, lays out, paints a scene, and responds to taps.
 
-use dart::binding::{PointerEvent, PointerPhase};
-use dart::{DartCapabilitySet, DartRuntime, ResourceMeter};
+use elpian_dart_runtime::binding::{PointerEvent, PointerPhase};
+use elpian_dart_runtime::{DartCapabilitySet, DartRuntime, ResourceMeter};
 use serde_json::Value;
 
-const DEMO: &str = include_str!("../../../guest-sdk/dart/demo_app.dart");
+const DEMO: &str = include_str!("../../../../guest-sdk/dart/demo_app.dart");
 
 fn ops(frame: &Value) -> &Vec<Value> {
     frame["root"]["ops"].as_array().expect("ops array")

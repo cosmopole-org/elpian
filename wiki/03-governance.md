@@ -3,11 +3,11 @@
 Elpian is built to run code you do not trust. Three orthogonal mechanisms
 provide that, all enforced inside the Rust VM:
 
-1. **Capabilities** — *what* a guest may do (`rust/src/sdk/capabilities.rs`).
-2. **Resource limits + meters** — *how much* it may do (`rust/src/sdk/limits.rs`).
+1. **Capabilities** — *what* a guest may do (`rust/crates/elpian-vm/src/sdk/capabilities.rs`).
+2. **Resource limits + meters** — *how much* it may do (`rust/crates/elpian-vm/src/sdk/limits.rs`).
 3. **The VM hierarchy** — how those compose across a tree of VMs
-   (`rust/src/sdk/hierarchy.rs`), plus lifecycle control
-   (`rust/src/sdk/lifecycle.rs`).
+   (`rust/crates/elpian-vm/src/sdk/hierarchy.rs`), plus lifecycle control
+   (`rust/crates/elpian-vm/src/sdk/lifecycle.rs`).
 
 Because a guest's only outward effect is `askHost`, all of this is enforced at
 one seam.
@@ -236,7 +236,7 @@ enforce_tree_budgets()              -> Vec<(String, String, Vec<String>)>;
 
 `VmHierarchy` is **pure data** — no statics, no locks — so it is unit-testable in
 isolation. The process-wide instance and the functions combining it with the live
-VM registry live in `rust/src/api.rs`.
+VM registry live in `rust/crates/elpian-vm/src/api.rs`.
 
 ---
 

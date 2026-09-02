@@ -187,7 +187,8 @@ jobs:
       # The browser VM is a checked-in artifact; rebuild it so the showcase runs
       # the VM from this commit rather than whatever was last committed.
       - name: Build the Elpian VM for WebAssembly
-        working-directory: elpian/rust
+        # wasm-pack needs the package, not the (virtual) workspace root.
+        working-directory: elpian/rust/crates/elpian-vm
         run: |
           wasm-pack build --release --target web --out-name elpian_vm \
             --out-dir "$GITHUB_WORKSPACE/elpian/assets/web_runtime/wasm/elpian_vm"

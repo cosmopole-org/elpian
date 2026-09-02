@@ -10,8 +10,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use dart::governance::{DartCapabilitySet, ResourceMeter};
-use dart::runtime::DartRuntime;
+use elpian_dart_runtime::governance::{DartCapabilitySet, ResourceMeter};
+use elpian_dart_runtime::runtime::DartRuntime;
 use elpian_godot::compose_godot_program;
 use serde_json::{json, Value};
 

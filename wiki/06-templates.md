@@ -117,7 +117,7 @@ not at the domain root, set `basePath` first and rebuild.
 `elpian-server` (native Rust) exposes every exported function in
 `server.elpian.bc` at `POST /__elpian/api/<functionName>`.
 
-**Per request** (`run_api` in `rust/src/bin/elpian-server.rs`):
+**Per request** (`run_api` in `rust/crates/elpian-vm/src/bin/elpian-server.rs`):
 
 ```rust
 let id = format!("elpian-http-{}", REQUEST_ID.fetch_add(1, Ordering::Relaxed));

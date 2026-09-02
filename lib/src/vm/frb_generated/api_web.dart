@@ -5,7 +5,7 @@
 ///
 /// Build the WASM module with:
 /// ```bash
-/// cd rust && wasm-pack build --target web
+/// cd rust/crates/elpian-vm && wasm-pack build --target web
 /// ```
 library;
 
@@ -89,7 +89,7 @@ class ElpianVmApi {
 
   static const _wasmMissing = 'Elpian WASM module is not loaded. Ensure '
       'assets/packages/elpian_ui/assets/web_runtime/elpian_wasm_loader.js is included in '
-      'web/index.html, then build wasm with: cd rust && wasm-pack build --target web';
+      'web/index.html, then build wasm with: cd rust/crates/elpian-vm && wasm-pack build --target web';
 
   static Future<void> initVmSystem() async {
     // The wasm-bindgen module and Flutter bootstrap are fetched in parallel.

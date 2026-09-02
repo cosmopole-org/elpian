@@ -80,16 +80,16 @@ are enforced.
 This wiki is written to be correct, but **the code is the ultimate authority**.
 Exhaustive lists (every widget prop, every CSS property) live in the source:
 
-- **VM (Rust):** `rust/src/sdk/` — `executor.rs` (the interpreter), `compiler.rs`
+- **VM (Rust):** `rust/crates/elpian-vm/src/sdk/` — `executor.rs` (the interpreter), `compiler.rs`
   (AST→bytecode), `program.rs` (decode), `limits.rs`, `capabilities.rs`,
-  `hierarchy.rs`, `lifecycle.rs`, `stdlib/mod.rs`; public API in `rust/src/api.rs`.
-- **VM embedding:** `rust/src/api/ffi.rs` (native), `rust/src/api/wasm.rs` (web),
-  `rust/src/bin/elpian-server.rs` (the HTTP server VM).
+  `hierarchy.rs`, `lifecycle.rs`, `stdlib/mod.rs`; public API in `rust/crates/elpian-vm/src/api.rs`.
+- **VM embedding:** `rust/crates/elpian-vm/src/api/ffi.rs` (native), `rust/crates/elpian-vm/src/api/wasm.rs` (web),
+  `rust/crates/elpian-vm/src/bin/elpian-server.rs` (the HTTP server VM).
 - **Flutter host:** `lib/src/vm/` (widget + runtimes + host handlers),
   `lib/src/core/` (engine, registry, events, DOM), `lib/src/widgets/`,
   `lib/src/html_widgets/`, `lib/src/css/`, `lib/src/canvas/`, `lib/src/godot/`. Public surface: `lib/elpian_ui.dart`.
-- **Compilers:** `rust/js2elpian/src/lib.rs` (JS→AST→bytecode),
-  `rust/dart2elpian/src/lib.rs` (Dart→JS subset) — vendored in-repo.
+- **Compilers:** `rust/crates/js2elpian/src/lib.rs` (JS→AST→bytecode),
+  `rust/crates/dart2elpian/src/lib.rs` (Dart→JS subset) — vendored in-repo.
 - **CLI:** `cli/rust/main.rs` (single file), `cli/README.md`.
 - **Web shell:** `cli/elpian_client/` (the standalone Flutter project
   the CLI builds and serves).

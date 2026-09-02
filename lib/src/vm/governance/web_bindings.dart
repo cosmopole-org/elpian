@@ -52,7 +52,7 @@ class GovernanceBindings {
 
   Never _missing(String call) => throw ElpianGovernanceException(
         'the loaded Elpian WASM module does not export ${_wasmName(call)} — '
-        'rebuild it (cd rust && wasm-pack build --target web)',
+        'rebuild it (cd rust/crates/elpian-vm && wasm-pack build --target web)',
         call: call,
       );
 

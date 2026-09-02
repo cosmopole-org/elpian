@@ -5,8 +5,8 @@
 //! the `dart:ui` scene the engine rasterizes; taps re-enter the guest, mutate
 //! `State`, and the next frame reflects it.
 
-use dart::binding::{PointerEvent, PointerPhase};
-use dart::{DartCapabilitySet, DartRuntime, ResourceMeter};
+use elpian_dart_runtime::binding::{PointerEvent, PointerPhase};
+use elpian_dart_runtime::{DartCapabilitySet, DartRuntime, ResourceMeter};
 use serde_json::Value;
 
 fn app(machine_id: &str, source: &str) -> DartRuntime {

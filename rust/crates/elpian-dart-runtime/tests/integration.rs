@@ -2,9 +2,9 @@
 //! End-to-end tests: real guest code runs on the Elpian VM and drives the
 //! `dart:*` foundational libraries through the governed host seam.
 
-use dart::binding::{PointerEvent, PointerPhase};
-use dart::bundle::{BundleLoader, CodeBundle, HmacSha256Scheme};
-use dart::{DartCapability, DartCapabilitySet, DartRuntime, ResourceMeter};
+use elpian_dart_runtime::binding::{PointerEvent, PointerPhase};
+use elpian_dart_runtime::bundle::{BundleLoader, CodeBundle, HmacSha256Scheme};
+use elpian_dart_runtime::{DartCapability, DartCapabilitySet, DartRuntime, ResourceMeter};
 
 /// A `dart:typed_data` round-trip driven entirely from guest code: allocate a
 /// ByteData, write an Int32, read it back, and emit the result. This exercises

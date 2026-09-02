@@ -14,8 +14,9 @@ name: Verify
 #     options: the root `elpian_ui`, `example/`, `cli/elpian_client/` and
 #     `godot/`. Each is analysed in its own directory — analysing them from the
 #     root resolves their dependencies against the wrong package.
-#   * `cli/` is a separate Cargo project from the `rust/` workspace, with its
-#     own lockfile, so it needs its own build and test invocation.
+#   * `rust/` is a virtual workspace whose crates live under `rust/crates/`.
+#     `cli/` is a separate Cargo project with its own lockfile, so it needs its
+#     own build and test invocation.
 #   * The Dart test suite includes tests that cross the real FFI boundary. They
 #     skip themselves when the native library is absent, so the Rust library is
 #     built first and put on the loader path — otherwise those tests would

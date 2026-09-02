@@ -1,7 +1,8 @@
 [package]
-name = "dart"
-version = "0.1.0"
-edition = "2021"
+name = "elpian-dart-runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
 description = "Optional Dart/Flutter extras for the Elpian VM. Provides the dart:* foundational-library binding surface (dart:ui, dart:typed_data, dart:isolate, ...), the framework/widget layer, and a two-layer capability/resource governor, all serviced over Elpian's askHost pause/resume seam. Language semantics (numbers, ~/, ??, reified is/as, JSON/UTF-8/Base64 codecs) live natively in the VM; this crate is the host-side surface that only ships when the `dart` feature is enabled (the --include-dart build). No JIT: valid for the iOS App Store and compiles to wasm32."
 
 [lib]
@@ -18,6 +19,6 @@ dart = []
 [dependencies]
 js2elpian = { path = "../js2elpian" }
 dart2elpian = { path = "../dart2elpian" }
-elpian-vm = { path = ".." }
+elpian-vm = { path = "../elpian-vm" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

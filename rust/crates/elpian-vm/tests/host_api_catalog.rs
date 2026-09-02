@@ -13,13 +13,22 @@
 use elpian_vm::api::catalog::dart_catalog;
 use elpian_vm::api::{all_host_apis, Capability};
 
-/// Where the generated catalog lives, relative to the `rust/` crate root.
-const CATALOG_PATH: &str = "../lib/src/vm/host_api_catalog.dart";
+/// Where the generated catalog lives.
+///
+/// Resolved from `CARGO_MANIFEST_DIR` rather than the process working
+/// directory, so the test does not break the next time the crate moves within
+/// the workspace — which is exactly what happened when `elpian-vm` moved under
+/// `crates/`.
+fn catalog_path() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../lib/src/vm/host_api_catalog.dart")
+}
 
 #[test]
 fn the_checked_in_catalog_is_current() {
-    let on_disk = std::fs::read_to_string(CATALOG_PATH)
-        .unwrap_or_else(|e| panic!("cannot read {CATALOG_PATH}: {e}"));
+    let path = catalog_path();
+    let on_disk = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
     let expected = dart_catalog();
 
     if on_disk != expected {
@@ -38,8 +47,10 @@ fn the_checked_in_catalog_is_current() {
                 )
             });
         panic!(
-            "{CATALOG_PATH} is stale.\n\n{first_diff}\n\nRegenerate it:\n    \
-             cd rust && cargo run --bin gen-host-api-catalog -- {CATALOG_PATH}\n"
+            "{} is stale.\n\n{first_diff}\n\nRegenerate it:\n    \
+             cd rust && cargo run --bin gen-host-api-catalog -- \
+             ../lib/src/vm/host_api_catalog.dart\n",
+            path.display()
         );
     }
 }

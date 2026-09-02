@@ -14,4 +14,4 @@ serde_json = "1.0"
 [dev-dependencies]
 # End-to-end tests transpile Dart → JS and run it through the JS front-end + VM.
 js2elpian = { path = "../js2elpian" }
-elpian-vm = { path = ".." }
+elpian-vm = { path = "../elpian-vm" }

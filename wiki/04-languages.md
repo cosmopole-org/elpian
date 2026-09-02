@@ -52,7 +52,7 @@ benefit, but do not rely on them for validation.
 
 ## JavaScript — the `js2elpian` supported surface
 
-This is the authoritative list. From `rust/js2elpian/src/lib.rs`.
+This is the authoritative list. From `rust/crates/js2elpian/src/lib.rs`.
 
 ### Operators — the full tower
 
@@ -265,7 +265,7 @@ compiles. It is purely a *language* layer — runtime intrinsics still go throug
 generics with runtime reification, named/optional parameters beyond the basics,
 `part`/`library`, the Dart core library beyond what maps to the universal stdlib.
 
-> Note: `dart2elpian` is vendored at `rust/dart2elpian/` but is **not wired into
+> Note: `dart2elpian` is vendored at `rust/crates/dart2elpian/` but is **not wired into
 > the `elpian` CLI**. The CLI compiles TypeScript/JavaScript only. Use the crate
 > directly if you need the Dart path.
 
