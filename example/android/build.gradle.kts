@@ -15,10 +15,6 @@ subprojects {
     val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
-subprojects {
-    project.evaluationDependsOn(":app")
-}
-
 // AGP 8 requires every Android module to declare a `namespace`; plugins written
 // before that only set `package` in their AndroidManifest, and configuring the
 // project fails outright:
@@ -41,13 +37,16 @@ subprojects {
 // the half that is actually in our control. Derived from the module's group so
 // each plugin keeps a distinct one, and only applied where it is missing, so a
 // plugin that declares its own is untouched.
-// Reached reflectively rather than through AGP's typed DSL: the Kotlin DSL is
-// compiled, so naming an AGP type here would make this script fail to *compile*
-// on any setup where those classes are not on the root build script's classpath.
-// Nothing is assumed beyond the property existing.
+// Configure the extension as soon as the library plugin creates it. Besides
+// avoiding an `afterEvaluate` timing dependency, this runs before the root
+// script forces `:app` evaluation below. Reached reflectively rather than
+// through AGP's typed DSL: the Kotlin DSL is compiled, so naming an AGP type
+// here would make this script fail to *compile* on any setup where those
+// classes are not on the root build script's classpath. Nothing is assumed
+// beyond the property existing.
 subprojects {
-    afterEvaluate {
-        val android = project.extensions.findByName("android") ?: return@afterEvaluate
+    pluginManager.withPlugin("com.android.library") {
+        val android = project.extensions.findByName("android") ?: return@withPlugin
         val get = android.javaClass.methods.firstOrNull {
             it.name == "getNamespace" && it.parameterCount == 0
         }
@@ -62,6 +61,9 @@ subprojects {
     }
 }
 
+subprojects {
+    project.evaluationDependsOn(":app")
+}
 
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
