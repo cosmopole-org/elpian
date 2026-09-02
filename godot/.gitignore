@@ -6,10 +6,16 @@ android/src/main/assets/godot/
 godot-project/bin/
 
 # Native extension build state and the reproducible godot-cpp checkout.
-extension/godot-cpp/
+# No trailing slash on godot-cpp: a local checkout is usually a directory, but
+# it is often a symlink into a shared cache, and `foo/` would not match that —
+# which is how a symlink to an absolute developer path once got committed and
+# broke `git clone` in CI with "could not create work tree dir: File exists".
+extension/godot-cpp
 extension/gen/
 extension/.sconsign.dblite
+# scons names shared-library objects .os, not .o.
 extension/**/*.o
+extension/**/*.os
 
 # Godot editor state
 godot-project/.godot/

@@ -74,8 +74,15 @@ jobs:
       - name: Install scons
         run: pipx install scons || pip install scons
 
+      # `git clone` into an existing path aborts with "could not create work
+      # tree dir: File exists", so clear it first. Locally this path is a
+      # checkout — often a symlink into a shared cache — and one such symlink,
+      # pointing at an absolute developer path, was committed once and failed
+      # every job here on checkout. .gitignore now covers it; this keeps the
+      # clone from being what breaks if it ever comes back.
       - name: Clone godot-cpp
         run: |
+          rm -rf elpian/godot/extension/godot-cpp
           git clone --depth 1 -b "$GODOT_CPP_BRANCH" \
             https://github.com/godotengine/godot-cpp \
             elpian/godot/extension/godot-cpp
@@ -239,8 +246,15 @@ jobs:
       - name: Install scons
         run: pipx install scons || pip install scons
 
+      # `git clone` into an existing path aborts with "could not create work
+      # tree dir: File exists", so clear it first. Locally this path is a
+      # checkout — often a symlink into a shared cache — and one such symlink,
+      # pointing at an absolute developer path, was committed once and failed
+      # every job here on checkout. .gitignore now covers it; this keeps the
+      # clone from being what breaks if it ever comes back.
       - name: Clone godot-cpp
         run: |
+          rm -rf elpian/godot/extension/godot-cpp
           git clone --depth 1 -b "$GODOT_CPP_BRANCH" \
             https://github.com/godotengine/godot-cpp \
             elpian/godot/extension/godot-cpp
