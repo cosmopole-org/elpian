@@ -155,8 +155,87 @@ impl From<Rc<RefCell<Function>>> for Payload {
     }
 }
 
+/// The type tags a [`Val`] carries in its `typ` field.
+///
+/// The tag is an `i64` rather than an enum because it crosses the wire: it is
+/// what the compiler emits into bytecode, what the AST's `{"type": …}` maps
+/// onto, and what every host reply is decoded into. Changing the
+/// representation would be a format break.
+///
+/// What it cost to leave them unnamed: hundreds of sites matched `1..=3`,
+/// `typ: 7` and `arg2.typ == 9` positionally, so reading any of them meant
+/// remembering the table — and a `Val { typ: 7, data: Payload::Bool(..) }`
+/// (a boolean tagged as a string) sat in `operate_multiply` unnoticed, because
+/// nothing about `7` says "string".
+///
+/// Tags 250 and above are internal: they never appear in a program's values,
+/// only in the executor's own signalling.
+pub mod ty {
+    /// The absence of a value.
+    pub const NULL: i64 = 0;
+    pub const I16: i64 = 1;
+    pub const I32: i64 = 2;
+    pub const I64: i64 = 3;
+    pub const F32: i64 = 4;
+    pub const F64: i64 = 5;
+    pub const BOOL: i64 = 6;
+    pub const STRING: i64 = 7;
+    pub const OBJECT: i64 = 8;
+    pub const ARRAY: i64 = 9;
+    pub const FUNCTION: i64 = 10;
+
+    // ---- Internal tags -----------------------------------------------------
+    //
+    // These never appear in a guest program's values; they exist only so the
+    // executor can pass signals through the same `Val` channel it passes data.
+
+    /// A native standard-library builtin, resolved by name. The payload is the
+    /// builtin's universal name.
+    pub const NATIVE_BUILTIN: i64 = 252;
+    /// A native method bound to a receiver: `[receiver, "<universalName>"]`.
+    /// The receiver is threaded through `this_arg` at the call site.
+    pub const BOUND_NATIVE: i64 = 253;
+    /// "No value" — distinct from [`NULL`], which *is* a value. Used for the
+    /// pending host-call result slot so an absent result and a result of null
+    /// can be told apart.
+    pub const NO_VALUE: i64 = 254;
+    /// The `askHost` seam itself, as resolved from the identifier `askHost`.
+    pub const ASK_HOST: i64 = 255;
+
+    /// The five numeric tags, in order, for range checks and matches.
+    pub const NUMERIC: std::ops::RangeInclusive<i64> = I16..=F64;
+    /// The three integral tags.
+    pub const INTEGRAL: std::ops::RangeInclusive<i64> = I16..=I64;
+
+    /// Whether `tag` is one of the five numeric kinds.
+    pub fn is_numeric(tag: i64) -> bool {
+        NUMERIC.contains(&tag)
+    }
+
+    /// Whether `tag` is one of the three integral kinds.
+    pub fn is_integral(tag: i64) -> bool {
+        INTEGRAL.contains(&tag)
+    }
+
+    /// The guest-visible name of a tag, for error messages and diagnostics.
+    pub fn name(tag: i64) -> &'static str {
+        match tag {
+            NULL => "null",
+            I16 | I32 | I64 => "integer",
+            F32 | F64 => "float",
+            BOOL => "boolean",
+            STRING => "string",
+            OBJECT => "object",
+            ARRAY => "array",
+            FUNCTION => "function",
+            _ => "unknown data type",
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Val {
+    /// This value's type tag. See [`ty`] for the names.
     pub typ: i64,
     pub data: Payload,
 }
