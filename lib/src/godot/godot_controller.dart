@@ -352,7 +352,8 @@ class Godot3D {
 
   /// A primitive mesh *resource* — `box` `sphere` `cylinder` `capsule` `plane`
   /// `prism` `torus`. Unknown shapes fall back to a box, matching the bridge.
-  GodotObject primitive(String shape, {Map<String, Object?> options = const {}}) {
+  GodotObject primitive(String shape,
+      {Map<String, Object?> options = const {}}) {
     num n(String key, num fallback) {
       final v = options[key];
       return v is num ? v : fallback;
@@ -379,7 +380,8 @@ class Godot3D {
         return mesh;
       case 'plane':
         final mesh = c.create('PlaneMesh');
-        mesh.set('size', Vector2(n('width', 2).toDouble(), n('depth', 2).toDouble()));
+        mesh.set('size',
+            Vector2(n('width', 2).toDouble(), n('depth', 2).toDouble()));
         return mesh;
       case 'prism':
         final mesh = c.create('PrismMesh');
@@ -493,13 +495,15 @@ class Godot3D {
   /// this synchronous: `Environment.BG_COLOR` is 1 and
   /// `AMBIENT_SOURCE_COLOR` is 3. Reading them through [GodotController.constant]
   /// would make every environment build await a round trip.
-  GodotObject environment({GodotColor? bg, GodotColor? ambient, num ambientEnergy = 0.6}) {
+  GodotObject environment(
+      {GodotColor? bg, GodotColor? ambient, num ambientEnergy = 0.6}) {
     final we = c.create('WorldEnvironment');
     final env = c.create('Environment');
     env.set('background_mode', const GInt(1)); // BG_COLOR
     env.set('background_color', bg ?? const GodotColor(0.05, 0.06, 0.09, 1.0));
     env.set('ambient_light_source', const GInt(3)); // AMBIENT_SOURCE_COLOR
-    env.set('ambient_light_color', ambient ?? const GodotColor(0.5, 0.55, 0.7, 1.0));
+    env.set('ambient_light_color',
+        ambient ?? const GodotColor(0.5, 0.55, 0.7, 1.0));
     env.set('ambient_light_energy', GFloat(ambientEnergy));
     we.set('environment', env);
     return we;

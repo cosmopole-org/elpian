@@ -3,8 +3,10 @@ import '../models/elpian_node.dart';
 
 class ElpianAnimatedPositioned {
   static Widget build(ElpianNode node, List<Widget> children) {
-    final child = children.isNotEmpty ? children.first : const SizedBox.shrink();
-    final duration = node.style?.transitionDuration ?? const Duration(milliseconds: 300);
+    final child =
+        children.isNotEmpty ? children.first : const SizedBox.shrink();
+    final duration =
+        node.style?.transitionDuration ?? const Duration(milliseconds: 300);
     final curve = node.style?.transitionCurve ?? Curves.linear;
 
     return AnimatedPositioned(

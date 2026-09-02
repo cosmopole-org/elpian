@@ -5,7 +5,7 @@ class ElpianDismissible {
   static Widget build(ElpianNode node, List<Widget> children) {
     final child = children.isNotEmpty ? children.first : Container();
     final key = node.key ?? 'dismissible';
-    
+
     return Dismissible(
       key: Key(key),
       onDismissed: (_) {},

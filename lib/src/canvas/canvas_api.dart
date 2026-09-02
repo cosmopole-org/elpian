@@ -424,8 +424,7 @@ class CanvasAPIExecutor {
         break;
 
       case CanvasCommandType.fillCircle:
-        final fillC =
-            Offset(_getDouble(params, 'x'), _getDouble(params, 'y'));
+        final fillC = Offset(_getDouble(params, 'x'), _getDouble(params, 'y'));
         final fillCr = _getDouble(params, 'radius');
         _fillWithShadow(
             canvas, (c, paint) => c.drawCircle(fillC, fillCr, paint));
@@ -458,8 +457,7 @@ class CanvasAPIExecutor {
         break;
 
       case CanvasCommandType.fill:
-        _fillWithShadow(
-            canvas, (c, paint) => c.drawPath(currentPath, paint));
+        _fillWithShadow(canvas, (c, paint) => c.drawPath(currentPath, paint));
         break;
 
       case CanvasCommandType.stroke:
@@ -558,13 +556,13 @@ class CanvasAPIExecutor {
         break;
 
       case CanvasCommandType.setShadowOffsetX:
-        currentState.shadowOffsetX = _getDouble(params, 'offset',
-            _getDouble(params, 'x'));
+        currentState.shadowOffsetX =
+            _getDouble(params, 'offset', _getDouble(params, 'x'));
         break;
 
       case CanvasCommandType.setShadowOffsetY:
-        currentState.shadowOffsetY = _getDouble(params, 'offset',
-            _getDouble(params, 'y'));
+        currentState.shadowOffsetY =
+            _getDouble(params, 'offset', _getDouble(params, 'y'));
         break;
 
       case CanvasCommandType.setGlobalCompositeOperation:
@@ -577,7 +575,8 @@ class CanvasAPIExecutor {
         break;
 
       case CanvasCommandType.setTextAlign:
-        currentState.textAlign = _parseTextAlignName(params['align'] as String?);
+        currentState.textAlign =
+            _parseTextAlignName(params['align'] as String?);
         break;
 
       case CanvasCommandType.setTextBaseline:
@@ -870,12 +869,13 @@ class CanvasAPIExecutor {
   }
 
   double _getDouble(Map<String, dynamic> params, String key,
-      [double defaultValue = 0.0]) => switch (params[key]) {
-    double v => v,
-    int v => v.toDouble(),
-    String v => double.tryParse(v) ?? defaultValue,
-    _ => defaultValue,
-  };
+          [double defaultValue = 0.0]) =>
+      switch (params[key]) {
+        double v => v,
+        int v => v.toDouble(),
+        String v => double.tryParse(v) ?? defaultValue,
+        _ => defaultValue,
+      };
 
   Color _parseColor(dynamic value) {
     if (value is Color) return value;
@@ -919,7 +919,8 @@ class CanvasAPIExecutor {
     'bevel': StrokeJoin.bevel,
   };
 
-  StrokeJoin _parseLineJoin(String? join) => _lineJoinMap[join] ?? StrokeJoin.miter;
+  StrokeJoin _parseLineJoin(String? join) =>
+      _lineJoinMap[join] ?? StrokeJoin.miter;
 }
 
 /// Parsed components of a Canvas 2D `font` string, cached per distinct string (C).

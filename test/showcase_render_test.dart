@@ -20,7 +20,8 @@ void main() {
       jsonDecode(File('test/assets/showcase_view.json').readAsStringSync())
           as Map<String, dynamic>;
 
-  testWidgets('the showcase template view renders its 2D chrome', (tester) async {
+  testWidgets('the showcase template view renders its 2D chrome',
+      (tester) async {
     final engine = ElpianEngine();
     await tester.pumpWidget(MaterialApp(
       home: Builder(builder: (context) => engine.renderFromJson(loadView())),

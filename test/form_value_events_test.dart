@@ -6,20 +6,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:elpian_ui/elpian_ui.dart';
 import 'package:elpian_ui/src/core/event_dispatcher.dart' as ed;
-import 'package:elpian_ui/src/core/event_system.dart';
 
 void main() {
-  final dispatcher = ed.EventDispatcher();
+  final dispatcher = ed.EventDispatcher.shared;
 
   setUp(() {
-    GlobalStylesheetManager().clear();
+    GlobalStylesheetManager.shared.clear();
   });
   tearDown(() {
     dispatcher.globalEventHandler = null;
-    GlobalStylesheetManager().clear();
+    GlobalStylesheetManager.shared.clear();
   });
 
-  testWidgets('select dispatches a change event with the chosen value', (tester) async {
+  testWidgets('select dispatches a change event with the chosen value',
+      (tester) async {
     ElpianEvent? captured;
     dispatcher.globalEventHandler = (e) => captured ??= e;
 
@@ -36,7 +36,8 @@ void main() {
         ],
       },
     };
-    await tester.pumpWidget(MaterialApp(home: Scaffold(body: engine.renderFromJson(node))));
+    await tester.pumpWidget(
+        MaterialApp(home: Scaffold(body: engine.renderFromJson(node))));
     await tester.pumpAndSettle();
 
     // Open the dropdown and pick "Marble".
@@ -53,7 +54,8 @@ void main() {
     expect(captured!.currentTarget, 'offer');
   });
 
-  testWidgets('input dispatches an input event with the typed value', (tester) async {
+  testWidgets('input dispatches an input event with the typed value',
+      (tester) async {
     ElpianInputEvent? captured;
     dispatcher.globalEventHandler = (e) {
       if (e is ElpianInputEvent && e.type == 'input') captured = e;
@@ -66,7 +68,8 @@ void main() {
       'events': {'input': '__field_amount'},
       'props': {'type': 'number', 'value': '200'},
     };
-    await tester.pumpWidget(MaterialApp(home: Scaffold(body: engine.renderFromJson(node))));
+    await tester.pumpWidget(
+        MaterialApp(home: Scaffold(body: engine.renderFromJson(node))));
     await tester.pump();
 
     // Seeded from props.value, then edited.

@@ -262,7 +262,8 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
       }
     }
 
-    ElpianTrace.mark('loadPayload "$_currentRoute" HTTP done; resolving clientComps');
+    ElpianTrace.mark(
+        'loadPayload "$_currentRoute" HTTP done; resolving clientComps');
     final envelope = NextjsRenderEnvelope.fromJson(payload);
     final resolvedComponent = await _resolveClientComponentNodes(
       envelope.component,
@@ -367,7 +368,8 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
         .timeout(widget.timeout);
     final decoded = jsonDecode(res.body);
     if (decoded is! Map<String, dynamic>) {
-      throw const FormatException('Action response must decode to a JSON object.');
+      throw const FormatException(
+          'Action response must decode to a JSON object.');
     }
     return decoded;
   }
@@ -426,7 +428,8 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
   }) async {
     final baseUrl = widget.serverBaseUrl;
     if (baseUrl == null || baseUrl.isEmpty) {
-      throw StateError('serverBaseUrl is required when no custom loader is provided.');
+      throw StateError(
+          'serverBaseUrl is required when no custom loader is provided.');
     }
 
     if (widget.requestMode == NextjsServerRequestMode.routePath) {
@@ -436,7 +439,8 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
         headers: {
           'accept': 'application/vnd.elpian+json, application/json',
           'x-elpian-route': route,
-          if (props != null && props.isNotEmpty) 'x-elpian-props': jsonEncode(props),
+          if (props != null && props.isNotEmpty)
+            'x-elpian-props': jsonEncode(props),
           ..._authHeaders(),
           ...?headers,
         },
@@ -450,21 +454,25 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
 
       final decoded = jsonDecode(response.body);
       if (decoded is! Map<String, dynamic>) {
-        throw const FormatException('Next.js route response must decode to a JSON object.');
+        throw const FormatException(
+            'Next.js route response must decode to a JSON object.');
       }
       return decoded;
     }
 
     final endpointUri = _buildUri(widget.endpoint ?? '/api/elpian-render');
-    final response = await http.post(
-      endpointUri,
-      headers: {
-        'content-type': 'application/json',
-        ..._authHeaders(),
-        ...?headers,
-      },
-      body: jsonEncode(NextjsBridge.buildRouteRequest(route: route, props: props)),
-    ).timeout(widget.timeout);
+    final response = await http
+        .post(
+          endpointUri,
+          headers: {
+            'content-type': 'application/json',
+            ..._authHeaders(),
+            ...?headers,
+          },
+          body: jsonEncode(
+              NextjsBridge.buildRouteRequest(route: route, props: props)),
+        )
+        .timeout(widget.timeout);
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
@@ -474,15 +482,15 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
 
     final decoded = jsonDecode(response.body);
     if (decoded is! Map<String, dynamic>) {
-      throw const FormatException('Next.js payload must decode to a JSON object.');
+      throw const FormatException(
+          'Next.js payload must decode to a JSON object.');
     }
     return decoded;
   }
 
   Future<Map<String, dynamic>> _resolveClientComponentNodes(
-    Map<String, dynamic> node,
-    {Map<String, dynamic>? packedClientComponents}
-  ) async {
+      Map<String, dynamic> node,
+      {Map<String, dynamic>? packedClientComponents}) async {
     final type = node['type']?.toString();
     if (type == 'clientComp' || type == 'client-component') {
       final resolved = await _resolveClientComponentNode(
@@ -528,9 +536,8 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
   }
 
   Future<Map<String, dynamic>?> _resolveClientComponentNode(
-    Map<String, dynamic> node,
-    {Map<String, dynamic>? packedClientComponents}
-  ) async {
+      Map<String, dynamic> node,
+      {Map<String, dynamic>? packedClientComponents}) async {
     final props = (node['props'] is Map<String, dynamic>)
         ? Map<String, dynamic>.from(node['props'] as Map<String, dynamic>)
         : <String, dynamic>{};
@@ -660,7 +667,8 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
       await firstRender.future.timeout(
         const Duration(seconds: 3),
         onTimeout: () {
-          debugPrint('NextjsServerWidget: clientComp "$mountId" first render timed out');
+          debugPrint(
+              'NextjsServerWidget: clientComp "$mountId" first render timed out');
           ElpianTrace.mark('clientComp[$mountId] first render TIMED OUT (3s)');
         },
       );
@@ -718,7 +726,8 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
     var any = false;
     for (final record in _liveClientComps.values) {
       if (!record.dirty || record.latest == null) continue;
-      if (ScopePatch.replaceByKey(tree, record.mountId, _clientCompContent(record))) {
+      if (ScopePatch.replaceByKey(
+          tree, record.mountId, _clientCompContent(record))) {
         record.dirty = false;
         any = true;
       }
@@ -779,21 +788,24 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
     if (baseUrl == null || baseUrl.isEmpty) return null;
 
     try {
-      final endpointUri = _buildUri(widget.endpoint ?? '/api/elpian-client-component');
-      final response = await http.post(
-        endpointUri,
-        headers: {
-          'content-type': 'application/json',
-          'accept': 'application/json',
-          ..._authHeaders(),
-          ...?widget.headers,
-        },
-        body: jsonEncode({
-          'route': _currentRoute,
-          'lookupKeys': lookupKeys,
-          'componentNode': node,
-        }),
-      ).timeout(widget.timeout);
+      final endpointUri =
+          _buildUri(widget.endpoint ?? '/api/elpian-client-component');
+      final response = await http
+          .post(
+            endpointUri,
+            headers: {
+              'content-type': 'application/json',
+              'accept': 'application/json',
+              ..._authHeaders(),
+              ...?widget.headers,
+            },
+            body: jsonEncode({
+              'route': _currentRoute,
+              'lookupKeys': lookupKeys,
+              'componentNode': node,
+            }),
+          )
+          .timeout(widget.timeout);
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
         return null;
@@ -886,7 +898,8 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
 
   _PackedClientScript? _normalizePackedScript(dynamic raw) {
     if (raw is String && raw.trim().isNotEmpty) {
-      return _PackedClientScript(jsCode: raw.trim(), jsEntryFunction: 'MainComponent');
+      return _PackedClientScript(
+          jsCode: raw.trim(), jsEntryFunction: 'MainComponent');
     }
 
     if (raw is Map<String, dynamic>) {
@@ -895,7 +908,8 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
       final entry = raw['jsEntryFunction']?.toString();
       return _PackedClientScript(
         jsCode: jsCode,
-        jsEntryFunction: (entry == null || entry.isEmpty) ? 'MainComponent' : entry,
+        jsEntryFunction:
+            (entry == null || entry.isEmpty) ? 'MainComponent' : entry,
       );
     }
 
@@ -922,8 +936,9 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
       _payloadFuture = _loadPayload();
       // Keep the just-rendered screen as the loading fallback so the next route
       // paints over a live screen (scene included) instead of a blank spinner.
-      _previousComponent =
-          _scriptRenderedComponent ?? _lastEnvelopeComponent ?? _previousComponent;
+      _previousComponent = _scriptRenderedComponent ??
+          _lastEnvelopeComponent ??
+          _previousComponent;
       _scriptRenderedComponent = null;
       _lastEnvelopeComponent = null;
       _lastScriptSignature = null;
@@ -938,8 +953,9 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
       _payloadFuture = _loadPayload();
       // Keep the just-rendered screen as the loading fallback so the next route
       // paints over a live screen (scene included) instead of a blank spinner.
-      _previousComponent =
-          _scriptRenderedComponent ?? _lastEnvelopeComponent ?? _previousComponent;
+      _previousComponent = _scriptRenderedComponent ??
+          _lastEnvelopeComponent ??
+          _previousComponent;
       _scriptRenderedComponent = null;
       _lastEnvelopeComponent = null;
       _lastScriptSignature = null;
@@ -952,8 +968,9 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
       _payloadFuture = _loadPayload();
       // Keep the just-rendered screen as the loading fallback so the next route
       // paints over a live screen (scene included) instead of a blank spinner.
-      _previousComponent =
-          _scriptRenderedComponent ?? _lastEnvelopeComponent ?? _previousComponent;
+      _previousComponent = _scriptRenderedComponent ??
+          _lastEnvelopeComponent ??
+          _previousComponent;
       _scriptRenderedComponent = null;
       _lastEnvelopeComponent = null;
       _lastScriptSignature = null;
@@ -1080,7 +1097,8 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
   /// `askHost('submit', { route, body, onResult })` — POST an action and hand
   /// the response envelope back to `onResult`. Navigation directives are applied
   /// automatically (matching `NextjsForm`).
-  Future<String> _hostSubmit(String payload) => _hostSubmitInto(_pageVm, payload);
+  Future<String> _hostSubmit(String payload) =>
+      _hostSubmitInto(_pageVm, payload);
 
   /// As [_hostSubmit], but delivers the result to a specific [vm].
   Future<String> _hostSubmitInto(VmRuntimeClient? vm, String payload) async {
@@ -1328,7 +1346,8 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
   void _triggerScriptExecution(NextjsRenderEnvelope envelope) {
     final jsCode = envelope.jsCode;
     final vmAst = envelope.vmAstJson;
-    if ((jsCode == null || jsCode.isEmpty) && (vmAst == null || vmAst.isEmpty)) {
+    if ((jsCode == null || jsCode.isEmpty) &&
+        (vmAst == null || vmAst.isEmpty)) {
       return;
     }
 
@@ -1351,7 +1370,8 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
 
       if (envelope.vmAstJson != null && envelope.vmAstJson!.isNotEmpty) {
         await _ensureElpianVmInitialized();
-        final vmMachineId = 'nextjs-ast-${DateTime.now().microsecondsSinceEpoch}';
+        final vmMachineId =
+            'nextjs-ast-${DateTime.now().microsecondsSinceEpoch}';
         final vm = await ElpianVm.fromAst(vmMachineId, envelope.vmAstJson!);
         if (vm == null) {
           throw StateError('Failed to create Elpian VM from AST payload.');
@@ -1480,7 +1500,8 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
         _foldClientCompRenders();
 
         ElpianTrace.mark('build(): rendering widget tree');
-        final componentToRender = _scriptRenderedComponent ?? envelope.component;
+        final componentToRender =
+            _scriptRenderedComponent ?? envelope.component;
         final rendered = _bridge.engine.renderWithStylesheet(
           componentToRender,
           stylesheet: envelope.stylesheet,

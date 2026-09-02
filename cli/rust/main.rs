@@ -20,7 +20,11 @@ use std::{
 use walkdir::WalkDir;
 
 #[derive(Parser)]
-#[command(name = "elpian", version, about = "Native Rust toolchain for Elpian projects")]
+#[command(
+    name = "elpian",
+    version,
+    about = "Native Rust toolchain for Elpian projects"
+)]
 struct Cli {
     #[command(subcommand)]
     command: CommandName,
@@ -43,7 +47,12 @@ struct CreateArgs {
 }
 
 #[derive(Clone, Copy, ValueEnum)]
-enum Template { Client, Server, Fullstack, Showcase }
+enum Template {
+    Client,
+    Server,
+    Fullstack,
+    Showcase,
+}
 
 #[derive(Subcommand)]
 enum RunTask {
@@ -66,7 +75,11 @@ enum RunTask {
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, ValueEnum, PartialEq)]
 #[serde(rename_all = "lowercase")]
-enum Mode { Js, Bytecode, Both }
+enum Mode {
+    Js,
+    Bytecode,
+    Both,
+}
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -84,26 +97,47 @@ struct Config {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-struct Target { entry: PathBuf }
-fn default_out() -> PathBuf { "dist".into() }
-fn default_mode() -> Mode { Mode::Both }
-fn default_base() -> String { "/".into() }
+struct Target {
+    entry: PathBuf,
+}
+fn default_out() -> PathBuf {
+    "dist".into()
+}
+fn default_mode() -> Mode {
+    Mode::Both
+}
+fn default_base() -> String {
+    "/".into()
+}
 
 #[derive(Deserialize)]
 struct ProjectSpec {
-    #[allow(dead_code)] name: String,
-    #[serde(default)] dependencies: BTreeMap<String, PackageRef>,
+    #[allow(dead_code)]
+    name: String,
+    #[serde(default)]
+    dependencies: BTreeMap<String, PackageRef>,
 }
 
 #[derive(Deserialize)]
 #[serde(untagged)]
-enum PackageRef { Path(String), Object { path: String } }
+enum PackageRef {
+    Path(String),
+    Object { path: String },
+}
 
 #[derive(Deserialize)]
-struct PackageSpec { name: String, entry: String }
+struct PackageSpec {
+    name: String,
+    entry: String,
+}
 
 #[derive(Clone)]
-struct Artifact { target: &'static str, js: PathBuf, ast: PathBuf, bytecode: Option<PathBuf> }
+struct Artifact {
+    target: &'static str,
+    js: PathBuf,
+    ast: PathBuf,
+    bytecode: Option<PathBuf>,
+}
 
 fn main() {
     if let Err(error) = real_main() {
@@ -115,23 +149,48 @@ fn main() {
 fn real_main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
-        CommandName::Create(args) => create_project(&absolute(&env::current_dir()?, &args.directory), args.template),
+        CommandName::Create(args) => create_project(
+            &absolute(&env::current_dir()?, &args.directory),
+            args.template,
+        ),
         CommandName::Run { task } => {
             let root = env::current_dir()?;
             match task {
-                RunTask::Install => { println!("Installed {} Elpian package(s)", install(&root)?); Ok(()) }
-                RunTask::Build { mode } => {
-                    let mut config = load_config(&root)?;
-                    if let Some(mode) = mode { config.mode = mode; }
-                    for artifact in build_project(&root, &config, true)? {
-                        println!("Built {}: {}", artifact.target, artifact.bytecode.as_ref().unwrap_or(&artifact.ast).display());
-                    }
-                    if config.client.is_some() { println!("Deployable web app: {}/web", config.out_dir.display()); }
+                RunTask::Install => {
+                    println!("Installed {} Elpian package(s)", install(&root)?);
                     Ok(())
                 }
-                RunTask::Dev { host, port, mode, build_engine } => {
+                RunTask::Build { mode } => {
                     let mut config = load_config(&root)?;
-                    if let Some(mode) = mode { config.mode = mode; }
+                    if let Some(mode) = mode {
+                        config.mode = mode;
+                    }
+                    for artifact in build_project(&root, &config, true)? {
+                        println!(
+                            "Built {}: {}",
+                            artifact.target,
+                            artifact
+                                .bytecode
+                                .as_ref()
+                                .unwrap_or(&artifact.ast)
+                                .display()
+                        );
+                    }
+                    if config.client.is_some() {
+                        println!("Deployable web app: {}/web", config.out_dir.display());
+                    }
+                    Ok(())
+                }
+                RunTask::Dev {
+                    host,
+                    port,
+                    mode,
+                    build_engine,
+                } => {
+                    let mut config = load_config(&root)?;
+                    if let Some(mode) = mode {
+                        config.mode = mode;
+                    }
                     dev(&root, config, &host, port, build_engine)
                 }
             }
@@ -141,8 +200,12 @@ fn real_main() -> Result<()> {
 
 fn load_config(root: &Path) -> Result<Config> {
     let file = root.join("elpian.config.json");
-    let config: Config = serde_json::from_slice(&fs::read(&file).with_context(|| format!("cannot read {}", file.display()))?)?;
-    if config.client.is_none() && config.server.is_none() { bail!("configure a client or server target"); }
+    let config: Config = serde_json::from_slice(
+        &fs::read(&file).with_context(|| format!("cannot read {}", file.display()))?,
+    )?;
+    if config.client.is_none() && config.server.is_none() {
+        bail!("configure a client or server target");
+    }
     Ok(config)
 }
 
@@ -153,15 +216,33 @@ fn install(root: &Path) -> Result<usize> {
     let mut lock = serde_json::Map::new();
     for (name, reference) in &spec.dependencies {
         validate_package_name(name)?;
-        let declared = match reference { PackageRef::Path(path) | PackageRef::Object { path } => path };
-        let source = fs::canonicalize(root.join(declared)).with_context(|| format!("package {name} path {declared} does not exist"))?;
+        let declared = match reference {
+            PackageRef::Path(path) | PackageRef::Object { path } => path,
+        };
+        let source = fs::canonicalize(root.join(declared))
+            .with_context(|| format!("package {name} path {declared} does not exist"))?;
         let package: PackageSpec = read_json(&source.join("elpian.package.json"))?;
-        if package.name != *name { bail!("package {} declares name {}, expected {name}", source.display(), package.name); }
-        if !source.join(&package.entry).is_file() { bail!("package {name} entry {} does not exist", package.entry); }
+        if package.name != *name {
+            bail!(
+                "package {} declares name {}, expected {name}",
+                source.display(),
+                package.name
+            );
+        }
+        if !source.join(&package.entry).is_file() {
+            bail!("package {name} entry {} does not exist", package.entry);
+        }
         let destination = packages.join(name);
         if let Ok(existing) = fs::read_link(&destination) {
-            if fs::canonicalize(destination.parent().unwrap().join(existing))? != source { fs::remove_file(&destination)?; }
-        } else if destination.exists() { bail!("{} exists and is not a managed package link", destination.display()); }
+            if fs::canonicalize(destination.parent().unwrap().join(existing))? != source {
+                fs::remove_file(&destination)?;
+            }
+        } else if destination.exists() {
+            bail!(
+                "{} exists and is not a managed package link",
+                destination.display()
+            );
+        }
         if !destination.exists() {
             fs::create_dir_all(destination.parent().unwrap())?;
             create_dir_link(&source, &destination)?;
@@ -169,39 +250,66 @@ fn install(root: &Path) -> Result<usize> {
         lock.insert(name.clone(), json!({ "path": source }));
     }
     fs::create_dir_all(root.join(".elpian"))?;
-    write_json(&root.join(".elpian/elpian.lock.json"), &json!({ "version": 1, "packages": lock }))?;
+    write_json(
+        &root.join(".elpian/elpian.lock.json"),
+        &json!({ "version": 1, "packages": lock }),
+    )?;
     Ok(spec.dependencies.len())
 }
 
 #[cfg(unix)]
-fn create_dir_link(source: &Path, destination: &Path) -> Result<()> { std::os::unix::fs::symlink(source, destination)?; Ok(()) }
+fn create_dir_link(source: &Path, destination: &Path) -> Result<()> {
+    std::os::unix::fs::symlink(source, destination)?;
+    Ok(())
+}
 #[cfg(windows)]
-fn create_dir_link(source: &Path, destination: &Path) -> Result<()> { std::os::windows::fs::symlink_dir(source, destination)?; Ok(()) }
+fn create_dir_link(source: &Path, destination: &Path) -> Result<()> {
+    std::os::windows::fs::symlink_dir(source, destination)?;
+    Ok(())
+}
 
 fn build_project(root: &Path, config: &Config, package_web: bool) -> Result<Vec<Artifact>> {
     let out = absolute(root, &config.out_dir);
     fs::create_dir_all(&out)?;
     let mut artifacts = Vec::new();
-    for (name, target) in [("client", config.client.as_ref()), ("server", config.server.as_ref())] {
+    for (name, target) in [
+        ("client", config.client.as_ref()),
+        ("server", config.server.as_ref()),
+    ] {
         let Some(target) = target else { continue };
         let js = out.join(format!("{name}.elpian.js"));
         let ast = out.join(format!("{name}.elpian.ast.json"));
         let bytecode_path = out.join(format!("{name}.elpian.bc"));
         let mut seen = HashSet::new();
         let mut modules = Vec::new();
-        bundle_module(root, &resolve_source(&absolute(root, &target.entry))?, &mut seen, &mut modules)?;
+        bundle_module(
+            root,
+            &resolve_source(&absolute(root, &target.entry))?,
+            &mut seen,
+            &mut modules,
+        )?;
         let source = modules.join("\n");
         fs::write(&js, &source)?;
         let ast_json = js2elpian::compile_js_to_ast(source.clone());
         let ast_value: serde_json::Value = serde_json::from_str(&ast_json)?;
-        if let Some(error) = ast_value.get("error") { bail!("{name}: {error}"); }
+        if let Some(error) = ast_value.get("error") {
+            bail!("{name}: {error}");
+        }
         fs::write(&ast, ast_json)?;
         let bytecode = if config.mode != Mode::Js {
-            let bytes = js2elpian::compile_js_to_bytecode(&source).ok_or_else(|| anyhow!("{name}: JavaScript is outside the Elpian subset"))?;
+            let bytes = js2elpian::compile_js_to_bytecode(&source)
+                .ok_or_else(|| anyhow!("{name}: JavaScript is outside the Elpian subset"))?;
             fs::write(&bytecode_path, bytes)?;
             Some(bytecode_path)
-        } else { None };
-        artifacts.push(Artifact { target: name, js, ast, bytecode });
+        } else {
+            None
+        };
+        artifacts.push(Artifact {
+            target: name,
+            js,
+            ast,
+            bytecode,
+        });
     }
     let client = artifacts.iter().find(|item| item.target == "client");
     let manifest = json!({
@@ -214,41 +322,72 @@ fn build_project(root: &Path, config: &Config, package_web: bool) -> Result<Vec<
         "server": config.server.as_ref().map(|_| json!({ "endpoint": "__elpian/api" }))
     });
     write_json(&out.join("elpian.manifest.json"), &manifest)?;
-    if package_web && client.is_some() { package_web_export(root, config, &artifacts, &out)?; }
+    if package_web && client.is_some() {
+        package_web_export(root, config, &artifacts, &out)?;
+    }
     Ok(artifacts)
 }
 
-fn bundle_module(root: &Path, file: &Path, seen: &mut HashSet<PathBuf>, output: &mut Vec<String>) -> Result<()> {
+fn bundle_module(
+    root: &Path,
+    file: &Path,
+    seen: &mut HashSet<PathBuf>,
+    output: &mut Vec<String>,
+) -> Result<()> {
     let file = fs::canonicalize(file)?;
-    if !seen.insert(file.clone()) { return Ok(()); }
+    if !seen.insert(file.clone()) {
+        return Ok(());
+    }
     let source = fs::read_to_string(&file)?;
-    let import_re = Regex::new(r#"(?ms)^\s*import\s+(?:[\s\S]*?\s+from\s+)?[\"']([^\"']+)[\"']\s*;?"#)?;
+    let import_re =
+        Regex::new(r#"(?ms)^\s*import\s+(?:[\s\S]*?\s+from\s+)?[\"']([^\"']+)[\"']\s*;?"#)?;
     for capture in import_re.captures_iter(&source) {
         let dependency = resolve_import(root, &file, &capture[1])?;
         bundle_module(root, &dependency, seen, output)?;
     }
     let transformed = transpile_typescript(&file, &source)?;
     let without_imports = import_re.replace_all(&transformed, "");
-    let export_decl = Regex::new(r"(?m)^\s*export\s+((?:async\s+)?(?:function|class|const|let|var)\b)")?;
+    let export_decl =
+        Regex::new(r"(?m)^\s*export\s+((?:async\s+)?(?:function|class|const|let|var)\b)")?;
     let export_list = Regex::new(r"(?ms)^\s*export\s*\{.*?\}\s*;?")?;
-    let cleaned = export_list.replace_all(&export_decl.replace_all(&without_imports, "$1"), "").to_string();
-    output.push(format!("// {}\n{}", file.strip_prefix(root).unwrap_or(&file).display(), cleaned));
+    let cleaned = export_list
+        .replace_all(&export_decl.replace_all(&without_imports, "$1"), "")
+        .to_string();
+    output.push(format!(
+        "// {}\n{}",
+        file.strip_prefix(root).unwrap_or(&file).display(),
+        cleaned
+    ));
     Ok(())
 }
 
 fn transpile_typescript(path: &Path, source: &str) -> Result<String> {
     let allocator = Allocator::default();
-    let source_type = SourceType::from_path(path).map_err(|_| anyhow!("unsupported source type: {}", path.display()))?;
+    let source_type = SourceType::from_path(path)
+        .map_err(|_| anyhow!("unsupported source type: {}", path.display()))?;
     let parsed = OxcParser::new(&allocator, source, source_type).parse();
     if !parsed.diagnostics.is_empty() {
-        bail!("TypeScript parse failed in {}: {}", path.display(), parsed.diagnostics[0].clone().render_with_source_code(source.to_string()));
+        bail!(
+            "TypeScript parse failed in {}: {}",
+            path.display(),
+            parsed.diagnostics[0]
+                .clone()
+                .render_with_source_code(source.to_string())
+        );
     }
     let mut program = parsed.program;
-    let semantic = SemanticBuilder::new().with_excess_capacity(2.0).with_enum_eval(true).build(&program);
-    if !semantic.diagnostics.is_empty() { bail!("TypeScript semantics failed in {}", path.display()); }
+    let semantic = SemanticBuilder::new()
+        .with_excess_capacity(2.0)
+        .with_enum_eval(true)
+        .build(&program);
+    if !semantic.diagnostics.is_empty() {
+        bail!("TypeScript semantics failed in {}", path.display());
+    }
     let transformed = Transformer::new(&allocator, path, &TransformOptions::default())
         .build_with_scoping(semantic.semantic.into_scoping(), &mut program);
-    if !transformed.diagnostics.is_empty() { bail!("TypeScript transform failed in {}", path.display()); }
+    if !transformed.diagnostics.is_empty() {
+        bail!("TypeScript transform failed in {}", path.display());
+    }
     Ok(Codegen::new().build(&program).code)
 }
 
@@ -257,17 +396,37 @@ fn resolve_import(root: &Path, importer: &Path, specifier: &str) -> Result<PathB
         return resolve_source(&importer.parent().unwrap().join(specifier));
     }
     let parts: Vec<_> = specifier.split('/').collect();
-    let package_name = if specifier.starts_with('@') { parts[..2].join("/") } else { parts[0].to_string() };
+    let package_name = if specifier.starts_with('@') {
+        parts[..2].join("/")
+    } else {
+        parts[0].to_string()
+    };
     let package_dir = root.join(".elpian/packages").join(&package_name);
     let package: PackageSpec = read_json(&package_dir.join("elpian.package.json"))?;
-    let subpath = specifier.strip_prefix(&package_name).unwrap().trim_start_matches('/');
-    resolve_source(&package_dir.join(if subpath.is_empty() { &package.entry } else { subpath }))
-        .with_context(|| format!("cannot resolve Elpian package {specifier}; run `elpian run install`"))
+    let subpath = specifier
+        .strip_prefix(&package_name)
+        .unwrap()
+        .trim_start_matches('/');
+    resolve_source(&package_dir.join(if subpath.is_empty() {
+        &package.entry
+    } else {
+        subpath
+    }))
+    .with_context(|| format!("cannot resolve Elpian package {specifier}; run `elpian run install`"))
 }
 
 fn resolve_source(path: &Path) -> Result<PathBuf> {
-    let candidates = [path.to_path_buf(), path.with_extension("ts"), path.with_extension("tsx"), path.with_extension("js"), path.join("index.ts")];
-    candidates.into_iter().find(|item| item.is_file()).ok_or_else(|| anyhow!("source file not found: {}", path.display()))
+    let candidates = [
+        path.to_path_buf(),
+        path.with_extension("ts"),
+        path.with_extension("tsx"),
+        path.with_extension("js"),
+        path.join("index.ts"),
+    ];
+    candidates
+        .into_iter()
+        .find(|item| item.is_file())
+        .ok_or_else(|| anyhow!("source file not found: {}", path.display()))
 }
 
 /// Where the built Flutter engine for `base` lives.
@@ -284,7 +443,11 @@ fn engine_dir_for(engine_project: &Path, base: &str) -> PathBuf {
         .chars()
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
         .collect();
-    let slug = if slug.is_empty() { "root".to_string() } else { slug };
+    let slug = if slug.is_empty() {
+        "root".to_string()
+    } else {
+        slug
+    };
     engine_project.join("build/elpian-engine").join(slug)
 }
 
@@ -302,27 +465,51 @@ fn ensure_engine(engine_project: &Path, base: &str, force: bool) -> Result<PathB
             "--output",
             &engine.to_string_lossy(),
         ]))?;
-        fs::write(&marker, format!("elpian_client/lib/main.dart\nbasePath={base}\n"))?;
+        fs::write(
+            &marker,
+            format!("elpian_client/lib/main.dart\nbasePath={base}\n"),
+        )?;
     }
     Ok(engine)
 }
 
-fn package_web_export(root: &Path, config: &Config, artifacts: &[Artifact], out: &Path) -> Result<()> {
+fn package_web_export(
+    root: &Path,
+    config: &Config,
+    artifacts: &[Artifact],
+    out: &Path,
+) -> Result<()> {
     let base = normalize_base(&config.base_path);
-    let engine_project = config.engine_project.as_ref().map(|value| absolute(root, value)).unwrap_or_else(|| cli_root().join("elpian_client"));
+    let engine_project = config
+        .engine_project
+        .as_ref()
+        .map(|value| absolute(root, value))
+        .unwrap_or_else(|| cli_root().join("elpian_client"));
     let engine = match config.engine_dir.as_ref() {
         Some(value) => absolute(root, value),
         None => ensure_engine(&engine_project, &base, false)?,
     };
-    if !engine.join("index.html").is_file() { bail!("Flutter engine missing at {}", engine.display()); }
+    if !engine.join("index.html").is_file() {
+        bail!("Flutter engine missing at {}", engine.display());
+    }
     let web = out.join("web");
-    if web.exists() { fs::remove_dir_all(&web)?; }
+    if web.exists() {
+        fs::remove_dir_all(&web)?;
+    }
     copy_tree(&engine, &web)?;
     let guest = web.join("__elpian");
     fs::create_dir_all(&guest)?;
-    fs::copy(out.join("elpian.manifest.json"), guest.join("elpian.manifest.json"))?;
+    fs::copy(
+        out.join("elpian.manifest.json"),
+        guest.join("elpian.manifest.json"),
+    )?;
     for item in artifacts {
-        for file in [&item.js, &item.ast].into_iter().chain(item.bytecode.iter()) { fs::copy(file, guest.join(file.file_name().unwrap()))?; }
+        for file in [&item.js, &item.ast]
+            .into_iter()
+            .chain(item.bytecode.iter())
+        {
+            fs::copy(file, guest.join(file.file_name().unwrap()))?;
+        }
     }
     disable_service_worker(&web)?;
     Ok(())
@@ -331,109 +518,226 @@ fn package_web_export(root: &Path, config: &Config, artifacts: &[Artifact], out:
 fn dev(root: &Path, config: Config, host: &str, port: u16, force_engine: bool) -> Result<()> {
     build_project(root, &config, false)?;
     let base = normalize_base(&config.base_path);
-    let engine_project = config.engine_project.as_ref().map(|value| absolute(root, value)).unwrap_or_else(|| cli_root().join("elpian_client"));
+    let engine_project = config
+        .engine_project
+        .as_ref()
+        .map(|value| absolute(root, value))
+        .unwrap_or_else(|| cli_root().join("elpian_client"));
     let engine = match config.engine_dir.as_ref() {
         Some(value) => absolute(root, value),
         None => ensure_engine(&engine_project, &base, force_engine)?,
     };
     let (tx, rx) = mpsc::channel();
-    let mut watcher = notify::recommended_watcher(move |event| { if changed(&event) { let _ = tx.send(event); } })?;
-    for path in [root.join("src"), root.join("packages"), root.join("elpian.json"), root.join("elpian.config.json")] {
-        if path.exists() { watcher.watch(&path, if path.is_dir() { RecursiveMode::Recursive } else { RecursiveMode::NonRecursive })?; }
+    let mut watcher = notify::recommended_watcher(move |event| {
+        if changed(&event) {
+            let _ = tx.send(event);
+        }
+    })?;
+    for path in [
+        root.join("src"),
+        root.join("packages"),
+        root.join("elpian.json"),
+        root.join("elpian.config.json"),
+    ] {
+        if path.exists() {
+            watcher.watch(
+                &path,
+                if path.is_dir() {
+                    RecursiveMode::Recursive
+                } else {
+                    RecursiveMode::NonRecursive
+                },
+            )?;
+        }
     }
     let rebuild_root = root.to_path_buf();
     let rebuild_config = config.clone();
-    std::thread::spawn(move || while rx.recv().is_ok() {
-        while rx.try_recv().is_ok() {}
-        match build_project(&rebuild_root, &rebuild_config, false) { Ok(_) => println!("[elpian] rebuilt"), Err(error) => eprintln!("[elpian] build failed: {error:#}") }
+    std::thread::spawn(move || {
+        while rx.recv().is_ok() {
+            while rx.try_recv().is_ok() {}
+            match build_project(&rebuild_root, &rebuild_config, false) {
+                Ok(_) => println!("[elpian] rebuilt"),
+                Err(error) => eprintln!("[elpian] build failed: {error:#}"),
+            }
+        }
     });
     let manifest = workspace().join("rust/Cargo.toml");
     let out = absolute(root, &config.out_dir);
     let mut command = Command::new("cargo");
-    command.current_dir(root).args(["run", "--quiet", "--manifest-path"]).arg(manifest).args(["--bin", "elpian-server", "--", "--host", host, "--port", &port.to_string(), "--web-root"]).arg(&engine).arg("--artifact-root").arg(&out);
+    command
+        .current_dir(root)
+        .args(["run", "--quiet", "--manifest-path"])
+        .arg(manifest)
+        .args([
+            "--bin",
+            "elpian-server",
+            "--",
+            "--host",
+            host,
+            "--port",
+            &port.to_string(),
+            "--web-root",
+        ])
+        .arg(&engine)
+        .arg("--artifact-root")
+        .arg(&out);
     let server_bytecode = out.join("server.elpian.bc");
-    if server_bytecode.is_file() { command.arg("--server-bytecode").arg(server_bytecode); }
-    command.stdin(Stdio::inherit()).stdout(Stdio::inherit()).stderr(Stdio::inherit());
+    if server_bytecode.is_file() {
+        command.arg("--server-bytecode").arg(server_bytecode);
+    }
+    command
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit());
     let status = command.status()?;
-    if !status.success() { bail!("Elpian Rust server exited {status}"); }
+    if !status.success() {
+        bail!("Elpian Rust server exited {status}");
+    }
     Ok(())
 }
 
 fn create_project(root: &Path, template: Template) -> Result<()> {
-    if root.exists() { bail!("{} already exists", root.display()); }
+    if root.exists() {
+        bail!("{} already exists", root.display());
+    }
     fs::create_dir_all(root.join("src"))?;
     let client = !matches!(template, Template::Server);
     let server = matches!(template, Template::Server | Template::Fullstack);
     let showcase = matches!(template, Template::Showcase);
     let name = root.file_name().unwrap().to_string_lossy();
-    let dependencies = if client { json!({ "@elpian/sdk": { "path": "./packages/elpian-sdk" } }) } else { json!({}) };
-    write_json(&root.join("elpian.json"), &json!({ "name": name, "spec": 1, "dependencies": dependencies }))?;
-    write_json(&root.join("elpian.config.json"), &json!({
-        "outDir": "dist", "mode": "both", "basePath": "/",
-        "client": client.then(|| json!({ "entry": "src/client.ts" })),
-        "server": server.then(|| json!({ "entry": "src/server.ts" }))
-    }))?;
-    fs::write(root.join("tsconfig.json"), "{\n  \"compilerOptions\": { \"target\": \"ES2015\", \"strict\": true, \"module\": \"ESNext\" },\n  \"include\": [\"src\"]\n}\n")?;
+    let dependencies = if client {
+        json!({ "@elpian/sdk": { "path": "./packages/elpian-sdk" } })
+    } else {
+        json!({})
+    };
+    write_json(
+        &root.join("elpian.json"),
+        &json!({ "name": name, "spec": 1, "dependencies": dependencies }),
+    )?;
+    write_json(
+        &root.join("elpian.config.json"),
+        &json!({
+            "outDir": "dist", "mode": "both", "basePath": "/",
+            "client": client.then(|| json!({ "entry": "src/client.ts" })),
+            "server": server.then(|| json!({ "entry": "src/server.ts" }))
+        }),
+    )?;
+    fs::write(
+        root.join("tsconfig.json"),
+        "{\n  \"compilerOptions\": { \"target\": \"ES2015\", \"strict\": true, \"module\": \"ESNext\" },\n  \"include\": [\"src\"]\n}\n",
+    )?;
     fs::write(root.join(".gitignore"), "dist/\n.elpian/\n")?;
-    let readme = if showcase { format!("{SHOWCASE_README}") } else {
+    let readme = if showcase {
+        SHOWCASE_README.to_string()
+    } else {
         format!("# {name}\n\nRun `elpian run install`, then `elpian run dev`.\n")
     };
     fs::write(root.join("README.md"), readme)?;
     if client {
         fs::write(
             root.join("src/client.ts"),
-            if showcase { SHOWCASE_TEMPLATE } else { CLIENT_TEMPLATE },
+            if showcase {
+                SHOWCASE_TEMPLATE
+            } else {
+                CLIENT_TEMPLATE
+            },
         )?;
-        let sdk = root.join("packages/elpian-sdk"); fs::create_dir_all(&sdk)?;
-        write_json(&sdk.join("elpian.package.json"), &json!({ "name": "@elpian/sdk", "version": "0.1.0", "spec": 1, "entry": "index.ts" }))?;
+        let sdk = root.join("packages/elpian-sdk");
+        fs::create_dir_all(&sdk)?;
+        write_json(
+            &sdk.join("elpian.package.json"),
+            &json!({ "name": "@elpian/sdk", "version": "0.1.0", "spec": 1, "entry": "index.ts" }),
+        )?;
         fs::write(sdk.join("index.ts"), SDK_TEMPLATE)?;
     }
-    if server { fs::write(root.join("src/server.ts"), SERVER_TEMPLATE)?; }
+    if server {
+        fs::write(root.join("src/server.ts"), SERVER_TEMPLATE)?;
+    }
     println!("Created {}", root.display());
     Ok(())
 }
 
 fn changed(event: &notify::Result<notify::Event>) -> bool {
     // Reads count as inotify events, so a rebuild that opens the watched sources would retrigger itself.
-    event.as_ref().map(|item| !matches!(item.kind, EventKind::Access(_))).unwrap_or(false)
+    event
+        .as_ref()
+        .map(|item| !matches!(item.kind, EventKind::Access(_)))
+        .unwrap_or(false)
 }
 
 fn runtime_stale(project: &Path, marker: &Path, base: &str) -> Result<bool> {
-    if !marker.is_file() { return Ok(true); }
-    if !fs::read_to_string(marker)?.lines().any(|line| line.trim() == format!("basePath={base}")) { return Ok(true); }
+    if !marker.is_file() {
+        return Ok(true);
+    }
+    if !fs::read_to_string(marker)?
+        .lines()
+        .any(|line| line.trim() == format!("basePath={base}"))
+    {
+        return Ok(true);
+    }
     let built = fs::metadata(marker)?.modified()?;
     let ui = ui_package(project).unwrap_or_else(|| project.join(".."));
-    for source in [project.join("lib/main.dart"), ui.join("lib/src/vm/elpian_vm_widget.dart"), ui.join("lib/src/vm/frb_generated/api_web.dart")] {
-        if source.is_file() && fs::metadata(source)?.modified()? > built { return Ok(true); }
+    for source in [
+        project.join("lib/main.dart"),
+        ui.join("lib/src/vm/elpian_vm_widget.dart"),
+        ui.join("lib/src/vm/frb_generated/api_web.dart"),
+    ] {
+        if source.is_file() && fs::metadata(source)?.modified()? > built {
+            return Ok(true);
+        }
     }
     Ok(false)
 }
 
 fn ui_package(project: &Path) -> Option<PathBuf> {
     let pubspec = fs::read_to_string(project.join("pubspec.yaml")).ok()?;
-    let value = pubspec.lines().skip_while(|line| line.trim_end() != "  elpian_ui:").skip(1).take_while(|line| line.starts_with("    ")).find_map(|line| line.trim().strip_prefix("path:"))?;
-    Some(absolute(project, Path::new(value.trim().trim_matches(['"', '\'']))))
+    let value = pubspec
+        .lines()
+        .skip_while(|line| line.trim_end() != "  elpian_ui:")
+        .skip(1)
+        .take_while(|line| line.starts_with("    "))
+        .find_map(|line| line.trim().strip_prefix("path:"))?;
+    Some(absolute(
+        project,
+        Path::new(value.trim().trim_matches(['"', '\''])),
+    ))
 }
 
 fn disable_service_worker(web: &Path) -> Result<()> {
     let bootstrap = web.join("flutter_bootstrap.js");
     if bootstrap.is_file() {
         let source = fs::read_to_string(&bootstrap)?;
-        let re = Regex::new(r"(?s)_flutter\.loader\.load\(\{\s*serviceWorkerSettings:.*?\}\s*\}\);?\s*$")?;
-        fs::write(bootstrap, re.replace(&source, "_flutter.loader.load();\n").as_bytes())?;
+        let re = Regex::new(
+            r"(?s)_flutter\.loader\.load\(\{\s*serviceWorkerSettings:.*?\}\s*\}\);?\s*$",
+        )?;
+        fs::write(
+            bootstrap,
+            re.replace(&source, "_flutter.loader.load();\n").as_bytes(),
+        )?;
     }
     Ok(())
 }
 
 fn copy_tree(source: &Path, destination: &Path) -> Result<()> {
     for entry in WalkDir::new(source) {
-        let entry = entry?; let relative = entry.path().strip_prefix(source)?; let target = destination.join(relative);
-        if entry.file_type().is_dir() { fs::create_dir_all(&target)?; } else { if let Some(parent) = target.parent() { fs::create_dir_all(parent)?; } fs::copy(entry.path(), target)?; }
+        let entry = entry?;
+        let relative = entry.path().strip_prefix(source)?;
+        let target = destination.join(relative);
+        if entry.file_type().is_dir() {
+            fs::create_dir_all(&target)?;
+        } else {
+            if let Some(parent) = target.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::copy(entry.path(), target)?;
+        }
     }
     Ok(())
 }
 
-fn normalize_base(value: &str) -> String { format!("/{}/", value.trim_matches('/')).replace("//", "/") }
+fn normalize_base(value: &str) -> String {
+    format!("/{}/", value.trim_matches('/')).replace("//", "/")
+}
 /// The CLI crate's directory — where the bundled `elpian_client` engine lives.
 ///
 /// `CARGO_MANIFEST_DIR` is baked in at COMPILE time, so it goes stale the moment
@@ -449,21 +753,49 @@ fn cli_root() -> PathBuf {
     }
     if let Ok(exe) = env::current_exe() {
         // …/cli/target/release/elpian -> …/cli
-        if let Some(dir) = exe.parent().and_then(|p| p.parent()).and_then(|p| p.parent()) {
-            if dir.join("elpian_client").is_dir() {
+        if let Some(dir) = exe
+            .parent()
+            .and_then(|p| p.parent())
+            .and_then(|p| p.parent())
+            && dir.join("elpian_client").is_dir() {
                 return dir.to_path_buf();
             }
-        }
     }
     baked
 }
 /// The elpian repository root — the CLI crate now lives inside it.
-fn workspace() -> PathBuf { cli_root().parent().unwrap().to_path_buf() }
-fn absolute(root: &Path, value: &Path) -> PathBuf { if value.is_absolute() { value.to_path_buf() } else { root.join(value) } }
-fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T> { Ok(serde_json::from_slice(&fs::read(path).with_context(|| format!("cannot read {}", path.display()))?)?) }
-fn write_json(path: &Path, value: &serde_json::Value) -> Result<()> { fs::write(path, format!("{}\n", serde_json::to_string_pretty(value)?))?; Ok(()) }
-fn run_checked(command: &mut Command) -> Result<()> { let status = command.status()?; if !status.success() { bail!("command exited {status}"); } Ok(()) }
-fn validate_package_name(name: &str) -> Result<()> { if name.is_empty() || name.contains("..") || name.starts_with('/') || name.ends_with('/') { bail!("invalid package name: {name}"); } Ok(()) }
+fn workspace() -> PathBuf {
+    cli_root().parent().unwrap().to_path_buf()
+}
+fn absolute(root: &Path, value: &Path) -> PathBuf {
+    if value.is_absolute() {
+        value.to_path_buf()
+    } else {
+        root.join(value)
+    }
+}
+fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T> {
+    Ok(serde_json::from_slice(&fs::read(path).with_context(
+        || format!("cannot read {}", path.display()),
+    )?)?)
+}
+fn write_json(path: &Path, value: &serde_json::Value) -> Result<()> {
+    fs::write(path, format!("{}\n", serde_json::to_string_pretty(value)?))?;
+    Ok(())
+}
+fn run_checked(command: &mut Command) -> Result<()> {
+    let status = command.status()?;
+    if !status.success() {
+        bail!("command exited {status}");
+    }
+    Ok(())
+}
+fn validate_package_name(name: &str) -> Result<()> {
+    if name.is_empty() || name.contains("..") || name.starts_with('/') || name.ends_with('/') {
+        bail!("invalid package name: {name}");
+    }
+    Ok(())
+}
 
 const CLIENT_TEMPLATE: &str = r##"import { el, render } from '@elpian/sdk';
 

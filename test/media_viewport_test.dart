@@ -11,7 +11,7 @@ void main() {
   // desktop window collapsed to the mobile full-screen layout. Media must
   // resolve against the host-provided widget viewport (CSSParser.viewportOverride).
   setUp(() {
-    final mgr = GlobalStylesheetManager();
+    final mgr = GlobalStylesheetManager.shared;
     mgr.clear();
     mgr.global.addRule('.game-window', {
       'position': 'absolute',
@@ -28,12 +28,12 @@ void main() {
   });
 
   tearDown(() {
-    GlobalStylesheetManager().clear();
+    GlobalStylesheetManager.shared.clear();
     CSSParser.viewportOverride = null;
   });
 
   Map<String, dynamic> resolveGameWindow() =>
-      GlobalStylesheetManager().getComputedStyleMap(
+      GlobalStylesheetManager.shared.getComputedStyleMap(
         tagName: 'div',
         classes: ['game-window'],
       );

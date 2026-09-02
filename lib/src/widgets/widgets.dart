@@ -1,0 +1,87 @@
+/// Every Flutter-DSL widget builder Elpian registers.
+///
+/// An internal barrel: `src/` files import this instead of the package's own
+/// public entrypoint, so nothing inside the library depends on its own public
+/// API. Not exported from `elpian_ui.dart` directly — the public barrel lists
+/// these individually so the documented surface stays explicit.
+library;
+
+export 'elpian_align.dart';
+export 'elpian_animated_align.dart';
+export 'elpian_animated_container.dart';
+export 'elpian_animated_cross_fade.dart';
+export 'elpian_animated_default_text_style.dart';
+export 'elpian_animated_gradient.dart';
+export 'elpian_animated_opacity.dart';
+export 'elpian_animated_padding.dart';
+export 'elpian_animated_positioned.dart';
+export 'elpian_animated_rotation.dart';
+export 'elpian_animated_scale.dart';
+export 'elpian_animated_size.dart';
+export 'elpian_animated_slide.dart';
+export 'elpian_animated_switcher.dart';
+export 'elpian_app_bar.dart';
+export 'elpian_aspect_ratio.dart';
+export 'elpian_badge.dart';
+export 'elpian_baseline.dart';
+export 'elpian_button.dart';
+export 'elpian_cached_canvas.dart';
+export 'elpian_canvas_widget.dart';
+export 'elpian_card.dart';
+export 'elpian_center.dart';
+export 'elpian_checkbox.dart';
+export 'elpian_chip.dart';
+export 'elpian_circular_progress_indicator.dart';
+export 'elpian_clip_rrect.dart';
+export 'elpian_column.dart';
+export 'elpian_constrained_box.dart';
+export 'elpian_container.dart';
+export 'elpian_decorated_box.dart';
+export 'elpian_dismissible.dart';
+export 'elpian_divider.dart';
+export 'elpian_drag_target.dart';
+export 'elpian_draggable.dart';
+export 'elpian_expanded.dart';
+export 'elpian_fade_transition.dart';
+export 'elpian_fitted_box.dart';
+export 'elpian_flexible.dart';
+export 'elpian_fractionally_sized_box.dart';
+export 'elpian_gesture_detector.dart';
+export 'elpian_grid_view.dart';
+export 'elpian_hero.dart';
+export 'elpian_icon.dart';
+export 'elpian_image.dart';
+export 'elpian_indexed_stack.dart';
+export 'elpian_inkwell.dart';
+export 'elpian_limited_box.dart';
+export 'elpian_linear_progress_indicator.dart';
+export 'elpian_list_view.dart';
+export 'elpian_math_expression.dart';
+export 'elpian_opacity.dart';
+export 'elpian_overflow_box.dart';
+export 'elpian_padding.dart';
+export 'elpian_positioned.dart';
+export 'elpian_pulse.dart';
+export 'elpian_radio.dart';
+export 'elpian_rotated_box.dart';
+export 'elpian_rotation_transition.dart';
+export 'elpian_row.dart';
+export 'elpian_scaffold.dart';
+export 'elpian_scale_transition.dart';
+export 'elpian_scope.dart';
+export 'elpian_shimmer.dart';
+export 'elpian_size_transition.dart';
+export 'elpian_sized_box.dart';
+export 'elpian_slide_transition.dart';
+export 'elpian_slider.dart';
+export 'elpian_spacer.dart';
+export 'elpian_stack.dart';
+export 'elpian_staggered_animation.dart';
+export 'elpian_switch.dart';
+export 'elpian_text.dart';
+export 'elpian_text_field.dart';
+export 'elpian_tooltip.dart';
+export 'elpian_transform.dart';
+export 'elpian_tween_animation_builder.dart';
+export 'elpian_vertical_divider.dart';
+export 'elpian_wrap.dart';

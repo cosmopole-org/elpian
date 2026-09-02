@@ -14,7 +14,7 @@ cargo install --path cli
 ```
 
 The binary is named `elpian` (`[[bin]] name = "elpian"`). It depends on
-`js2elpian` at `../rust/js2elpian`, which is vendored in this repository — no
+`js2elpian` at `../rust/crates/js2elpian`, which is vendored in this repository — no
 sibling checkout is needed.
 
 ## The whole surface
@@ -257,7 +257,7 @@ my-app/
 
 ## The dev/prod HTTP surface
 
-Served by `elpian-server` (`elpian/rust/src/bin/elpian-server.rs`):
+Served by `elpian-server` (`elpian/rust/crates/elpian-vm/src/bin/elpian-server.rs`):
 
 | Route | Behaviour |
 |---|---|

@@ -18,7 +18,8 @@ class HtmlNav {
     );
 
     if (node.style != null) {
-      result = CSSProperties.applyStyle(result, node.style, layoutHandled: true);
+      result =
+          CSSProperties.applyStyle(result, node.style, layoutHandled: true);
     }
 
     return result;

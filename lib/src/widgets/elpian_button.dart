@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/elpian_node.dart';
-import '../core/event_dispatcher.dart';
+import '../core/elpian_services.dart';
 import '../core/event_system.dart';
 
 class ElpianButton {
@@ -15,7 +15,7 @@ class ElpianButton {
 
     Widget result = ElevatedButton(
       onPressed: () {
-        final dispatcher = EventDispatcher();
+        final dispatcher = ElpianServices.current.events;
         // Dispatch both 'click' and 'tap' so that handlers registered
         // under either name are triggered (e.g. QuickJS events: { tap: fn }).
         dispatcher.dispatchClick(elementId);

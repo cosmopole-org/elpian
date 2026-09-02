@@ -23,7 +23,10 @@ Map<String, dynamic> _cityEnvelope() => {
                     'type': 'div',
                     'key': 'city-navbar',
                     'children': [
-                      {'type': 'span', 'props': {'text': 'Lycanis Harbor'}}
+                      {
+                        'type': 'span',
+                        'props': {'text': 'Lycanis Harbor'}
+                      }
                     ],
                   }
                 ],
@@ -33,7 +36,11 @@ Map<String, dynamic> _cityEnvelope() => {
                 'key': 'hud__scope',
                 'props': <String, dynamic>{},
                 'children': [
-                  {'type': 'div', 'key': 'hud', 'props': {'text': 'resources'}}
+                  {
+                    'type': 'div',
+                    'key': 'hud',
+                    'props': {'text': 'resources'}
+                  }
                 ],
               },
             ],
@@ -43,7 +50,10 @@ Map<String, dynamic> _cityEnvelope() => {
       'jsCode': 'function MainComponent(){ return "null"; }',
       'stylesheet': {
         'rules': [
-          {'selector': '.btn', 'styles': {'color': '#fff'}}
+          {
+            'selector': '.btn',
+            'styles': {'color': '#fff'}
+          }
         ]
       },
     };

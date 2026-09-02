@@ -157,7 +157,7 @@ class ElpianVmWidget extends StatefulWidget {
   })  : astJson = null,
         bytecode = null;
 
-  /// Create a widget from precompiled Victor/Elpian bytecode.
+  /// Create a widget from precompiled Elpian bytecode.
   const ElpianVmWidget.fromBytecode({
     super.key,
     required this.machineId,

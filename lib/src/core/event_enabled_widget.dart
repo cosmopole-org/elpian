@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../models/elpian_node.dart';
 import 'event_system.dart';
 import 'event_dispatcher.dart';
+import 'elpian_services.dart';
 
 /// Wrapper widget that adds event handling capabilities to any widget
 class EventEnabledWidget extends StatefulWidget {
@@ -22,7 +23,7 @@ class EventEnabledWidget extends StatefulWidget {
 }
 
 class _EventEnabledWidgetState extends State<EventEnabledWidget> {
-  final EventDispatcher _dispatcher = EventDispatcher();
+  final EventDispatcher _dispatcher = ElpianServices.current.events;
   late String _elementId;
   final FocusNode _focusNode = FocusNode();
 

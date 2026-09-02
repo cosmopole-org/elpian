@@ -4,8 +4,9 @@ import '../css/css_properties.dart';
 
 class ElpianText {
   static Widget build(ElpianNode node, List<Widget> children) {
-    final text = node.props['text'] as String? ?? node.props['data'] as String? ?? '';
-    
+    final text =
+        node.props['text'] as String? ?? node.props['data'] as String? ?? '';
+
     TextStyle? textStyle;
     if (node.props['style'] is TextStyle) {
       textStyle = node.props['style'] as TextStyle;
@@ -19,7 +20,8 @@ class ElpianText {
       style: textStyle,
       textAlign: node.props['textAlign'] as TextAlign? ?? node.style?.textAlign,
       maxLines: node.props['maxLines'] as int?,
-      overflow: node.props['overflow'] as TextOverflow? ?? node.style?.textOverflow,
+      overflow:
+          node.props['overflow'] as TextOverflow? ?? node.style?.textOverflow,
       softWrap: node.props['softWrap'] as bool?,
     );
 

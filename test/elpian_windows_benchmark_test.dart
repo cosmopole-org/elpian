@@ -12,141 +12,151 @@ import 'package:flutter_test/flutter_test.dart';
 // ─── shared JSON payloads ────────────────────────────────────────────────────
 
 const _kColors = [
-  '#667eea', '#764ba2', '#f093fb', '#4facfe',
-  '#00f2fe', '#43e97b', '#fa709a', '#fee140',
+  '#667eea',
+  '#764ba2',
+  '#f093fb',
+  '#4facfe',
+  '#00f2fe',
+  '#43e97b',
+  '#fa709a',
+  '#fee140',
 ];
 
 Map<String, dynamic> _dashboardJson(int cards) => {
-  'type': 'Column',
-  'style': {'padding': '20', 'backgroundColor': '#f0f2f5'},
-  'children': [
-    {
-      'type': 'Container',
-      'style': {
-        'backgroundColor': '#667eea',
-        'padding': '24',
-        'borderRadius': '12',
-        'marginBottom': '24',
-      },
+      'type': 'Column',
+      'style': {'padding': '20', 'backgroundColor': '#f0f2f5'},
       'children': [
         {
-          'type': 'Text',
-          'props': {'text': 'Performance Dashboard'},
-          'style': {'fontSize': 28, 'fontWeight': 'bold', 'color': '#ffffff'},
-        },
-      ],
-    },
-    {
-      'type': 'Row',
-      'style': {'justifyContent': 'space-between', 'flexWrap': 'wrap'},
-      'children': List.generate(
-        cards,
-        (i) => {
-          'type': 'Card',
-          'style': {'borderRadius': '12', 'padding': '20', 'margin': '8'},
+          'type': 'Container',
+          'style': {
+            'backgroundColor': '#667eea',
+            'padding': '24',
+            'borderRadius': '12',
+            'marginBottom': '24',
+          },
           'children': [
             {
               'type': 'Text',
-              'props': {'text': 'Metric ${i + 1}'},
-              'style': {'fontSize': 16, 'fontWeight': '600'},
-            },
-            {
-              'type': 'Text',
-              'props': {'text': '${(i + 1) * 1237}'},
+              'props': {'text': 'Performance Dashboard'},
               'style': {
-                'fontSize': 32,
-                'fontWeight': '700',
-                'color': _kColors[i % _kColors.length],
+                'fontSize': 28,
+                'fontWeight': 'bold',
+                'color': '#ffffff'
               },
             },
+          ],
+        },
+        {
+          'type': 'Row',
+          'style': {'justifyContent': 'space-between', 'flexWrap': 'wrap'},
+          'children': List.generate(
+            cards,
+            (i) => {
+              'type': 'Card',
+              'style': {'borderRadius': '12', 'padding': '20', 'margin': '8'},
+              'children': [
+                {
+                  'type': 'Text',
+                  'props': {'text': 'Metric ${i + 1}'},
+                  'style': {'fontSize': 16, 'fontWeight': '600'},
+                },
+                {
+                  'type': 'Text',
+                  'props': {'text': '${(i + 1) * 1237}'},
+                  'style': {
+                    'fontSize': 32,
+                    'fontWeight': '700',
+                    'color': _kColors[i % _kColors.length],
+                  },
+                },
+                {
+                  'type': 'LinearProgressIndicator',
+                  'props': {'value': (i + 1) / cards},
+                },
+              ],
+            },
+          ),
+        },
+      ],
+    };
+
+Map<String, dynamic> _animJson(int tick) => {
+      'type': 'Row',
+      'style': {'flexWrap': 'wrap', 'backgroundColor': '#1A1A2E'},
+      'children': List.generate(
+        12,
+        (i) => {
+          'type': 'AnimatedContainer',
+          'style': {
+            'width': 100.0 + math.sin(tick * 0.05 + i) * 40.0,
+            'height': 80.0,
+            'backgroundColor': _kColors[i % _kColors.length],
+            'borderRadius': 12.0,
+            'margin': '4',
+            'duration': 200, // milliseconds integer — valid JSON
+          },
+          'children': [
             {
-              'type': 'LinearProgressIndicator',
-              'props': {'value': (i + 1) / cards},
+              'type': 'Text',
+              'props': {'text': 'Anim ${i + 1}'},
+              'style': {'color': '#ffffff', 'fontSize': 12},
             },
           ],
         },
       ),
-    },
-  ],
-};
-
-Map<String, dynamic> _animJson(int tick) => {
-  'type': 'Row',
-  'style': {'flexWrap': 'wrap', 'backgroundColor': '#1A1A2E'},
-  'children': List.generate(
-    12,
-    (i) => {
-      'type': 'AnimatedContainer',
-      'style': {
-        'width': 100.0 + math.sin(tick * 0.05 + i) * 40.0,
-        'height': 80.0,
-        'backgroundColor': _kColors[i % _kColors.length],
-        'borderRadius': 12.0,
-        'margin': '4',
-        'duration': 200, // milliseconds integer — valid JSON
-      },
-      'children': [
-        {
-          'type': 'Text',
-          'props': {'text': 'Anim ${i + 1}'},
-          'style': {'color': '#ffffff', 'fontSize': 12},
-        },
-      ],
-    },
-  ),
-};
+    };
 
 Map<String, dynamic> _inputJson(int i) => {
-  'type': 'Column',
-  'children': [
-    {
-      'type': 'TextField',
-      'props': {'value': 'Input $i ${'x' * (i % 40)}'},
-      'style': {'marginBottom': '16'},
-    },
-    {
-      'type': 'Text',
-      'props': {'text': 'Processed: ${i * 15} chars'},
-      'style': {'fontSize': 14, 'color': '#666'},
-    },
-  ],
-};
-
-Map<String, dynamic> _listJson(int n) => {
-  'type': 'Column',
-  'style': {'backgroundColor': '#ffffff'},
-  'children': List.generate(
-    n,
-    (i) => {
-      'type': 'div',
-      'style': {
-        'padding': '12',
-        'backgroundColor': i.isEven ? '#ffffff' : '#f5f5f5',
-        'borderBottom': '1px solid #e0e0e0',
-      },
+      'type': 'Column',
       'children': [
         {
+          'type': 'TextField',
+          'props': {'value': 'Input $i ${'x' * (i % 40)}'},
+          'style': {'marginBottom': '16'},
+        },
+        {
           'type': 'Text',
-          'props': {'text': 'Item ${i + 1} — subtitle text for list entry'},
-          'style': {'fontSize': 14},
+          'props': {'text': 'Processed: ${i * 15} chars'},
+          'style': {'fontSize': 14, 'color': '#666'},
         },
       ],
-    },
-  ),
-};
+    };
+
+Map<String, dynamic> _listJson(int n) => {
+      'type': 'Column',
+      'style': {'backgroundColor': '#ffffff'},
+      'children': List.generate(
+        n,
+        (i) => {
+          'type': 'div',
+          'style': {
+            'padding': '12',
+            'backgroundColor': i.isEven ? '#ffffff' : '#f5f5f5',
+            'borderBottom': '1px solid #e0e0e0',
+          },
+          'children': [
+            {
+              'type': 'Text',
+              'props': {'text': 'Item ${i + 1} — subtitle text for list entry'},
+              'style': {'fontSize': 14},
+            },
+          ],
+        },
+      ),
+    };
 
 // ─── stats helper ────────────────────────────────────────────────────────────
 
 class _Stats {
   _Stats(List<double> raw) {
     sorted = List.of(raw)..sort();
-    avg   = sorted.reduce((a, b) => a + b) / sorted.length;
-    p50   = sorted[(sorted.length * 0.50).round().clamp(0, sorted.length - 1)];
-    p90   = sorted[(sorted.length * 0.90).round().clamp(0, sorted.length - 1)];
-    p99   = sorted[(sorted.length * 0.99).round().clamp(0, sorted.length - 1)];
+    avg = sorted.reduce((a, b) => a + b) / sorted.length;
+    p50 = sorted[(sorted.length * 0.50).round().clamp(0, sorted.length - 1)];
+    p90 = sorted[(sorted.length * 0.90).round().clamp(0, sorted.length - 1)];
+    p99 = sorted[(sorted.length * 0.99).round().clamp(0, sorted.length - 1)];
     worst = sorted.last;
     jankPct = sorted.where((t) => t > 16.67).length / sorted.length * 100;
-    fps     = 1000.0 / avg;
+    fps = 1000.0 / avg;
   }
 
   late List<double> sorted;
@@ -160,30 +170,32 @@ class _Stats {
     // ignore: avoid_print
     print('║ Avg       : ${avg.toStringAsFixed(3)} ms');
     // ignore: avoid_print
-    print('║ P50/P90/P99: ${p50.toStringAsFixed(2)} / ${p90.toStringAsFixed(2)} / ${p99.toStringAsFixed(2)} ms');
+    print(
+        '║ P50/P90/P99: ${p50.toStringAsFixed(2)} / ${p90.toStringAsFixed(2)} / ${p99.toStringAsFixed(2)} ms');
     // ignore: avoid_print
-    print('║ Worst     : ${worst.toStringAsFixed(2)} ms   Jank: ${jankPct.toStringAsFixed(1)} %');
+    print(
+        '║ Worst     : ${worst.toStringAsFixed(2)} ms   Jank: ${jankPct.toStringAsFixed(1)} %');
     // ignore: avoid_print
     print('╚══════════════════════════════════════════════════════════════');
   }
 
   Map<String, dynamic> toJson(String scenario) => {
-    'scenario'      : scenario,
-    'fps'           : double.parse(fps.toStringAsFixed(1)),
-    'avg_build_ms'  : double.parse(avg.toStringAsFixed(3)),
-    'p50_ms'        : double.parse(p50.toStringAsFixed(2)),
-    'p90_ms'        : double.parse(p90.toStringAsFixed(2)),
-    'p99_ms'        : double.parse(p99.toStringAsFixed(2)),
-    'worst_frame_ms': double.parse(worst.toStringAsFixed(2)),
-    'jank_rate_pct' : double.parse(jankPct.toStringAsFixed(1)),
-    'total_frames'  : sorted.length,
-  };
+        'scenario': scenario,
+        'fps': double.parse(fps.toStringAsFixed(1)),
+        'avg_build_ms': double.parse(avg.toStringAsFixed(3)),
+        'p50_ms': double.parse(p50.toStringAsFixed(2)),
+        'p90_ms': double.parse(p90.toStringAsFixed(2)),
+        'p99_ms': double.parse(p99.toStringAsFixed(2)),
+        'worst_frame_ms': double.parse(worst.toStringAsFixed(2)),
+        'jank_rate_pct': double.parse(jankPct.toStringAsFixed(1)),
+        'total_frames': sorted.length,
+      };
 }
 
 // ─── test suite ──────────────────────────────────────────────────────────────
 
 void main() {
-  final engine   = ElpianEngine();
+  final engine = ElpianEngine();
   final allResults = <Map<String, dynamic>>[];
 
   // S1 — Complex Dashboard Build (24 cards)
@@ -207,7 +219,7 @@ void main() {
     const N = 150;
     final times = <double>[];
     for (var i = 0; i < N; i++) {
-        final sw = Stopwatch()..start();
+      final sw = Stopwatch()..start();
       engine.renderFromJson(_animJson(i));
       sw.stop();
       times.add(sw.elapsedMicroseconds / 1000.0);
@@ -273,7 +285,11 @@ void main() {
         'type': 'Container',
         'style': style,
         'children': [
-          {'type': 'Text', 'props': {'text': 'Node $i'}, 'style': style},
+          {
+            'type': 'Text',
+            'props': {'text': 'Node $i'},
+            'style': style
+          },
         ],
       });
       sw.stop();
@@ -293,7 +309,11 @@ void main() {
       'type': 'Column',
       'children': List.generate(
         1000,
-        (i) => {'type': 'Text', 'props': {'text': 'Item $i'}, 'style': {'color': _kColors[i % _kColors.length]}},
+        (i) => {
+          'type': 'Text',
+          'props': {'text': 'Item $i'},
+          'style': {'color': _kColors[i % _kColors.length]}
+        },
       ),
     };
     for (var i = 0; i < N; i++) {
@@ -326,13 +346,13 @@ void main() {
     // ignore: avoid_print
     print('╚══════════════════════════════════════════════════════════════╝');
 
-    final outDir  = Directory('bench/reports');
+    final outDir = Directory('bench/reports');
     if (!outDir.existsSync()) outDir.createSync(recursive: true);
     final outFile = File('bench/reports/elpian_windows_results.json');
     outFile.writeAsStringSync(const JsonEncoder.withIndent('  ').convert({
-      'suite'     : 'Elpian Windows Benchmark',
-      'runner'    : 'flutter test (Dart VM, real ElpianEngine)',
-      'timestamp' : DateTime.now().toIso8601String(),
+      'suite': 'Elpian Windows Benchmark',
+      'runner': 'flutter test (Dart VM, real ElpianEngine)',
+      'timestamp': DateTime.now().toIso8601String(),
       'benchmarks': allResults,
     }));
     // ignore: avoid_print

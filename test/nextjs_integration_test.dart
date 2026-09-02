@@ -26,7 +26,8 @@ void main() {
       expect(envelope.component['type'], equals('Text'));
       expect(envelope.meta?['route'], equals('/home'));
       expect(envelope.navigation?['redirectTo'], equals('/auth'));
-      expect(envelope.clientComponents?['profile-card'], isA<Map<String, dynamic>>());
+      expect(envelope.clientComponents?['profile-card'],
+          isA<Map<String, dynamic>>());
       expect(envelope.jsCode, contains('MainComponent'));
       expect(envelope.jsEntryFunction, equals('MainComponent'));
       expect(envelope.vmAstJson, isNotNull);
@@ -130,7 +131,8 @@ void main() {
       expect(find.text('Loaded route: /welcome'), findsOneWidget);
     });
 
-    testWidgets('resolves packed client component scripts in server hierarchy', (tester) async {
+    testWidgets('resolves packed client component scripts in server hierarchy',
+        (tester) async {
       final widget = MaterialApp(
         home: Scaffold(
           body: NextjsServerWidget(

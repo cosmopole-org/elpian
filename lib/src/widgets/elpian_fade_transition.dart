@@ -21,7 +21,8 @@ class _ElpianFadeTransitionWidget extends StatefulWidget {
       _ElpianFadeTransitionWidgetState();
 }
 
-class _ElpianFadeTransitionWidgetState extends State<_ElpianFadeTransitionWidget>
+class _ElpianFadeTransitionWidgetState
+    extends State<_ElpianFadeTransitionWidget>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _animation;
@@ -33,8 +34,7 @@ class _ElpianFadeTransitionWidgetState extends State<_ElpianFadeTransitionWidget
     final duration = widget.node.style?.animationDuration ??
         widget.node.style?.transitionDuration ??
         const Duration(milliseconds: 300);
-    final curve =
-        widget.node.style?.transitionCurve ?? Curves.linear;
+    final curve = widget.node.style?.transitionCurve ?? Curves.linear;
 
     _controller = AnimationController(
       duration: duration,

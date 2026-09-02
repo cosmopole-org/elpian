@@ -40,7 +40,8 @@ void main() {
       expect(g.end, Alignment.centerRight);
     });
 
-    test('background: <solid color> resolves to backgroundColor (no gradient)', () {
+    test('background: <solid color> resolves to backgroundColor (no gradient)',
+        () {
       final style = CSSParser.parse({'background': '#0B1F3A'});
       expect(style.gradient, isNull);
       expect(style.backgroundColor, isNotNull);

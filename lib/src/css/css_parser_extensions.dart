@@ -8,13 +8,13 @@ class CSSParserExtensions {
     if (value == null) return null;
     return value.toString();
   }
-  
+
   /// Parse grid template rows
   static String? parseGridTemplateRows(dynamic value) {
     if (value == null) return null;
     return value.toString();
   }
-  
+
   static const _clipBehaviorMap = <String, Clip>{
     'none': Clip.none,
     'hardedge': Clip.hardEdge,
@@ -70,7 +70,7 @@ class CSSParserExtensions {
     if (value is String) return _textBaselineMap[value.toLowerCase()];
     return null;
   }
-  
+
   /// Parse border side
   static BorderSide parseBorderSide(Map<String, dynamic> value) {
     return BorderSide(
@@ -79,7 +79,7 @@ class CSSParserExtensions {
       style: parseBorderStyle(value['style']),
     );
   }
-  
+
   /// Parse border style
   static BorderStyle parseBorderStyle(dynamic value) {
     if (value is String) {
@@ -92,12 +92,12 @@ class CSSParserExtensions {
     }
     return BorderStyle.solid;
   }
-  
+
   /// Parse individual border radii
   static double? parseBorderRadiusValue(dynamic value) {
     return CSSParser.parseDouble(value);
   }
-  
+
   /// Parse gradient colors list
   static List<Color>? parseGradientColors(dynamic value) {
     if (value == null) return null;
@@ -110,7 +110,7 @@ class CSSParserExtensions {
     }
     return null;
   }
-  
+
   /// Parse gradient stops
   static List<double>? parseGradientStops(dynamic value) {
     if (value == null) return null;
@@ -123,26 +123,29 @@ class CSSParserExtensions {
     }
     return null;
   }
-  
+
   /// Parse shadow from map
   static Shadow? parseShadow(Map<String, dynamic> value) {
     return Shadow(
       color: CSSParser.parseColor(value['color']) ?? Colors.black26,
       offset: CSSParser.parseOffset(value['offset']) ?? Offset.zero,
-      blurRadius: CSSParser.parseDouble(value['blurRadius'] ?? value['blur']) ?? 0,
+      blurRadius:
+          CSSParser.parseDouble(value['blurRadius'] ?? value['blur']) ?? 0,
     );
   }
-  
+
   /// Parse box shadow from map
   static BoxShadow? parseBoxShadowSingle(Map<String, dynamic> value) {
     return BoxShadow(
       color: CSSParser.parseColor(value['color']) ?? Colors.black26,
       offset: CSSParser.parseOffset(value['offset']) ?? Offset.zero,
-      blurRadius: CSSParser.parseDouble(value['blurRadius'] ?? value['blur']) ?? 0,
-      spreadRadius: CSSParser.parseDouble(value['spreadRadius'] ?? value['spread']) ?? 0,
+      blurRadius:
+          CSSParser.parseDouble(value['blurRadius'] ?? value['blur']) ?? 0,
+      spreadRadius:
+          CSSParser.parseDouble(value['spreadRadius'] ?? value['spread']) ?? 0,
     );
   }
-  
+
   /// Parse multiple box shadows
   static List<BoxShadow?>? parseBoxShadows(dynamic value) {
     if (value == null) return null;
@@ -156,13 +159,13 @@ class CSSParserExtensions {
     }
     return null;
   }
-  
+
   /// Parse flex basis
   static String? parseFlexBasis(dynamic value) {
     if (value == null) return null;
     return value.toString();
   }
-  
+
   static const _wrapAlignmentMap = <String, WrapAlignment>{
     'start': WrapAlignment.start,
     'end': WrapAlignment.end,
@@ -185,7 +188,8 @@ class CSSParserExtensions {
 
   /// Parse wrap cross alignment
   static WrapCrossAlignment parseWrapCrossAlignment(String? value) {
-    return _wrapCrossAlignmentMap[value?.toLowerCase()] ?? WrapCrossAlignment.start;
+    return _wrapCrossAlignmentMap[value?.toLowerCase()] ??
+        WrapCrossAlignment.start;
   }
 
   static const _axisMap = <String, Axis>{
@@ -199,84 +203,84 @@ class CSSParserExtensions {
   static Axis parseAxis(String? value) {
     return _axisMap[value?.toLowerCase()] ?? Axis.horizontal;
   }
-  
+
   /// Parse matrix4 from string or map
   static Matrix4? parseMatrix4(dynamic value) {
     if (value == null) return null;
-    
+
     if (value is List && value.length == 16) {
       return Matrix4.fromList(
         value.map((e) => (e as num).toDouble()).toList(),
       );
     }
-    
+
     return null;
   }
-  
+
   /// Parse transform origin
   static Alignment? parseTransformOrigin(dynamic value) {
     return CSSParser.parseAlignment(value) as Alignment?;
   }
-  
+
   /// Parse multiple transforms and combine them
   static Matrix4? parseTransforms(Map<String, dynamic> transforms) {
     Matrix4 result = Matrix4.identity();
-    
+
     if (transforms['translateX'] != null || transforms['translateY'] != null) {
       final tx = CSSParser.parseDouble(transforms['translateX']) ?? 0.0;
       final ty = CSSParser.parseDouble(transforms['translateY']) ?? 0.0;
       result = Matrix4.translationValues(tx, ty, 0.0);
     }
-    
+
     if (transforms['rotate'] != null) {
       final angle = CSSParser.parseDouble(transforms['rotate']) ?? 0.0;
       result = result * Matrix4.rotationZ(angle * 3.14159 / 180);
     }
-    
+
     if (transforms['rotateX'] != null) {
       final angle = CSSParser.parseDouble(transforms['rotateX']) ?? 0.0;
       result = result * Matrix4.rotationX(angle * 3.14159 / 180);
     }
-    
+
     if (transforms['rotateY'] != null) {
       final angle = CSSParser.parseDouble(transforms['rotateY']) ?? 0.0;
       result = result * Matrix4.rotationY(angle * 3.14159 / 180);
     }
-    
+
     if (transforms['rotateZ'] != null) {
       final angle = CSSParser.parseDouble(transforms['rotateZ']) ?? 0.0;
       result = result * Matrix4.rotationZ(angle * 3.14159 / 180);
     }
-    
+
     if (transforms['scale'] != null) {
       final scale = CSSParser.parseDouble(transforms['scale']) ?? 1.0;
       result = result * Matrix4.diagonal3Values(scale, scale, 1.0);
     }
-    
+
     if (transforms['scaleX'] != null || transforms['scaleY'] != null) {
       final sx = CSSParser.parseDouble(transforms['scaleX']) ?? 1.0;
       final sy = CSSParser.parseDouble(transforms['scaleY']) ?? 1.0;
       result = result * Matrix4.diagonal3Values(sx, sy, 1.0);
     }
-    
+
     if (transforms['skewX'] != null) {
       final angle = CSSParser.parseDouble(transforms['skewX']) ?? 0.0;
       result = result * Matrix4.skewX(angle * 3.14159 / 180);
     }
-    
+
     if (transforms['skewY'] != null) {
       final angle = CSSParser.parseDouble(transforms['skewY']) ?? 0.0;
       result = result * Matrix4.skewY(angle * 3.14159 / 180);
     }
-    
+
     return result;
   }
-  
+
   /// Parse filter values (for blur, brightness, etc.)
   static double? parseFilterValue(dynamic value) {
     return CSSParser.parseDouble(value);
   }
-  
+
   static const _timingFunctionMap = <String, Curve>{
     'linear': Curves.linear,
     'ease': Curves.ease,
@@ -340,7 +344,7 @@ class CSSParserExtensions {
   static bool parseAnimationRunning(String? value) {
     return value?.toLowerCase() != 'paused';
   }
-  
+
   static const _backgroundRepeatMap = <String, ImageRepeat>{
     'repeat': ImageRepeat.repeat,
     'repeat-x': ImageRepeat.repeatX,
@@ -365,17 +369,17 @@ class CSSParserExtensions {
   static BoxFit parseObjectFit(String? value) {
     return _objectFitMap[value?.toLowerCase()] ?? BoxFit.contain;
   }
-  
+
   /// Parse list style type
   static String parseListStyleType(String? value) {
     return value ?? 'disc';
   }
-  
+
   /// Parse vertical align
   static String parseVerticalAlign(String? value) {
     return value ?? 'baseline';
   }
-  
+
   /// Parse writing mode
   static String parseWritingMode(String? value) {
     return value ?? 'horizontal-tb';

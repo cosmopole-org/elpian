@@ -11,11 +11,13 @@ void main() {
 
     test('hidden maps to Overflow.hidden, visible to visible', () {
       expect(CSSParser.parse({'overflow': 'hidden'}).overflow, Overflow.hidden);
-      expect(CSSParser.parse({'overflow': 'visible'}).overflow, Overflow.visible);
+      expect(
+          CSSParser.parse({'overflow': 'visible'}).overflow, Overflow.visible);
     });
 
     test('overflowX / overflowY parse independently', () {
-      final style = CSSParser.parse({'overflowX': 'hidden', 'overflowY': 'auto'});
+      final style =
+          CSSParser.parse({'overflowX': 'hidden', 'overflowY': 'auto'});
       expect(style.overflowX, Overflow.hidden);
       expect(style.overflowY, Overflow.scroll);
     });

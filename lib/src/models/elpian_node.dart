@@ -29,7 +29,8 @@ class ElpianNode {
       type: json['type'] as String,
       props: props,
       children: (json['children'] as List<dynamic>?)
-              ?.map((child) => ElpianNode.fromJson(child as Map<String, dynamic>))
+              ?.map(
+                  (child) => ElpianNode.fromJson(child as Map<String, dynamic>))
               .toList() ??
           [],
       key: json['key'] as String?,

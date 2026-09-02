@@ -20,8 +20,7 @@ external JSAny? _eval(JSString code);
 String _evalString(String code) =>
     (_eval(code.toJS) as JSString?)?.toDart ?? '';
 
-int _evalInt(String code) =>
-    ((_eval(code.toJS) as JSNumber?)?.toDartInt) ?? -1;
+int _evalInt(String code) => ((_eval(code.toJS) as JSNumber?)?.toDartInt) ?? -1;
 
 void _resetPage() {
   _eval('''
@@ -67,7 +66,8 @@ void main() {
   test('it is not live until the page installs the drain hook', () {
     final binding = resolveGodotBinding();
     expect(binding.isLive, isFalse,
-        reason: 'no engine on the page yet, so Scene3D must draw a placeholder');
+        reason:
+            'no engine on the page yet, so Scene3D must draw a placeholder');
 
     _installDrainHook();
     expect(binding.isLive, isTrue,
@@ -103,13 +103,17 @@ void main() {
 
     // Read the request id the way OpSink.gd does, then reply as its _reply()
     // does on the web transport.
-    final batch = jsonDecode(_evalString('window.__elpianGodotDrain()')) as List;
+    final batch =
+        jsonDecode(_evalString('window.__elpianGodotDrain()')) as List;
     final req = batch.single['req'] as int;
     // `pending` carries a JSON *string*, exactly as the glue's
     // __elpianGodotReply writes it with JSON.stringify — parking a bare JS array
     // here would pass through jsonEncode and still be wrong.
     final parked = jsonEncode([
-      {'req': req, 'values': [4]}
+      {
+        'req': req,
+        'values': [4]
+      }
     ]);
     _eval('window.__elpianGodotReplies.pending = ${jsonEncode(parked)};'.toJS);
 

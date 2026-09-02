@@ -18,12 +18,12 @@ void main() {
       engine.registerWidget('CustomTest', (node, children) {
         return const SizedBox();
       });
-      
+
       final json = <String, dynamic>{
         'type': 'CustomTest',
         'props': <String, dynamic>{},
       };
-      
+
       final widget = engine.renderFromJson(json);
       expect(widget, isNotNull);
     });
@@ -34,7 +34,7 @@ void main() {
       final style = CSSParser.parse({
         'color': '#FF0000',
       });
-      
+
       expect(style.color, isNotNull);
     });
 
@@ -42,7 +42,7 @@ void main() {
       final style = CSSParser.parse({
         'padding': '16',
       });
-      
+
       expect(style.padding, isNotNull);
     });
 
@@ -51,7 +51,7 @@ void main() {
         'fontSize': 24,
         'fontWeight': 'bold',
       });
-      
+
       expect(style.fontSize, equals(24.0));
       expect(style.fontWeight, isNotNull);
     });
@@ -63,9 +63,9 @@ void main() {
         'type': 'Text',
         'props': {'text': 'Hello'},
       };
-      
+
       final node = ElpianNode.fromJson(json);
-      
+
       expect(node.type, equals('Text'));
       expect(node.props['text'], equals('Hello'));
     });
@@ -75,9 +75,9 @@ void main() {
         type: 'Container',
         props: {'width': 100},
       );
-      
+
       final json = node.toJson();
-      
+
       expect(json['type'], equals('Container'));
       expect(json['props']['width'], equals(100));
     });
@@ -85,25 +85,25 @@ void main() {
 
   group('Widget Registry Tests', () {
     test('Can register and retrieve widgets', () {
-      final registry = WidgetRegistry();
-      
+      final registry = WidgetRegistry.shared;
+
       registry.register('Test', (node, children) {
         return const SizedBox();
       });
-      
+
       expect(registry.has('Test'), isTrue);
       expect(registry.get('Test'), isNotNull);
     });
 
     test('Can unregister widgets', () {
-      final registry = WidgetRegistry();
-      
+      final registry = WidgetRegistry.shared;
+
       registry.register('Test', (node, children) {
         return const SizedBox();
       });
-      
+
       registry.unregister('Test');
-      
+
       expect(registry.has('Test'), isFalse);
     });
   });
@@ -115,7 +115,8 @@ void main() {
       engine = ElpianEngine();
     });
 
-    testWidgets('video element renders player fallback when src is missing', (tester) async {
+    testWidgets('video element renders player fallback when src is missing',
+        (tester) async {
       final widget = MaterialApp(
         home: Scaffold(
           body: SizedBox(
@@ -135,7 +136,8 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsNothing);
     });
 
-    testWidgets('audio element renders player fallback when src is missing', (tester) async {
+    testWidgets('audio element renders player fallback when src is missing',
+        (tester) async {
       final widget = MaterialApp(
         home: Scaffold(
           body: engine.renderFromJson({
@@ -152,7 +154,6 @@ void main() {
     });
   });
 
-
   group('HTML Extended Element Tests', () {
     late ElpianEngine engine;
 
@@ -160,7 +161,8 @@ void main() {
       engine = ElpianEngine();
     });
 
-    testWidgets('iframe shows source-required fallback when src is missing', (tester) async {
+    testWidgets('iframe shows source-required fallback when src is missing',
+        (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -179,7 +181,8 @@ void main() {
       expect(find.text('iframe source is required'), findsOneWidget);
     });
 
-    testWidgets('canvas builds without throwing when no commands are provided', (tester) async {
+    testWidgets('canvas builds without throwing when no commands are provided',
+        (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -198,7 +201,6 @@ void main() {
     });
   });
 
-
   group('Math Expression Widget Tests', () {
     late ElpianEngine engine;
 
@@ -206,7 +208,8 @@ void main() {
       engine = ElpianEngine();
     });
 
-    testWidgets('math expression shows required message when empty', (tester) async {
+    testWidgets('math expression shows required message when empty',
+        (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -220,7 +223,6 @@ void main() {
 
       expect(find.text('Math expression is required'), findsOneWidget);
     });
-
 
     testWidgets('math expression renders common math symbols', (tester) async {
       await tester.pumpWidget(
@@ -239,7 +241,8 @@ void main() {
       expect(find.textContaining('α² + β₁ → ∞'), findsOneWidget);
     });
 
-    testWidgets('math expression sanitizes unsafe TeX commands', (tester) async {
+    testWidgets('math expression sanitizes unsafe TeX commands',
+        (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -259,5 +262,4 @@ void main() {
       );
     });
   });
-
 }

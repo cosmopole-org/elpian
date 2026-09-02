@@ -87,10 +87,10 @@ class MethodChannelGodotBinding implements GodotBinding {
   })  : _channel = channel ?? const MethodChannel(GodotChannels.ops),
         _events = events ?? const EventChannel(GodotChannels.events) {
     _subscription = _events.receiveBroadcastStream().listen(
-      _dispatchEvent,
-      onError: (Object e) =>
-          debugPrint('ElpianGodot: event channel error: $e'),
-    );
+          _dispatchEvent,
+          onError: (Object e) =>
+              debugPrint('ElpianGodot: event channel error: $e'),
+        );
   }
 
   final MethodChannel _channel;
@@ -116,8 +116,8 @@ class MethodChannelGodotBinding implements GodotBinding {
     // Deliberately not awaited: the engine applies these a frame later and the
     // caller already knows every handle involved.
     _channel.invokeMethod<void>('post', encodeOps(ops)).catchError(
-      (Object e) => debugPrint('ElpianGodot: post failed: $e'),
-    );
+          (Object e) => debugPrint('ElpianGodot: post failed: $e'),
+        );
   }
 
   @override

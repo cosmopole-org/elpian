@@ -5,8 +5,9 @@ import '../css/css_properties.dart';
 class HtmlSummary {
   static Widget build(ElpianNode node, List<Widget> children) {
     final text = node.props['text'] as String? ?? '';
-    
-    Widget result = Text(text, style: const TextStyle(fontWeight: FontWeight.bold));
+
+    Widget result =
+        Text(text, style: const TextStyle(fontWeight: FontWeight.bold));
 
     if (node.style != null) {
       result = CSSProperties.applyStyle(result, node.style);

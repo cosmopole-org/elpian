@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:elpian_ui/elpian_ui.dart';
 
@@ -9,18 +8,18 @@ import 'package:elpian_ui/elpian_ui.dart';
 ///     instead of applying unconditionally (which corrupted desktop layouts);
 ///   * a trailing `!important` flag must be stripped so the value parses.
 void main() {
-  setUp(() => GlobalStylesheetManager().clear());
-  tearDown(() => GlobalStylesheetManager().clear());
+  setUp(() => GlobalStylesheetManager.shared.clear());
+  tearDown(() => GlobalStylesheetManager.shared.clear());
 
   test('class rules contribute all properties, not just six', () {
-    GlobalStylesheetManager().global.addRule('.game-window', {
+    GlobalStylesheetManager.shared.global.addRule('.game-window', {
       'width': 460,
       'position': 'absolute',
       'borderRadius': 16,
       'borderWidth': 1,
     });
 
-    final map = GlobalStylesheetManager().getComputedStyleMap(
+    final map = GlobalStylesheetManager.shared.getComputedStyleMap(
       tagName: 'div',
       classes: ['game-window'],
     );
@@ -43,17 +42,20 @@ void main() {
         {
           'media': '(max-width: 820px)',
           'selector': '.game-window',
-          'styles': {'width': '100% !important', 'position': 'fixed !important'},
+          'styles': {
+            'width': '100% !important',
+            'position': 'fixed !important'
+          },
         },
       ],
     });
     // Load the non-media rules into global exactly as ElpianEngine does.
     for (final r in parsed.rules) {
-      GlobalStylesheetManager().global.addRule(r.selector, r.styles);
+      GlobalStylesheetManager.shared.global.addRule(r.selector, r.styles);
     }
 
     // Desktop (1366 wide): the mobile @media override must NOT apply.
-    final desktop = GlobalStylesheetManager().getComputedStyleMap(
+    final desktop = GlobalStylesheetManager.shared.getComputedStyleMap(
       tagName: 'div',
       classes: ['game-window'],
       screenWidth: 1366,
@@ -64,7 +66,7 @@ void main() {
 
     // Mobile (412 wide): the override applies, and `!important` is stripped so
     // the values parse to a full-screen fixed panel.
-    final mobile = GlobalStylesheetManager().getComputedStyleMap(
+    final mobile = GlobalStylesheetManager.shared.getComputedStyleMap(
       tagName: 'div',
       classes: ['game-window'],
       screenWidth: 412,
@@ -82,8 +84,9 @@ void main() {
   });
 
   test('inline styles still win over class rules', () {
-    GlobalStylesheetManager().global.addRule('.game-window', {'width': 460});
-    final map = GlobalStylesheetManager().getComputedStyleMap(
+    GlobalStylesheetManager.shared.global
+        .addRule('.game-window', {'width': 460});
+    final map = GlobalStylesheetManager.shared.getComputedStyleMap(
       tagName: 'div',
       classes: ['game-window'],
       inlineStyles: {'width': 600},

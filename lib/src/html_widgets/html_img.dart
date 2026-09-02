@@ -23,14 +23,14 @@ class HtmlImg {
     final cacheHeight = (h != null && h > 0) ? h.round() : null;
 
     Widget result = ElpianResources.isNetwork(src)
-      ? Image.network(src,
-          cacheWidth: cacheWidth,
-          cacheHeight: cacheHeight,
-          errorBuilder: (_, __, ___) => Text(alt))
-      : Image.asset(src.startsWith('asset:') ? src.substring(6) : src,
-          cacheWidth: cacheWidth,
-          cacheHeight: cacheHeight,
-          errorBuilder: (_, __, ___) => Text(alt));
+        ? Image.network(src,
+            cacheWidth: cacheWidth,
+            cacheHeight: cacheHeight,
+            errorBuilder: (_, __, ___) => Text(alt))
+        : Image.asset(src.startsWith('asset:') ? src.substring(6) : src,
+            cacheWidth: cacheWidth,
+            cacheHeight: cacheHeight,
+            errorBuilder: (_, __, ___) => Text(alt));
 
     if (node.style != null) {
       result = CSSProperties.applyStyle(result, node.style);

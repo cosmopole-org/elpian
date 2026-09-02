@@ -88,8 +88,7 @@ class GodotRef {
 
   Map<String, Object?> toWire() => {'ref': id};
 
-  static bool isRef(Object? v) =>
-      v is Map && v.length == 1 && v['ref'] is int;
+  static bool isRef(Object? v) => v is Map && v.length == 1 && v['ref'] is int;
 
   static GodotRef fromWire(Map v) => GodotRef(v['ref'] as int);
 
@@ -152,8 +151,7 @@ class HandleAllocator {
 Map<String, Object?> wireError(String message) => {'__dart_error__': message};
 
 /// Whether a reply is an engine-side error.
-bool isWireError(Object? v) =>
-    v is Map && v.containsKey('__dart_error__');
+bool isWireError(Object? v) => v is Map && v.containsKey('__dart_error__');
 
 /// The message of an engine-side error reply, or null.
 String? wireErrorMessage(Object? v) =>

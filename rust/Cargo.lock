@@ -15,7 +15,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
-name = "dart"
+name = "dart2elpian"
+version = "0.1.0"
+dependencies = [
+ "elpian-vm",
+ "js2elpian",
+ "serde_json",
+]
+
+[[package]]
+name = "elpian-dart-runtime"
 version = "0.1.0"
 dependencies = [
  "dart2elpian",
@@ -26,11 +35,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "dart2elpian"
+name = "elpian-ffi"
 version = "0.1.0"
 dependencies = [
+ "elpian-runtime",
  "elpian-vm",
- "js2elpian",
  "serde_json",
 ]
 
@@ -38,7 +47,19 @@ dependencies = [
 name = "elpian-godot-capi"
 version = "0.1.0"
 dependencies = [
- "dart",
+ "dart2elpian",
+ "elpian-dart-runtime",
+ "elpian-runtime",
+ "elpian-vm",
+ "js2elpian",
+ "serde_json",
+]
+
+[[package]]
+name = "elpian-runtime"
+version = "0.1.0"
+dependencies = [
+ "elpian-dart-runtime",
  "elpian-vm",
  "serde_json",
 ]

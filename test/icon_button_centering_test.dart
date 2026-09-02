@@ -35,10 +35,12 @@ void main() {
     expect(glyph.width, lessThan(box.width - 2),
         reason: 'glyph stretched to box width (painted top-left), not centred');
     expect(glyph.height, lessThan(box.height - 2),
-        reason: 'glyph stretched to box height (painted top-left), not centred');
+        reason:
+            'glyph stretched to box height (painted top-left), not centred');
   }
 
-  testWidgets('navbar NextjsLink icon button centres its glyph', (tester) async {
+  testWidgets('navbar NextjsLink icon button centres its glyph',
+      (tester) async {
     final bridge = NextjsBridge();
     final node = {
       'type': 'NextjsLink',

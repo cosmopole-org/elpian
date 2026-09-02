@@ -1,0 +1,13 @@
+[package]
+name = "js2elpian"
+version = "0.1.0"
+edition = "2021"
+license = "BSD-3-Clause"
+description = "JavaScript → Elpian compiler. Lowers a practical JS subset to Elpian AST JSON / bytecode that the elpian-vm executes."
+
+[lib]
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[dependencies]
+elpian-vm = { path = "../elpian-vm" }
+serde_json = "1.0"

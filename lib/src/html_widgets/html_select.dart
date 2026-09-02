@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/elpian_node.dart';
+import '../core/elpian_services.dart';
 import '../css/css_properties.dart';
-import '../core/event_dispatcher.dart';
 
 /// A `<select>` dropdown.
 ///
@@ -77,7 +77,8 @@ class _HtmlSelectState extends State<HtmlSelect> {
       // Fall back to `<option>` children.
       for (final child in widget.node.children) {
         if (child.type == 'option') {
-          final v = (child.props['value'] ?? child.props['text'] ?? '').toString();
+          final v =
+              (child.props['value'] ?? child.props['text'] ?? '').toString();
           out.add(_SelectOption(v, (child.props['text'] ?? v).toString()));
         }
       }
@@ -118,7 +119,7 @@ class _HtmlSelectState extends State<HtmlSelect> {
       onChanged: (newValue) {
         if (newValue == null) return;
         setState(() => _value = newValue);
-        EventDispatcher().dispatchChange(_elementId, newValue);
+        ElpianServices.current.events.dispatchChange(_elementId, newValue);
       },
     );
 

@@ -6,10 +6,11 @@ class HtmlAbbr {
   static Widget build(ElpianNode node, List<Widget> children) {
     final text = node.props['text'] as String? ?? '';
     final title = node.props['title'] as String? ?? '';
-    
+
     Widget result = Tooltip(
       message: title,
-      child: Text(text, style: const TextStyle(decoration: TextDecoration.underline)),
+      child: Text(text,
+          style: const TextStyle(decoration: TextDecoration.underline)),
     );
 
     if (node.style != null) {

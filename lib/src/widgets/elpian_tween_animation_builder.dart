@@ -23,11 +23,14 @@ class ElpianTweenAnimationBuilder {
           case 'scale':
             return Transform.scale(scale: value, child: childWidget);
           case 'rotation':
-            return Transform.rotate(angle: value * 3.14159 * 2, child: childWidget);
+            return Transform.rotate(
+                angle: value * 3.14159 * 2, child: childWidget);
           case 'translateX':
-            return Transform.translate(offset: Offset(value, 0), child: childWidget);
+            return Transform.translate(
+                offset: Offset(value, 0), child: childWidget);
           case 'translateY':
-            return Transform.translate(offset: Offset(0, value), child: childWidget);
+            return Transform.translate(
+                offset: Offset(0, value), child: childWidget);
           default:
             return Opacity(opacity: value.clamp(0.0, 1.0), child: childWidget);
         }

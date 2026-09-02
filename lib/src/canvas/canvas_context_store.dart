@@ -5,9 +5,13 @@ import 'package:flutter/foundation.dart';
 import 'canvas_api.dart';
 
 class CanvasContextStore {
-  CanvasContextStore._();
+  CanvasContextStore();
 
-  static final CanvasContextStore instance = CanvasContextStore._();
+  /// The store every un-scoped caller sees.
+  static final CanvasContextStore shared = CanvasContextStore();
+
+  /// Deprecated spelling of [shared], kept so existing embedders compile.
+  static CanvasContextStore get instance => shared;
 
   final Map<String, CanvasContext> _contexts = {};
   int _nextId = 1;

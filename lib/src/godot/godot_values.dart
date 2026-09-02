@@ -31,10 +31,14 @@ abstract class GodotValue {
 
 class Vector2 extends GodotValue {
   const Vector2(this.x, this.y);
-  const Vector2.zero() : x = 0, y = 0;
+  const Vector2.zero()
+      : x = 0,
+        y = 0;
   final double x, y;
   @override
-  Map<String, Object?> toWire() => {'vec2': [x, y]};
+  Map<String, Object?> toWire() => {
+        'vec2': [x, y]
+      };
   @override
   String toString() => 'Vector2($x, $y)';
 }
@@ -43,15 +47,23 @@ class Vector2i extends GodotValue {
   const Vector2i(this.x, this.y);
   final int x, y;
   @override
-  Map<String, Object?> toWire() => {'vec2i': [x, y]};
+  Map<String, Object?> toWire() => {
+        'vec2i': [x, y]
+      };
   @override
   String toString() => 'Vector2i($x, $y)';
 }
 
 class Vector3 extends GodotValue {
   const Vector3(this.x, this.y, this.z);
-  const Vector3.zero() : x = 0, y = 0, z = 0;
-  const Vector3.all(double v) : x = v, y = v, z = v;
+  const Vector3.zero()
+      : x = 0,
+        y = 0,
+        z = 0;
+  const Vector3.all(double v)
+      : x = v,
+        y = v,
+        z = v;
   final double x, y, z;
 
   Vector3 operator +(Vector3 o) => Vector3(x + o.x, y + o.y, z + o.z);
@@ -59,7 +71,9 @@ class Vector3 extends GodotValue {
   Vector3 operator *(double s) => Vector3(x * s, y * s, z * s);
 
   @override
-  Map<String, Object?> toWire() => {'vec3': [x, y, z]};
+  Map<String, Object?> toWire() => {
+        'vec3': [x, y, z]
+      };
   @override
   String toString() => 'Vector3($x, $y, $z)';
 }
@@ -68,21 +82,27 @@ class Vector3i extends GodotValue {
   const Vector3i(this.x, this.y, this.z);
   final int x, y, z;
   @override
-  Map<String, Object?> toWire() => {'vec3i': [x, y, z]};
+  Map<String, Object?> toWire() => {
+        'vec3i': [x, y, z]
+      };
 }
 
 class Vector4 extends GodotValue {
   const Vector4(this.x, this.y, this.z, this.w);
   final double x, y, z, w;
   @override
-  Map<String, Object?> toWire() => {'vec4': [x, y, z, w]};
+  Map<String, Object?> toWire() => {
+        'vec4': [x, y, z, w]
+      };
 }
 
 class Vector4i extends GodotValue {
   const Vector4i(this.x, this.y, this.z, this.w);
   final int x, y, z, w;
   @override
-  Map<String, Object?> toWire() => {'vec4i': [x, y, z, w]};
+  Map<String, Object?> toWire() => {
+        'vec4i': [x, y, z, w]
+      };
 }
 
 // ---------------------------------------------------------------------------
@@ -102,7 +122,9 @@ class GodotColor extends GodotValue {
 
   final double r, g, b, a;
   @override
-  Map<String, Object?> toWire() => {'color': [r, g, b, a]};
+  Map<String, Object?> toWire() => {
+        'color': [r, g, b, a]
+      };
   @override
   String toString() => 'GodotColor($r, $g, $b, $a)';
 }
@@ -111,35 +133,45 @@ class Rect2 extends GodotValue {
   const Rect2(this.x, this.y, this.w, this.h);
   final double x, y, w, h;
   @override
-  Map<String, Object?> toWire() => {'rect2': [x, y, w, h]};
+  Map<String, Object?> toWire() => {
+        'rect2': [x, y, w, h]
+      };
 }
 
 class Rect2i extends GodotValue {
   const Rect2i(this.x, this.y, this.w, this.h);
   final int x, y, w, h;
   @override
-  Map<String, Object?> toWire() => {'rect2i': [x, y, w, h]};
+  Map<String, Object?> toWire() => {
+        'rect2i': [x, y, w, h]
+      };
 }
 
 class Plane extends GodotValue {
   const Plane(this.nx, this.ny, this.nz, this.d);
   final double nx, ny, nz, d;
   @override
-  Map<String, Object?> toWire() => {'plane': [nx, ny, nz, d]};
+  Map<String, Object?> toWire() => {
+        'plane': [nx, ny, nz, d]
+      };
 }
 
 class Quaternion extends GodotValue {
   const Quaternion(this.x, this.y, this.z, this.w);
   final double x, y, z, w;
   @override
-  Map<String, Object?> toWire() => {'quat': [x, y, z, w]};
+  Map<String, Object?> toWire() => {
+        'quat': [x, y, z, w]
+      };
 }
 
 class AABB extends GodotValue {
   const AABB(this.px, this.py, this.pz, this.sx, this.sy, this.sz);
   final double px, py, pz, sx, sy, sz;
   @override
-  Map<String, Object?> toWire() => {'aabb': [px, py, pz, sx, sy, sz]};
+  Map<String, Object?> toWire() => {
+        'aabb': [px, py, pz, sx, sy, sz]
+      };
 }
 
 /// A 3x3 basis, as three row triples.
@@ -338,8 +370,7 @@ Object? unmarshal(Object? v) {
 
   final key = v.keys.first;
   final data = v[key];
-  List<double> nums() =>
-      [for (final e in data as List) (e as num).toDouble()];
+  List<double> nums() => [for (final e in data as List) (e as num).toDouble()];
   List<int> ints() => [for (final e in data as List) (e as num).toInt()];
 
   switch (key) {

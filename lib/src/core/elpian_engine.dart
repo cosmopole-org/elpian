@@ -1,20 +1,45 @@
 import 'package:flutter/material.dart';
-import 'package:elpian_ui/elpian_ui.dart';
-import '../widgets/elpian_canvas_widget.dart';
-import '../widgets/elpian_cached_canvas.dart';
-import '../widgets/elpian_scope.dart';
+
+// Explicit relative imports rather than the package's own public barrel.
+// `elpian_engine.dart` used to `import 'package:elpian_ui/elpian_ui.dart'`,
+// i.e. a file inside `src/` reaching back through the library's public
+// entrypoint — a cycle that defeats tree-shaking and makes the dependency
+// graph unreadable.
+import '../css/css_parser.dart';
+import '../css/json_stylesheet_parser.dart';
+import '../css/stylesheet.dart';
+import '../godot/scene3d_widget.dart';
+import '../html_widgets/html_widgets.dart';
+import '../models/css_style.dart';
+import '../models/elpian_node.dart';
+import '../widgets/widgets.dart';
+import '../scope/scope_contract.dart';
+import 'elpian_services.dart';
+import 'event_dispatcher.dart';
+import 'event_enabled_widget.dart';
+import 'event_system.dart';
+import 'widget_registry.dart';
 
 // HTML Widgets
 
 class ElpianEngine {
-  final WidgetRegistry _registry = WidgetRegistry();
-  final EventDispatcher _eventDispatcher = EventDispatcher();
-  final GlobalStylesheetManager _stylesheetManager = GlobalStylesheetManager();
+  /// The mini app this engine renders for.
+  ///
+  /// Defaults to [ElpianServices.shared], which is what a single-app embedder
+  /// wants and what these services used to be unconditionally. A super app
+  /// gives each mini app its own set so nothing leaks between them.
+  final ElpianServices services;
+
   String? _currentParentId;
 
-  ElpianEngine() {
+  ElpianEngine({ElpianServices? services})
+      : services = services ?? ElpianServices.shared {
     _registerDefaultWidgets();
   }
+
+  WidgetRegistry get _registry => services.registry;
+  EventDispatcher get _eventDispatcher => services.events;
+  GlobalStylesheetManager get _stylesheetManager => services.stylesheets;
 
   /// Set global event handler to receive all events
   void setGlobalEventHandler(ElpianEventListener handler) {
@@ -96,7 +121,8 @@ class ElpianEngine {
     _registry.register('ClipRRect', ElpianClipRRect.build);
     _registry.register('ConstrainedBox', ElpianConstrainedBox.build);
     _registry.register('AspectRatio', ElpianAspectRatio.build);
-    _registry.register('FractionallySizedBox', ElpianFractionallySizedBox.build);
+    _registry.register(
+        'FractionallySizedBox', ElpianFractionallySizedBox.build);
     _registry.register('FittedBox', ElpianFittedBox.build);
     _registry.register('LimitedBox', ElpianLimitedBox.build);
     _registry.register('OverflowBox', ElpianOverflowBox.build);
@@ -104,8 +130,10 @@ class ElpianEngine {
     _registry.register('Spacer', ElpianSpacer.build);
     _registry.register('Divider', ElpianDivider.build);
     _registry.register('VerticalDivider', ElpianVerticalDivider.build);
-    _registry.register('CircularProgressIndicator', ElpianCircularProgressIndicator.build);
-    _registry.register('LinearProgressIndicator', ElpianLinearProgressIndicator.build);
+    _registry.register(
+        'CircularProgressIndicator', ElpianCircularProgressIndicator.build);
+    _registry.register(
+        'LinearProgressIndicator', ElpianLinearProgressIndicator.build);
     _registry.register('Tooltip', ElpianTooltip.build);
     _registry.register('Badge', ElpianBadge.build);
     _registry.register('Chip', ElpianChip.build);
@@ -131,7 +159,8 @@ class ElpianEngine {
     _registry.register('AnimatedRotation', ElpianAnimatedRotation.build);
     _registry.register('AnimatedSlide', ElpianAnimatedSlide.build);
     _registry.register('AnimatedSize', ElpianAnimatedSize.build);
-    _registry.register('AnimatedDefaultTextStyle', ElpianAnimatedDefaultTextStyle.build);
+    _registry.register(
+        'AnimatedDefaultTextStyle', ElpianAnimatedDefaultTextStyle.build);
 
     // Animation widgets - Explicit
     _registry.register('FadeTransition', ElpianFadeTransition.build);
@@ -141,7 +170,8 @@ class ElpianEngine {
     _registry.register('SizeTransition', ElpianSizeTransition.build);
 
     // Animation widgets - Custom
-    _registry.register('TweenAnimationBuilder', ElpianTweenAnimationBuilder.build);
+    _registry.register(
+        'TweenAnimationBuilder', ElpianTweenAnimationBuilder.build);
     _registry.register('StaggeredAnimation', ElpianStaggeredAnimation.build);
     _registry.register('Shimmer', ElpianShimmer.build);
     _registry.register('Pulse', ElpianPulse.build);
@@ -173,13 +203,15 @@ class ElpianEngine {
     _registry.register('select', HtmlSelect.build);
     _registry.register('option', HtmlOption.build);
     _registry.register('textarea', HtmlTextarea.build);
-    _registry.register('section', HtmlSection.build);
-    _registry.register('article', HtmlArticle.build);
-    _registry.register('header', HtmlHeader.build);
-    _registry.register('footer', HtmlFooter.build);
+    // The sectioning elements differ only in tag name and whether they
+    // stretch to full width, so they share one builder.
+    for (final tag in ['section', 'article', 'aside', 'main']) {
+      _registry.register(tag, HtmlSemanticContainer.builder());
+    }
+    for (final tag in ['header', 'footer']) {
+      _registry.register(tag, HtmlSemanticContainer.builder(fullWidth: true));
+    }
     _registry.register('nav', HtmlNav.build);
-    _registry.register('aside', HtmlAside.build);
-    _registry.register('main', HtmlMain.build);
     _registry.register('video', HtmlVideo.build);
     _registry.register('audio', HtmlAudio.build);
     _registry.register('canvas', HtmlCanvas.build);
@@ -228,7 +260,14 @@ class ElpianEngine {
     _registry.register('area', HtmlArea.build);
   }
 
-  Widget render(ElpianNode node, {String? parentId}) {
+  Widget render(ElpianNode node, {String? parentId}) =>
+      services.runScoped(() => _render(node, parentId: parentId));
+
+  /// The render itself, always run inside this engine's service scope so
+  /// builders capture the right mini app's dispatcher, stylesheets and canvas
+  /// store as they build. See [ElpianServices] for why capture-at-build rather
+  /// than lookup-at-dispatch.
+  Widget _render(ElpianNode node, {String? parentId}) {
     final builder = _registry.get(node.type);
 
     if (builder == null) {
@@ -286,7 +325,7 @@ class ElpianEngine {
 
     // Render children with parent ID
     final children = nodeWithStyle.children
-        .map((child) => render(child, parentId: _currentParentId))
+        .map((child) => _render(child, parentId: _currentParentId))
         .toList();
 
     // Restore previous parent
@@ -403,11 +442,14 @@ class ElpianEngine {
     return false;
   }
 
-  void registerWidget(String type, Widget Function(ElpianNode node, List<Widget> children) builder) {
+  void registerWidget(String type,
+      Widget Function(ElpianNode node, List<Widget> children) builder) {
     _registry.register(type, builder);
   }
 
-  void registerWidgets(Map<String, Widget Function(ElpianNode node, List<Widget> children)> builders) {
+  void registerWidgets(
+      Map<String, Widget Function(ElpianNode node, List<Widget> children)>
+          builders) {
     _registry.registerAll(builders);
   }
 }

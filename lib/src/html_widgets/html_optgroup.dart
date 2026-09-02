@@ -5,7 +5,7 @@ import '../css/css_properties.dart';
 class HtmlOptgroup {
   static Widget build(ElpianNode node, List<Widget> children) {
     final label = node.props['label'] as String? ?? '';
-    
+
     Widget result = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

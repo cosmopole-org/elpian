@@ -11,7 +11,12 @@ get_filename_component(ELPIAN_RUST_ROOT "${PLUGIN_ROOT}/../rust" REALPATH)
 # Invoke the build for native code shared library
 add_custom_command(
     OUTPUT "${ELPIAN_RUST_ROOT}/target/release/libelpian_vm.so"
-    COMMAND cargo build --manifest-path "${ELPIAN_RUST_ROOT}/Cargo.toml" --release
+    # Build the C ABI package specifically. It produces the artifact named
+    # `elpian_vm` that the Dart bindings open, and pulls in the VM and the
+    # multi-VM runtime; the workspace root is virtual, and building every
+    # member would also compile the Godot C ABI, which Flutter does not link.
+    COMMAND cargo build --release -p elpian-ffi
+            --manifest-path "${ELPIAN_RUST_ROOT}/Cargo.toml"
     USES_TERMINAL
 )
 

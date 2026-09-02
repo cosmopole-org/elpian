@@ -5,7 +5,8 @@ import 'package:elpian_ui/elpian_ui.dart';
 /// A segmented control (two `flex:1` NextjsLink tabs in a row) must split the
 /// row into two equal-width halves — the Sign In/Sign Up + leaderboard toggles.
 void main() {
-  testWidgets('two flex:1 NextjsLink tabs split the row equally', (tester) async {
+  testWidgets('two flex:1 NextjsLink tabs split the row equally',
+      (tester) async {
     final bridge = NextjsBridge();
     // Mirror the real structure: a fixed-width card column (no alignItems → the
     // block-flow stretch path) whose child is the width-less tabs row.

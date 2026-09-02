@@ -5,7 +5,7 @@ import '../css/css_properties.dart';
 class ElpianInkWell {
   static Widget build(ElpianNode node, List<Widget> children) {
     final child = children.isNotEmpty ? children.first : Container();
-    
+
     Widget result = InkWell(
       onTap: () {},
       child: child,

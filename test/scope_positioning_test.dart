@@ -2,20 +2,17 @@
 // client-component mount and server scope() produces) must still be absolutely
 // positioned by its parent: Scopes are re-render boundaries, not layout nodes.
 
-import 'dart:ui' show Size;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:elpian_ui/elpian_ui.dart';
-import 'package:elpian_ui/src/css/css_parser.dart';
-import 'package:elpian_ui/src/css/stylesheet.dart';
 
 void main() {
   setUp(() {
-    GlobalStylesheetManager().clear();
+    GlobalStylesheetManager.shared.clear();
     CSSParser.viewportOverride = const Size(1366, 900);
   });
   tearDown(() {
-    GlobalStylesheetManager().clear();
+    GlobalStylesheetManager.shared.clear();
     CSSParser.viewportOverride = null;
   });
 
@@ -30,7 +27,12 @@ void main() {
       'rules': [
         {
           'selector': '.game-window',
-          'styles': {'position': 'absolute', 'top': 96, 'left': 24, 'width': 460},
+          'styles': {
+            'position': 'absolute',
+            'top': 96,
+            'left': 24,
+            'width': 460
+          },
         },
       ],
     });
@@ -44,7 +46,13 @@ void main() {
         {
           'type': 'div',
           'props': {
-            'style': {'position': 'absolute', 'top': 0, 'left': 0, 'right': 0, 'bottom': 0},
+            'style': {
+              'position': 'absolute',
+              'top': 0,
+              'left': 0,
+              'right': 0,
+              'bottom': 0
+            },
           },
           'children': [
             {
@@ -56,7 +64,10 @@ void main() {
                   'type': 'div',
                   'props': {'className': 'game-window'},
                   'children': [
-                    {'type': 'span', 'props': {'text': 'WINDOW BODY'}},
+                    {
+                      'type': 'span',
+                      'props': {'text': 'WINDOW BODY'}
+                    },
                   ],
                 },
               ],

@@ -34,4 +34,66 @@ android {
     defaultConfig {
         minSdkVersion 21
     }
+
+    sourceSets {
+        main.jniLibs.srcDirs += "${buildDir}/jniLibs"
+    }
+}
+
+// Build libelpian_vm.so for each Android ABI and stage it where the AGP picks
+// up native libraries.
+//
+// This file previously contained no cargo invocation at all, so the Elpian VM
+// was never built for Android: `DynamicLibrary.open('libelpian_vm.so')` failed
+// at runtime, every VM operation degraded to a failed result, and the app
+// rendered nothing with no indication why.
+//
+// cargo-ndk handles the NDK toolchain plumbing:
+//
+//     cargo install cargo-ndk
+//     rustup target add aarch64-linux-android armv7-linux-androideabi \
+//                       x86_64-linux-android i686-linux-android
+ext {
+    rustManifest = file("${projectDir}/../../rust/crates/elpian-ffi/Cargo.toml")
+    // Matches Flutter's own default ABI set.
+    androidAbis = ["arm64-v8a", "armeabi-v7a", "x86_64"]
+}
+
+tasks.register("buildElpianVm", Exec) {
+    description = "Cross-compile the Elpian VM for every Android ABI."
+    group = "build"
+
+    def outDir = file("${buildDir}/jniLibs")
+    outputs.dir(outDir)
+    inputs.file(rustManifest)
+    inputs.dir(file("${projectDir}/../../rust/crates/elpian-vm/src"))
+    inputs.dir(file("${projectDir}/../../rust/crates/elpian-ffi/src"))
+
+    doFirst { outDir.mkdirs() }
+
+    def args = ["cargo", "ndk", "-o", outDir.absolutePath]
+    androidAbis.each { args += ["-t", it] }
+    args += ["build", "--release", "--manifest-path", rustManifest.absolutePath]
+    commandLine args
+
+    // A missing toolchain should say what to install rather than dumping a
+    // gradle stack trace.
+    ignoreExitValue = true
+    doLast {
+        if (executionResult.get().exitValue != 0) {
+            throw new GradleException(
+                "Could not build the Elpian VM for Android.\n" +
+                "Install the toolchain:\n" +
+                "  cargo install cargo-ndk\n" +
+                "  rustup target add aarch64-linux-android " +
+                "armv7-linux-androideabi x86_64-linux-android\n" +
+                "and make sure ANDROID_NDK_HOME points at an installed NDK.")
+        }
+    }
+}
+
+tasks.configureEach { task ->
+    if (task.name.startsWith("merge") && task.name.endsWith("NativeLibs")) {
+        task.dependsOn("buildElpianVm")
+    }
 }

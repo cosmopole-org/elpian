@@ -83,7 +83,8 @@ void main() {
       expect(find.text('old'), findsNothing);
     });
 
-    testWidgets('uses animated transition when update command sets animate=true',
+    testWidgets(
+        'uses animated transition when update command sets animate=true',
         (tester) async {
       final controller = StreamController<dynamic>();
       addTearDown(controller.close);
@@ -119,7 +120,8 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      final switcher = tester.widget<AnimatedSwitcher>(find.byType(AnimatedSwitcher));
+      final switcher =
+          tester.widget<AnimatedSwitcher>(find.byType(AnimatedSwitcher));
       expect(switcher.duration, const Duration(milliseconds: 700));
       expect(find.text('v2'), findsOneWidget);
     });

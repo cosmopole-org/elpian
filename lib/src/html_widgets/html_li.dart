@@ -6,10 +6,9 @@ class HtmlLi {
   static Widget build(ElpianNode node, List<Widget> children) {
     final text = node.props['text'] as String? ?? '';
     final child = children.isNotEmpty ? children.first : Text(text);
-    
-    final bulletStyle = node.style != null
-        ? CSSProperties.createTextStyle(node.style)
-        : null;
+
+    final bulletStyle =
+        node.style != null ? CSSProperties.createTextStyle(node.style) : null;
 
     Widget result = Row(
       crossAxisAlignment: CrossAxisAlignment.start,

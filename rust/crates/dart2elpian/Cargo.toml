@@ -1,0 +1,17 @@
+[package]
+name = "dart2elpian"
+version = "0.1.0"
+edition = "2021"
+license = "BSD-3-Clause"
+description = "Dart → Elpian compiler. Lowers a Dart subset to the Elpian AST / JS-subset the elpian-vm executes."
+
+[lib]
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[dependencies]
+serde_json = "1.0"
+
+[dev-dependencies]
+# End-to-end tests transpile Dart → JS and run it through the JS front-end + VM.
+js2elpian = { path = "../js2elpian" }
+elpian-vm = { path = "../elpian-vm" }

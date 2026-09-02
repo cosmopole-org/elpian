@@ -1,3 +1,6 @@
+// A benchmark harness: its results table is written to stdout, which is
+// the whole point of the file. `avoid_print` does not apply here.
+// ignore_for_file: avoid_print
 import 'package:flutter_test/flutter_test.dart';
 import 'dart:math';
 

@@ -20,7 +20,8 @@ class HtmlEmbeddedContent extends StatelessWidget {
     }
 
     return Container(
-      decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade400)),
+      decoration:
+          BoxDecoration(border: Border.all(color: Colors.grey.shade400)),
       padding: const EdgeInsets.all(12),
       child: Row(
         children: [

@@ -97,7 +97,8 @@ void main() {
       final alloc = HandleAllocator();
       final handles = List.generate(5, (_) => alloc.allocate());
       expect(handles, isNot(contains(HandleAllocator.selfHandle)));
-      expect(handles, handles.toSet().toList(), reason: 'handles must be unique');
+      expect(handles, handles.toSet().toList(),
+          reason: 'handles must be unique');
     });
   });
 }

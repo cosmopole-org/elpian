@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'frb_generated/api.dart'
-    if (dart.library.js_interop) 'frb_generated/api_web.dart';
+import 'ffi/api.dart' if (dart.library.js_interop) 'ffi/api_web.dart';
+import 'governance/elpian_governor.dart';
 import 'vm_runtime_client.dart';
 
 /// Callback for handling host function calls from the Rust VM.
@@ -32,11 +32,36 @@ class ElpianVm implements VmRuntimeClient {
 
   ElpianVm({required this.machineId});
 
+  /// Governs this mini app: budgets, capabilities and lifecycle.
+  ///
+  /// ```dart
+  /// final vm = await ElpianVm.fromCode('weather', source);
+  /// await vm!.governor.sandbox({ElpianCapability.render, ElpianCapability.dom});
+  /// await vm.governor.setLimits(ElpianLimits.sandboxed);
+  /// ...
+  /// final used = await vm.governor.subtreeUsage();
+  /// ```
+  @override
+  late final ElpianVmGovernor governor = ElpianVmGovernor(machineId);
+
+  /// Governs the spawn tree this mini app belongs to — adoption, subtree
+  /// lifecycle, and the aggregate-budget sweep. Stateless, so a host may hold
+  /// one and address any mini app by id.
+  static const ElpianTreeGovernor treeGovernor = ElpianTreeGovernor();
+
   /// Whether the VM is currently executing.
   bool get isRunning => _isRunning;
 
-  /// Last low-level FRB/FFI error (if any).
+  /// Last low-level FFI error (if any).
   static String? get lastApiError => ElpianVmApi.lastError;
+
+  /// Whether the Elpian VM runtime is actually loadable on this platform —
+  /// the native library on native targets, the WASM module on the web.
+  ///
+  /// When this is false every VM operation degrades to a failed result rather
+  /// than throwing, so hosts and tests that need to distinguish "the runtime
+  /// is missing" from "the program failed" check this and read [lastApiError].
+  static bool get isRuntimeAvailable => ElpianVmApi.isAvailable;
 
   /// Initialize the VM subsystem. Call once at app startup before
   /// creating any VM instances.
@@ -74,7 +99,7 @@ class ElpianVm implements VmRuntimeClient {
     return ElpianVm(machineId: machineId);
   }
 
-  /// Create a VM directly from precompiled Victor/Elpian bytecode.
+  /// Create a VM directly from precompiled Elpian bytecode.
   static Future<ElpianVm?> fromBytecode(
       String machineId, Uint8List bytecode) async {
     final success = await ElpianVmApi.createVmFromBytecode(
@@ -187,7 +212,8 @@ class ElpianVm implements VmRuntimeClient {
       // often serialized them before building the host-call envelope. Keep the
       // Dart HostCallHandler contract stable for both forms.
       final rawPayload = hostCallData['payload'];
-      final payload = rawPayload is String ? rawPayload : jsonEncode(rawPayload);
+      final payload =
+          rawPayload is String ? rawPayload : jsonEncode(rawPayload);
 
       // Route to the appropriate handler
       String response;

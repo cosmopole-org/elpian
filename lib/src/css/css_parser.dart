@@ -57,11 +57,16 @@ class CSSParser {
       height: parseDimension(styleMap['height'], isWidth: false),
       widthFactor: _percentFactor(styleMap['width']),
       heightFactor: _percentFactor(styleMap['height']),
-      aspectRatio: parseAspectRatio(styleMap['aspectRatio'] ?? styleMap['aspect-ratio']),
-      minWidth: parseDimension(styleMap['minWidth'] ?? styleMap['min-width'], isWidth: true),
-      maxWidth: parseDimension(styleMap['maxWidth'] ?? styleMap['max-width'], isWidth: true),
-      minHeight: parseDimension(styleMap['minHeight'] ?? styleMap['min-height'], isWidth: false),
-      maxHeight: parseDimension(styleMap['maxHeight'] ?? styleMap['max-height'], isWidth: false),
+      aspectRatio:
+          parseAspectRatio(styleMap['aspectRatio'] ?? styleMap['aspect-ratio']),
+      minWidth: parseDimension(styleMap['minWidth'] ?? styleMap['min-width'],
+          isWidth: true),
+      maxWidth: parseDimension(styleMap['maxWidth'] ?? styleMap['max-width'],
+          isWidth: true),
+      minHeight: parseDimension(styleMap['minHeight'] ?? styleMap['min-height'],
+          isWidth: false),
+      maxHeight: parseDimension(styleMap['maxHeight'] ?? styleMap['max-height'],
+          isWidth: false),
       padding: _parseEdgeInsetsFor(styleMap, 'padding'),
       margin: _parseEdgeInsetsFor(styleMap, 'margin'),
       alignment: parseAlignment(styleMap['alignment']),
@@ -82,8 +87,10 @@ class CSSParser {
       flexShrink: parseInt(styleMap['flexShrink'] ?? styleMap['flex-shrink']),
       flexBasis: (styleMap['flexBasis'] ?? styleMap['flex-basis'])?.toString(),
       overflow: _parseOverflow(styleMap['overflow']),
-      overflowX: _parseOverflow(styleMap['overflowX'] ?? styleMap['overflow-x']),
-      overflowY: _parseOverflow(styleMap['overflowY'] ?? styleMap['overflow-y']),
+      overflowX:
+          _parseOverflow(styleMap['overflowX'] ?? styleMap['overflow-x']),
+      overflowY:
+          _parseOverflow(styleMap['overflowY'] ?? styleMap['overflow-y']),
       // CSS `background` shorthand: a `linear-gradient(...)`/`radial-gradient(...)`
       // value resolves to a gradient, any other value to a solid colour. Without
       // this the engine only honoured the explicit `gradient`/`backgroundColor`
@@ -167,79 +174,79 @@ class CSSParser {
           styleMap['gridAutoRows'] ?? styleMap['grid-auto-rows'] as String?,
       gridAutoFlow:
           styleMap['gridAutoFlow'] ?? styleMap['grid-auto-flow'] as String?,
-      gridColumnGap: parseDouble(
-          styleMap['gridColumnGap'] ?? styleMap['grid-column-gap'] ??
-              styleMap['columnGap'] ?? styleMap['column-gap']),
+      gridColumnGap: parseDouble(styleMap['gridColumnGap'] ??
+          styleMap['grid-column-gap'] ??
+          styleMap['columnGap'] ??
+          styleMap['column-gap']),
       gridRowGap: parseDouble(styleMap['gridRowGap'] ??
-          styleMap['grid-row-gap'] ?? styleMap['rowGap'] ?? styleMap['row-gap']),
+          styleMap['grid-row-gap'] ??
+          styleMap['rowGap'] ??
+          styleMap['row-gap']),
       gridGap: parseDouble(styleMap['gridGap'] ?? styleMap['grid-gap']),
       transitionDuration: parseDuration(
           styleMap['transitionDuration'] ?? styleMap['transition-duration']),
       transitionCurve: parseCurve(
           styleMap['transitionCurve'] ?? styleMap['transition-curve']),
-      transitionProperty:
-          styleMap['transitionProperty'] ?? styleMap['transition-property'] as String?,
+      transitionProperty: styleMap['transitionProperty'] ??
+          styleMap['transition-property'] as String?,
       transitionDelay: parseDuration(
           styleMap['transitionDelay'] ?? styleMap['transition-delay']),
       animationName:
           styleMap['animationName'] ?? styleMap['animation-name'] as String?,
       animationDuration: parseDuration(
           styleMap['animationDuration'] ?? styleMap['animation-duration']),
-      animationTimingFunction:
-          styleMap['animationTimingFunction'] ?? styleMap['animation-timing-function'] as String?,
+      animationTimingFunction: styleMap['animationTimingFunction'] ??
+          styleMap['animation-timing-function'] as String?,
       animationDelay: parseDuration(
           styleMap['animationDelay'] ?? styleMap['animation-delay']),
-      animationIterationCount: parseInt(
-          styleMap['animationIterationCount'] ?? styleMap['animation-iteration-count']),
-      animationDirection:
-          styleMap['animationDirection'] ?? styleMap['animation-direction'] as String?,
-      animationFillMode:
-          styleMap['animationFillMode'] ?? styleMap['animation-fill-mode'] as String?,
-      animationPlayState:
-          styleMap['animationPlayState'] ?? styleMap['animation-play-state'] as String?,
-      animateOnBuild: styleMap['animateOnBuild'] ?? styleMap['animate-on-build'] as bool?,
-      staggerDelay: parseDuration(
-          styleMap['staggerDelay'] ?? styleMap['stagger-delay']),
-      staggerChildren: parseInt(
-          styleMap['staggerChildren'] ?? styleMap['stagger-children']),
-      animationFrom: parseDouble(
-          styleMap['animationFrom'] ?? styleMap['animation-from']),
-      animationTo: parseDouble(
-          styleMap['animationTo'] ?? styleMap['animation-to']),
-      slideBegin: parseOffset(
-          styleMap['slideBegin'] ?? styleMap['slide-begin']),
-      slideEnd: parseOffset(
-          styleMap['slideEnd'] ?? styleMap['slide-end']),
-      scaleBegin: parseDouble(
-          styleMap['scaleBegin'] ?? styleMap['scale-begin']),
-      scaleEnd: parseDouble(
-          styleMap['scaleEnd'] ?? styleMap['scale-end']),
-      rotationBegin: parseDouble(
-          styleMap['rotationBegin'] ?? styleMap['rotation-begin']),
-      rotationEnd: parseDouble(
-          styleMap['rotationEnd'] ?? styleMap['rotation-end']),
-      fadeBegin: parseDouble(
-          styleMap['fadeBegin'] ?? styleMap['fade-begin']),
-      fadeEnd: parseDouble(
-          styleMap['fadeEnd'] ?? styleMap['fade-end']),
-      colorBegin: parseColor(
-          styleMap['colorBegin'] ?? styleMap['color-begin']),
-      colorEnd: parseColor(
-          styleMap['colorEnd'] ?? styleMap['color-end']),
+      animationIterationCount: parseInt(styleMap['animationIterationCount'] ??
+          styleMap['animation-iteration-count']),
+      animationDirection: styleMap['animationDirection'] ??
+          styleMap['animation-direction'] as String?,
+      animationFillMode: styleMap['animationFillMode'] ??
+          styleMap['animation-fill-mode'] as String?,
+      animationPlayState: styleMap['animationPlayState'] ??
+          styleMap['animation-play-state'] as String?,
+      animateOnBuild:
+          styleMap['animateOnBuild'] ?? styleMap['animate-on-build'] as bool?,
+      staggerDelay:
+          parseDuration(styleMap['staggerDelay'] ?? styleMap['stagger-delay']),
+      staggerChildren:
+          parseInt(styleMap['staggerChildren'] ?? styleMap['stagger-children']),
+      animationFrom:
+          parseDouble(styleMap['animationFrom'] ?? styleMap['animation-from']),
+      animationTo:
+          parseDouble(styleMap['animationTo'] ?? styleMap['animation-to']),
+      slideBegin:
+          parseOffset(styleMap['slideBegin'] ?? styleMap['slide-begin']),
+      slideEnd: parseOffset(styleMap['slideEnd'] ?? styleMap['slide-end']),
+      scaleBegin:
+          parseDouble(styleMap['scaleBegin'] ?? styleMap['scale-begin']),
+      scaleEnd: parseDouble(styleMap['scaleEnd'] ?? styleMap['scale-end']),
+      rotationBegin:
+          parseDouble(styleMap['rotationBegin'] ?? styleMap['rotation-begin']),
+      rotationEnd:
+          parseDouble(styleMap['rotationEnd'] ?? styleMap['rotation-end']),
+      fadeBegin: parseDouble(styleMap['fadeBegin'] ?? styleMap['fade-begin']),
+      fadeEnd: parseDouble(styleMap['fadeEnd'] ?? styleMap['fade-end']),
+      colorBegin: parseColor(styleMap['colorBegin'] ?? styleMap['color-begin']),
+      colorEnd: parseColor(styleMap['colorEnd'] ?? styleMap['color-end']),
       paddingBegin: _parseEdgeInsets(
           styleMap['paddingBegin'] ?? styleMap['padding-begin']),
-      paddingEnd: _parseEdgeInsets(
-          styleMap['paddingEnd'] ?? styleMap['padding-end']),
+      paddingEnd:
+          _parseEdgeInsets(styleMap['paddingEnd'] ?? styleMap['padding-end']),
       alignmentBegin: parseAlignment(
           styleMap['alignmentBegin'] ?? styleMap['alignment-begin']),
-      alignmentEnd: parseAlignment(
-          styleMap['alignmentEnd'] ?? styleMap['alignment-end']),
+      alignmentEnd:
+          parseAlignment(styleMap['alignmentEnd'] ?? styleMap['alignment-end']),
       shimmerBaseColor: parseColor(
           styleMap['shimmerBaseColor'] ?? styleMap['shimmer-base-color']),
-      shimmerHighlightColor: parseColor(
-          styleMap['shimmerHighlightColor'] ?? styleMap['shimmer-highlight-color']),
-      animationAutoReverse: styleMap['animationAutoReverse'] ?? styleMap['animation-auto-reverse'] as bool?,
-      animationRepeat: styleMap['animationRepeat'] ?? styleMap['animation-repeat'] as bool?,
+      shimmerHighlightColor: parseColor(styleMap['shimmerHighlightColor'] ??
+          styleMap['shimmer-highlight-color']),
+      animationAutoReverse: styleMap['animationAutoReverse'] ??
+          styleMap['animation-auto-reverse'] as bool?,
+      animationRepeat:
+          styleMap['animationRepeat'] ?? styleMap['animation-repeat'] as bool?,
       keyframes: _parseKeyframes(styleMap['keyframes']),
     );
   }
@@ -308,11 +315,17 @@ class CSSParser {
     if (n == null) return null;
 
     final size = _viewportSize();
-    if (t.contains('vmin')) return n / 100.0 * math.min(size.width, size.height);
-    if (t.contains('vmax')) return n / 100.0 * math.max(size.width, size.height);
+    if (t.contains('vmin')) {
+      return n / 100.0 * math.min(size.width, size.height);
+    }
+    if (t.contains('vmax')) {
+      return n / 100.0 * math.max(size.width, size.height);
+    }
     if (t.contains('vw')) return n / 100.0 * size.width;
     if (t.contains('vh')) return n / 100.0 * size.height;
-    if (t.contains('%')) return n / 100.0 * (isWidth ? size.width : size.height);
+    if (t.contains('%')) {
+      return n / 100.0 * (isWidth ? size.width : size.height);
+    }
     return n;
   }
 
@@ -345,7 +358,8 @@ class CSSParser {
           body[i - 1] == ' ' &&
           i + 1 < body.length &&
           body[i + 1] == ' ') {
-        final v = _resolveLength(body.substring(start, i).trim(), isWidth: isWidth);
+        final v =
+            _resolveLength(body.substring(start, i).trim(), isWidth: isWidth);
         if (v == null) return null;
         sum += sign * v;
         sign = c == '+' ? 1 : -1;
@@ -360,7 +374,8 @@ class CSSParser {
   /// Resolve `env(safe-area-inset-top|right|bottom|left[, <fallback>])` against
   /// the device's safe-area insets (notch / status bar / home indicator).
   static double? _resolveEnv(String raw, {required bool isWidth}) {
-    final m = RegExp(r'^env\(\s*([a-z-]+)\s*(?:,\s*([^)]+))?\)$').firstMatch(raw.trim());
+    final m = RegExp(r'^env\(\s*([a-z-]+)\s*(?:,\s*([^)]+))?\)$')
+        .firstMatch(raw.trim());
     if (m == null) return null;
     final insets = _safeAreaInsets();
     switch (m.group(1)) {
@@ -374,7 +389,9 @@ class CSSParser {
         return insets.left;
     }
     final fallback = m.group(2);
-    return fallback != null ? (_resolveLength(fallback.trim(), isWidth: isWidth) ?? 0) : 0;
+    return fallback != null
+        ? (_resolveLength(fallback.trim(), isWidth: isWidth) ?? 0)
+        : 0;
   }
 
   /// Parse a CSS `aspect-ratio` (`"16/9"`, `"1.5"`, `"4 / 3"`) into a
@@ -398,10 +415,20 @@ class CSSParser {
   /// Dimension properties whose values flow through [parseDimension] and may use
   /// viewport-relative units.
   static const List<String> _dimensionKeys = [
-    'width', 'height',
-    'minWidth', 'min-width', 'maxWidth', 'max-width',
-    'minHeight', 'min-height', 'maxHeight', 'max-height',
-    'top', 'right', 'bottom', 'left',
+    'width',
+    'height',
+    'minWidth',
+    'min-width',
+    'maxWidth',
+    'max-width',
+    'minHeight',
+    'min-height',
+    'maxHeight',
+    'max-height',
+    'top',
+    'right',
+    'bottom',
+    'left',
   ];
 
   /// True when a *dimension* property uses a viewport-relative unit (`%`, `vw`,
@@ -557,9 +584,8 @@ class CSSParser {
           final h = double.parse(match.group(1)!);
           final s = double.parse(match.group(2)!) / 100;
           final l = double.parse(match.group(3)!) / 100;
-          final a = match.group(4) != null
-              ? double.parse(match.group(4)!)
-              : 1.0;
+          final a =
+              match.group(4) != null ? double.parse(match.group(4)!) : 1.0;
           return HSLColor.fromAHSL(a, h, s, l).toColor();
         }
       }
@@ -589,8 +615,12 @@ class CSSParser {
     final x = parseDouble(m['${base}X']);
     final y = parseDouble(m['${base}Y']);
     if (shorthand == null &&
-        top == null && right == null && bottom == null && left == null &&
-        x == null && y == null) {
+        top == null &&
+        right == null &&
+        bottom == null &&
+        left == null &&
+        x == null &&
+        y == null) {
       return null;
     }
     final b = shorthand ?? EdgeInsets.zero;
@@ -959,7 +989,8 @@ class CSSParser {
       return RadialGradient(colors: colors, stops: useStops);
     }
     final (begin, end) = _beginEndForAngle(angleDeg ?? 180);
-    return LinearGradient(colors: colors, begin: begin, end: end, stops: useStops);
+    return LinearGradient(
+        colors: colors, begin: begin, end: end, stops: useStops);
   }
 
   /// Split on top-level commas only (commas inside `rgba(...)` etc. are kept).
@@ -1081,7 +1112,9 @@ class CSSParser {
       if (trimmed.endsWith('s') && !trimmed.endsWith('ms')) {
         final numStr = trimmed.substring(0, trimmed.length - 1);
         final seconds = double.tryParse(numStr);
-        if (seconds != null) return Duration(milliseconds: (seconds * 1000).toInt());
+        if (seconds != null) {
+          return Duration(milliseconds: (seconds * 1000).toInt());
+        }
       }
       // Support 'ms' suffix for milliseconds
       if (trimmed.endsWith('ms')) {

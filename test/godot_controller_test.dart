@@ -49,11 +49,7 @@ void main() {
       expect(ops[3]['args'], [
         {'ref': node.handle}
       ]);
-      expect(ops[4], {
-        'ref': node.handle,
-        'seti': 'position:x',
-        'value': 5.0
-      });
+      expect(ops[4], {'ref': node.handle, 'seti': 'position:x', 'value': 5.0});
     });
 
     test('singleton, tree and load each carry an allocated handle', () async {
@@ -98,8 +94,8 @@ void main() {
       await node.get('visible');
 
       // create, set, then the get — the engine must observe them in that order.
-      expect(binding.ops.map((o) => o.keys.first).toList(),
-          ['new', 'ref', 'ref']);
+      expect(
+          binding.ops.map((o) => o.keys.first).toList(), ['new', 'ref', 'ref']);
       expect(binding.ops[1]['set'], 'visible');
       expect(binding.ops[2]['get'], 'visible');
     });
@@ -117,7 +113,9 @@ void main() {
       expect(op['cb'], id);
 
       binding.fireSignal(id, [
-        {'vec3': [1.0, 2.0, 3.0]}
+        {
+          'vec3': [1.0, 2.0, 3.0]
+        }
       ]);
       expect(received, hasLength(1));
       expect(received!.single, isA<Vector3>());
@@ -148,8 +146,8 @@ void main() {
           .where((o) => o.containsKey('new'))
           .map((o) => o['new'])
           .toList();
-      expect(created, containsAll(
-          ['MeshInstance3D', 'SphereMesh', 'StandardMaterial3D']));
+      expect(created,
+          containsAll(['MeshInstance3D', 'SphereMesh', 'StandardMaterial3D']));
 
       final radius = binding.ops.firstWhere((o) => o['set'] == 'radius');
       expect(radius['value'], {'float': 2.0});
@@ -185,14 +183,16 @@ void main() {
       expect(Godot3D.vec3(const Vector3(1, 2, 3), 0, 0, 0).x, 1);
       expect(Godot3D.vec3([4, 5, 6], 0, 0, 0).y, 5);
       expect(Godot3D.vec3(2, 0, 0, 0).z, 2, reason: 'a scalar is uniform');
-      expect(Godot3D.vec3(null, 7, 8, 9).x, 7, reason: 'null takes the default');
+      expect(Godot3D.vec3(null, 7, 8, 9).x, 7,
+          reason: 'null takes the default');
     });
   });
 
   group('surface lifecycle', () {
     test('attach binds the root handle to this surface', () async {
       await controller.attachSurface();
-      expect(binding.surfaces[controller.surfaceId], HandleAllocator.selfHandle);
+      expect(
+          binding.surfaces[controller.surfaceId], HandleAllocator.selfHandle);
     });
 
     test('detach releases it', () async {

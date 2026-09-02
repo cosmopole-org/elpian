@@ -58,8 +58,8 @@ class _ElpianShimmerWidgetState extends State<_ElpianShimmerWidget>
             width: widget.node.style?.width ?? 200,
             height: widget.node.style?.height ?? 20,
             decoration: BoxDecoration(
-              borderRadius: widget.node.style?.borderRadius ??
-                  BorderRadius.circular(4),
+              borderRadius:
+                  widget.node.style?.borderRadius ?? BorderRadius.circular(4),
             ),
           );
 

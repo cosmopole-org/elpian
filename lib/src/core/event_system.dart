@@ -10,7 +10,7 @@ enum ElpianEventType {
   tapDown,
   tapUp,
   tapCancel,
-  
+
   // Pointer Events
   pointerDown,
   pointerUp,
@@ -19,7 +19,7 @@ enum ElpianEventType {
   pointerExit,
   pointerHover,
   pointerCancel,
-  
+
   // Drag Events
   dragStart,
   drag,
@@ -28,41 +28,41 @@ enum ElpianEventType {
   dragLeave,
   dragOver,
   drop,
-  
+
   // Focus Events
   focus,
   blur,
   focusIn,
   focusOut,
-  
+
   // Input Events
   input,
   change,
   submit,
-  
+
   // Keyboard Events
   keyDown,
   keyUp,
   keyPress,
-  
+
   // Scroll Events
   scroll,
-  
+
   // Form Events
   reset,
   select,
-  
+
   // UI Events
   resize,
   load,
   unload,
-  
+
   // Touch Events
   touchStart,
   touchMove,
   touchEnd,
   touchCancel,
-  
+
   // Gesture Events
   swipeLeft,
   swipeRight,
@@ -77,7 +77,7 @@ enum ElpianEventType {
   rotateStart,
   rotateUpdate,
   rotateEnd,
-  
+
   // Custom Events
   custom,
 }
@@ -99,11 +99,11 @@ class ElpianEvent {
   final DateTime timestamp;
   final EventPhase phase;
   final Map<String, dynamic> data;
-  
+
   bool _propagationStopped = false;
   bool _immediatePropagationStopped = false;
   bool _defaultPrevented = false;
-  
+
   ElpianEvent({
     required this.type,
     required this.eventType,
@@ -113,33 +113,33 @@ class ElpianEvent {
     this.phase = EventPhase.none,
     this.data = const {},
   }) : timestamp = timestamp ?? DateTime.now();
-  
+
   /// Stop event from bubbling up the tree
   void stopPropagation() {
     _propagationStopped = true;
   }
-  
+
   /// Stop event from triggering other listeners on the same element
   void stopImmediatePropagation() {
     _immediatePropagationStopped = true;
     _propagationStopped = true;
   }
-  
+
   /// Prevent default action
   void preventDefault() {
     _defaultPrevented = true;
   }
-  
+
   bool get isPropagationStopped => _propagationStopped;
   bool get isImmediatePropagationStopped => _immediatePropagationStopped;
   bool get isDefaultPrevented => _defaultPrevented;
-  
+
   /// Check if event is in bubbling phase
   bool get bubbles => true;
-  
+
   /// Check if event can be cancelled
   bool get cancelable => true;
-  
+
   ElpianEvent copyWith({
     dynamic currentTarget,
     EventPhase? phase,
@@ -165,7 +165,7 @@ class ElpianPointerEvent extends ElpianEvent {
   final double pressure;
   final double distance;
   final int pointerId;
-  
+
   ElpianPointerEvent({
     required super.type,
     required super.eventType,
@@ -182,7 +182,7 @@ class ElpianPointerEvent extends ElpianEvent {
     this.distance = 0.0,
     this.pointerId = 0,
   });
-  
+
   @override
   ElpianPointerEvent copyWith({
     dynamic currentTarget,
@@ -215,7 +215,7 @@ class ElpianKeyboardEvent extends ElpianEvent {
   final bool ctrlKey;
   final bool shiftKey;
   final bool metaKey;
-  
+
   ElpianKeyboardEvent({
     required super.type,
     required super.eventType,
@@ -231,7 +231,7 @@ class ElpianKeyboardEvent extends ElpianEvent {
     this.shiftKey = false,
     this.metaKey = false,
   });
-  
+
   @override
   ElpianKeyboardEvent copyWith({
     dynamic currentTarget,
@@ -260,7 +260,7 @@ class ElpianInputEvent extends ElpianEvent {
   final dynamic value;
   final String? inputType;
   final bool isComposing;
-  
+
   ElpianInputEvent({
     required super.type,
     required super.eventType,
@@ -273,7 +273,7 @@ class ElpianInputEvent extends ElpianEvent {
     this.inputType,
     this.isComposing = false,
   });
-  
+
   @override
   ElpianInputEvent copyWith({
     dynamic currentTarget,
@@ -300,7 +300,7 @@ class ElpianGestureEvent extends ElpianEvent {
   final double scale;
   final double rotation;
   final Offset focalPoint;
-  
+
   ElpianGestureEvent({
     required super.type,
     required super.eventType,
@@ -314,7 +314,7 @@ class ElpianGestureEvent extends ElpianEvent {
     this.rotation = 0.0,
     this.focalPoint = Offset.zero,
   });
-  
+
   @override
   ElpianGestureEvent copyWith({
     dynamic currentTarget,
@@ -345,7 +345,7 @@ class EventListenerConfig {
   final bool capture;
   final bool once;
   final bool passive;
-  
+
   const EventListenerConfig({
     required this.listener,
     this.capture = false,
@@ -357,10 +357,10 @@ class EventListenerConfig {
 /// Event target mixin for objects that can dispatch events
 mixin ElpianEventTarget {
   final Map<String, List<EventListenerConfig>> _eventListeners = {};
-  
+
   /// Add event listener
   void addEventListener(
-    String type, 
+    String type,
     ElpianEventListener listener, {
     bool capture = false,
     bool once = false,
@@ -372,24 +372,25 @@ mixin ElpianEventTarget {
       once: once,
       passive: passive,
     );
-    
+
     if (_eventListeners.containsKey(type)) {
       _eventListeners[type]!.add(config);
     } else {
       _eventListeners[type] = [config];
     }
   }
-  
+
   /// Remove event listener
   void removeEventListener(String type, ElpianEventListener listener) {
     if (_eventListeners.containsKey(type)) {
-      _eventListeners[type]!.removeWhere((config) => config.listener == listener);
+      _eventListeners[type]!
+          .removeWhere((config) => config.listener == listener);
       if (_eventListeners[type]!.isEmpty) {
         _eventListeners.remove(type);
       }
     }
   }
-  
+
   /// Remove all event listeners
   void removeAllEventListeners([String? type]) {
     if (type != null) {
@@ -398,50 +399,51 @@ mixin ElpianEventTarget {
       _eventListeners.clear();
     }
   }
-  
+
   /// Dispatch event to this target
   bool dispatchEvent(ElpianEvent event) {
     final listeners = _eventListeners[event.type];
     if (listeners == null || listeners.isEmpty) {
       return !event.isDefaultPrevented;
     }
-    
+
     final listenersToRemove = <EventListenerConfig>[];
-    
+
     for (final config in List.from(listeners)) {
       // Check if we should execute this listener based on phase
       if (config.capture && event.phase != EventPhase.capturing) continue;
       if (!config.capture && event.phase == EventPhase.capturing) continue;
-      
+
       // Execute listener
       try {
         config.listener(event);
       } catch (e) {
         debugPrint('Error in event listener: $e');
       }
-      
+
       // Mark for removal if once
       if (config.once) {
         listenersToRemove.add(config);
       }
-      
+
       // Stop if immediate propagation stopped
       if (event.isImmediatePropagationStopped) break;
     }
-    
+
     // Remove once listeners
     for (final config in listenersToRemove) {
       listeners.remove(config);
     }
-    
+
     return !event.isDefaultPrevented;
   }
-  
+
   /// Check if has event listener
   bool hasEventListener(String type) {
-    return _eventListeners.containsKey(type) && _eventListeners[type]!.isNotEmpty;
+    return _eventListeners.containsKey(type) &&
+        _eventListeners[type]!.isNotEmpty;
   }
-  
+
   /// Get listener count
   int getListenerCount([String? type]) {
     if (type != null) {
@@ -453,20 +455,21 @@ mixin ElpianEventTarget {
 
 /// Global event bus for broadcasting events
 class EventBus with ElpianEventTarget {
-  static final EventBus _instance = EventBus._internal();
-  factory EventBus() => _instance;
-  EventBus._internal();
-  
+  EventBus();
+
+  /// The bus every un-scoped caller sees.
+  static final EventBus shared = EventBus();
+
   /// Broadcast event to all subscribers
   void broadcast(ElpianEvent event) {
     dispatchEvent(event);
   }
-  
+
   /// Subscribe to events
   void subscribe(String type, ElpianEventListener listener) {
     addEventListener(type, listener);
   }
-  
+
   /// Unsubscribe from events
   void unsubscribe(String type, ElpianEventListener listener) {
     removeEventListener(type, listener);
@@ -475,8 +478,9 @@ class EventBus with ElpianEventTarget {
 
 /// Event delegation manager
 class EventDelegation {
-  final Map<String, Map<String, List<ElpianEventListener>>> _delegatedListeners = {};
-  
+  final Map<String, Map<String, List<ElpianEventListener>>>
+      _delegatedListeners = {};
+
   /// Delegate event from child selector to handler
   void delegate(
     String eventType,
@@ -486,14 +490,14 @@ class EventDelegation {
     if (!_delegatedListeners.containsKey(eventType)) {
       _delegatedListeners[eventType] = {};
     }
-    
+
     if (!_delegatedListeners[eventType]!.containsKey(selector)) {
       _delegatedListeners[eventType]![selector] = [];
     }
-    
+
     _delegatedListeners[eventType]![selector]!.add(handler);
   }
-  
+
   /// Check if event matches delegated selector
   bool matchesSelector(dynamic target, String selector) {
     // Simplified selector matching
@@ -506,12 +510,12 @@ class EventDelegation {
       return target.tagName == selector;
     }
   }
-  
+
   /// Handle delegated event
   void handleEvent(ElpianEvent event) {
     final handlers = _delegatedListeners[event.type];
     if (handlers == null) return;
-    
+
     for (final entry in handlers.entries) {
       if (matchesSelector(event.target, entry.key)) {
         for (final handler in entry.value) {
@@ -539,7 +543,7 @@ class EventUtils {
       localPosition: details.localPosition,
     );
   }
-  
+
   /// Create event from Flutter drag details
   static ElpianPointerEvent fromDragUpdateDetails(
     DragUpdateDetails details, {
@@ -554,7 +558,7 @@ class EventUtils {
       delta: details.delta,
     );
   }
-  
+
   /// Create event from Flutter scale details
   static ElpianGestureEvent fromScaleUpdateDetails(
     ScaleUpdateDetails details, {
@@ -569,14 +573,14 @@ class EventUtils {
       focalPoint: details.focalPoint,
     );
   }
-  
+
   /// Debounce event handler
   static ElpianEventListener debounce(
     ElpianEventListener listener,
     Duration duration,
   ) {
     DateTime? lastCall;
-    
+
     return (event) {
       final now = DateTime.now();
       if (lastCall == null || now.difference(lastCall!) > duration) {
@@ -585,14 +589,14 @@ class EventUtils {
       }
     };
   }
-  
+
   /// Throttle event handler
   static ElpianEventListener throttle(
     ElpianEventListener listener,
     Duration duration,
   ) {
     bool canCall = true;
-    
+
     return (event) {
       if (canCall) {
         canCall = false;

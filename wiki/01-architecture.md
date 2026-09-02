@@ -32,7 +32,7 @@ system:
 │      cli: resolve imports, bundle modules into one source            │
 │      js2elpian: JS → Elpian AST JSON → bytecode (.elpian.bc)          │
 ├───────────────────────────────────────────────────────────────────────┤
-│  L3  Elpian VM (Rust) — rust/src/sdk/                                 │
+│  L3  Elpian VM (Rust) — rust/crates/elpian-vm/src/sdk/                                 │
 │      program.rs   decode bytecode once into an addressable op list    │
 │      executor.rs  the pausing interpreter (6.5k lines)                │
 │      stdlib/      ~200 universal builtins (math, string, list, map)   │
@@ -100,7 +100,7 @@ function increment() { count = count + 1; render(view()); }
 
 ...and why the **server** template's functions must be self-contained: the HTTP
 server creates a fresh VM per request and destroys it afterwards
-(`rust/src/bin/elpian-server.rs`), so nothing carries over between requests.
+(`rust/crates/elpian-vm/src/bin/elpian-server.rs`), so nothing carries over between requests.
 
 ## Repo map (what lives where)
 
@@ -164,7 +164,7 @@ victor/                        a sibling project — only the GDExtension C++
 > live in this repository, not part of the `elpian_ui` package. Its
 > `elpian_client` web shell depends on `elpian_ui` by relative path
 > (`path: ../..`), and its `Cargo.toml` resolves `js2elpian` at
-> `../rust/js2elpian`. Everything it needs is in this repository — **no sibling
+> `../rust/crates/js2elpian`. Everything it needs is in this repository — **no sibling
 > checkout is required.**
 
 ## The three delivery stories (choose deliberately)

@@ -115,13 +115,13 @@ class SceneDsl {
     return GodotScene(controller, byId, roots);
   }
 
-  void _register(
-      Map<String, GodotObject> byId, Map spec, GodotObject node) {
+  void _register(Map<String, GodotObject> byId, Map spec, GodotObject node) {
     final id = spec['id'];
     if (id is String && id.isNotEmpty) byId[id] = node;
   }
 
-  GodotObject _environment(Map<String, Object?> spec) => controller.g3.environment(
+  GodotObject _environment(Map<String, Object?> spec) =>
+      controller.g3.environment(
         bg: parseColor(spec['bg']),
         ambient: parseColor(spec['ambient']),
         ambientEnergy: spec['ambientEnergy'] as num? ?? 0.6,
@@ -238,7 +238,8 @@ class SceneDsl {
   }
 }
 
-bool _looksLikeColor(String v) => v.startsWith('#') && (v.length == 7 || v.length == 9 || v.length == 4);
+bool _looksLikeColor(String v) =>
+    v.startsWith('#') && (v.length == 7 || v.length == 9 || v.length == 4);
 
 /// Parse a colour from the DSL: `"#RRGGBB"`, `"#RRGGBBAA"`, `"#RGB"`, an
 /// `[r,g,b(,a)]` list of 0..1 doubles, or an existing [GodotColor].
@@ -247,8 +248,9 @@ GodotColor? parseColor(Object? value) {
   if (value is GodotColor) return value;
 
   if (value is List && value.length >= 3) {
-    double at(int i, double fallback) =>
-        i < value.length && value[i] is num ? (value[i] as num).toDouble() : fallback;
+    double at(int i, double fallback) => i < value.length && value[i] is num
+        ? (value[i] as num).toDouble()
+        : fallback;
     return GodotColor(at(0, 0), at(1, 0), at(2, 0), at(3, 1));
   }
 

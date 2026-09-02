@@ -8,7 +8,8 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   Widget host(NextjsBridge bridge, Map<String, dynamic> node) {
     return MaterialApp(
-      home: Scaffold(body: SingleChildScrollView(child: bridge.renderComponent(node))),
+      home: Scaffold(
+          body: SingleChildScrollView(child: bridge.renderComponent(node))),
     );
   }
 
@@ -119,7 +120,12 @@ void main() {
     await tester.pumpWidget(host(
       bridge,
       formNode([
-        {'name': 'safeMode', 'type': 'checkbox', 'label': 'Safe mode', 'value': 'false'},
+        {
+          'name': 'safeMode',
+          'type': 'checkbox',
+          'label': 'Safe mode',
+          'value': 'false'
+        },
       ]),
     ));
 

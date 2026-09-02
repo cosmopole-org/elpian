@@ -1,3 +1,6 @@
+// A developer smoke tool: it drives a headless browser and reports what it
+// found on stdout. `avoid_print` does not apply here.
+// ignore_for_file: avoid_print
 import 'package:puppeteer/puppeteer.dart';
 
 Future<void> main(List<String> args) async {
@@ -15,7 +18,7 @@ Future<void> main(List<String> args) async {
   });
   final response = await page.goto(url, wait: Until.networkIdle);
   await Future<void>.delayed(const Duration(seconds: 3));
-  print('document: ${response?.status} ${page.url}');
+  print('document: ${response.status} ${page.url}');
   print('body: ${(await page.evaluate<String>('document.body.innerText')).trim()}');
   await browser.close();
 }
