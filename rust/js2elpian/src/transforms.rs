@@ -26,6 +26,32 @@ use std::collections::HashSet;
 
 use serde_json::{json, Value};
 
+/// Is this JSON object a **typed AST node**, as opposed to a plain container map?
+///
+/// The walkers below descend generically, so they must tell a node apart from
+/// the anonymous maps that carry a node's payload. A node always tags itself
+/// with a **string** `type`; a container never does.
+///
+/// Testing merely for the *presence* of a `type` key is not enough, and the bug
+/// it caused was subtle. An object literal's property map is a container keyed
+/// by the guest's own property names, so a guest writing
+///
+/// ```js
+/// { type: 'directional', energy: lightEnergy }
+/// ```
+///
+/// produced a map with a `type` key whose value is the *string node* for
+/// `'directional'`. The walker mistook it for a node, handed it to `rewrite`,
+/// matched no node kind, and so never descended into the sibling values. A
+/// captured variable read there kept its unrewritten form, evaluating to the box
+/// itself: `[14] / 10` trapped the VM with "array can not be divisioned with
+/// other types", and `[14] + 0` silently produced `[14, 0]`. Requiring `type` to
+/// be a string classifies the property map correctly, because its `type` entry
+/// holds a node object, never a bare string.
+fn is_ast_node(map: &serde_json::Map<String, Value>) -> bool {
+    map.get("type").and_then(Value::as_str).is_some()
+}
+
 /// Apply the by-reference boxing transform to a whole program AST in place.
 pub(crate) fn box_captured_program(program: &mut Value) {
     if let Some(body) = program.get_mut("body").and_then(|b| b.as_array_mut()) {
@@ -74,7 +100,7 @@ fn recurse_into_fns(node: &mut Value) {
 fn recurse_into_fns_any(v: &mut Value) {
     match v {
         Value::Object(map) => {
-            if map.contains_key("type") {
+            if is_ast_node(map) {
                 recurse_into_fns(v);
             } else {
                 for (_k, child) in map.iter_mut() {
@@ -149,7 +175,7 @@ fn descend_ref(node: &Value, f: &mut dyn FnMut(&Value)) {
 fn descend_any_ref(v: &Value, f: &mut dyn FnMut(&Value)) {
     match v {
         Value::Object(map) => {
-            if map.contains_key("type") {
+            if is_ast_node(map) {
                 f(v);
             } else {
                 for (_k, child) in map {
@@ -263,7 +289,7 @@ fn rewrite(node: &mut Value, boxed: &HashSet<String>) {
 fn rewrite_any(v: &mut Value, boxed: &HashSet<String>) {
     match v {
         Value::Object(map) => {
-            if map.contains_key("type") {
+            if is_ast_node(map) {
                 rewrite(v, boxed);
             } else {
                 for (_k, child) in map.iter_mut() {

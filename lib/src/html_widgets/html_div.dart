@@ -98,7 +98,13 @@ class HtmlDiv {
         hasFlex: _hasFlexChild(node),
       );
     } else if (children.length == 1) {
-      return children.first;
+      // Not a flex container, so there is no Flex to carry a child's flex
+      // parent data. A child that declared `flex` was already wrapped in a
+      // Flexible by `applyStyle`; handing it to the enclosing Container would
+      // trip the ParentDataWidget assertion and blank the entire screen. CSS
+      // simply ignores `flex` on a non-flex parent, so drop the wrapper and
+      // render the child.
+      return _unflex(children.first);
     }
     return _buildColumn(
       node,
@@ -158,9 +164,7 @@ class HtmlDiv {
         final bounded = constraints.maxWidth.isFinite;
         final laidOut = <Widget>[
           for (var i = 0; i < children.length; i++)
-            bounded && fill[i]
-                ? SizedBox(width: double.infinity, child: children[i])
-                : children[i],
+            bounded && fill[i] ? _stretch(children[i]) : children[i],
         ];
         return Column(
           mainAxisAlignment: mainAxisAlignment,
@@ -171,6 +175,39 @@ class HtmlDiv {
       },
     );
   }
+
+  /// Stretch one column child across the cross axis.
+  ///
+  /// A child whose style carries `flex` has already been wrapped in a
+  /// [Flexible] by `CSSProperties.applyStyle`, and a `Flexible` only carries
+  /// its flex parent data when it is a **direct** child of the [Column].
+  /// Wrapping it in the stretching [SizedBox] detaches it, which trips the
+  /// `ParentDataWidget` assertion, aborts the build of the whole subtree, and
+  /// renders the screen blank with the failure reported far from its cause. So
+  /// stretch the Flexible's *child* instead and re-wrap, keeping the Flexible
+  /// outermost and both behaviours intact — `flex` still governs the main axis,
+  /// the SizedBox still fills the cross axis.
+  static Widget _stretch(Widget child) {
+    if (child is Flexible) {
+      return Flexible(
+        flex: child.flex,
+        fit: child.fit,
+        child: SizedBox(width: double.infinity, child: child.child),
+      );
+    }
+    return SizedBox(width: double.infinity, child: child);
+  }
+
+  /// Strip a [Flexible]/[Expanded] wrapper from a child that is about to be
+  /// placed somewhere other than a [Flex].
+  ///
+  /// `flex` is a property of a flex *item*, meaningful only inside a flex
+  /// container; CSS ignores it elsewhere. Flutter is far less forgiving — a
+  /// stray Flexible throws while applying parent data, which aborts the build
+  /// of the whole subtree and leaves a blank screen whose reported error points
+  /// nowhere near the offending node. Degrading to the unwrapped child keeps a
+  /// guest's misplaced `flex` a cosmetic no-op instead of a fatal one.
+  static Widget _unflex(Widget child) => child is Flexible ? child.child : child;
 
   /// Resolve a child node's **fully cascaded** style — the stylesheet
   /// (tag/class/id + matching `@media`, honouring `!important`) merged with the

@@ -869,7 +869,7 @@ function view() {
     ]),
 
     // The 3D stage
-    el('div', { style: { flex: 1, padding: '14', paddingTop: '0' } }, [
+    el('div', { style: { display: 'flex', flexDirection: 'column', flex: 1, padding: '14', paddingTop: '0' } }, [
       el('div', {
         style: {
           flex: 1, borderRadius: 16, overflow: 'hidden',
