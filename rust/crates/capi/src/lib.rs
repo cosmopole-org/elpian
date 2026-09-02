@@ -1,6 +1,6 @@
 //! # elpian-godot-capi — the C ABI the Godot GDExtension embeds
 //!
-//! The C++ side of the bridge (`victor/bridge/extension/`) cannot link Rust
+//! The C++ side of the bridge (`godot/extension/`) cannot link Rust
 //! directly, so this crate flattens the multi-VM [`manager::VmManager`] into a
 //! small, panic-safe C surface (`elpian_godot_*`), mirrored by the
 //! `extension/src/elpian_capi.h` header:
@@ -52,12 +52,12 @@ pub const GODOT_PRELUDE: &str = include_str!("../../../../guest-sdk/dart/godot.d
 /// subset the `js2elpian` front-end compiles.
 pub const GODOT_PRELUDE_JS: &str = include_str!("../../../../guest-sdk/js/godot.js");
 
-/// The Victor UI kit (`ui.js`) — a full widget toolkit in JavaScript built on
+/// The Elpian UI kit (`ui.js`) — a full widget toolkit in JavaScript built on
 /// Godot `Control` nodes over the bridge. Composed ahead of a JS guest when
 /// its source imports it (`import 'ui.js';`).
 pub const GODOT_UI_KIT_JS: &str = include_str!("../../../../guest-sdk/js/ui.js");
 
-/// Victor networking (`net.js`) — HTTP (Godot `HTTPRequest` + a cookie jar),
+/// Elpian networking (`net.js`) — HTTP (Godot `HTTPRequest` + a cookie jar),
 /// WebSocket (`WebSocketPeer` pumped on a guest timer) and a Socket.IO v4
 /// client, all in the Elpian-JS subset. Composed ahead of a JS guest when its
 /// source imports it (`import 'net.js';`); it depends only on `godot.js`.
@@ -84,14 +84,14 @@ pub const GODOT_FLUTTER_JS: &str = include_str!("../../../../guest-sdk/js/flutte
 /// whose host config targets the VUI kit. Composed ahead of a JS guest when its
 /// source imports it (`import 'react.js';`); because it builds on VUI, importing
 /// it implies the UI kit even if `ui.js` is not imported explicitly. This is
-/// what a compiled Next.js-on-Victor program (see `templates/victor-nextjs/`)
+/// what a compiled Next.js-on-Elpian program (see the CLI's nextjs template)
 /// runs on.
 pub const GODOT_REACT_JS: &str = include_str!("../../../../guest-sdk/js/react.js");
 
 /// The React Native bridge (`reactnative.js`) — the `RN` facade that drives a
 /// **real React Native / Expo widget tree** (2D) plus embedded Godot `Scene3D`
 /// worlds (3D) over the `rn.op`/`rn.batch` seam. It is the twin of `ui.js`, but
-/// its host is React Native instead of Godot `Control` nodes, so a Victor app
+/// its host is React Native instead of Godot `Control` nodes, so an Elpian app
 /// becomes a first-class RN view tree on mobile, desktop and web while keeping
 /// every 3D feature of Godot as an embedded surface. Composed ahead of a JS
 /// guest when its source imports it (`import 'reactnative.js';`); it depends on
@@ -178,7 +178,7 @@ pub fn compose_godot_program(user_source: &str) -> String {
 }
 
 /// Compose the final **JavaScript** guest program: the `godot.js` prelude —
-/// plus the Victor UI kit (`ui.js`) and the VReact runtime (`react.js`) when
+/// plus the Elpian UI kit (`ui.js`) and the VReact runtime (`react.js`) when
 /// the user source imports them — then the user source, with `import …;`
 /// directives stripped from all parts (the front-end has no module system; the
 /// prelude *is* the import). VReact depends on VUI, so an `import 'react.js';`

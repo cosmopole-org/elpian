@@ -1,7 +1,13 @@
 /// Dart FFI bindings to the Elpian Rust VM native library.
 ///
-/// On native platforms (Android, iOS, macOS, Linux, Windows), this uses
-/// dart:ffi to call into the compiled Rust cdylib/staticlib.
+/// On native platforms (Android, iOS, macOS, Linux, Windows) this uses
+/// `dart:ffi` to call into the compiled Rust cdylib/staticlib.
+///
+/// These bindings are **hand-written**. The directory was called
+/// `frb_generated`, which said flutter_rust_bridge produced them — there is no
+/// flutter_rust_bridge dependency anywhere in the project and never was, and
+/// code that looks generated is code contributors avoid editing or regenerate
+/// over. Edit it like any other source file.
 library;
 
 import 'dart:convert';

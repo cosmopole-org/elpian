@@ -26,9 +26,9 @@ export 'src/vm/runtime_kind.dart';
 export 'src/vm/host_handler.dart';
 export 'src/stream/elpian_stream_widget.dart';
 export 'src/vm/wasm_vm.dart';
-export 'src/vm/frb_generated/vm_types.dart';
-export 'src/vm/frb_generated/api.dart'
-    if (dart.library.js_interop) 'src/vm/frb_generated/api_web.dart'
+export 'src/vm/ffi/vm_types.dart';
+export 'src/vm/ffi/api.dart'
+    if (dart.library.js_interop) 'src/vm/ffi/api_web.dart'
     show ElpianVmApi;
 
 // Core

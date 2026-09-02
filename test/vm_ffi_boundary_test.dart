@@ -1,3 +1,8 @@
+// The Elpian VM across the real native FFI boundary: create from AST, run,
+// service a host call, tear down.
+//
+// Was `victor_vm_native_compatibility_test.dart`, named for a predecessor
+// project rather than for what it checks.
 import 'dart:convert';
 
 import 'package:elpian_ui/src/vm/elpian_vm.dart';

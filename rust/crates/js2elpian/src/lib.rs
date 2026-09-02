@@ -57,7 +57,7 @@ fn log(_s: &str) {}
 // Elpian AST JSON that the hand-written test helpers and external front-ends
 // emit (see the node shapes consumed by `compile_ast` / `serialize_expr`
 // above). It is intentionally self-contained — a tokenizer plus a
-// recursive-descent / precedence-climbing parser — so the VM can build an Elpa
+// recursive-descent / precedence-climbing parser — so the VM can build an Elpian
 // instance straight from JS code without an off-VM toolchain.
 //
 // The pipeline mirrors the AST path exactly:

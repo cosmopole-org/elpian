@@ -2,7 +2,7 @@
 //!
 //! This is a renderer-agnostic port of the original Elpian `api/mod.rs`. It
 //! keeps the VM registry and the pause/resume host-call protocol, but drops the
-//! old Bevy/Flutter coupling. The set of host API names advertised here is the
+//! earlier renderer coupling. The set of host API names advertised here is the
 //! contract the embedding `elpa-runtime` is expected to service.
 //!
 //! ## Host-call protocol
@@ -52,11 +52,11 @@ fn lock_tolerant<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-/// Host APIs the Elpa runtime services. The VM implements none of these — it
-/// only forwards `askHost` calls. Elpa is a *programmable VM around the wgpu
+/// Host APIs the embedding runtime services. The VM implements none of these — it
+/// only forwards `askHost` calls. The GPU surface below is a *programmable VM around the wgpu
 /// API*: there is **no** widget/DOM/canvas abstraction. The app's JS emits a
-/// nested JSON tree of wgpu commands and submits it; Elpa maps that tree to the
-/// wgpu API in real time (see `PLAN.md`).
+/// nested JSON tree of wgpu commands and submits it; the host maps that tree
+/// to the wgpu API in real time.
 ///
 /// The surface is intentionally tiny:
 /// * `gpu.submit` — hand the renderer one frame's wgpu command tree

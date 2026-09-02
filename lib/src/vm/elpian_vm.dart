@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'frb_generated/api.dart'
-    if (dart.library.js_interop) 'frb_generated/api_web.dart';
+import 'ffi/api.dart'
+    if (dart.library.js_interop) 'ffi/api_web.dart';
 import 'governance/elpian_governor.dart';
 import 'vm_runtime_client.dart';
 
@@ -100,7 +100,7 @@ class ElpianVm implements VmRuntimeClient {
     return ElpianVm(machineId: machineId);
   }
 
-  /// Create a VM directly from precompiled Victor/Elpian bytecode.
+  /// Create a VM directly from precompiled Elpian bytecode.
   static Future<ElpianVm?> fromBytecode(
       String machineId, Uint8List bytecode) async {
     final success = await ElpianVmApi.createVmFromBytecode(

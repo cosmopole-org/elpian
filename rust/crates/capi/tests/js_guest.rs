@@ -1,5 +1,5 @@
 //! The JavaScript guest surface: `godot.js` (the JS twin of the Dart prelude)
-//! and the Victor UI kit (`ui.js`) compiled by js2elpian and run on real VMs
+//! and the Elpian UI kit (`ui.js`) compiled by js2elpian and run on real VMs
 //! against a mock engine. Pins that:
 //!
 //!   * a JS root program speaks the identical wire protocol (create / set /

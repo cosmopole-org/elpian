@@ -13,7 +13,7 @@ library;
 
 import 'dart:convert';
 
-import '../frb_generated/api.dart';
+import '../ffi/api.dart';
 import 'governor.dart';
 import 'models.dart';
 import 'native_bindings.dart' if (dart.library.js_interop) 'web_bindings.dart'

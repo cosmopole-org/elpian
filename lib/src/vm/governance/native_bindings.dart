@@ -16,7 +16,7 @@ import 'dart:ffi' as ffi;
 
 import 'package:ffi/ffi.dart';
 
-import '../frb_generated/api.dart';
+import '../ffi/api.dart';
 import 'models.dart';
 
 // ── Call shapes ─────────────────────────────────────────────────────

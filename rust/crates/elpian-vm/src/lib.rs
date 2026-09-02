@@ -1,7 +1,7 @@
 //! # elpian-vm
 //!
 //! The Elpian AST-based bytecode virtual machine, ported from the Elpian
-//! project for use as the application logic core of the Elpa framework.
+//! project for use as the application logic core of the Elpian framework.
 //!
 //! ## Pipeline
 //!
@@ -31,7 +31,7 @@
 //!
 //! The VM is a *pausing* interpreter: when user code calls
 //! `askHost(apiName, payload)` it suspends and hands a host-call request back
-//! to the embedder. The embedder (the Elpa runtime) services the call —
+//! to the embedder. The embedder (the embedding runtime) services the call —
 //! crucially `askHost("render", uiTree)` — and resumes the VM with
 //! [`api::continue_execution`].
 //!
@@ -39,7 +39,7 @@
 //! host-call requests as JSON. The `elpa-runtime` crate wires those requests to
 //! the `elpa-renderer`.
 //!
-//! See `PLAN.md` at the repository root for the full architecture.
+//! See `wiki/01-architecture.md` for the full architecture.
 
 pub mod api;
 pub mod sdk;

@@ -1,6 +1,6 @@
 //! Unified resource governance for an Elpian VM instance.
 //!
-//! The host embedding Elpa needs to keep a guest program inside hard, auditable
+//! The host embedding A host needs to keep a guest program inside hard, auditable
 //! bounds: how much *work* it may do (instruction budget), how much *live heap*
 //! it may hold (value memory), how much *persistent storage* it may occupy
 //! (fabricated filesystem), and how deep it may recurse (call depth). This
