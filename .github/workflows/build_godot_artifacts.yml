@@ -311,7 +311,7 @@ jobs:
             victor/victor/bridge/extension/godot-cpp/gen
             victor/victor/bridge/extension/godot-cpp/src
             victor/victor/bridge/extension/.sconsign.dblite
-          key: godot-cpp-web-${{ env.GODOT_CPP_BRANCH }}-${{ env.EMSDK_VERSION }}-v1
+          key: godot-cpp-web-nothreads-${{ env.GODOT_CPP_BRANCH }}-${{ env.EMSDK_VERSION }}-v2
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -355,11 +355,25 @@ jobs:
           cargo build -p elpian-godot-capi --release --target wasm32-unknown-emscripten
           ls -lh target/wasm32-unknown-emscripten/release/libelpian_godot.a
 
+      # `threads=no` matches the engine this extension has to load into.
+      # export_presets.cfg sets `variant/thread_support=false`, so the export
+      # uses Godot's web_dlink_nothreads template — but godot-cpp defaults
+      # `threads` to true, which adds -sUSE_PTHREADS and links with
+      # --shared-memory. That fails outright against the Rust archive, whose
+      # objects are built without the atomics/bulk-memory features:
+      #
+      #   wasm-ld: error: --shared-memory is disallowed by ...rcgu.o because it
+      #   was not compiled with 'atomics' or 'bulk-memory' features
+      #
+      # and even linked, a threaded side module would not load into a nothreads
+      # engine. Victor's SConstruct names the output itself, so godot-cpp's
+      # `.nothreads` filename suffix does not apply and the .gdextension entry
+      # stays correct.
       - name: Build the GDExtension for the web
         working-directory: victor/victor/bridge/extension
         run: |
           set -e
-          scons platform=web target=template_release \
+          scons platform=web target=template_release threads=no \
             elpian_capi="$GITHUB_WORKSPACE/elpian/rust/target/wasm32-unknown-emscripten/release/libelpian_godot.a"
           ls -la ../project/bin/
 
