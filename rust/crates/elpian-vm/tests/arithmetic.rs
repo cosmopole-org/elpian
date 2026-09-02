@@ -183,3 +183,34 @@ fn a_type_error_traps_the_instance_instead_of_tearing_down_the_host() {
         "and should name both operand types, got {out:?}"
     );
 }
+
+#[test]
+fn bool_times_bool_is_a_boolean_and() {
+    // `*` treats a boolean as a mask elsewhere — `arr * false` yields an empty
+    // array, `obj * true` yields the object — so `bool * bool` is a logical
+    // AND. It computed exactly that, but tagged the result `typ: 7` (string)
+    // while storing a `Payload::Bool`, so the value claimed to be a string and
+    // panicked inside `as_string` the moment anything printed or stringified
+    // it.
+    let t = || lit("bool", json!(true));
+    let f = || lit("bool", json!(false));
+
+    assert_eq!(eval("ar-bb-tt", "*", t(), t()), "true");
+    assert_eq!(eval("ar-bb-tf", "*", t(), f()), "false");
+    assert_eq!(eval("ar-bb-ft", "*", f(), t()), "false");
+    assert_eq!(eval("ar-bb-ff", "*", f(), f()), "false");
+}
+
+#[test]
+fn a_boolean_masks_the_value_it_multiplies() {
+    // The behaviour `bool * bool` should be consistent with.
+    let arr = json!({ "type": "array", "data": { "value": [num(1.0), num(2.0)] } });
+    assert_eq!(
+        eval("ar-mask-on", "*", lit("bool", json!(true)), arr.clone()),
+        "[1, 2]"
+    );
+    assert_eq!(
+        eval("ar-mask-off", "*", lit("bool", json!(false)), arr),
+        "[]"
+    );
+}

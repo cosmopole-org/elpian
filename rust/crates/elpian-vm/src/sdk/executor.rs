@@ -2583,9 +2583,15 @@ impl Executor {
                         panic!("elpian error: bool and float can not be multiplied");
                     }
                     6 => {
+                        // Logical AND, consistent with how `*` treats a
+                        // boolean everywhere else in this function: as a mask.
+                        // This was tagged `typ: 7` (string) while storing a
+                        // `Payload::Bool`, so the result claimed to be a string
+                        // and panicked inside `as_string` as soon as anything
+                        // printed or stringified it.
                         let val2 = arg2.as_bool();
                         Val {
-                            typ: 7,
+                            typ: 6,
                             data: Payload::from(val1 & val2),
                         }
                     }
