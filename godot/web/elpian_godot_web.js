@@ -71,28 +71,32 @@
     });
   }
 
-  // Everything the export produced lives in one directory beside the page.
-  var ENGINE_DIR = 'godot/';
-
-  // The exported config names its files *relative to the document* — the shell
-  // Godot generates sits next to them, this page does not. Rebasing them onto
-  // the engine directory is what stops the engine fetching /<repo>/*.wasm and
-  // 404ing with nothing but a failed boot to show for it. Absolute URLs are used
-  // so the lookup still matches once the engine resolves what it fetches.
-  function rebase(config) {
-    var dir = resolve(ENGINE_DIR);
-    if (config.executable) config.executable = dir + config.executable;
-    if (config.mainPack) config.mainPack = dir + config.mainPack;
-    if (Array.isArray(config.gdextensionLibs)) {
-      config.gdextensionLibs = config.gdextensionLibs.map(function (p) { return dir + p; });
-    }
-    if (config.fileSizes) {
-      var sizes = {};
-      Object.keys(config.fileSizes).forEach(function (k) { sizes[dir + k] = config.fileSizes[k]; });
-      config.fileSizes = sizes;
-    }
-    return config;
-  }
+  // The export is deployed *beside* the page, not in a subdirectory, because
+  // that is the only layout Godot's own loader supports.
+  //
+  // engine.js resolves every file through a `locateFile` that rewrites only
+  // paths beginning with `godot.` and returns everything else untouched, so a
+  // name from the exported config is resolved against the document. This file
+  // used to keep the export in `godot/` and rebase those names onto it, which
+  // fetched correctly but broke the GDExtension: `gdextensionLibs` entries go
+  // into Emscripten's `dynamicLibraries` verbatim and are registered under
+  // exactly that string, while Godot's OS_Web::open_dynamic_library dlopen()s
+  // the *basename* of `res://bin/libelpian_godot.web.wasm32.wasm`. A rebased
+  // absolute URL therefore never matched:
+  //
+  //   Can't open dynamic library: bin/libelpian_godot.web.wasm32.wasm
+  //   ElpianScene3D (elpian_godot GDExtension) not loaded
+  //
+  // and Scene3D showed a live but empty canvas. Leaving the names bare while
+  // the export sat in `godot/` was no better — the fetch then 404s against the
+  // document root, and a failed asyncLoad never clears its run dependency, so
+  // the engine hangs forever on `loadDylibs` instead of failing:
+  //
+  //   still waiting on run dependencies: dependency: al libelpian_...wasm
+  //
+  // Putting the export beside the page satisfies both: the bare names resolve,
+  // and they keep the basename identity dlopen needs. Nothing to rebase.
+  var ENGINE_DIR = '';
 
   // The engine is booted from the exported config rather than a hand-written
   // one: `gdextensionLibs`, `fileSizes` and the executable/pack names are all
@@ -153,7 +157,7 @@
       loadScript(resolve(ENGINE_DIR + 'elpian_godot.js')),
       fetch(resolve(ENGINE_DIR + 'godot_config.json')).then(function (r) { return r.json(); }),
     ]).then(function (results) {
-      var config = rebase(results[1] || {});
+      var config = results[1] || {};
       config.canvas = canvas;
       // 0 = leave the canvas alone. Neither policy Godot offers fits a platform
       // view: 1 pins the canvas to the *project* resolution (which is what

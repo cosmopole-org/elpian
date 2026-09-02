@@ -264,11 +264,20 @@ jobs:
             exit 0
           fi
           cat godot-web/MANIFEST.txt || true
-          cp -r godot-web/godot site/godot
+          # Beside the page, NOT in site/godot: engine.js resolves the names in
+          # godot_config.json against the document, and the GDExtension has to
+          # keep its bare basename or Godot's dlopen misses it. See the comment
+          # in elpian_godot_web.js. Every file the export emits is prefixed
+          # `elpian_godot.` (plus libelpian_godot.web.wasm32.wasm and the
+          # godot_config.json this pipeline writes), so nothing collides with
+          # the Flutter build already in site/.
+          cp -r godot-web/godot/. site/
           cp elpian/godot/web/elpian_godot_web.js site/elpian_godot_web.js
           for f in godot_config.json elpian_godot.js elpian_godot.wasm \
-                   elpian_godot.pck elpian_godot.side.wasm; do
-            test -f "site/godot/$f" || { echo "::error::export is missing $f"; exit 1; }
+                   elpian_godot.pck elpian_godot.side.wasm \
+                   elpian_godot.audio.worklet.js \
+                   libelpian_godot.web.wasm32.wasm; do
+            test -f "site/$f" || { echo "::error::export is missing $f"; exit 1; }
           done
           # A plain <script> in <head> parses before Flutter boots, so the drain
           # hook exists by the time the first Scene3D asks whether it is live.
@@ -285,7 +294,7 @@ jobs:
           print("injected the Godot web glue")
           PY
           grep -q 'elpian_godot_web.js' site/index.html
-          du -sh site site/godot
+          du -sh site
 
       - name: Upload the site
         uses: actions/upload-artifact@v4

@@ -1,7 +1,7 @@
 // The embedded-Godot Android module.
 //
-// Depends on the Godot library AAR (`libs/godot-lib.template_release.aar`),
-// which is the same artifact Victor's React Native module ships. It is ~21 MB,
+// Depends on the Godot engine Android library, resolved from Maven Central (see
+// the dependencies block). It is ~87 MB unpacked — engine .so for four ABIs —
 // which is why this lives in its own plugin package rather than in `elpian_ui`:
 // an app with no 3D pays nothing.
 group 'dev.elpian.godot'
@@ -49,5 +49,22 @@ android {
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
     implementation 'androidx.fragment:fragment-ktx:1.6.2'
-    implementation fileTree(dir: 'libs', include: ['*.aar'])
+    // The engine comes from Godot's own Maven Central publication, NOT from
+    // `libs/*.aar`. A `com.android.library` module cannot carry a direct local
+    // .aar dependency: AGP 8 fails `:elpian_godot:bundleReleaseAar` with
+    //
+    //   Direct local .aar file dependencies are not supported when building an
+    //   AAR ... would be broken because the classes and Android resources from
+    //   any local .aar file dependencies would not be packaged
+    //
+    // and Flutter's root `assembleRelease` builds every plugin's AAR, so this
+    // fired on every APK build that had actually restored the bundle. Exploding
+    // the AAR into a jar is not an option either — it ships `res/` and a
+    // manifest declaring GodotDownloaderService and ProcessPhoenix, which a
+    // plain jar dependency would drop.
+    //
+    // `4.3.0.stable` is the same artifact build_godot_artifacts.yml pulls out of
+    // android_source.zip, byte for byte, and must stay in lockstep with
+    // GODOT_RELEASE there.
+    implementation 'org.godotengine:godot:4.3.0.stable'
 }
