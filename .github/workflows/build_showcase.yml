@@ -248,9 +248,10 @@ jobs:
           cat godot-web/MANIFEST.txt || true
           cp -r godot-web/godot site/godot
           cp elpian/godot/web/elpian_godot_web.js site/elpian_godot_web.js
-          test -f site/godot/godot_config.json
-          test -f site/godot/elpian_godot.js
-          test -f site/godot/elpian_godot.pck
+          for f in godot_config.json elpian_godot.js elpian_godot.wasm \
+                   elpian_godot.pck elpian_godot.side.wasm; do
+            test -f "site/godot/$f" || { echo "::error::export is missing $f"; exit 1; }
+          done
           # A plain <script> in <head> parses before Flutter boots, so the drain
           # hook exists by the time the first Scene3D asks whether it is live.
           python3 - <<'PY'
