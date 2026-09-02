@@ -274,5 +274,6 @@ building 2D nodes as bare maps, is the mistake to avoid.
 `.github/workflows/build_showcase.yml` generates this template from the CLI,
 compiles it to bytecode, and builds it for **web** and **Android** — so the
 template, the toolchain and the `Scene3D` widget are verified together on every
-push. The web build additionally exercises the no-engine degradation path, since
-no Godot artifact exists for the web yet.
+push. The web build folds in the Godot HTML5 export from
+`build_godot_artifacts.yml` when one is available, and ships the placeholder when
+it is not — so both the live path and the degradation path stay covered.

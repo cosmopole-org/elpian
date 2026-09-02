@@ -45,6 +45,11 @@ import 'godot_object.dart';
 import 'scene_dsl.dart';
 import 'scene_taps.dart';
 
+// The web viewport is selected at compile time; off the web the stub compiles
+// instead, so `dart:ui_web` never reaches a native build.
+import 'godot_web_surface.dart'
+    if (dart.library.ui_web) 'godot_web_surface_web.dart';
+
 /// Owns a scene's engine controller and its built nodes across rebuilds.
 ///
 /// Create one in your `State` and dispose it there; passing the same controller
@@ -257,7 +262,16 @@ class _Scene3DState extends State<Scene3D> {
 
   /// The native viewport hosting this surface's Godot render target.
   Widget _viewport() {
-    final params = <String, dynamic>{'surfaceId': _controller.godot.surfaceId};
+    final surfaceId = _controller.godot.surfaceId;
+    // Checked before `defaultTargetPlatform`, which on the web reports the
+    // *host OS* — mobile web would otherwise fall into the AndroidView/UiKitView
+    // arms and ask for a native platform view that does not exist there.
+    if (kIsWeb) {
+      return buildGodotWebSurface(surfaceId) ??
+          widget.placeholder ??
+          const _Scene3DPlaceholder();
+    }
+    final params = <String, dynamic>{'surfaceId': surfaceId};
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
         return AndroidView(

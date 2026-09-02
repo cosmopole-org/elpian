@@ -30,10 +30,13 @@ func _ready() -> void:
 	_sink.call("exec_op_json", JSON.stringify({"self": true, "def": SELF_HANDLE}))
 	if Engine.has_singleton("ElpianGodotBridge"):
 		_bridge = Engine.get_singleton("ElpianGodotBridge")
-	elif OS.has_feature("web") and _has_web_bridge():
-		# The RN web page (WebGodotEngine → globalThis.__ElpianGodotWeb) queues 3D
-		# ops on the page; drain them over JavaScriptBridge each frame.
-		_web = true
+	elif OS.has_feature("web"):
+		# The page (godot/web/elpian_godot_web.js) queues 3D ops on window and
+		# drains them over JavaScriptBridge each frame. The glue installs its
+		# hooks before booting the engine, so this normally binds immediately;
+		# _process re-checks anyway, because deciding the transport once in
+		# _ready would strand the sink forever on any other boot order.
+		_web = _has_web_bridge()
 
 func _has_web_bridge() -> bool:
 	return bool(JavaScriptBridge.eval("typeof window.__elpianGodotDrain === 'function'", true))
@@ -47,7 +50,14 @@ func _drain() -> String:
 	return ""
 
 func _process(_dt: float) -> void:
-	if _sink == null or (_bridge == null and not _web):
+	if _sink == null:
+		return
+	if _bridge == null and not _web:
+		# Cheap enough once a second; the alternative is a permanently dead sink
+		# if the page installed its hooks after the engine came up.
+		_frame += 1
+		if _frame % 60 == 0 and OS.has_feature("web"):
+			_web = _has_web_bridge()
 		return
 	var json: String = _drain()
 	if not json.is_empty():
@@ -131,10 +141,22 @@ func _apply(m: Dictionary) -> void:
 		for op in m["ops"]:
 			results.append(_exec(op))
 		# Only a batch the host is awaiting needs a reply crossing.
-		if m.has("req") and _bridge != null:
-			_bridge.call("reply", int(m["req"]), JSON.stringify(results))
+		if m.has("req"):
+			_reply(int(m["req"]), results)
 	elif m.has("op"):
 		_exec(m["op"])
+
+# Return one awaited batch's results to the host, over whichever transport is
+# bound. On the web there is no bridge singleton to call back through, so the
+# reply is handed to the page, which parks it where the Dart side polls.
+func _reply(req: int, results: Array) -> void:
+	if _bridge != null:
+		_bridge.call("reply", req, JSON.stringify(results))
+	elif _web:
+		# JSON is a subset of JS object literal syntax, so the payload can be
+		# embedded in the call expression directly.
+		var payload := JSON.stringify({"req": req, "values": results})
+		JavaScriptBridge.eval("window.__elpianGodotReply(%s)" % payload, true)
 
 # Apply one op and return its (already unmarshaled) result.
 func _exec(op) -> Variant:

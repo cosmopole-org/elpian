@@ -230,11 +230,26 @@ Prefer `callVoid` over `call` when you do not need the return value.
 
 ## Degradation — this is load-bearing
 
-Where no Godot artifact is present (web today, desktop, a debug build without the
-plugin, any test), the binding resolves to `MockGodotBinding`: ops are recorded,
-handles are minted, and the widget renders a placeholder. **A `Scene3D` is safe
-to put in any tree** — the surrounding 2D app is unaffected. `controller.isLive`
-tells you which you have.
+Where no Godot artifact is present (desktop, a debug build without the plugin,
+any test), the binding resolves to `MockGodotBinding`: ops are recorded, handles
+are minted, and the widget renders a placeholder. **A `Scene3D` is safe to put in
+any tree** — the surrounding 2D app is unaffected. `controller.isLive` tells you
+which you have.
+
+### The three live transports
+
+| Target | Transport | Viewport |
+|---|---|---|
+| Android / iOS | `MethodChannelGodotBinding` | `AndroidView` / `UiKitView` |
+| Web | `WebGodotBinding` — a Godot HTML5 export fed over `window` hooks | `HtmlElementView` |
+| anything else | `MockGodotBinding` | placeholder |
+
+The web transport is resolved by a conditional import, so nothing has to be
+installed by an embedder — but it only reports `isLive` once the page has loaded
+the glue (`godot/web/elpian_godot_web.js`) that boots the engine. A page without
+it behaves exactly like the mock. See [`godot/README.md`](../godot/README.md) for
+the wiring, and note the platform limit: **one `Scene3D` per page on the web**,
+because a Godot web export drives a single canvas.
 
 ## Layout interaction
 

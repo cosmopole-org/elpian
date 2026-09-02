@@ -12,9 +12,11 @@ name: Build Showcase (web + Android)
 # deploy_web_pages.yml, which published the example app.
 #
 # The two targets differ in one meaningful way:
-#   * **web**   — no Godot artifact exists for the web yet, so `Scene3D` renders
-#     its placeholder and the 2D app is fully live. This is the graceful
-#     degradation path, built on every run so it cannot silently break.
+#   * **web**   — the Godot HTML5 export from build_godot_artifacts.yml is
+#     folded into the deployed site, so `Scene3D` is live on Pages. The bundle
+#     is optional: without it the page ships no glue, the binding never reports
+#     itself live, and the 2D app runs with the placeholder — the graceful
+#     degradation path, still exercised on every run that has no bundle.
 #   * **Android** — the example app depends on the in-repo `elpian_godot`
 #     plugin, so the APK carries the native embedded-Godot seam. A real engine
 #     additionally needs three binary artifacts (see godot/README.md);
@@ -165,6 +167,15 @@ jobs:
           channel: stable
           cache: true
 
+      # The web transport is the one part of the embedded-Godot seam with no
+      # native equivalent to lean on, and it is only reachable in a browser.
+      # Run it before the expensive builds so a broken seam fails fast.
+      - name: Test the Godot web transport
+        working-directory: elpian
+        run: |
+          flutter pub get
+          flutter test --platform chrome test/godot_web_transport_test.dart
+
       - name: Setup Rust (wasm target)
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -193,6 +204,25 @@ jobs:
           name: showcase-app
           path: showcase-app
 
+      # Same cadence argument as the Android job: the Godot artifacts are built
+      # by their own workflow, on a Godot bump or an interpreter change, not on
+      # every push here. `continue-on-error` keeps a missing bundle a downgrade
+      # rather than a failed deploy.
+      - name: Restore the Godot web export (optional)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          run_id=$(gh run list --repo "$GITHUB_REPOSITORY" \
+            --workflow build_godot_artifacts.yml --status success \
+            --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [ -z "$run_id" ]; then
+            echo "::notice::build_godot_artifacts.yml has no successful run yet."
+            exit 0
+          fi
+          gh run download "$run_id" --repo "$GITHUB_REPOSITORY" \
+            --name godot-artifacts-web --dir godot-web
+
       # dist/web is the engine build plus the app's manifest and VM artifacts.
       - name: Assemble the deployable site
         run: |
@@ -202,6 +232,41 @@ jobs:
           test -f site/__elpian/elpian.manifest.json
           grep -o 'base href="[^"]*"' site/index.html
           du -sh site
+
+      # The glue is only installed when there is an engine for it to boot.
+      # Shipping it unconditionally would be worse than useless: it installs
+      # `window.__elpianGodotDrain` synchronously, which is exactly what the Dart
+      # binding reads as "an engine is present", so Scene3D would drop its
+      # placeholder for a canvas that never renders.
+      - name: Install the Godot web engine into the site
+        run: |
+          set -e
+          if [ ! -d godot-web/godot ]; then
+            echo "::notice::No Godot web export — Scene3D will ship its placeholder."
+            exit 0
+          fi
+          cat godot-web/MANIFEST.txt || true
+          cp -r godot-web/godot site/godot
+          cp elpian/godot/web/elpian_godot_web.js site/elpian_godot_web.js
+          test -f site/godot/godot_config.json
+          test -f site/godot/elpian_godot.js
+          test -f site/godot/elpian_godot.pck
+          # A plain <script> in <head> parses before Flutter boots, so the drain
+          # hook exists by the time the first Scene3D asks whether it is live.
+          python3 - <<'PY'
+          import pathlib, sys
+          p = pathlib.Path("site/index.html")
+          html = p.read_text()
+          tag = '<script src="elpian_godot_web.js"></script>'
+          if tag in html:
+              sys.exit(0)
+          if "</head>" not in html:
+              sys.exit("::error::index.html has no </head> to inject the Godot glue into")
+          p.write_text(html.replace("</head>", "  " + tag + "\n</head>", 1))
+          print("injected the Godot web glue")
+          PY
+          grep -q 'elpian_godot_web.js' site/index.html
+          du -sh site site/godot
 
       - name: Upload the site
         uses: actions/upload-artifact@v4
