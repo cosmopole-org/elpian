@@ -291,7 +291,7 @@ impl Shared {
 fn is_ui_seam(name: &str) -> bool {
     matches!(
         name,
-        "godot.op" | "godot.batch" | "flutter.op" | "flutter.batch" | "rn.op" | "rn.batch"
+        "godot.op" | "godot.batch" | "flutter.op" | "flutter.batch"
     )
 }
 

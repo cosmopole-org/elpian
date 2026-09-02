@@ -89,18 +89,6 @@ pub const GODOT_FLUTTER_JS: &str = include_str!("../../../../guest-sdk/js/flutte
 /// runs on.
 pub const GODOT_REACT_JS: &str = include_str!("../../../../guest-sdk/js/react.js");
 
-/// The React Native bridge (`reactnative.js`) — the `RN` facade that drives a
-/// **real React Native / Expo widget tree** (2D) plus embedded Godot `Scene3D`
-/// worlds (3D) over the `rn.op`/`rn.batch` seam. It is the twin of `ui.js`, but
-/// its host is React Native instead of Godot `Control` nodes, so an Elpian app
-/// becomes a first-class RN view tree on mobile, desktop and web while keeping
-/// every 3D feature of Godot as an embedded surface. Composed ahead of a JS
-/// guest when its source imports it (`import 'reactnative.js';`); it depends on
-/// `godot.js` (it reuses that prelude's callback registry and marshaling so
-/// widget events route through the same namespaced-dispatch path, and so the
-/// contents of a `Scene3D` drive Godot with the ordinary `GD`/`G3` surface).
-pub const GODOT_REACTNATIVE_JS: &str = include_str!("../../../../guest-sdk/js/reactnative.js");
-
 /// Service a guest host call: `(user, api_name, args_json)` → reply JSON.
 /// Return NULL (or leave unregistered) to decline — the guest then sees `null`.
 /// The returned buffer is released via the paired [`ElpianGodotHostFreeFn`].
@@ -209,9 +197,6 @@ pub fn compose_godot_program_js(user_source: &str) -> String {
     let wants_net = imports("net.js");
     let wants_caspar = imports("caspar.js");
     let wants_flutter = imports("flutter.js");
-    // reactnative.js is the React Native host's UI kit; it depends on godot.js
-    // (marshaling + callback registry + the GD/G3 surface a Scene3D drives).
-    let wants_reactnative = imports("reactnative.js");
 
     let mut parts: Vec<String> = vec![strip(GODOT_PRELUDE_JS)];
     if wants_net {
@@ -235,11 +220,6 @@ pub fn compose_godot_program_js(user_source: &str) -> String {
     }
     if wants_react {
         parts.push(strip(GODOT_REACT_JS));
-    }
-    if wants_reactnative {
-        // Depends only on godot.js (already first); compose after the optional
-        // UI layers so an app may import both and reach every facade.
-        parts.push(strip(GODOT_REACTNATIVE_JS));
     }
     parts.push(strip(user_source));
     parts.join("\n\n")

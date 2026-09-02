@@ -206,8 +206,6 @@ class VmHostApiCatalog {
     'godot.batch',
     'flutter.op',
     'flutter.batch',
-    'rn.op',
-    'rn.batch',
   };
 
   /// Module import and management of other VM instances.
@@ -383,8 +381,6 @@ class VmHostApiCatalog {
     'random.bytes': 'randomness',
     'random.next': 'randomness',
     'render': 'render',
-    'rn.batch': 'surface',
-    'rn.op': 'surface',
     'setInterval': 'timers',
     'setTimeout': 'timers',
     'stringify': 'other',

@@ -21,7 +21,7 @@
 
 use elpian_godot::{
     compose_godot_program, compose_godot_program_js, GODOT_CASPAR_JS, GODOT_FLUTTER_JS,
-    GODOT_NET_JS, GODOT_PRELUDE_JS, GODOT_REACTNATIVE_JS, GODOT_REACT_JS, GODOT_UI_KIT_JS,
+    GODOT_NET_JS, GODOT_PRELUDE_JS, GODOT_REACT_JS, GODOT_UI_KIT_JS,
 };
 
 /// Every JavaScript prelude, with the imports it depends on.
@@ -38,11 +38,6 @@ fn js_preludes() -> Vec<(&'static str, &'static str, &'static str)> {
         ("caspar.js", "import 'caspar.js';", GODOT_CASPAR_JS),
         ("flutter.js", "import 'flutter.js';", GODOT_FLUTTER_JS),
         ("react.js", "import 'react.js';", GODOT_REACT_JS),
-        (
-            "reactnative.js",
-            "import 'reactnative.js';",
-            GODOT_REACTNATIVE_JS,
-        ),
     ]
 }
 
@@ -109,7 +104,7 @@ fn the_javascript_preludes_reach_bytecode_not_just_the_ast() {
     // Parsing is not the whole front-end: a construct can lower to an AST the
     // bytecode compiler then rejects. The preludes that carry the most surface
     // are checked all the way through.
-    for name in ["ui.js", "react.js", "reactnative.js"] {
+    for name in ["ui.js", "react.js"] {
         let import = format!("import '{name}';");
         let composed = compose_godot_program_js(&format!("{import}\nvar __probe = 1;"));
         assert!(
@@ -182,7 +177,6 @@ fn every_host_api_the_preludes_call_is_documented_and_gateable() {
         GODOT_CASPAR_JS,
         GODOT_FLUTTER_JS,
         GODOT_REACT_JS,
-        GODOT_REACTNATIVE_JS,
         elpian_godot::GODOT_PRELUDE,
     ] {
         let mut rest = src;

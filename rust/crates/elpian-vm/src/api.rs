@@ -134,16 +134,13 @@ pub fn all_host_apis() -> Vec<String> {
         "vm.info",
         "vm.send",
         "vm.grant",
-        // The UI op seams. Every host surface — a Godot scene, a Flutter widget
-        // tree, a React Native view tree — speaks the same op vocabulary, so
-        // they share one capability: a super app can deny a mini app the
+        // The UI op seams. Every host surface speaks the same op vocabulary,
+        // so they share one capability: a super app can deny a mini app the
         // drawing surface without touching anything else.
         "godot.op",
         "godot.batch",
         "flutter.op",
         "flutter.batch",
-        "rn.op",
-        "rn.batch",
         // Capability-gated environmental interfaces. Each family is toggled by
         // the host via the instance's capability set; a disabled family makes
         // the corresponding `askHost` short-circuit to null (see executor).

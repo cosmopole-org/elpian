@@ -9,7 +9,7 @@
 //!
 //! All of this lived inside `elpian-godot-capi`, the C ABI the Godot
 //! GDExtension embeds. Nothing about a tree of governed VMs is specific to
-//! Godot — the same manager already forwarded `flutter.op` and `rn.op` seams
+//! Godot — the same manager already forwarded the `flutter.op` seam
 //! verbatim — but because it sat inside the Godot crate, the Flutter host
 //! could not reach it. Flutter linked the VM directly and got creation and
 //! execution with no manager at all, so a mini app running under Flutter could
@@ -73,8 +73,8 @@ pub trait HostSurface {
     /// the compiler.
     fn compose(&self, lang: GuestLang, user_source: &str) -> String;
 
-    /// The op-seam prefix this host reads, without a trailing dot — `"godot"`,
-    /// `"flutter"`, `"rn"`. The manager sanitizes and forwards
+    /// The op-seam prefix this host reads, without a trailing dot — `"godot"`
+    /// or `"flutter"`. The manager sanitizes and forwards
     /// `<prefix>.op` and `<prefix>.batch`.
     ///
     /// Ops for *other* known prefixes are still sanitized and forwarded, so one
