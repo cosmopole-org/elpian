@@ -1,78 +1,66 @@
+/// Elpian: a dynamic super-app framework.
+///
+/// This is the everything entrypoint. Three narrower ones exist for callers who
+/// do not need all of it, and each is a strict subset of this library — nothing
+/// is reachable only through them:
+///
+///   * `package:elpian_ui/elpian_governance.dart` — the control plane. What a
+///     mini app may do, how much it may spend, whether it runs. Import this
+///     from a super-app shell that decides policy but renders nothing itself.
+///   * `package:elpian_ui/elpian_runtime.dart` — the VM instances a mini app's
+///     code runs on, for embedders and tools that drive a runtime without a UI.
+///   * `package:elpian_ui/elpian_godot.dart` — the embedded Godot `Scene3D`
+///     surface and its op protocol.
+///
+/// The split matters because this barrel is large: a policy layer reaching for
+/// a capability enum should not have to pull in 200 widget classes to get it.
 library elpian_ui;
 
-// Super app — the mini-app layer: what an app declares, what it is granted,
-// what it actually gets, and the host that owns its runtime, its isolated
-// state and its children.
-export 'src/superapp/mini_app.dart';
-export 'src/superapp/mini_app_host.dart';
+// ── The focused entrypoints, re-exported ───────────────────────────
+export 'elpian_governance.dart';
+export 'elpian_runtime.dart';
+export 'elpian_godot.dart';
 
-// Governance — the control plane over every mini app: what it may do
-// (capabilities), how much it may spend (limits + meters), whether it runs
-// (lifecycle), and how a mini app that spawns others is accountable for them
-// (the tree). Enforced inside the VM; this is the host's handle on it.
-export 'src/vm/governance/models.dart';
-export 'src/vm/governance/governor.dart';
-export 'src/vm/governance/elpian_governor.dart';
-export 'src/vm/governance/host_side_governor.dart';
-export 'src/vm/host_api_catalog.dart';
-
-// VM - Elpian Rust VM integration
-export 'src/vm/elpian_vm.dart';
+// ── Scopes and streaming, which sit on top of the runtime ──────────
 export 'src/vm/elpian_vm_widget.dart';
 export 'src/scope/scoped_components.dart';
 export 'src/scope/scope_patch.dart';
 export 'src/scope/scope_contract.dart';
-export 'src/vm/runtime_kind.dart';
-export 'src/vm/host_handler.dart';
 export 'src/stream/elpian_stream_widget.dart';
-export 'src/vm/wasm_vm.dart';
-export 'src/vm/ffi/vm_types.dart';
-export 'src/vm/ffi/api.dart'
-    if (dart.library.js_interop) 'src/vm/ffi/api_web.dart' show ElpianVmApi;
 
-// Core
+// ── The rendering engine ───────────────────────────────────────────
 export 'src/core/elpian_engine.dart';
 export 'src/core/widget_registry.dart';
 export 'src/core/dom_api.dart';
 export 'src/core/event_system.dart';
 export 'src/core/resources.dart';
-export 'src/core/elpian_services.dart';
 export 'src/core/event_dispatcher.dart';
 export 'src/core/event_enabled_widget.dart';
 
-// Models
+// ── The node and style model ───────────────────────────────────────
 export 'src/models/elpian_node.dart';
 export 'src/models/css_style.dart';
 
-// Next.js Integration
+// ── Server-driven Next.js payloads ─────────────────────────────────
 export 'src/integrations/nextjs_bridge.dart';
 export 'src/integrations/nextjs_server_widget.dart';
-// Parser
 export 'src/parser/json_parser.dart';
 
-// CSS
+// ── CSS ────────────────────────────────────────────────────────────
 export 'src/css/css_parser.dart';
 export 'src/css/css_parser_extensions.dart';
 export 'src/css/css_properties.dart';
 export 'src/css/stylesheet.dart';
 export 'src/css/json_stylesheet_parser.dart';
 
-// Canvas
+// ── Canvas 2D ──────────────────────────────────────────────────────
 export 'src/canvas/canvas_api.dart';
 export 'src/canvas/canvas_widget.dart';
 
 // Embedded Godot 3D — the `Scene3D` widget, its controller, and the op protocol.
-export 'src/godot/scene3d_widget.dart';
-export 'src/godot/godot_controller.dart';
-export 'src/godot/godot_object.dart';
-export 'src/godot/godot_values.dart';
-export 'src/godot/protocol.dart';
-export 'src/godot/scene_dsl.dart';
-export 'src/godot/godot_binding.dart';
 // Global hook receiving taps on `clickable` scene nodes (see ElpianSceneTaps).
-export 'src/godot/scene_taps.dart';
 
-// Widgets - Core
+// ── Widgets: the Flutter DSL ───────────────────────────────────────
 export 'src/widgets/elpian_container.dart';
 export 'src/widgets/elpian_text.dart';
 export 'src/widgets/elpian_button.dart';
@@ -99,7 +87,6 @@ export 'src/widgets/elpian_card.dart';
 export 'src/widgets/elpian_scaffold.dart';
 export 'src/widgets/elpian_app_bar.dart';
 
-// Widgets - Additional
 export 'src/widgets/elpian_wrap.dart';
 export 'src/widgets/elpian_inkwell.dart';
 export 'src/widgets/elpian_gesture_detector.dart';
@@ -152,7 +139,7 @@ export 'src/widgets/elpian_rotated_box.dart';
 export 'src/widgets/elpian_decorated_box.dart';
 export 'src/widgets/elpian_math_expression.dart';
 
-// HTML Widgets - Basic
+// ── Widgets: HTML elements ─────────────────────────────────────────
 export 'src/html_widgets/html_div.dart';
 export 'src/html_widgets/html_span.dart';
 export 'src/html_widgets/html_h1.dart';
@@ -193,7 +180,6 @@ export 'src/html_widgets/html_blockquote.dart';
 export 'src/html_widgets/html_hr.dart';
 export 'src/html_widgets/html_br.dart';
 
-// HTML Widgets - Extended
 export 'src/html_widgets/html_figure.dart';
 export 'src/html_widgets/html_figcaption.dart';
 export 'src/html_widgets/html_mark.dart';
