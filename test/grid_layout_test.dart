@@ -6,12 +6,6 @@ import 'package:elpian_ui/elpian_ui.dart';
 /// collapsed into a vertical stack. We now parse `grid-template-columns` and
 /// lay the children out in a responsive [Wrap] with computed item widths.
 void main() {
-  late ElpianEngine engine;
-
-  setUp(() {
-    engine = ElpianEngine();
-  });
-
   group('grid-template-columns parsing', () {
     test('auto-fill minmax populates gridTemplateColumns + grid gap', () {
       final style = CSSParser.parse({

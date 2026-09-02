@@ -35,8 +35,16 @@ class ElpianVm implements VmRuntimeClient {
   /// Whether the VM is currently executing.
   bool get isRunning => _isRunning;
 
-  /// Last low-level FRB/FFI error (if any).
+  /// Last low-level FFI error (if any).
   static String? get lastApiError => ElpianVmApi.lastError;
+
+  /// Whether the Elpian VM runtime is actually loadable on this platform —
+  /// the native library on native targets, the WASM module on the web.
+  ///
+  /// When this is false every VM operation degrades to a failed result rather
+  /// than throwing, so hosts and tests that need to distinguish "the runtime
+  /// is missing" from "the program failed" check this and read [lastApiError].
+  static bool get isRuntimeAvailable => ElpianVmApi.isAvailable;
 
   /// Initialize the VM subsystem. Call once at app startup before
   /// creating any VM instances.

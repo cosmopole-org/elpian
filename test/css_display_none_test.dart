@@ -6,8 +6,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:elpian_ui/elpian_ui.dart';
-import 'package:elpian_ui/src/css/css_parser.dart';
-import 'package:elpian_ui/src/css/stylesheet.dart';
 
 Map<String, dynamic> _tree() => {
       'type': 'div',

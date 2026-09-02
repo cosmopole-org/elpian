@@ -1,0 +1,145 @@
+name: Verify
+
+# The quality gate for the whole repository: static analysis, formatting and
+# the full test suites on both sides of the FFI boundary.
+#
+# This exists because the build workflows are exactly that — they produce
+# artifacts, they do not check the code. Before this workflow the only
+# verification anywhere in CI was a single Dart test file, which is how 70
+# analyzer errors and a permanently failing test came to sit in the tree
+# unnoticed.
+#
+# Layout notes that shape the jobs below:
+#   * There are four Dart packages, each with its own pubspec and analysis
+#     options: the root `elpian_ui`, `example/`, `cli/elpian_client/` and
+#     `godot/`. Each is analysed in its own directory — analysing them from the
+#     root resolves their dependencies against the wrong package.
+#   * `cli/` is a separate Cargo project from the `rust/` workspace, with its
+#     own lockfile, so it needs its own build and test invocation.
+#   * The Dart test suite includes tests that cross the real FFI boundary. They
+#     skip themselves when the native library is absent, so the Rust library is
+#     built first and put on the loader path — otherwise those tests would
+#     silently never run in CI.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  FLUTTER_VERSION: "3.38.3"
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  rust:
+    name: Rust — fmt, clippy, test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        run: rustup component add rustfmt clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+            cli/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('rust/**/Cargo.toml', 'cli/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+
+      - name: Format check (workspace)
+        working-directory: rust
+        run: cargo fmt --all -- --check
+
+      - name: Format check (cli)
+        working-directory: cli
+        run: cargo fmt --all -- --check
+
+      - name: Clippy (workspace)
+        working-directory: rust
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Clippy (cli)
+        working-directory: cli
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Test (workspace)
+        working-directory: rust
+        run: cargo test --workspace
+
+      - name: Test (cli)
+        working-directory: cli
+        run: cargo test
+
+  # ---------------------------------------------------------------------------
+  dart:
+    name: Dart — analyze + test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: cargo-native-${{ runner.os }}-${{ hashFiles('rust/**/Cargo.toml') }}
+          restore-keys: cargo-native-${{ runner.os }}-
+
+      # Built before the tests so the FFI-boundary tests actually execute
+      # instead of skipping themselves.
+      - name: Build the native VM library
+        working-directory: rust
+        run: cargo build --release
+
+      - name: Resolve dependencies
+        run: |
+          flutter pub get
+          for pkg in example cli/elpian_client godot; do
+            (cd "$pkg" && flutter pub get)
+          done
+
+      - name: Format check
+        run: dart format --output=none --set-exit-if-changed lib test
+
+      - name: Analyze (all packages)
+        run: |
+          fail=0
+          for pkg in . example cli/elpian_client godot; do
+            echo "::group::flutter analyze — $pkg"
+            (cd "$pkg" && flutter analyze --no-pub) || fail=1
+            echo "::endgroup::"
+          done
+          exit $fail
+
+      - name: Test — elpian_ui
+        env:
+          LD_LIBRARY_PATH: ${{ github.workspace }}/rust/target/release
+        run: flutter test --no-pub
+
+      - name: Test — example
+        working-directory: example
+        env:
+          LD_LIBRARY_PATH: ${{ github.workspace }}/rust/target/release
+        run: flutter test --no-pub

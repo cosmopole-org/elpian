@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:elpian_ui/elpian_ui.dart';
 import 'package:elpian_ui/src/core/event_dispatcher.dart' as ed;
-import 'package:elpian_ui/src/core/event_system.dart';
 
 void main() {
   final dispatcher = ed.EventDispatcher();

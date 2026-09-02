@@ -11,8 +11,18 @@ Map<String, dynamic> _stringValue(String value) => {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('Victor VM crosses the native Dart FFI and legacy host-call boundary',
-      () async {
+  // This test exercises the real FFI boundary, so it needs the compiled native
+  // library. Skip (rather than fail) when it is absent, so a checkout that has
+  // not run the Rust build still reports a green suite — CI builds the library
+  // first and therefore always runs the body.
+  //
+  //   cd rust && cargo build --release
+  final skip = ElpianVm.isRuntimeAvailable
+      ? null
+      : 'Native VM library not built. Run: cd rust && cargo build --release '
+          '(loader error: ${ElpianVm.lastApiError})';
+
+  test('the VM crosses the native Dart FFI and host-call boundary', () async {
     await ElpianVm.initialize();
     final ast = jsonEncode({
       'type': 'program',
@@ -39,5 +49,5 @@ void main() {
     expect(await vm.run(), isNotEmpty);
     expect(payload, isNotNull);
     await vm.dispose();
-  });
+  }, skip: skip);
 }

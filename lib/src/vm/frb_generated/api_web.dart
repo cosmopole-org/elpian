@@ -81,6 +81,12 @@ class ElpianVmApi {
     _lastError = null;
   }
 
+  /// Whether the Elpian WASM module has been loaded into the page.
+  ///
+  /// Mirrors the native [ElpianVmApi.isAvailable] so host code and tests can
+  /// ask the same question on either platform.
+  static bool get isAvailable => _wasmAvailable;
+
   static const _wasmMissing = 'Elpian WASM module is not loaded. Ensure '
       'assets/packages/elpian_ui/assets/web_runtime/elpian_wasm_loader.js is included in '
       'web/index.html, then build wasm with: cd rust && wasm-pack build --target web';

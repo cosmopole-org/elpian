@@ -99,6 +99,16 @@ class ElpianVmApi {
     _lastError = null;
   }
 
+  /// Whether the native VM library could actually be loaded on this platform.
+  ///
+  /// Every entry point degrades to a failed result when the library is absent
+  /// (see [_tryGetApi]), which keeps a host app alive but makes the cause hard
+  /// to see. Callers that need to *know* — a test that would otherwise fail on
+  /// a machine that has never run `cargo build`, or a host that wants to show
+  /// a diagnostic instead of an empty screen — check this first and read
+  /// [lastError] for the reason.
+  static bool get isAvailable => _tryGetApi() != null;
+
   late final ffi.DynamicLibrary _lib;
 
   _InitDart? _init;

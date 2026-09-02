@@ -3,12 +3,9 @@
 // would bury the Flexible and throw "Incorrect use of ParentDataWidget" in the
 // Row). This mirrors the tritonias structure: flex on an outer wrapper, events
 // on the inner face — and asserts it lays out cleanly inside a flex row.
-import 'dart:ui' show Size;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:elpian_ui/elpian_ui.dart';
-import 'package:elpian_ui/src/css/css_parser.dart';
-import 'package:elpian_ui/src/css/stylesheet.dart';
 
 void main() {
   setUp(() { GlobalStylesheetManager().clear(); CSSParser.viewportOverride = const Size(412, 915); });

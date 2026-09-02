@@ -2,12 +2,9 @@
 // client-component mount and server scope() produces) must still be absolutely
 // positioned by its parent: Scopes are re-render boundaries, not layout nodes.
 
-import 'dart:ui' show Size;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:elpian_ui/elpian_ui.dart';
-import 'package:elpian_ui/src/css/css_parser.dart';
-import 'package:elpian_ui/src/css/stylesheet.dart';
 
 void main() {
   setUp(() {

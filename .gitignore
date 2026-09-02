@@ -32,9 +32,22 @@ migrate_working_dir/
 
 # Generated benchmark run output (written by performance_benchmark_test.dart /
 # elpian_windows_benchmark_test.dart on every run). The committed baseline lives
-# under benchmarks/reports/presentmon/.
-/benchmarks/reports/elpian_results.json
-/benchmarks/reports/elpian_windows_results.json
+# under bench/reports/presentmon/.
+#
+# NB: these paths were previously written as /benchmarks/..., which matched
+# nothing — the directory is bench/ — so the generated files were tracked and
+# rewritten on every benchmark run.
+/bench/reports/elpian_results.json
+/bench/reports/elpian_windows_results.json
+
+# Rust build output. The workspace target/ dirs are large and fully derived.
+target/
+**/target/
+
+# SCons intermediates from the Godot GDExtension build.
+*.o
+*.os
+.sconsign.dblite
 
 # The old example APK was committed by the removed build_android_apk.yml.
 elpian_example.apk

@@ -2,12 +2,9 @@
 // cards and event buttons. This renders a representative facility tree (the
 // shapes __facilitySections emits) and asserts it lays out cleanly in the real
 // engine — no overflow/ParentData exceptions.
-import 'dart:ui' show Size;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:elpian_ui/elpian_ui.dart';
-import 'package:elpian_ui/src/css/css_parser.dart';
-import 'package:elpian_ui/src/css/stylesheet.dart';
 
 void main() {
   setUp(() { GlobalStylesheetManager().clear(); CSSParser.viewportOverride = const Size(412, 915); });

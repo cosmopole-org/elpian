@@ -10,13 +10,9 @@
 // shell-root(absolute top/left/right, height:100vh) > [ pinned navbar, window ].
 // All styles are TOP-LEVEL `style` maps, matching the client runtime's output.
 
-import 'dart:ui' show Size;
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show RenderBox;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:elpian_ui/elpian_ui.dart';
-import 'package:elpian_ui/src/css/css_parser.dart';
-import 'package:elpian_ui/src/css/stylesheet.dart';
 
 void main() {
   const mobile = Size(412, 915);

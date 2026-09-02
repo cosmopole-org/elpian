@@ -1,6 +1,30 @@
+# Analyzer configuration for the `elpian_ui` host package.
+#
+# `exclude` deliberately drops two classes of Dart that are NOT host code:
+#
+#   * `guest-sdk/**` and `rust/**` — the guest-side preludes a mini app is
+#     compiled against (`flutter.dart`, `godot.dart`). They are written in the
+#     subset the Elpian front-end compiles and call VM intrinsics such as
+#     `askHost`, which do not exist in the Dart SDK. Analysing them as host
+#     code produces ~360 unfixable diagnostics and drowns out real findings.
+#     They are checked by the front-end compilers' own test suites instead.
+#   * `build/**` — Flutter build output.
 analyzer:
   exclude:
     - build/**
+    - rust/**
+    - guest-sdk/**
+    # Nested packages with their own pubspec + analysis_options. CI analyses
+    # each in its own directory (see .github/workflows/verify.yml); analysing
+    # them from here resolves their dependencies against the wrong package.
+    - example/**
+    - cli/**
+    - godot/**
+    - rust_builder/**
+  errors:
+    # Generated/derived sources must never regress the build.
+    unused_import: warning
+
 include: package:flutter_lints/flutter.yaml
 
 linter:
