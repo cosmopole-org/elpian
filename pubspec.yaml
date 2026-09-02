@@ -14,8 +14,8 @@ dependencies:
   http: ^1.2.0
   shared_preferences: ^2.2.0
   flutter_js: ^0.8.3
-  wasm_run: ^0.2.0
-  wasm_run_flutter: ^0.2.0
+  wasm_run: ^0.1.0+2
+  wasm_run_flutter: ^0.1.0
   video_player: ^2.9.2
   url_launcher: ^6.3.1
   webview_flutter: ^4.10.0
