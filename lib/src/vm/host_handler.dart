@@ -17,6 +17,12 @@ class HostHandler {
   final void Function(String message)? onPrintln;
   final Map<String, dynamic> Function()? onGetEnvironment;
 
+  /// Called when a guest reaches for a host API this handler does not
+  /// implement. `advertised` distinguishes an API the VM offers but Dart has
+  /// not wired up from a name nothing knows. Useful for a super-app host that
+  /// wants to see what its mini apps are asking for.
+  final void Function(String apiName, bool advertised)? onUnservicedApi;
+
   final ElpianDOM dom;
   final CanvasAPIExecutor canvas;
 
@@ -25,6 +31,7 @@ class HostHandler {
     this.onUpdateApp,
     this.onPrintln,
     this.onGetEnvironment,
+    this.onUnservicedApi,
     ElpianDOM? dom,
     CanvasAPIExecutor? canvas,
   })  : dom = dom ?? ElpianDOM(),
@@ -50,9 +57,43 @@ class HostHandler {
       case 'stringify':
         return handleStringify(payload);
       default:
-        return _makeResponse('i16', 0);
+        return _unserviced(apiName);
     }
   }
+
+  /// The reply for a host API this handler does not implement.
+  ///
+  /// This branch used to return `i16 0`, which is indistinguishable from a
+  /// successful call that happened to return zero. It catches every API the VM
+  /// advertises but Dart does not service — all of `fs.*`, `net.*`, `gpu.*`,
+  /// `time.*`, `random.*`, `task.*` and `host.*` — so a guest calling
+  /// `time.now()` was quietly told the time was 0 rather than that nothing was
+  /// listening.
+  ///
+  /// Returning null instead matches what the VM itself does for a
+  /// capability-denied call: the interface is unplugged, and a guest that
+  /// checks its result can tell. [onUnservicedApi] lets a host see which
+  /// surface a mini app is reaching for.
+  String _unserviced(String apiName) {
+    final known = VmHostApiCatalog.allHostApiNames.contains(apiName);
+    onUnservicedApi?.call(apiName, known);
+    assert(() {
+      debugPrint(
+        known
+            ? 'HostHandler: $apiName is advertised by the VM but not serviced '
+                'here; returning null'
+            : 'HostHandler: unknown host API $apiName; returning null',
+      );
+      return true;
+    }());
+    return _nullResponse();
+  }
+
+  /// A typed null — the same shape the VM produces when a capability is denied.
+  String _nullResponse() => jsonEncode({
+        'type': 'null',
+        'data': {'value': null},
+      });
 
   String handleRender(String payload) {
     try {
