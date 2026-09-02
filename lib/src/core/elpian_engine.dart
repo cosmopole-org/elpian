@@ -203,13 +203,15 @@ class ElpianEngine {
     _registry.register('select', HtmlSelect.build);
     _registry.register('option', HtmlOption.build);
     _registry.register('textarea', HtmlTextarea.build);
-    _registry.register('section', HtmlSection.build);
-    _registry.register('article', HtmlArticle.build);
-    _registry.register('header', HtmlHeader.build);
-    _registry.register('footer', HtmlFooter.build);
+    // The sectioning elements differ only in tag name and whether they
+    // stretch to full width, so they share one builder.
+    for (final tag in ['section', 'article', 'aside', 'main']) {
+      _registry.register(tag, HtmlSemanticContainer.builder());
+    }
+    for (final tag in ['header', 'footer']) {
+      _registry.register(tag, HtmlSemanticContainer.builder(fullWidth: true));
+    }
     _registry.register('nav', HtmlNav.build);
-    _registry.register('aside', HtmlAside.build);
-    _registry.register('main', HtmlMain.build);
     _registry.register('video', HtmlVideo.build);
     _registry.register('audio', HtmlAudio.build);
     _registry.register('canvas', HtmlCanvas.build);

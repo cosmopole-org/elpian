@@ -28,8 +28,7 @@ export 'src/stream/elpian_stream_widget.dart';
 export 'src/vm/wasm_vm.dart';
 export 'src/vm/ffi/vm_types.dart';
 export 'src/vm/ffi/api.dart'
-    if (dart.library.js_interop) 'src/vm/ffi/api_web.dart'
-    show ElpianVmApi;
+    if (dart.library.js_interop) 'src/vm/ffi/api_web.dart' show ElpianVmApi;
 
 // Core
 export 'src/core/elpian_engine.dart';
@@ -179,13 +178,9 @@ export 'src/html_widgets/html_label.dart';
 export 'src/html_widgets/html_select.dart';
 export 'src/html_widgets/html_option.dart';
 export 'src/html_widgets/html_textarea.dart';
-export 'src/html_widgets/html_section.dart';
-export 'src/html_widgets/html_article.dart';
-export 'src/html_widgets/html_header.dart';
-export 'src/html_widgets/html_footer.dart';
+// section / article / aside / main / header / footer share one builder.
+export 'src/html_widgets/html_semantic_container.dart';
 export 'src/html_widgets/html_nav.dart';
-export 'src/html_widgets/html_aside.dart';
-export 'src/html_widgets/html_main.dart';
 export 'src/html_widgets/html_video.dart';
 export 'src/html_widgets/html_audio.dart';
 export 'src/html_widgets/html_canvas.dart';

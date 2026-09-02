@@ -1,8 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'ffi/api.dart'
-    if (dart.library.js_interop) 'ffi/api_web.dart';
+import 'ffi/api.dart' if (dart.library.js_interop) 'ffi/api_web.dart';
 import 'governance/elpian_governor.dart';
 import 'vm_runtime_client.dart';
 
