@@ -114,10 +114,10 @@ class WasmVm implements VmRuntimeClient {
     for (final import in module.getImports()) {
       if (import.kind != WasmExternalKind.function) continue;
 
-      // `ExternalType` is a sealed class; wasm_run 0.2 dropped freezed's
-      // `maybeWhen` in favour of Dart pattern matching.
-      final importType = import.type;
-      final funcTy = importType is ExternalType_Func ? importType.field0 : null;
+      final funcTy = import.type?.maybeWhen(
+        func: (field0) => field0,
+        orElse: () => null,
+      );
 
       final params =
           List<ValueTy?>.from(funcTy?.parameters ?? const <ValueTy>[]);
