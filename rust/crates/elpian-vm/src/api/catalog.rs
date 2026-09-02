@@ -44,6 +44,7 @@ fn dart_set_for(cap: Capability) -> &'static str {
         Capability::Randomness => "randomApiNames",
         Capability::Tasks => "taskApiNames",
         Capability::HostMessaging => "hostMessagingApiNames",
+        Capability::Surface => "surfaceApiNames",
         Capability::VmManage | Capability::ModuleImport => "vmApiNames",
     }
 }
@@ -69,6 +70,10 @@ const SET_ORDER: &[(&str, &str)] = &[
     (
         "hostMessagingApiNames",
         "The embedder-defined message pipe.",
+    ),
+    (
+        "surfaceApiNames",
+        "The host's drawing surface — the op seams a guest submits UI\n  /// through, whichever host is underneath.",
     ),
     (
         "vmApiNames",

@@ -22,12 +22,8 @@ unsafe impl Send for VM {}
 unsafe impl Sync for VM {}
 
 impl VM {
-    pub fn compile_and_create_of_bytecode(
-        machine_id: String,
-        program: Vec<u8>,
-        func_group: Vec<String>,
-    ) -> Self {
-        let executor = Executor::create_in_single_thread(program.clone(), 0, func_group);
+    pub fn compile_and_create_of_bytecode(machine_id: String, program: Vec<u8>) -> Self {
+        let executor = Executor::create_in_single_thread(program.clone(), 0);
         VM {
             machine_id,
             program,
@@ -40,19 +36,17 @@ impl VM {
         machine_id: String,
         program: serde_json::Value,
         _executor_count: i32,
-        func_group: Vec<String>,
     ) -> Self {
         let byte_code = compiler::compile_ast(program, 0);
-        Self::compile_and_create_of_bytecode(machine_id, byte_code, func_group)
+        Self::compile_and_create_of_bytecode(machine_id, byte_code)
     }
     pub fn compile_and_create_of_code(
         machine_id: String,
         program: String,
         _executor_count: i32,
-        func_group: Vec<String>,
     ) -> Self {
         let byte_code = compiler::compile_code(program);
-        Self::compile_and_create_of_bytecode(machine_id, byte_code, func_group)
+        Self::compile_and_create_of_bytecode(machine_id, byte_code)
     }
     pub fn print_memory(&mut self) {}
     pub fn run(&mut self) -> Val {

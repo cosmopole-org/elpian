@@ -199,9 +199,35 @@ class VmHostApiCatalog {
     'host.request',
   };
 
+  /// The host's drawing surface — the op seams a guest submits UI
+  /// through, whichever host is underneath.
+  static const surfaceApiNames = <String>{
+    'godot.op',
+    'godot.batch',
+    'flutter.op',
+    'flutter.batch',
+    'rn.op',
+    'rn.batch',
+  };
+
   /// Module import and management of other VM instances.
   static const vmApiNames = <String>{
     'vm.import',
+    'vm.spawn',
+    'vm.pause',
+    'vm.resume',
+    'vm.terminate',
+    'vm.state',
+    'vm.usage',
+    'vm.usageTree',
+    'vm.limits',
+    'vm.setLimits',
+    'vm.permissions',
+    'vm.setPermission',
+    'vm.list',
+    'vm.info',
+    'vm.send',
+    'vm.grant',
   };
 
   /// The complete advertised surface.
@@ -217,6 +243,7 @@ class VmHostApiCatalog {
     ...randomApiNames,
     ...taskApiNames,
     ...hostMessagingApiNames,
+    ...surfaceApiNames,
     ...vmApiNames,
   };
 
@@ -325,6 +352,8 @@ class VmHostApiCatalog {
     'dom.toJson': 'dom',
     'dom.toggleClass': 'dom',
     'env.get': 'environment',
+    'flutter.batch': 'surface',
+    'flutter.op': 'surface',
     'fs.append': 'storage',
     'fs.delete': 'storage',
     'fs.exists': 'storage',
@@ -333,6 +362,8 @@ class VmHostApiCatalog {
     'fs.read': 'storage',
     'fs.stat': 'storage',
     'fs.write': 'storage',
+    'godot.batch': 'surface',
+    'godot.op': 'surface',
     'gpu.define': 'gpu',
     'gpu.readBuffer': 'gpu',
     'gpu.submit': 'gpu',
@@ -352,6 +383,8 @@ class VmHostApiCatalog {
     'random.bytes': 'randomness',
     'random.next': 'randomness',
     'render': 'render',
+    'rn.batch': 'surface',
+    'rn.op': 'surface',
     'setInterval': 'timers',
     'setTimeout': 'timers',
     'stringify': 'other',
@@ -364,7 +397,22 @@ class VmHostApiCatalog {
     'time.monotonic': 'clock',
     'time.now': 'clock',
     'updateApp': 'render',
+    'vm.grant': 'vm_manage',
     'vm.import': 'module_import',
+    'vm.info': 'vm_manage',
+    'vm.limits': 'vm_manage',
+    'vm.list': 'vm_manage',
+    'vm.pause': 'vm_manage',
+    'vm.permissions': 'vm_manage',
+    'vm.resume': 'vm_manage',
+    'vm.send': 'vm_manage',
+    'vm.setLimits': 'vm_manage',
+    'vm.setPermission': 'vm_manage',
+    'vm.spawn': 'vm_manage',
+    'vm.state': 'vm_manage',
+    'vm.terminate': 'vm_manage',
+    'vm.usage': 'vm_manage',
+    'vm.usageTree': 'vm_manage',
   };
 
   /// The capability gating [apiName], or `'other'` for a name the VM does

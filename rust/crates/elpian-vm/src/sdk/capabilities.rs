@@ -53,6 +53,11 @@ pub enum Capability {
     Tasks,
     /// The embedder-defined message pipe (`host.send`, `host.request`).
     HostMessaging,
+    /// The host's drawing surface: the op seams a guest submits UI through
+    /// (`godot.*`, `flutter.*`, `rn.*`). One gate for all of them because they
+    /// speak the same op vocabulary and a mini app that may draw at all may
+    /// draw on whichever surface its host provides.
+    Surface,
     /// Any host API not mapped to a more specific capability.
     Other,
 }
@@ -86,6 +91,7 @@ impl Capability {
                 Some("time") => Capability::Clock,
                 Some("random") => Capability::Randomness,
                 Some("vm") => Capability::VmManage,
+                Some("godot") | Some("flutter") | Some("rn") => Capability::Surface,
                 Some("dom") => Capability::Dom,
                 Some("canvas") => Capability::Canvas,
                 Some("task") => Capability::Tasks,
@@ -114,6 +120,7 @@ impl Capability {
             Capability::Environment => "environment",
             Capability::Tasks => "tasks",
             Capability::HostMessaging => "host_messaging",
+            Capability::Surface => "surface",
             Capability::Other => "other",
         }
     }
@@ -141,13 +148,14 @@ impl Capability {
             "environment" => Capability::Environment,
             "tasks" => Capability::Tasks,
             "host_messaging" => Capability::HostMessaging,
+            "surface" => Capability::Surface,
             "other" => Capability::Other,
             _ => return None,
         })
     }
 
     /// Every capability, for enumeration / bulk toggling.
-    pub fn all() -> [Capability; 16] {
+    pub fn all() -> [Capability; 17] {
         [
             Capability::Logging,
             Capability::Gpu,
@@ -164,6 +172,7 @@ impl Capability {
             Capability::Environment,
             Capability::Tasks,
             Capability::HostMessaging,
+            Capability::Surface,
             Capability::Other,
         ]
     }

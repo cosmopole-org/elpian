@@ -79,9 +79,19 @@ fn lock_tolerant<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 ///   delivered by [`deliver_host_message`].
 /// * `log` — diagnostics.
 ///
-/// This list is the single source of truth for the host surface. The Dart
-/// catalog (`lib/src/vm/host_api_catalog.dart`) is generated from it by the
+/// This list is the documented host surface, and the source the Dart catalog
+/// (`lib/src/vm/host_api_catalog.dart`) is generated from by the
 /// `gen-host-api-catalog` binary — do not maintain a second copy by hand.
+///
+/// It is **not** an allowlist. An `askHost` name absent from here still
+/// reaches the host: what gates a call is the capability set, which resolves
+/// any name through [`Capability::for_api`] and needs no list to work. This
+/// list used to be threaded into the executor as `_allowed_api` and never
+/// read, which made it look like a gate it never was.
+///
+/// Keeping a name here is still worth doing: it is how the name gets a
+/// capability in the generated catalog, and how a host knows the surface
+/// exists at all.
 pub fn all_host_apis() -> Vec<String> {
     // Every native host name the VM may emit must appear here, or a call to it
     // is not treated as a native `askHost` target.
@@ -104,6 +114,36 @@ pub fn all_host_apis() -> Vec<String> {
         "gpu.define",
         "gpu.undefine",
         "vm.import",
+        // The multi-VM manager's control surface (serviced by
+        // `elpian-runtime`, not by the VM itself). A guest holding `vm_manage`
+        // spawns and steers children through these; they were called by every
+        // prelude but listed nowhere, so they had no capability and did not
+        // appear in the generated catalog.
+        "vm.spawn",
+        "vm.pause",
+        "vm.resume",
+        "vm.terminate",
+        "vm.state",
+        "vm.usage",
+        "vm.usageTree",
+        "vm.limits",
+        "vm.setLimits",
+        "vm.permissions",
+        "vm.setPermission",
+        "vm.list",
+        "vm.info",
+        "vm.send",
+        "vm.grant",
+        // The UI op seams. Every host surface — a Godot scene, a Flutter widget
+        // tree, a React Native view tree — speaks the same op vocabulary, so
+        // they share one capability: a super app can deny a mini app the
+        // drawing surface without touching anything else.
+        "godot.op",
+        "godot.batch",
+        "flutter.op",
+        "flutter.batch",
+        "rn.op",
+        "rn.batch",
         // Capability-gated environmental interfaces. Each family is toggled by
         // the host via the instance's capability set; a disabled family makes
         // the corresponding `askHost` short-circuit to null (see executor).
@@ -300,7 +340,7 @@ pub fn create_vm_from_ast(machine_id: String, ast_json: String) -> bool {
         Ok(v) => v,
         Err(_) => return false,
     };
-    let vm = VM::compile_and_create_of_ast(machine_id.clone(), ast_obj, 1, all_host_apis());
+    let vm = VM::compile_and_create_of_ast(machine_id.clone(), ast_obj, 1);
     lock_tolerant(&VMS).insert(machine_id, vm);
     true
 }
@@ -313,14 +353,14 @@ pub fn create_vm_from_ast(machine_id: String, ast_json: String) -> bool {
 /// operation structure). Always succeeds — bytecode is already validated by the
 /// build-time compile.
 pub fn create_vm_from_bytecode(machine_id: String, bytecode: Vec<u8>) -> bool {
-    let vm = VM::compile_and_create_of_bytecode(machine_id.clone(), bytecode, all_host_apis());
+    let vm = VM::compile_and_create_of_bytecode(machine_id.clone(), bytecode);
     lock_tolerant(&VMS).insert(machine_id, vm);
     true
 }
 
 /// Create a VM directly from Elpian source code (uses the in-VM parser).
 pub fn create_vm_from_code(machine_id: String, code: String) -> bool {
-    let vm = VM::compile_and_create_of_code(machine_id.clone(), code, 1, all_host_apis());
+    let vm = VM::compile_and_create_of_code(machine_id.clone(), code, 1);
     lock_tolerant(&VMS).insert(machine_id, vm);
     true
 }

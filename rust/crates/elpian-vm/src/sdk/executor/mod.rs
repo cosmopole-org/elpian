@@ -27,7 +27,7 @@ use crate::sdk::{
     type_methods::{self, CoreType, Dispatch},
 };
 use core::panic;
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
 use std::vec;
 
@@ -50,7 +50,6 @@ pub struct Executor {
     cb_counter: i64,
     pending_func_result_value: Val,
     registers: Vec<Box<dyn Operation>>,
-    _allowed_api: HashMap<String, bool>,
     run_cb_id: i64,
     exec_globally: bool,
     reserved_host_call: Option<(u8, i64, Val)>,
@@ -74,21 +73,21 @@ pub struct Executor {
 }
 
 impl Executor {
-    pub fn create_in_single_thread(
-        program: Vec<u8>,
-        exec_id: i16,
-        func_group: Vec<String>,
-    ) -> Self {
-        let mut allowed_api: HashMap<String, bool> = HashMap::new();
-        for api_name in func_group.iter() {
-            allowed_api.insert(api_name.clone(), true);
-        }
+    /// Build an executor over `program`.
+    ///
+    /// There is deliberately no host-API allowlist parameter. One used to be
+    /// threaded down from `api::all_host_apis()`, stored in an `_allowed_api`
+    /// map, and never read — so it gated nothing, and every `askHost` name
+    /// reached the host whether or not it appeared in that list. What actually
+    /// gates a host call is the capability set (see the `askHost` arm of the
+    /// run loop), which resolves *any* name through `Capability::for_api` and
+    /// so needs no list to work.
+    pub fn create_in_single_thread(program: Vec<u8>, exec_id: i16) -> Self {
         // Decode the bytecode once into the in-memory unit list; the raw bytes
         // are not kept past this point.
         let prog = DecodedProgram::decode(&program);
         let end_at = prog.units.len();
         Executor {
-            _allowed_api: allowed_api,
             executor_id: exec_id,
             pointer: 0,
             end_at,

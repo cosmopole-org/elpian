@@ -14,3 +14,8 @@ elpian-dart-runtime = { path = "../elpian-dart-runtime", features = ["dart"] }
 elpian-vm = { path = "../elpian-vm" }
 elpian-runtime = { path = "../elpian-runtime" }
 serde_json = "1.0"
+
+[dev-dependencies]
+# The guest-SDK validity tests compile every prelude through the front-ends.
+js2elpian = { path = "../js2elpian" }
+dart2elpian = { path = "../dart2elpian" }
