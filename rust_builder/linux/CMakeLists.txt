@@ -11,7 +11,11 @@ get_filename_component(ELPIAN_RUST_ROOT "${PLUGIN_ROOT}/../rust" REALPATH)
 # Invoke the build for native code shared library
 add_custom_command(
     OUTPUT "${ELPIAN_RUST_ROOT}/target/release/libelpian_vm.so"
-    COMMAND cargo build --manifest-path "${ELPIAN_RUST_ROOT}/Cargo.toml" --release
+    # Build the VM package specifically: the workspace root is virtual, and
+    # building every member here would also compile the Godot C ABI and the
+    # compiler front-ends, which the Flutter desktop host does not link.
+    COMMAND cargo build --release -p elpian-vm
+            --manifest-path "${ELPIAN_RUST_ROOT}/Cargo.toml"
     USES_TERMINAL
 )
 
