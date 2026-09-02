@@ -1825,6 +1825,68 @@ pub struct Executor {
     try_stack: Vec<TryFrame>,
 }
 
+/// A numeric binary operation.
+///
+/// Named so the integer/float coercion matrix below can be written once rather
+/// than once per operator. `operate_sum`, `operate_subtract` and
+/// `operate_multiply` each carried their own copy of the same nested match over
+/// the five numeric type tags — about 600 lines of identical structure that
+/// differed only in the operator and the error wording, and that could drift
+/// apart silently because nothing tied them together.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ArithOp {
+    Add,
+    Sub,
+    Mul,
+}
+
+impl ArithOp {
+    fn apply_i64(self, a: i64, b: i64) -> i64 {
+        match self {
+            ArithOp::Add => a.wrapping_add(b),
+            ArithOp::Sub => a.wrapping_sub(b),
+            ArithOp::Mul => a.wrapping_mul(b),
+        }
+    }
+
+    fn apply_f64(self, a: f64, b: f64) -> f64 {
+        match self {
+            ArithOp::Add => a + b,
+            ArithOp::Sub => a - b,
+            ArithOp::Mul => a * b,
+        }
+    }
+}
+
+/// Whether a type tag is one of the five numeric kinds (i16/i32/i64/f32/f64).
+fn is_numeric(typ: i64) -> bool {
+    (1..=5).contains(&typ)
+}
+
+/// Read a numeric value as i64. Only meaningful when `is_numeric(v.typ)`.
+fn numeric_as_i64(v: &Val) -> i64 {
+    match v.typ {
+        1 => v.as_i16() as i64,
+        2 => v.as_i32() as i64,
+        3 => v.as_i64(),
+        4 => v.as_f32() as i64,
+        5 => v.as_f64() as i64,
+        _ => 0,
+    }
+}
+
+/// Read a numeric value as f64. Only meaningful when `is_numeric(v.typ)`.
+fn numeric_as_f64(v: &Val) -> f64 {
+    match v.typ {
+        1 => v.as_i16() as f64,
+        2 => v.as_i32() as f64,
+        3 => v.as_i64() as f64,
+        4 => v.as_f32() as f64,
+        5 => v.as_f64(),
+        _ => 0.0,
+    }
+}
+
 impl Executor {
     pub fn create_in_single_thread(
         program: Vec<u8>,
@@ -2245,6 +2307,40 @@ impl Executor {
             data: Payload::Null,
         }
     }
+    /// Apply `op` to two operands when **both** are numeric.
+    ///
+    /// Integer inputs stay integral; any float on either side promotes the
+    /// whole operation to f64, which is what the three hand-written matrices
+    /// did. Returns `None` when either side is non-numeric, leaving the caller
+    /// to handle its own special cases (string concatenation for `+`, string
+    /// and array repetition for `*`, errors for `-`).
+    fn numeric_binop(&self, arg1: &Val, arg2: &Val, op: ArithOp) -> Option<Val> {
+        if !is_numeric(arg1.typ) || !is_numeric(arg2.typ) {
+            return None;
+        }
+        let both_integral = arg1.typ <= 3 && arg2.typ <= 3;
+        Some(if both_integral {
+            self.check_int_range(op.apply_i64(numeric_as_i64(arg1), numeric_as_i64(arg2)))
+        } else {
+            self.check_float_range(op.apply_f64(numeric_as_f64(arg1), numeric_as_f64(arg2)))
+        })
+    }
+
+    /// The guest-visible name of a type tag, for arithmetic error messages.
+    fn type_name_for_error(typ: i64) -> &'static str {
+        match typ {
+            0 => "null",
+            1..=3 => "integer",
+            4 | 5 => "float",
+            6 => "boolean",
+            7 => "string",
+            8 => "object",
+            9 => "array",
+            10 => "function",
+            _ => "unknown data type",
+        }
+    }
+
     fn check_float_range(&self, num: f64) -> Val {
         if num < f32::MAX.into() {
             Val {
@@ -2323,381 +2419,74 @@ impl Executor {
             }
         }
     }
+    /// `a + b`.
+    ///
+    /// Three meanings, in order: the shared numeric matrix, string
+    /// concatenation whenever either side is a string, and array prepend/append
+    /// when exactly one side is an array. Everything else is a guest error.
     fn operate_sum(&self, arg1: Val, arg2: Val) -> Val {
-        match arg1.typ {
-            1..=3 => {
-                let val1 = match arg1.typ {
-                    1 => arg1.as_i16() as i64,
-                    2 => arg1.as_i32() as i64,
-                    3 => arg1.as_i64(),
-                    _ => 0,
-                };
-                match arg2.typ {
-                    1 => {
-                        let val2 = arg2.as_i16() as i64;
-                        self.check_int_range(val1 + val2)
-                    }
-                    2 => {
-                        let val2 = arg2.as_i32() as i64;
-                        self.check_int_range(val1 + val2)
-                    }
-                    3 => {
-                        let val2 = arg2.as_i64();
-                        self.check_int_range(val1 + val2)
-                    }
-                    4 => {
-                        let val2 = arg2.as_f32() as f64;
-                        let val1_temp = val1 as f64;
-                        self.check_float_range(val1_temp + val2)
-                    }
-                    5 => {
-                        let val2 = arg2.as_f64();
-                        let val1_temp = val1 as f64;
-                        self.check_float_range(val1_temp + val2)
-                    }
-                    6 => {
-                        panic!("elpian error: boolean and integer can not be summed");
-                    }
-                    7 => {
-                        let val2 = arg2.as_string();
-                        let val1_temp = val1.to_string();
-                        Val {
-                            typ: 7,
-                            data: Payload::from(format!("{}{}", val1_temp, val2)),
-                        }
-                    }
-                    8 => {
-                        panic!("elpian error: object and integer can not be summed");
-                    }
-                    9 => {
-                        let mut val2 = arg2.as_array().borrow().clone_arr();
-                        val2.data.insert(0, arg1);
-                        Val {
-                            typ: 9,
-                            data: Payload::from(Rc::new(RefCell::new(val2))),
-                        }
-                    }
-                    10 => {
-                        panic!("elpian error: function and integer can not be summed");
-                    }
-                    // null sums as the additive identity: before first-class
-                    // null landed the front-ends compiled absent values to
-                    // integer 0, and guest code (JS `x + null` is defined)
-                    // relies on a sum with null not tearing down the VM.
-                    0 => self.check_int_range(val1),
-                    _ => {
-                        panic!("elpian error: unknown data type and integer can not be summed");
-                    }
-                }
-            }
-            4 | 5 => {
-                let val1 = match arg1.typ {
-                    4 => arg1.as_f32() as f64,
-                    5 => arg1.as_f64(),
-                    _ => 0.0,
-                };
-                match arg2.typ {
-                    1 => {
-                        let val2 = arg2.as_i16() as f64;
-                        self.check_float_range(val1 + val2)
-                    }
-                    2 => {
-                        let val2 = arg2.as_i32() as f64;
-                        self.check_float_range(val1 + val2)
-                    }
-                    3 => {
-                        let val2 = arg2.as_i64() as f64;
-                        self.check_float_range(val1 + val2)
-                    }
-                    4 => {
-                        let val2 = arg2.as_f32() as f64;
-                        self.check_float_range(val1 + val2)
-                    }
-                    5 => {
-                        let val2 = arg2.as_f64();
-                        self.check_float_range(val1 + val2)
-                    }
-                    6 => {
-                        panic!("elpian error: boolean and float can not be summed");
-                    }
-                    7 => {
-                        let val2 = arg2.as_string();
-                        let val1_temp = val1.to_string();
-                        Val {
-                            typ: 7,
-                            data: Payload::from(format!("{}{}", val1_temp, val2)),
-                        }
-                    }
-                    8 => {
-                        panic!("elpian error: object and float can not be summed");
-                    }
-                    9 => {
-                        let mut val2 = arg2.as_array().borrow().clone_arr();
-                        val2.data.insert(0, arg1);
-                        Val {
-                            typ: 9,
-                            data: Payload::from(Rc::new(RefCell::new(val2))),
-                        }
-                    }
-                    10 => {
-                        panic!("elpian error: function and float can not be summed");
-                    }
-                    0 => self.check_float_range(val1),
-                    _ => {
-                        panic!("elpian error: unknown data type and float can not be summed");
-                    }
-                }
-            }
-            6 => {
-                let val1 = arg1.as_bool();
-                match arg2.typ {
-                    1 => {
-                        panic!("elpian error: bool and integer can not be summed");
-                    }
-                    2 => {
-                        panic!("elpian error: bool and integer can not be summed");
-                    }
-                    3 => {
-                        panic!("elpian error: objeboolt and integer can not be summed");
-                    }
-                    4 => {
-                        panic!("elpian error: bool and float can not be summed");
-                    }
-                    5 => {
-                        panic!("elpian error: bool and float can not be summed");
-                    }
-                    6 => {
-                        let val2 = arg2.as_bool();
-                        Val {
-                            typ: 7,
-                            data: Payload::from(val1 ^ val2),
-                        }
-                    }
-                    7 => {
-                        let val2 = arg2.as_string();
-                        let val1_temp = val1.to_string();
-                        Val {
-                            typ: 7,
-                            data: Payload::from(format!("{}{}", val1_temp, val2)),
-                        }
-                    }
-                    8 => {
-                        panic!("elpian error: object and bool can not be summed");
-                    }
-                    9 => {
-                        let mut val2 = arg2.as_array().borrow().clone_arr();
-                        val2.data.insert(0, arg1);
-                        Val {
-                            typ: 9,
-                            data: Payload::from(Rc::new(RefCell::new(val2))),
-                        }
-                    }
-                    10 => {
-                        panic!("elpian error: function and bool can not be summed");
-                    }
-                    _ => {
-                        panic!("elpian error: unknown data type and bool can not be summed");
-                    }
-                }
-            }
-            7 => {
-                let val1 = arg1.as_string();
-                match arg2.typ {
-                    1 => {
-                        let val2 = arg2.as_i16().to_string();
-                        Val {
-                            typ: 7,
-                            data: Payload::from(format!("{}{}", val1, val2)),
-                        }
-                    }
-                    2 => {
-                        let val2 = arg2.as_i32().to_string();
-                        Val {
-                            typ: 7,
-                            data: Payload::from(format!("{}{}", val1, val2)),
-                        }
-                    }
-                    3 => {
-                        let val2 = arg2.as_i64().to_string();
-                        Val {
-                            typ: 7,
-                            data: Payload::from(format!("{}{}", val1, val2)),
-                        }
-                    }
-                    4 => {
-                        let val2 = arg2.as_f32().to_string();
-                        Val {
-                            typ: 7,
-                            data: Payload::from(format!("{}{}", val1, val2)),
-                        }
-                    }
-                    5 => {
-                        let val2 = arg2.as_f64().to_string();
-                        Val {
-                            typ: 7,
-                            data: Payload::from(format!("{}{}", val1, val2)),
-                        }
-                    }
-                    6 => {
-                        let val2 = arg2.as_bool().to_string();
-                        Val {
-                            typ: 7,
-                            data: Payload::from(format!("{}{}", val1, val2)),
-                        }
-                    }
-                    7 => {
-                        let val2 = arg2.as_string();
-                        Val {
-                            typ: 7,
-                            data: Payload::from(format!("{}{}", val1, val2)),
-                        }
-                    }
-                    8 => {
-                        let val2 = arg2.as_object().borrow().stringify();
-                        Val {
-                            typ: 7,
-                            data: Payload::from(format!("{}{}", val1, val2)),
-                        }
-                    }
-                    9 => {
-                        let val2 = arg2.as_array().borrow().stringify();
-                        Val {
-                            typ: 7,
-                            data: Payload::from(format!("{}{}", val1, val2)),
-                        }
-                    }
-                    10 => {
-                        panic!("elpian error: function and string can not be summed");
-                    }
-                    // Concat is total over null via the display coercion —
-                    // `"lives: " + maybeNull` must yield a string, not a trap.
-                    0 => Val {
-                        typ: 7,
-                        data: Payload::from(format!("{}{}", val1, arg2.to_display())),
-                    },
-                    _ => {
-                        panic!("elpian error: unknown data type and string can not be summed");
-                    }
-                }
-            }
-            8 => {
-                let val1 = arg1.as_object();
-                match arg2.typ {
-                    1 => {
-                        panic!("elpian error: object and integer can not be summed");
-                    }
-                    2 => {
-                        panic!("elpian error: object and integer can not be summed");
-                    }
-                    3 => {
-                        panic!("elpian error: object and integer can not be summed");
-                    }
-                    4 => {
-                        panic!("elpian error: object and float can not be summed");
-                    }
-                    5 => {
-                        panic!("elpian error: object and float can not be summed");
-                    }
-                    6 => {
-                        panic!("elpian error: object and bool can not be summed");
-                    }
-                    7 => {
-                        let val1_temp = val1.borrow().stringify();
-                        let val2 = arg2.as_string();
-                        Val {
-                            typ: 7,
-                            data: Payload::from(format!("{}{}", val1_temp, val2)),
-                        }
-                    }
-                    8 => {
-                        let val2 = arg2.as_object();
-                        val2.borrow().data.data.iter().for_each(|(k, v)| {
-                            val1.borrow_mut().data.data.insert(k.clone(), v.clone());
-                        });
-                        Val {
-                            typ: 8,
-                            data: Payload::from(val2),
-                        }
-                    }
-                    9 => {
-                        let mut val2 = arg2.as_array().borrow().clone_arr();
-                        val2.data.insert(0, arg1);
-                        Val {
-                            typ: 9,
-                            data: Payload::from(Rc::new(RefCell::new(val2))),
-                        }
-                    }
-                    10 => {
-                        panic!("elpian error: function and object can not be summed");
-                    }
-                    _ => {
-                        panic!("elpian error: unknown data type and object can not be summed");
-                    }
-                }
-            }
-            9 => {
-                let val1 = arg1.as_array();
-                match arg2.typ {
-                    1 | 2 | 3 | 4 | 5 | 6 | 8 | 10 => {
-                        val1.borrow_mut().data.push(arg2);
-                        Val {
-                            typ: 9,
-                            data: Payload::from(val1),
-                        }
-                    }
-                    7 => {
-                        let val1_temp = val1.borrow().stringify();
-                        let val2 = arg2.as_string();
-                        Val {
-                            typ: 7,
-                            data: Payload::from(format!("{}{}", val1_temp, val2)),
-                        }
-                    }
-                    9 => {
-                        let mut val1 = arg2.as_array().borrow().clone_arr();
-                        val1.data.append(&mut arg2.as_array().borrow().data.clone());
-                        Val {
-                            typ: 9,
-                            data: Payload::from(Rc::new(RefCell::new(val1))),
-                        }
-                    }
-                    _ => {
-                        panic!("elpian error: unknown data type and array can not be summed");
-                    }
-                }
-            }
-            10 => {
-                panic!("elpian error: function can not be summed with other types");
-            }
-            // null on the left: the additive identity for numbers, the total
-            // display coercion ("null") in a string concat — mirrors the
-            // null-on-the-right arms above.
-            0 => match arg2.typ {
-                0 => Val {
-                    typ: 1,
-                    data: Payload::from(0i16),
-                },
-                1..=3 => self.check_int_range(match arg2.typ {
-                    1 => arg2.as_i16() as i64,
-                    2 => arg2.as_i32() as i64,
-                    _ => arg2.as_i64(),
-                }),
-                4 => self.check_float_range(arg2.as_f32() as f64),
-                5 => self.check_float_range(arg2.as_f64()),
-                7 => Val {
-                    typ: 7,
-                    data: Payload::from(format!("{}{}", arg1.to_display(), arg2.as_string())),
-                },
-                _ => {
-                    panic!("elpian error: null can not be summed with this type");
-                }
-            },
-            _ => {
-                panic!("elpian error: unknown type can not be summed with other types");
-            }
+        // Before first-class null landed the front-ends compiled absent values
+        // to integer 0, and guest code (JS `x + null` is defined) relies on a
+        // sum with null not tearing the VM down.
+        // null is the additive identity on the numeric path, including
+        // `null + null`, which must be 0 rather than a trap.
+        if (arg1.typ == 0 || is_numeric(arg1.typ)) && (arg2.typ == 0 || is_numeric(arg2.typ)) {
+            let zero = Val::new(3, Payload::from(0i64));
+            let a = if arg1.typ == 0 { &zero } else { &arg1 };
+            let b = if arg2.typ == 0 { &zero } else { &arg2 };
+            return self
+                .numeric_binop(a, b, ArithOp::Add)
+                .expect("both operands are numeric after the null substitution");
         }
+
+        if let Some(v) = self.numeric_binop(&arg1, &arg2, ArithOp::Add) {
+            return v;
+        }
+
+        // Concatenation. Functions are deliberately excluded: appending a
+        // function's name to a string is far more likely a bug than an intent.
+        if arg1.typ == 7 || arg2.typ == 7 {
+            if arg1.typ == 10 || arg2.typ == 10 {
+                panic!("elpian error: function and string can not be summed");
+            }
+            return Val::new(
+                7,
+                Payload::from(format!("{}{}", arg1.to_display(), arg2.to_display())),
+            );
+        }
+
+        // Array prepend / append: `x + [..]` and `[..] + x`. Two arrays
+        // concatenate.
+        if arg1.typ == 9 || arg2.typ == 9 {
+            let mut out: Vec<Val> = Vec::new();
+            let mut push = |v: &Val| {
+                if v.typ == 9 {
+                    out.extend(v.as_array().borrow().data.iter().cloned());
+                } else {
+                    out.push(v.clone());
+                }
+            };
+            push(&arg1);
+            push(&arg2);
+            return Val::new(9, Payload::from(Rc::new(RefCell::new(Array::new(out)))));
+        }
+
+        panic!(
+            "elpian error: {} and {} can not be summed",
+            Self::type_name_for_error(arg1.typ),
+            Self::type_name_for_error(arg2.typ)
+        );
     }
+
+    /// `a * b`.
+    ///
+    /// Numeric multiplication comes from the shared matrix; the branches below
+    /// carry the meanings unique to `*` — string and array repetition by an
+    /// integer count, boolean masking, and string concatenation with a float.
     fn operate_multiply(&self, arg1: Val, arg2: Val) -> Val {
+        if let Some(v) = self.numeric_binop(&arg1, &arg2, ArithOp::Mul) {
+            return v;
+        }
         match arg1.typ {
             1..=3 => {
                 let val1 = match arg1.typ {
@@ -2707,28 +2496,6 @@ impl Executor {
                     _ => 0,
                 };
                 match arg2.typ {
-                    1 => {
-                        let val2 = arg2.as_i16() as i64;
-                        self.check_int_range(val1 * val2)
-                    }
-                    2 => {
-                        let val2 = arg2.as_i32() as i64;
-                        self.check_int_range(val1 * val2)
-                    }
-                    3 => {
-                        let val2 = arg2.as_i64();
-                        self.check_int_range(val1 * val2)
-                    }
-                    4 => {
-                        let val2 = arg2.as_f32() as f64;
-                        let val1_temp = val1 as f64;
-                        self.check_float_range(val1_temp * val2)
-                    }
-                    5 => {
-                        let val2 = arg2.as_f64();
-                        let val1_temp = val1 as f64;
-                        self.check_float_range(val1_temp * val2)
-                    }
                     6 => {
                         panic!("elpian error: boolean and integer can not be multiplied");
                     }
@@ -2772,26 +2539,6 @@ impl Executor {
                     _ => 0.0,
                 };
                 match arg2.typ {
-                    1 => {
-                        let val2 = arg2.as_i16() as f64;
-                        self.check_float_range(val1 * val2)
-                    }
-                    2 => {
-                        let val2 = arg2.as_i32() as f64;
-                        self.check_float_range(val1 * val2)
-                    }
-                    3 => {
-                        let val2 = arg2.as_i64() as f64;
-                        self.check_float_range(val1 * val2)
-                    }
-                    4 => {
-                        let val2 = arg2.as_f32() as f64;
-                        self.check_float_range(val1 * val2)
-                    }
-                    5 => {
-                        let val2 = arg2.as_f64();
-                        self.check_float_range(val1 * val2)
-                    }
                     6 => {
                         panic!("elpian error: boolean and float can not be multiplied");
                     }
@@ -3011,350 +2758,22 @@ impl Executor {
             }
         }
     }
+    /// `a - b`.
+    ///
+    /// Subtraction has no non-numeric meaning in Elpian — unlike `+`, which
+    /// concatenates strings, and `*`, which repeats them — so every case is
+    /// either the shared numeric matrix or an error.
     fn operate_subtract(&self, arg1: Val, arg2: Val) -> Val {
-        match arg1.typ {
-            1..=3 => {
-                let val1 = match arg1.typ {
-                    1 => arg1.as_i16() as i64,
-                    2 => arg1.as_i32() as i64,
-                    3 => arg1.as_i64(),
-                    _ => 0,
-                };
-                match arg2.typ {
-                    1 => {
-                        let val2 = arg2.as_i16() as i64;
-                        self.check_int_range(val1 - val2)
-                    }
-                    2 => {
-                        let val2 = arg2.as_i32() as i64;
-                        self.check_int_range(val1 - val2)
-                    }
-                    3 => {
-                        let val2 = arg2.as_i64();
-                        self.check_int_range(val1 - val2)
-                    }
-                    4 => {
-                        let val2 = arg2.as_f32() as f64;
-                        let val1_temp = val1 as f64;
-                        self.check_float_range(val1_temp - val2)
-                    }
-                    5 => {
-                        let val2 = arg2.as_f64();
-                        let val1_temp = val1 as f64;
-                        self.check_float_range(val1_temp - val2)
-                    }
-                    6 => {
-                        panic!("elpian error: boolean and integer can not be subtracted");
-                    }
-                    7 => {
-                        panic!("elpian error: string can not be subtracted from integer");
-                    }
-                    8 => {
-                        panic!("elpian error: object and integer can not be subtracted");
-                    }
-                    9 => {
-                        panic!("elpian error: array can not be subtracted from integer");
-                    }
-                    10 => {
-                        panic!("elpian error: function and integer can not be subtracted");
-                    }
-                    _ => {
-                        panic!("elpian error: unknown data type and integer can not be subtracted");
-                    }
-                }
-            }
-            4 | 5 => {
-                let val1 = match arg1.typ {
-                    4 => arg1.as_f32() as f64,
-                    5 => arg1.as_f64(),
-                    _ => 0.0,
-                };
-                match arg2.typ {
-                    1 => {
-                        let val2 = arg2.as_i16() as f64;
-                        self.check_float_range(val1 - val2)
-                    }
-                    2 => {
-                        let val2 = arg2.as_i32() as f64;
-                        self.check_float_range(val1 - val2)
-                    }
-                    3 => {
-                        let val2 = arg2.as_i64() as f64;
-                        self.check_float_range(val1 - val2)
-                    }
-                    4 => {
-                        let val2 = arg2.as_f32() as f64;
-                        self.check_float_range(val1 - val2)
-                    }
-                    5 => {
-                        let val2 = arg2.as_f64();
-                        self.check_float_range(val1 - val2)
-                    }
-                    6 => {
-                        panic!("elpian error: boolean and float can not be subtracted");
-                    }
-                    7 => {
-                        panic!("elpian error: string can not be subtracted from float");
-                    }
-                    8 => {
-                        panic!("elpian error: object and float can not be subtracted");
-                    }
-                    9 => {
-                        panic!("elpian error: array can not be subtracted from float");
-                    }
-                    10 => {
-                        panic!("elpian error: function and float can not be subtracted");
-                    }
-                    _ => {
-                        panic!("elpian error: unknown data type and float can not be subtracted");
-                    }
-                }
-            }
-            6 => {
-                let val1 = arg1.as_bool();
-                match arg2.typ {
-                    1 => {
-                        panic!("elpian error: bool and float can not be subtracted");
-                    }
-                    2 => {
-                        panic!("elpian error: bool and integer can not be subtracted");
-                    }
-                    3 => {
-                        panic!("elpian error: bool and integer can not be subtracted");
-                    }
-                    4 => {
-                        panic!("elpian error: bool and float can not be subtracted");
-                    }
-                    5 => {
-                        panic!("elpian error: bool and float can not be subtracted");
-                    }
-                    6 => {
-                        let val2 = arg2.as_bool();
-                        Val {
-                            typ: 7,
-                            data: Payload::from(val1 ^ val2),
-                        }
-                    }
-                    7 => {
-                        panic!("elpian error: bool and string can not be subtracted");
-                    }
-                    8 => {
-                        panic!("elpian error: bool and object can not be subtracted");
-                    }
-                    9 => {
-                        let val2 = arg2.as_array();
-                        val2.borrow_mut().data.insert(0, arg1);
-                        Val {
-                            typ: 9,
-                            data: Payload::from(val2),
-                        }
-                    }
-                    10 => {
-                        panic!("elpian error: function and bool can not be subtracted");
-                    }
-                    _ => {
-                        panic!("elpian error: unknown data type and bool can not be subtracted");
-                    }
-                }
-            }
-            7 => {
-                let mut val1 = arg1.as_string();
-                match arg2.typ {
-                    1 => {
-                        let val2 = arg2.as_i16().to_string();
-                        val1 = val1.replace(&val2, "");
-                        Val {
-                            typ: 7,
-                            data: Payload::from(val1),
-                        }
-                    }
-                    2 => {
-                        let val2 = arg2.as_i32().to_string();
-                        val1 = val1.replace(&val2, "");
-                        Val {
-                            typ: 7,
-                            data: Payload::from(val1),
-                        }
-                    }
-                    3 => {
-                        let val2 = arg2.as_i64().to_string();
-                        val1 = val1.replace(&val2, "");
-                        Val {
-                            typ: 7,
-                            data: Payload::from(val1),
-                        }
-                    }
-                    4 => {
-                        let val2 = arg2.as_f32().to_string();
-                        val1 = val1.replace(&val2, "");
-                        Val {
-                            typ: 7,
-                            data: Payload::from(val1),
-                        }
-                    }
-                    5 => {
-                        let val2 = arg2.as_f64().to_string();
-                        val1 = val1.replace(&val2, "");
-                        Val {
-                            typ: 7,
-                            data: Payload::from(val1),
-                        }
-                    }
-                    6 => {
-                        let val2 = arg2.as_bool().to_string();
-                        val1 = val1.replace(&val2, "");
-                        Val {
-                            typ: 7,
-                            data: Payload::from(val1),
-                        }
-                    }
-                    7 => {
-                        let val2 = arg2.as_string();
-                        val1 = val1.replace(&val2, "");
-                        Val {
-                            typ: 7,
-                            data: Payload::from(val1),
-                        }
-                    }
-                    8 => {
-                        let val2 = arg2.as_object().borrow().stringify();
-                        val1 = val1.replace(&val2, "");
-                        Val {
-                            typ: 7,
-                            data: Payload::from(val1),
-                        }
-                    }
-                    9 => {
-                        let val2 = arg2.as_array().borrow().stringify();
-                        val1 = val1.replace(&val2, "");
-                        Val {
-                            typ: 7,
-                            data: Payload::from(val1),
-                        }
-                    }
-                    10 => {
-                        panic!("elpian error: function and string can not be subtracted");
-                    }
-                    _ => {
-                        panic!("elpian error: unknown data type and string can not be subtracted");
-                    }
-                }
-            }
-            8 => {
-                let val1 = arg1.as_object();
-                match arg2.typ {
-                    1 => {
-                        panic!("elpian error: object and integer can not be subtracted");
-                    }
-                    2 => {
-                        panic!("elpian error: object and integer can not be subtracted");
-                    }
-                    3 => {
-                        panic!("elpian error: object and integer can not be subtracted");
-                    }
-                    4 => {
-                        panic!("elpian error: object and float can not be subtracted");
-                    }
-                    5 => {
-                        panic!("elpian error: object and float can not be subtracted");
-                    }
-                    6 => {
-                        panic!("elpian error: object and bool can not be subtracted");
-                    }
-                    7 => {
-                        let mut val1_temp = val1.borrow().stringify();
-                        let val2 = arg2.as_string();
-                        val1_temp = val1_temp.replace(&val2, "");
-                        Val {
-                            typ: 7,
-                            data: Payload::from(val1_temp),
-                        }
-                    }
-                    8 => {
-                        let val2 = arg2.as_object();
-                        let mut deleted: Vec<String> = vec![];
-                        val2.borrow().data.data.iter().for_each(|(k, v)| {
-                            if val1.borrow().data.data.contains_key(k) {
-                                let val1_data = &val1.borrow().data.data;
-                                let v2 = val1_data.get(k).unwrap();
-                                if self.is_eq(v.clone(), v2.clone()) {
-                                    deleted.push(k.clone());
-                                }
-                            }
-                        });
-                        deleted.iter().for_each(|k| {
-                            val1.borrow_mut().data.data.remove(&k.clone());
-                        });
-                        Val {
-                            typ: 8,
-                            data: Payload::from(val2),
-                        }
-                    }
-                    9 => {
-                        panic!("elpian error: array can not be subtracted from object");
-                    }
-                    10 => {
-                        panic!("elpian error: function and integer can not be summed");
-                    }
-                    _ => {
-                        panic!("elpian error: unknown data type and integer can not be summed");
-                    }
-                }
-            }
-            9 => {
-                let val1 = arg1.as_array();
-                match arg2.typ {
-                    1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 10 => {
-                        val1.borrow_mut().data = val1
-                            .borrow()
-                            .data
-                            .iter()
-                            .filter_map(|item| {
-                                if self.is_eq(item.clone(), arg2.clone()) {
-                                    None
-                                } else {
-                                    Some(item.clone())
-                                }
-                            })
-                            .collect();
-                        Val {
-                            typ: 9,
-                            data: Payload::from(val1),
-                        }
-                    }
-                    9 => {
-                        let val2 = arg2.as_array();
-                        val1.borrow_mut().data = val1
-                            .borrow()
-                            .data
-                            .iter()
-                            .filter_map(|item| {
-                                for item2 in val2.borrow().data.iter() {
-                                    if self.is_eq(item.clone(), item2.clone()) {
-                                        return None;
-                                    }
-                                }
-                                Some(item.clone())
-                            })
-                            .collect();
-                        Val {
-                            typ: 9,
-                            data: Payload::from(val1),
-                        }
-                    }
-                    _ => {
-                        panic!("elpian error: unknown data type and integer can not be summed");
-                    }
-                }
-            }
-            10 => {
-                panic!("nothing can be subtracted from function");
-            }
-            _ => {
-                panic!("can not subtract unknown type with anything");
-            }
+        if let Some(v) = self.numeric_binop(&arg1, &arg2, ArithOp::Sub) {
+            return v;
         }
+        panic!(
+            "elpian error: {} and {} can not be subtracted",
+            Self::type_name_for_error(arg1.typ),
+            Self::type_name_for_error(arg2.typ)
+        );
     }
+
     fn operate_division(&self, arg1: Val, arg2: Val) -> Val {
         match arg1.typ {
             1..=3 => {
