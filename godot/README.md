@@ -27,23 +27,10 @@ EventChannel elpian/godot/events  │◀── SignalRelay ───────
                                   │                            │      (reflective, ClassDB)
 ```
 
-The **op vocabulary is identical** to the one Victor's React Native host and the
-C++ `GodotController` already speak, so the engine-side interpreter — the
-`elpian_godot` GDExtension — is reused **verbatim**. Only the transport differs.
-
-### What changed from Victor's React Native port
-
-| | React Native | Flutter (here) |
-|---|---|---|
-| Transport | JSI (`globalThis.__ElpianGodot`) | `MethodChannel` |
-| Op queue | C++ + JNI (`ElpianGodotJsi.cpp`, 188 lines) | Kotlin `OpQueue` |
-| View | `ExpoView` | `PlatformView` |
-| Signals | JSI callback | `EventChannel` |
-| iOS queue | shared C++ | Swift `GodotOpQueue` |
-| Engine side | `OpSink.gd` + GDExtension | **unchanged**, plus batch/reply shapes |
-
-Dropping JSI removes the C++ layer and its ABI entirely — a method channel
-already lands on the platform thread, which is all the queue needs.
+The engine-side interpreter is owned by this package in [`extension/`](extension/).
+It contains only the VM-less `ElpianScene3D` node and reflective
+`GodotController`; Flutter owns the single Elpian VM and transports operations
+to Godot.
 
 ## The three binary artifacts
 
@@ -69,31 +56,24 @@ To build them by hand:
 1. **The Godot library AAR** → `android/libs/godot-lib.template_release.aar`
    **Do not build the engine from source.** It is an unmodified upstream
    release; a source build takes ~an hour to reproduce a binary Godot already
-   publishes. The Android library ships inside the official export templates as
-   `android_source.zip` — unzip it and run `./gradlew :lib:assembleTemplateRelease`.
-   (Victor's checked-in copy under
-   `victor/react-native/modules/elpian-godot/android/libs/` is the same artifact.)
+   publishes. The Android library ships prebuilt inside the official export
+   templates at `android_source.zip` →
+   `libs/release/godot-lib.template_release.aar`.
 
 2. **The `elpian_godot` GDExtension** → `godot-project/bin/`
-   The reflective `ElpianScene3D` op interpreter, built from Victor's
-   `bridge/extension`:
+   The reflective `ElpianScene3D` op interpreter, built from this repository:
 
    ```sh
-   scons platform=android target=template_release arch=arm64 \
-     elpian_capi=../../target/aarch64-linux-android/release/libelpian_godot.a
+   cd extension
+   git clone --depth 1 -b godot-4.3-stable \
+     https://github.com/godotengine/godot-cpp godot-cpp
+   scons platform=android target=template_release arch=arm64
    scons platform=linux target=template_release   # ← also required, see below
    ```
 
-   Two traps:
-
-   * `SConstruct` globs every `src/*.cpp`, including the ElpianVM node, so the
-     Rust C-ABI static library (`cargo build -p elpian-godot-capi`) is needed
-     even though Elpian only uses the `ElpianScene3D` half — `OpSink.gd` runs
-     the op interpreter with no VM, because the single VM lives in the Flutter
-     app.
-   * **A host-platform build is required too.** The headless editor loads the
-     `.gdextension` during import and export, so `linux.x86_64` must exist or
-     the export aborts with what looks like a project error.
+   **A host-platform build is required too.** The headless editor loads the
+   `.gdextension` during import and export, so `linux.x86_64` must exist or the
+   export aborts with what looks like a project error.
 
    `elpian_godot.gdextension` declares six library slots (four Android ABIs,
    linux, web). Build what you ship or trim the file — a missing slot for a

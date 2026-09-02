@@ -10,11 +10,9 @@ name: Build Godot artifacts
 #                                 upstream release; building the engine from
 #                                 source would take ~an hour to reproduce a
 #                                 binary Godot already publishes.
-#   2. The elpian_godot GDExtension  BUILT. This is our code — the reflective
-#                                 ElpianScene3D op interpreter. Its C++ source
-#                                 is the one thing still in victor
-#                                 (bridge/extension); the Rust crate it links,
-#                                 elpian-godot-capi, is now in rust/capi.
+#   2. The elpian_godot GDExtension  BUILT. Its source lives in
+#                                 godot/extension and contains only the
+#                                 VM-less ElpianScene3D op interpreter.
 #   3. embed.pck                  BUILT. A headless export of
 #                                 godot/godot-project/. Seconds.
 #
@@ -31,14 +29,10 @@ name: Build Godot artifacts
 
 on:
   workflow_dispatch:
-    inputs:
-      victor_ref:
-        description: "victor ref for the GDExtension C++ source (branch, tag or SHA)"
-        required: false
-        default: ""
   push:
     branches: [main]
     paths:
+      - "godot/extension/**"
       - "godot/godot-project/**"
       - ".github/workflows/build_godot_artifacts.yml"
 
@@ -46,12 +40,6 @@ permissions:
   contents: read
 
 env:
-  # The victor ref supplying the GDExtension C++ source (bridge/extension) —
-  # the last cross-repository build dependency, now that the VM, the compiler
-  # front-ends and the capi crate are all vendored into rust/. Pinned rather
-  # than floating on victor's default branch; override via workflow_dispatch to
-  # test a victor branch before merging it.
-  VICTOR_REF: "main"
   # Pinned together — godot-cpp, the editor and the export templates must all
   # match, or the .gdextension fails its compatibility check at load.
   GODOT_RELEASE: "4.3-stable"
@@ -73,27 +61,11 @@ jobs:
         with:
           path: elpian
 
-      # Only the GDExtension C++ source still lives in victor
-      # (bridge/extension). Its Rust dependency, elpian-godot-capi, is now
-      # in-repo, so this is the last cross-repo tie.
-      - name: Checkout victor
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/victor
-          ref: ${{ github.event.inputs.victor_ref || env.VICTOR_REF }}
-          path: victor
-          token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
-
-      - name: Setup Rust (Android targets)
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
 
       - name: Install the pinned NDK
         run: |
@@ -106,7 +78,7 @@ jobs:
         run: |
           git clone --depth 1 -b "$GODOT_CPP_BRANCH" \
             https://github.com/godotengine/godot-cpp \
-            victor/victor/bridge/extension/godot-cpp
+            elpian/godot/extension/godot-cpp
 
       # godot-cpp is nearly all of the build time and only invalidates on a
       # Godot bump, so cache it on the pinned versions rather than the source.
@@ -114,58 +86,36 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            victor/victor/bridge/extension/godot-cpp/bin
-            victor/victor/bridge/extension/godot-cpp/gen
-            victor/victor/bridge/extension/godot-cpp/src
-            victor/victor/bridge/extension/.sconsign.dblite
-          key: godot-cpp-${{ env.GODOT_CPP_BRANCH }}-${{ env.NDK_VERSION }}-v1
-
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            elpian/rust/target
-          key: cargo-godot-capi-${{ runner.os }}-${{ hashFiles('elpian/rust/Cargo.lock') }}
+            elpian/godot/extension/godot-cpp/bin
+            elpian/godot/extension/godot-cpp/gen
+            elpian/godot/extension/godot-cpp/src
+            elpian/godot/extension/.sconsign.dblite
+          key: godot-cpp-elpian-scene3d-${{ env.GODOT_CPP_BRANCH }}-${{ env.NDK_VERSION }}-v1
 
       # ---------------------------------------------------------------------
       # 2. The GDExtension.
       #
-      # SConstruct globs every src/*.cpp, which includes the ElpianVM node, so
-      # the Rust C-ABI static library is required even though Elpian only uses
-      # the ElpianScene3D half (OpSink.gd runs the op interpreter with no VM —
-      # the single VM lives in the Flutter app).
+      # The in-repo extension contains only the VM-less Scene3D interpreter.
+      # The Elpian VM stays in Flutter, so this native library has no Rust C-ABI
+      # dependency and can be built directly for every Godot ABI.
       # ---------------------------------------------------------------------
-      - name: Build the Elpian C-ABI library per Android ABI
-        working-directory: elpian/rust
-        run: |
-          TOOLCHAIN="$ANDROID_HOME/ndk/${NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64/bin"
-          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$TOOLCHAIN/aarch64-linux-android21-clang"
-          export CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER="$TOOLCHAIN/armv7a-linux-androideabi21-clang"
-          export CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER="$TOOLCHAIN/x86_64-linux-android21-clang"
-          for target in aarch64-linux-android armv7-linux-androideabi x86_64-linux-android; do
-            cargo build -p elpian-godot-capi --release --target "$target"
-          done
-
       - name: Build the GDExtension for each Android ABI
-        working-directory: victor/victor/bridge/extension
+        working-directory: elpian/godot/extension
         run: |
           set -e
-          build() {  # <godot arch> <rust target triple>
-            scons platform=android target=template_release arch="$1" \
-              elpian_capi="$GITHUB_WORKSPACE/elpian/rust/target/$2/release/libelpian_godot.a"
+          build() {
+            scons platform=android target=template_release arch="$1"
           }
-          build arm64   aarch64-linux-android
-          build arm32   armv7-linux-androideabi
-          build x86_64  x86_64-linux-android
-          ls -la ../project/bin/
+          build arm64
+          build arm32
+          build x86_64
+          ls -la ../godot-project/bin/
 
       # The headless editor loads the .gdextension during import and export, so
       # a HOST library must exist too or the export aborts. Easy to miss: the
       # failure looks like a project error, not a missing build.
       - name: Build the GDExtension for the host platform
-        working-directory: victor/victor/bridge/extension
+        working-directory: elpian/godot/extension
         run: scons platform=linux target=template_release
 
       # ---------------------------------------------------------------------
@@ -210,10 +160,16 @@ jobs:
       # ---------------------------------------------------------------------
       # 3. embed.pck — the packed op-sink project.
       # ---------------------------------------------------------------------
-      - name: Stage the extension libraries into the Godot project
+      - name: Verify the extension libraries in the Godot project
         run: |
-          mkdir -p elpian/godot/godot-project/bin
-          cp victor/victor/bridge/project/bin/*.so elpian/godot/godot-project/bin/
+          for library in \
+            libelpian_godot.android.arm64.so \
+            libelpian_godot.android.arm32.so \
+            libelpian_godot.android.x86_64.so \
+            libelpian_godot.linux.x86_64.so; do
+            test -f "elpian/godot/godot-project/bin/$library" \
+              || { echo "::error::missing $library"; exit 1; }
+          done
           ls -la elpian/godot/godot-project/bin
 
       - name: Export the op-sink project to embed.pck
@@ -256,9 +212,8 @@ jobs:
   #
   # This is what makes Scene3D live on GitHub Pages. It is a separate job rather
   # than more steps on `android` because almost nothing is shared: a different
-  # toolchain (emscripten, not the NDK), a different Rust target, a different
-  # export preset, and a different output shape (a wasm/pck/js export instead of
-  # an AAR plus a pck).
+  # toolchain (emscripten, not the NDK), a different export preset, and a
+  # different output shape (a wasm/pck/js export instead of an AAR plus a pck).
   #
   # GDExtension on the web needs the "extensions support" template variant —
   # already set in export_presets.cfg (`variant/extensions_support=true`) — and
@@ -275,19 +230,6 @@ jobs:
         with:
           path: elpian
 
-      - name: Checkout victor
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/victor
-          ref: ${{ github.event.inputs.victor_ref || env.VICTOR_REF }}
-          path: victor
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Setup Rust (wasm32 emscripten target)
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-emscripten
-
       - name: Setup emscripten
         uses: mymindstorm/setup-emsdk@v14
         with:
@@ -301,81 +243,48 @@ jobs:
         run: |
           git clone --depth 1 -b "$GODOT_CPP_BRANCH" \
             https://github.com/godotengine/godot-cpp \
-            victor/victor/bridge/extension/godot-cpp
+            elpian/godot/extension/godot-cpp
 
       - name: Cache godot-cpp
         uses: actions/cache@v4
         with:
           path: |
-            victor/victor/bridge/extension/godot-cpp/bin
-            victor/victor/bridge/extension/godot-cpp/gen
-            victor/victor/bridge/extension/godot-cpp/src
-            victor/victor/bridge/extension/.sconsign.dblite
-          key: godot-cpp-web-nothreads-${{ env.GODOT_CPP_BRANCH }}-${{ env.EMSDK_VERSION }}-v2
-
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            elpian/rust/target
-          key: cargo-godot-capi-web-${{ runner.os }}-${{ hashFiles('elpian/rust/Cargo.lock') }}
-
-      # Same reason as the Android job: SConstruct globs every src/*.cpp, so the
-      # Rust C-ABI library is required even though only the ElpianScene3D half is
-      # used here. emcc is the linker for this target and comes from the emsdk
-      # the setup step put on PATH.
-      # `-Clink-arg=-O0` is load-bearing, and not an optimisation choice.
-      #
-      # Cargo builds every crate-type a package declares, so asking for this
-      # staticlib also links a cdylib — a wasm SIDE_MODULE — for elpian-vm,
-      # dart2elpian, js2elpian and dart. Nothing consumes those; only
-      # libelpian_godot.a is fed to scons, and an `ar` archive needs no linking
-      # at all.
-      #
-      # Each of those pointless links runs emcc's binaryen post-link step, which
-      # forwards the wasm features found in the objects to `wasm-opt`. Current
-      # rustc (LLVM 20+) emits `bulk-memory-opt` and `call-indirect-overlong`,
-      # which the binaryen in emsdk 3.1.64 does not know:
-      #
-      #   Unknown option '--enable-bulk-memory-opt'
-      #
-      # The emscripten version is pinned by Godot's ABI and cannot float to
-      # match rustc, so the fix is to stop the throwaway links from invoking
-      # binaryen: emcc skips the post-link entirely at -O0, and the last -O wins.
-      # Codegen is untouched — link args do not reach the objects the archive is
-      # built from — so the staticlib is still a release build.
-      - name: Build the Elpian C-ABI library for wasm32
-        working-directory: elpian/rust
-        env:
-          RUSTFLAGS: -Clink-arg=-O0
-        run: |
-          set -e
-          cargo build -p elpian-godot-capi --release --target wasm32-unknown-emscripten
-          ls -lh target/wasm32-unknown-emscripten/release/libelpian_godot.a
+            elpian/godot/extension/godot-cpp/bin
+            elpian/godot/extension/godot-cpp/gen
+            elpian/godot/extension/godot-cpp/src
+            elpian/godot/extension/.sconsign.dblite
+          key: godot-cpp-web-elpian-scene3d-nothreads-${{ env.GODOT_CPP_BRANCH }}-${{ env.EMSDK_VERSION }}-v1
 
       # `threads=no` matches the engine this extension has to load into.
       # export_presets.cfg sets `variant/thread_support=false`, so the export
-      # uses Godot's web_dlink_nothreads template — but godot-cpp defaults
-      # `threads` to true, which adds -sUSE_PTHREADS and links with
-      # --shared-memory. That fails outright against the Rust archive, whose
-      # objects are built without the atomics/bulk-memory features:
-      #
-      #   wasm-ld: error: --shared-memory is disallowed by ...rcgu.o because it
-      #   was not compiled with 'atomics' or 'bulk-memory' features
-      #
-      # and even linked, a threaded side module would not load into a nothreads
-      # engine. Victor's SConstruct names the output itself, so godot-cpp's
-      # `.nothreads` filename suffix does not apply and the .gdextension entry
-      # stays correct.
+      # uses Godot's web_dlink_nothreads template. A threaded side module cannot
+      # load into that engine.
       - name: Build the GDExtension for the web
-        working-directory: victor/victor/bridge/extension
+        working-directory: elpian/godot/extension
         run: |
           set -e
-          scons platform=web target=template_release threads=no \
-            elpian_capi="$GITHUB_WORKSPACE/elpian/rust/target/wasm32-unknown-emscripten/release/libelpian_godot.a"
-          ls -la ../project/bin/
+          scons platform=web target=template_release threads=no
+          ls -la ../godot-project/bin/
+
+          # A wasm function import can be resolved lazily by Emscripten, but a
+          # tag import must be supplied as WebAssembly.Tag during instantiation.
+          # Godot 4.3 has no __cpp_exception tag, so catch the exact ABI drift
+          # which otherwise passes the build and leaves a blank canvas in Pages.
+          node - ../godot-project/bin/libelpian_godot.web.wasm32.wasm <<'NODE'
+          const fs = require('node:fs');
+          const file = process.argv[2];
+          const module = new WebAssembly.Module(fs.readFileSync(file));
+          const bad = WebAssembly.Module.imports(module).filter(
+            (entry) => entry.kind === 'tag'
+              && entry.module === 'env'
+              && entry.name === '__cpp_exception',
+          );
+          if (bad.length) {
+            console.error('::error::GDExtension uses the wasm exception ABI, but Godot 4.3 expects the legacy Emscripten ABI');
+            process.exit(1);
+          }
+          console.log('GDExtension exception ABI is compatible with Godot 4.3');
+          NODE
 
       - name: Install the Godot editor and export templates
         run: |
@@ -397,11 +306,9 @@ jobs:
       # res://bin/libelpian_godot.web.wasm32.wasm). Assert it rather than trusting
       # the glob: an export whose library is missing still succeeds, and the
       # failure only shows up as a blank canvas at runtime.
-      - name: Stage the extension library into the Godot project
+      - name: Verify the extension library in the Godot project
         run: |
           set -e
-          mkdir -p elpian/godot/godot-project/bin
-          cp victor/victor/bridge/project/bin/*.wasm elpian/godot/godot-project/bin/ 2>/dev/null || true
           ls -la elpian/godot/godot-project/bin
           test -f elpian/godot/godot-project/bin/libelpian_godot.web.wasm32.wasm \
             || { echo "::error::GDExtension wasm missing; the export would ship without ElpianScene3D"; exit 1; }

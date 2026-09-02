@@ -5,5 +5,11 @@ android/libs/*.aar
 android/src/main/assets/godot/
 godot-project/bin/
 
+# Native extension build state and the reproducible godot-cpp checkout.
+extension/godot-cpp/
+extension/gen/
+extension/.sconsign.dblite
+extension/**/*.o
+
 # Godot editor state
 godot-project/.godot/

@@ -1,0 +1,17 @@
+{
+  "enabled_classes": [
+    "CanvasLayer",
+    "ClassDBSingleton",
+    "Engine",
+    "Expression",
+    "JSON",
+    "MainLoop",
+    "Marshalls",
+    "Node",
+    "Object",
+    "RefCounted",
+    "ResourceLoader",
+    "SceneTree",
+    "Script"
+  ]
+}

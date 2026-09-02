@@ -1,0 +1,35 @@
+#!/usr/bin/env python
+"""Build the Elpian Scene3D GDExtension.
+
+godot-cpp is expected at ./godot-cpp. The resulting library is written
+directly to ../godot-project/bin, where elpian_godot.gdextension references it.
+"""
+
+env = SConscript("godot-cpp/SConstruct")
+
+# Keep @GlobalScope constants synchronized with the pinned Godot API dump.
+constants = env.Command(
+    "gen/gen/global_constants_map.inc",
+    ["tools/gen_global_constants.py", "godot-cpp/gdextension/extension_api.json"],
+    "python3 tools/gen_global_constants.py godot-cpp/gdextension/extension_api.json $TARGET",
+)
+
+env.Append(CPPPATH=["src", "gen"])
+sources = [
+    "src/register_types.cpp",
+    "src/elpian_scene3d.cpp",
+    "src/godot_controller.cpp",
+]
+env.Depends(sources, constants)
+
+if env["platform"] == "web":
+    # Godot 4.3's dlink templates use native i64 WebAssembly signatures.
+    env.Append(LINKFLAGS=["-sWASM_BIGINT"])
+
+library = env.SharedLibrary(
+    "../godot-project/bin/elpian_godot.{}.{}{}".format(
+        env["platform"], env["arch"], env["SHLIBSUFFIX"]
+    ),
+    source=sources,
+)
+Default(library)

@@ -47,7 +47,7 @@ links and runs, with `Scene3D` showing its placeholder.
    The counterpart of `android/libs/godot-lib.template_release.aar`.
 
 2. **The `elpian_godot` GDExtension for iOS** — the reflective `ElpianScene3D`
-   op interpreter (from Victor's `bridge/extension`) built for `arm64` iOS.
+   op interpreter from [`../extension/`](../extension/) built for `arm64` iOS.
 
 Drop both into the host app's Xcode project and wire `GodotRuntimeHost`.
 
