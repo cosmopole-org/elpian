@@ -293,3 +293,34 @@ if (c.bump() !== 1) { throw "wrong"; }
 "#,
     );
 }
+
+#[test]
+fn a_class_expression_cannot_be_assigned_to_a_variable() {
+    // `const C = class extends Base { … }` — the form that would let a class
+    // component be wrapped in one statement.
+    let r = accepts(
+        "sub-class-expr",
+        r#"
+class Base { hello() { return "hi"; } }
+let C = class extends Base { hello() { return "yo"; } };
+let c = new C();
+if (c.hello() !== "yo") { throw "wrong"; }
+"#,
+    );
+    // A class lowers to several *top-level* definitions — a constructor
+    // function, one function per method, a statics holder — so there is no
+    // single value for an expression to evaluate to without hoisting them out
+    // first. Supporting it would mean a pending-hoist mechanism in the
+    // expression parser.
+    //
+    // The cost of not having it is one extra statement where a class component
+    // is wrapped:
+    //
+    //     class Counter extends Component { … }
+    //     const C = GUI.component(Counter);
+    assert!(
+        r.is_err(),
+        "class expressions now work — a class component could be wrapped in \
+         one statement instead of two, and gui.js can be simplified"
+    );
+}

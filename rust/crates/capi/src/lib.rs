@@ -80,6 +80,13 @@ pub const GODOT_CASPAR_JS: &str = include_str!("../../../../guest-sdk/js/caspar.
 /// events route back through the same namespaced-dispatch path).
 pub const GODOT_FLUTTER_JS: &str = include_str!("../../../../guest-sdk/js/flutter.js");
 
+/// The unified GUI SDK (`gui.js`) — state, rendering, scoping, widgets,
+/// styling, 3D scenes and 2D canvases in one import. Composed ahead of a JS
+/// guest when its source imports it (`import 'gui.js';`). It carries its own
+/// copy of the engine, reactive and theme layers, so it is composed *instead
+/// of* the base prelude rather than on top of it.
+pub const GODOT_GUI_JS: &str = include_str!("../../../../guest-sdk/js/gui.js");
+
 /// VReact (`react.js`) — a React-compatible runtime (element factory, the full
 /// hook surface, and a keyed reconciler that mutates retained Godot nodes)
 /// whose host config targets the VUI kit. Composed ahead of a JS guest when its
@@ -191,6 +198,12 @@ pub fn compose_godot_program_js(user_source: &str) -> String {
             .lines()
             .any(|l| l.trim_start().starts_with("import ") && l.contains(needle))
     };
+    // gui.js is the whole SDK in one file — engine, reactive core, theme,
+    // widgets, 3D, canvas. It is composed *instead of* the base prelude, not
+    // after it, because it already contains one.
+    if imports("gui.js") {
+        return format!("{}\n\n{}", strip(GODOT_GUI_JS), strip(user_source));
+    }
     let wants_react = imports("react.js");
     // react.js is built on VUI, so it implies the UI kit.
     let wants_ui_kit = wants_react || imports("ui.js");

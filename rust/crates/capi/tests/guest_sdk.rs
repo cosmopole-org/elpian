@@ -10,7 +10,7 @@
 //! Until this file existed, only some of it was ever compiled. `godot.js`,
 //! `ui.js` and `net.js` were exercised because tests happened to import them,
 //! and `react.js` only because the Tritonix fixture pulls it in.
-//! `caspar.js`, `flutter.js` and `reactnative.js` — 71 KB of it — were
+//! `caspar.js` and `flutter.js` — 55 KB of it — were
 //! compiled by nothing at all. A syntax error or an unsupported construct in
 //! any of them would have shipped and only surfaced when a mini app tried to
 //! import it.
@@ -21,7 +21,7 @@
 
 use elpian_godot::{
     compose_godot_program, compose_godot_program_js, GODOT_CASPAR_JS, GODOT_FLUTTER_JS,
-    GODOT_NET_JS, GODOT_PRELUDE_JS, GODOT_REACT_JS, GODOT_UI_KIT_JS,
+    GODOT_GUI_JS, GODOT_NET_JS, GODOT_PRELUDE_JS, GODOT_REACT_JS, GODOT_UI_KIT_JS,
 };
 
 /// Every JavaScript prelude, with the imports it depends on.
@@ -33,6 +33,9 @@ fn js_preludes() -> Vec<(&'static str, &'static str, &'static str)> {
     vec![
         // (name, the import line a guest would write, the source itself)
         ("godot.js", "", GODOT_PRELUDE_JS),
+        // gui.js composes *instead of* the base prelude, not after it, so its
+        // import line is enough on its own.
+        ("gui.js", "import 'gui.js';", GODOT_GUI_JS),
         ("ui.js", "import 'ui.js';", GODOT_UI_KIT_JS),
         ("net.js", "import 'net.js';", GODOT_NET_JS),
         ("caspar.js", "import 'caspar.js';", GODOT_CASPAR_JS),
@@ -104,7 +107,7 @@ fn the_javascript_preludes_reach_bytecode_not_just_the_ast() {
     // Parsing is not the whole front-end: a construct can lower to an AST the
     // bytecode compiler then rejects. The preludes that carry the most surface
     // are checked all the way through.
-    for name in ["ui.js", "react.js"] {
+    for name in ["ui.js", "react.js", "gui.js"] {
         let import = format!("import '{name}';");
         let composed = compose_godot_program_js(&format!("{import}\nvar __probe = 1;"));
         assert!(
@@ -177,6 +180,7 @@ fn every_host_api_the_preludes_call_is_documented_and_gateable() {
         GODOT_CASPAR_JS,
         GODOT_FLUTTER_JS,
         GODOT_REACT_JS,
+        GODOT_GUI_JS,
         elpian_godot::GODOT_PRELUDE,
     ] {
         let mut rest = src;
