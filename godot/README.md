@@ -56,9 +56,13 @@ workflow runs on its own cadence — a Godot bump or an interpreter change — n
 on every push, because rebuilding them each time would add ~15 minutes for
 nothing.
 
-When the bundle is absent, the showcase build still succeeds and ships the
-placeholder. That is deliberate: the no-engine path is what web and any
-un-provisioned build get, so CI keeps proving it works.
+That workflow produces **two** bundles — `godot-artifacts-android` (the three
+artifacts below) and `godot-artifacts-web` (an HTML5 export of the same op-sink
+project) — and `build_showcase.yml` restores whichever its job needs.
+
+When a bundle is absent, the build still succeeds and ships the placeholder.
+That is deliberate: it is what any un-provisioned build gets, so CI keeps
+proving the degradation path works.
 
 To build them by hand:
 
@@ -128,6 +132,52 @@ protocol, same degradation. The one structural difference:
 `GodotRuntimeHost` is plain function hooks, so this package takes no build
 dependency on the Godot runtime: an app without it still compiles and runs, with
 `Scene3D` showing its placeholder.
+
+## Web
+
+Implemented. Same op protocol, same degradation, a different transport again:
+there is no plugin singleton to call back through, so all three directions meet
+on `window`.
+
+```
+Flutter (Dart)                     │ the page                    │ Godot 4 (wasm)
+─────────────────────────────────  │ ─────────────────────────── │ ────────────────
+WebGodotBinding                    │                             │
+  ├ push JSON per message          ├─▶ __elpianGodotQueue        │
+  │                                │      └ __elpianGodotDrain() ├─▶ OpSink.gd
+  └ poll for replies               │◀── __elpianGodotReplies ────┤   (JavaScriptBridge)
+Scene3D widget                     │      ▲ __elpianGodotReply() │
+  └ HtmlElementView ───────────────├─▶ __elpianGodotSurface(id)  │
+                                   │      └ <canvas> ────────────┼─▶ the engine's
+                                   │                             │   render target
+```
+
+Three pieces, all required:
+
+1. **The export** — `build_godot_artifacts.yml`'s `web` job, which needs the
+   GDExtension compiled to wasm32 and the *extensions-support* export template.
+2. **The glue** — [`web/elpian_godot_web.js`](web/elpian_godot_web.js), loaded
+   by a `<script>` in `<head>`. It installs the hooks synchronously at parse and
+   boots the engine on the first surface request, into the canvas Flutter put in
+   the platform-view slot.
+3. **The binding** — resolved automatically by the conditional import in
+   `lib/src/godot/godot_binding.dart`; nothing has to be installed by hand.
+
+Presence of `window.__elpianGodotDrain` *is* the liveness signal that makes
+`Scene3D` swap its placeholder for a viewport, so the glue is only shipped when
+there is an engine for it to boot — and it removes the hook again if the engine
+fails to start.
+
+Two limits worth knowing:
+
+* **One `Scene3D` per page.** A Godot web export drives a single canvas; a
+  second surface gets an empty element and a console warning.
+* **`isLive` is read at build time.** The glue is loaded before Flutter boots,
+  so this is a non-issue in practice, but an engine that arrives *after* the
+  first `Scene3D` builds will not light it up until something else rebuilds it.
+
+The Dart↔page contract is covered by `test/godot_web_transport_test.dart`, which
+runs in a real browser with no engine present and is executed by CI.
 
 ## Status
 

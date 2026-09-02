@@ -18,9 +18,16 @@ name: Build Godot artifacts
 #   3. embed.pck                  BUILT. A headless export of
 #                                 godot/godot-project/. Seconds.
 #
-# The result is uploaded as one bundle that build_showcase.yml restores. When
-# the bundle is absent that workflow still builds and ships the placeholder, so
-# the graceful-degradation path stays exercised rather than rotting.
+# Two bundles are uploaded, one per target, and build_showcase.yml restores
+# whichever its job needs:
+#
+#   godot-artifacts-android   the AAR + embed.pck + the per-ABI GDExtension
+#   godot-artifacts-web       the Godot HTML5 export (wasm/pck/js) + the
+#                             GDExtension built for wasm32, so Scene3D can be
+#                             live on GitHub Pages rather than a placeholder
+#
+# When a bundle is absent that workflow still builds and ships the placeholder,
+# so the graceful-degradation path stays exercised rather than rotting.
 
 on:
   workflow_dispatch:
@@ -50,6 +57,9 @@ env:
   GODOT_RELEASE: "4.3-stable"
   GODOT_TEMPLATE_DIR: "4.3.stable"
   GODOT_CPP_BRANCH: "godot-4.3-stable"
+  # Godot 4.3's web templates are built with this emscripten; a mismatched
+  # toolchain produces a side module the engine refuses to link at load.
+  EMSDK_VERSION: "3.1.64"
   NDK_VERSION: "23.2.8568313"
 
 jobs:
@@ -207,7 +217,11 @@ jobs:
           # A first headless open lets the editor import resources; the export
           # fails on a cold project otherwise.
           godot --headless --import || true
-          godot --headless --export-pack "Android" "$GITHUB_WORKSPACE/out/embed.pck"
+          # "pck" is the preset in export_presets.cfg built for exactly this
+          # (Linux/X11, runnable=false, embed_pck=false). There is no "Android"
+          # preset in that file, and Godot matches presets by exact name, so the
+          # old spelling could only ever fail.
+          godot --headless --export-pack "pck" "$GITHUB_WORKSPACE/out/embed.pck"
           ls -lh "$GITHUB_WORKSPACE/out/embed.pck"
 
       - name: Assemble the bundle
@@ -228,5 +242,178 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: godot-artifacts-android
+          path: out
+          retention-days: 90
+
+  # ---------------------------------------------------------------------------
+  # Web: a Godot HTML5 export of the same op-sink project.
+  #
+  # This is what makes Scene3D live on GitHub Pages. It is a separate job rather
+  # than more steps on `android` because almost nothing is shared: a different
+  # toolchain (emscripten, not the NDK), a different Rust target, a different
+  # export preset, and a different output shape (a wasm/pck/js export instead of
+  # an AAR plus a pck).
+  #
+  # GDExtension on the web needs the "extensions support" template variant —
+  # already set in export_presets.cfg (`variant/extensions_support=true`) — and
+  # the extension itself compiled to wasm32. Both halves must come from the same
+  # emscripten, hence the pin above.
+  # ---------------------------------------------------------------------------
+  web:
+    name: Godot artifacts (Web)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout elpian
+        uses: actions/checkout@v4
+        with:
+          path: elpian
+
+      - name: Checkout victor
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/victor
+          ref: ${{ github.event.inputs.victor_ref || env.VICTOR_REF }}
+          path: victor
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Rust (wasm32 emscripten target)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-emscripten
+
+      - name: Setup emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: ${{ env.EMSDK_VERSION }}
+          actions-cache-folder: emsdk-cache
+
+      - name: Install scons
+        run: pipx install scons || pip install scons
+
+      - name: Clone godot-cpp
+        run: |
+          git clone --depth 1 -b "$GODOT_CPP_BRANCH" \
+            https://github.com/godotengine/godot-cpp \
+            victor/victor/bridge/extension/godot-cpp
+
+      - name: Cache godot-cpp
+        uses: actions/cache@v4
+        with:
+          path: |
+            victor/victor/bridge/extension/godot-cpp/bin
+            victor/victor/bridge/extension/godot-cpp/gen
+            victor/victor/bridge/extension/godot-cpp/src
+            victor/victor/bridge/extension/.sconsign.dblite
+          key: godot-cpp-web-${{ env.GODOT_CPP_BRANCH }}-${{ env.EMSDK_VERSION }}-v1
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            elpian/rust/target
+          key: cargo-godot-capi-web-${{ runner.os }}-${{ hashFiles('elpian/rust/Cargo.lock') }}
+
+      # Same reason as the Android job: SConstruct globs every src/*.cpp, so the
+      # Rust C-ABI library is required even though only the ElpianScene3D half is
+      # used here. emcc is the linker for this target and comes from the emsdk
+      # the setup step put on PATH.
+      - name: Build the Elpian C-ABI library for wasm32
+        working-directory: elpian/rust
+        run: cargo build -p elpian-godot-capi --release --target wasm32-unknown-emscripten
+
+      - name: Build the GDExtension for the web
+        working-directory: victor/victor/bridge/extension
+        run: |
+          set -e
+          scons platform=web target=template_release \
+            elpian_capi="$GITHUB_WORKSPACE/elpian/rust/target/wasm32-unknown-emscripten/release/libelpian_godot.a"
+          ls -la ../project/bin/
+
+      - name: Install the Godot editor and export templates
+        run: |
+          curl -sSL -o godot.zip \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_RELEASE}/Godot_v${GODOT_RELEASE}_linux.x86_64.zip"
+          unzip -q godot.zip
+          sudo mv "Godot_v${GODOT_RELEASE}_linux.x86_64" /usr/local/bin/godot
+          curl -sSL -o templates.tpz \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_RELEASE}/Godot_v${GODOT_RELEASE}_export_templates.tpz"
+          mkdir -p "$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_DIR}"
+          unzip -q templates.tpz -d /tmp/templates
+          mv /tmp/templates/templates/* "$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_DIR}/"
+          # The extensions-support variant is a separate template in the archive;
+          # without it the export silently drops the GDExtension and OpSink.gd
+          # fails at _ready with "ElpianScene3D not loaded".
+          ls "$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_DIR}/" | grep -i web
+
+      # The .gdextension names the file it wants (web.wasm32 =
+      # res://bin/libelpian_godot.web.wasm32.wasm). Assert it rather than trusting
+      # the glob: an export whose library is missing still succeeds, and the
+      # failure only shows up as a blank canvas at runtime.
+      - name: Stage the extension library into the Godot project
+        run: |
+          set -e
+          mkdir -p elpian/godot/godot-project/bin
+          cp victor/victor/bridge/project/bin/*.wasm elpian/godot/godot-project/bin/ 2>/dev/null || true
+          ls -la elpian/godot/godot-project/bin
+          test -f elpian/godot/godot-project/bin/libelpian_godot.web.wasm32.wasm \
+            || { echo "::error::GDExtension wasm missing; the export would ship without ElpianScene3D"; exit 1; }
+
+      - name: Export the op-sink project for the web
+        working-directory: elpian/godot/godot-project
+        run: |
+          set -e
+          mkdir -p "$GITHUB_WORKSPACE/out/godot"
+          godot --headless --import || true
+          godot --headless --export-release "Web" \
+            "$GITHUB_WORKSPACE/out/godot/elpian_godot.html"
+          ls -lh "$GITHUB_WORKSPACE/out/godot"
+
+      # The page glue boots the engine itself instead of loading the exported
+      # HTML shell, because the canvas has to be the one Flutter put in the
+      # platform-view slot. It still needs the export's own config — the
+      # executable/pack names, fileSizes, and the gdextensionLibs list all come
+      # from the exporter and change with the Godot version — so lift it out of
+      # the shell rather than hand-maintaining a copy.
+      - name: Extract the engine config from the exported shell
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, re, sys
+          html = pathlib.Path("out/godot/elpian_godot.html").read_text()
+          m = re.search(r"const GODOT_CONFIG\s*=\s*(\{.*?\});", html, re.S)
+          if not m:
+              sys.exit("::error::GODOT_CONFIG not found in the exported shell")
+          cfg = json.loads(m.group(1))
+          # Owned by the page glue, not the export.
+          for key in ("canvas", "canvasResizePolicy", "focusCanvas"):
+              cfg.pop(key, None)
+          pathlib.Path("out/godot/godot_config.json").write_text(json.dumps(cfg, indent=2))
+          print(json.dumps(cfg, indent=2))
+          if not cfg.get("gdextensionLibs"):
+              sys.exit("::error::export declares no gdextensionLibs; ElpianScene3D would be absent")
+          PY
+
+      - name: Assemble the bundle
+        run: |
+          set -e
+          # The shell is not shipped — the glue boots the engine — but keeping it
+          # makes the export reproducible by hand when debugging.
+          cat > out/MANIFEST.txt <<EOF
+          target=web
+          godot_release=${GODOT_RELEASE}
+          godot_cpp=${GODOT_CPP_BRANCH}
+          emsdk=${EMSDK_VERSION}
+          elpian=${GITHUB_SHA}
+          built=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          EOF
+          cat out/MANIFEST.txt
+          find out -type f -exec ls -lh {} \;
+
+      - name: Upload the Godot artifact bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-artifacts-web
           path: out
           retention-days: 90

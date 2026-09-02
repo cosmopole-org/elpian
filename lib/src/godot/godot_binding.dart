@@ -28,6 +28,11 @@ import 'package:flutter/services.dart';
 
 import 'protocol.dart';
 
+// The web transport is selected at compile time. Off the web the stub is
+// compiled instead, so `dart:js_interop` never reaches a native build.
+import 'godot_binding_stub.dart'
+    if (dart.library.js_interop) 'godot_binding_web.dart' as web_transport;
+
 /// A callback delivered from the engine: a connected signal fired.
 typedef GodotSignalDispatch = void Function(int callbackId, List<Object?> args);
 
@@ -247,9 +252,18 @@ void resetGodotBinding() {
 
 GodotBinding _createBinding() {
   if (kIsWeb) {
-    // The web binding lives behind a conditional import so `dart:js_interop`
-    // never reaches a native build; it registers itself when loaded.
-    return webGodotBindingFactory?.call() ?? MockGodotBinding();
+    // Resolved through the conditional import above rather than an explicit
+    // install call from the embedder: an app that forgot to call one would
+    // silently get the mock and a permanent placeholder, with nothing to show
+    // that 3D was ever meant to work here.
+    //
+    // The web binding is returned whether or not a Godot export is on the page.
+    // It reports `isLive` false until the page installs the drain hook and true
+    // the moment it does, so a late-booting engine lights the surface up on its
+    // own. Returning the mock instead would pin the placeholder forever.
+    return webGodotBindingFactory?.call() ??
+        web_transport.createWebGodotBinding() ??
+        MockGodotBinding();
   }
   switch (defaultTargetPlatform) {
     case TargetPlatform.android:

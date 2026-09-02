@@ -24,7 +24,15 @@ import 'package:flutter/foundation.dart';
 import 'godot_binding.dart';
 import 'protocol.dart';
 
-/// Install this binding as the web factory. Called from a web entrypoint.
+/// Construct the web transport. Called by the conditional import in
+/// `godot_binding.dart`, so nothing has to be installed by hand.
+GodotBinding? createWebGodotBinding() => WebGodotBinding();
+
+/// Install this binding as the web factory.
+///
+/// Redundant now that `godot_binding.dart` resolves the transport through a
+/// conditional import; kept for an embedder that wants to force it (or install
+/// a subclass) before the first `Scene3D` builds.
 void installWebGodotBinding() {
   webGodotBindingFactory = WebGodotBinding.new;
 }
@@ -51,6 +59,7 @@ class WebGodotBinding implements GodotBinding {
   }
 
   int _nextRequestId = 1;
+  bool _polling = false;
   final Map<int, Completer<List<Wire>>> _awaiting = {};
   Timer? _poll;
 
@@ -64,9 +73,31 @@ class WebGodotBinding implements GodotBinding {
 
   void _ensureQueue() {
     _queue ??= <JSString>[].toJS;
-    // Replies and signals arrive asynchronously from the engine; poll the
-    // page-side reply object rather than blocking a frame on it.
-    _poll ??= Timer.periodic(const Duration(milliseconds: 16), (_) => _drainReplies());
+    _ensurePolling();
+  }
+
+  /// Replies and signals arrive asynchronously from the engine, so they are
+  /// polled rather than blocking a frame on them.
+  ///
+  /// Two cadences, because this binding is now constructed on **every** web
+  /// page whether or not a Godot export is present (see `resolveGodotBinding`).
+  /// Draining at 60 Hz forever on a page that has no engine would be pure
+  /// waste, so until the drain hook appears we only look once a second, then
+  /// upgrade to per-frame and stay there.
+  void _ensurePolling() {
+    if (_polling == _hasDrainHook()) return;
+    _polling = _hasDrainHook();
+    _poll?.cancel();
+    _poll = Timer.periodic(
+      _polling ? const Duration(milliseconds: 16) : const Duration(seconds: 1),
+      (_) {
+        if (!_polling) {
+          _ensurePolling();
+          return;
+        }
+        _drainReplies();
+      },
+    );
   }
 
   bool _hasDrainHook() {
@@ -150,6 +181,7 @@ class WebGodotBinding implements GodotBinding {
   void dispose() {
     _poll?.cancel();
     _poll = null;
+    _polling = false;
     _awaiting.clear();
   }
 }
