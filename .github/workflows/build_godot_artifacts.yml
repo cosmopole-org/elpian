@@ -195,13 +195,22 @@ jobs:
 
       - name: Assemble the bundle
         run: |
+          set -e
           mkdir -p out/godot-project/bin
           cp elpian/godot/godot-project/bin/*.so out/godot-project/bin/
+          # The two trees this workflow declares as its inputs, hashed. Consumers
+          # compare this against their own checkout to tell a bundle that is
+          # merely older than HEAD — the normal case, since this workflow runs on
+          # its own cadence — from one built before the extension changed, which
+          # is no longer the extension the app expects.
+          inputs="$(git -C elpian rev-parse HEAD:godot/extension)"
+          inputs="$inputs-$(git -C elpian rev-parse HEAD:godot/godot-project)"
           cat > out/MANIFEST.txt <<EOF
           godot_release=${GODOT_RELEASE}
           godot_cpp=${GODOT_CPP_BRANCH}
           ndk=${NDK_VERSION}
           elpian=${GITHUB_SHA}
+          godot_inputs=${inputs}
           built=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           EOF
           cat out/MANIFEST.txt
@@ -374,12 +383,17 @@ jobs:
           set -e
           # The shell is not shipped — the glue boots the engine — but keeping it
           # makes the export reproducible by hand when debugging.
+          # See the android job: identifies the extension sources this bundle
+          # was actually built from, so a consumer can reject a stale one.
+          inputs="$(git -C elpian rev-parse HEAD:godot/extension)"
+          inputs="$inputs-$(git -C elpian rev-parse HEAD:godot/godot-project)"
           cat > out/MANIFEST.txt <<EOF
           target=web
           godot_release=${GODOT_RELEASE}
           godot_cpp=${GODOT_CPP_BRANCH}
           emsdk=${EMSDK_VERSION}
           elpian=${GITHUB_SHA}
+          godot_inputs=${inputs}
           built=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           EOF
           cat out/MANIFEST.txt

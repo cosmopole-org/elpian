@@ -223,6 +223,24 @@ jobs:
           gh run download "$run_id" --repo "$GITHUB_REPOSITORY" \
             --name godot-artifacts-web --dir godot-web
 
+      # A bundle older than HEAD is normal and fine — build_godot_artifacts.yml
+      # runs on its own cadence. A bundle built from *different* extension
+      # sources is not: it is a binary for an engine seam this commit no longer
+      # has. Shipping one anyway is how a failed artifact run reaches Pages as a
+      # broken canvas instead of the placeholder, which is the whole point of
+      # treating the bundle as optional. Drop it and degrade on purpose.
+      - name: Reject a Godot bundle built from other sources
+        run: |
+          set -e
+          [ -f godot-web/MANIFEST.txt ] || exit 0
+          want="$(git -C elpian rev-parse HEAD:godot/extension)"
+          want="$want-$(git -C elpian rev-parse HEAD:godot/godot-project)"
+          have="$(sed -n 's/^godot_inputs=//p' godot-web/MANIFEST.txt)"
+          if [ "$want" != "$have" ]; then
+            echo "::warning::Godot web bundle was built from ${have:-an unstamped commit}, but this commit needs $want; shipping the Scene3D placeholder instead."
+            rm -rf godot-web
+          fi
+
       # dist/web is the engine build plus the app's manifest and VM artifacts.
       - name: Assemble the deployable site
         run: |
