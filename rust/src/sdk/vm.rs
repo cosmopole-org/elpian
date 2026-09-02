@@ -119,6 +119,11 @@ impl VM {
     pub fn trap_reason(&self) -> Option<String> {
         self.exec().trap_reason()
     }
+    /// Turn a guest fault that unwound out of a turn into an ordinary trap.
+    /// See [`crate::sdk::executor::Executor::record_fault`].
+    pub fn record_fault(&self, reason: String) {
+        self.exec().record_fault(reason);
+    }
     /// Charge the host filesystem's storage delta against the storage budget.
     pub fn charge_storage(&self, delta: i64) -> Result<(), String> {
         self.exec().charge_storage(delta)

@@ -1919,6 +1919,29 @@ impl Executor {
     pub fn trap_reason(&self) -> Option<String> {
         self.trap.clone()
     }
+    /// Record a guest fault that unwound out of the step loop, turning it into
+    /// an ordinary trap.
+    ///
+    /// Guest type errors are raised with `panic!` rather than as traps (see
+    /// `operate_sum` and friends), so they unwind straight past the bookkeeping
+    /// that would normally end a turn. That left the instance wedged: the
+    /// `processing` flag stayed set, and every later `execute_vm_func*` bounced
+    /// with `vm_busy` forever. The embedder catches the unwind at the turn
+    /// boundary and calls this, which puts the instance in exactly the state a
+    /// limit overrun would have: trapped, terminated, no longer processing, and
+    /// reporting its reason through [`Executor::trap_reason`].
+    ///
+    /// The first fault wins — a fault raised while unwinding a previous one
+    /// must not mask the original reason.
+    pub fn record_fault(&mut self, reason: String) {
+        if self.trap.is_none() {
+            self.trap = Some(reason);
+        }
+        self.processing = false;
+        self.paused_out = false;
+        self.control.confirm_terminated();
+        self.registers.clear();
+    }
     /// Charge the storage governor on behalf of the host filesystem; returns the
     /// limit error string if the storage cap would be exceeded.
     pub fn charge_storage(&mut self, delta: i64) -> Result<(), String> {

@@ -331,15 +331,49 @@ pub fn validate_ast(ast_json: String) -> bool {
     true
 }
 
+/// Drive one VM turn with guest faults contained.
+///
+/// The executor raises guest type errors with `panic!` (`{} - 1` unwinds with
+/// "object and integer can not be subtracted"), which skips every piece of
+/// end-of-turn bookkeeping on the way out. Two things went wrong as a result:
+/// the instance stayed flagged `processing` and so bounced every later call
+/// with `vm_busy`, and the unwind escaped to whatever was driving the VM — for
+/// the C ABI, straight through an `extern "C"` frame.
+///
+/// Containing it here rather than at each embedder's edge means every embedder
+/// — the C ABI, the wasm bindings, the Godot manager, a plain Rust host — gets
+/// the same behaviour: the fault becomes an ordinary trap on that instance,
+/// readable through [`trap_reason`], and the turn returns a normal result.
+///
+/// `AssertUnwindSafe` is sound for the same reason `lock_tolerant` is: the
+/// registry holds plain data that stays coherent across an executor unwind, and
+/// the faulting instance is left in a well-defined terminated state.
+fn drive_turn(vm: &mut VM, turn: impl FnOnce(&mut VM) -> VmExecResult) -> VmExecResult {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| turn(vm))) {
+        Ok(result) => result,
+        Err(payload) => {
+            let reason = if let Some(s) = payload.downcast_ref::<&str>() {
+                (*s).to_string()
+            } else if let Some(s) = payload.downcast_ref::<String>() {
+                s.clone()
+            } else {
+                "guest fault".to_string()
+            };
+            vm.record_fault(reason.clone());
+            VmExecResult::done(&serde_json::Value::String(reason).to_string())
+        }
+    }
+}
+
 /// Execute a VM's top-level program.
 pub fn execute_vm(machine_id: String) -> VmExecResult {
     let mut vms = lock_tolerant(&VMS);
     match vms.get_mut(&machine_id) {
         Some(vm) if vm.is_exec_processing() => VmExecResult::done("\"vm_busy\""),
-        Some(vm) => {
+        Some(vm) => drive_turn(vm, |vm| {
             vm.run();
             check_host_call(vm, "\"done\"")
-        }
+        }),
         None => VmExecResult::done("\"vm_not_found\""),
     }
 }
@@ -349,10 +383,10 @@ pub fn execute_vm_func(machine_id: String, func_name: String, cb_id: i64) -> VmE
     let mut vms = lock_tolerant(&VMS);
     match vms.get_mut(&machine_id) {
         Some(vm) if vm.is_exec_processing() => VmExecResult::done("\"vm_busy\""),
-        Some(vm) => {
+        Some(vm) => drive_turn(vm, |vm| {
             let res = vm.run_func_with_input(&func_name, None, cb_id);
             check_host_call(vm, &res.stringify())
-        }
+        }),
         None => VmExecResult::done("\"vm_not_found\""),
     }
 }
@@ -367,10 +401,10 @@ pub fn execute_vm_func_with_input(
     let mut vms = lock_tolerant(&VMS);
     match vms.get_mut(&machine_id) {
         Some(vm) if vm.is_exec_processing() => VmExecResult::done("\"vm_busy\""),
-        Some(vm) => {
+        Some(vm) => drive_turn(vm, |vm| {
             let res = vm.run_func_with_input(&func_name, Some(&input_json), cb_id);
             check_host_call(vm, &res.stringify())
-        }
+        }),
         None => VmExecResult::done("\"vm_not_found\""),
     }
 }
@@ -407,10 +441,10 @@ pub fn deliver_host_message(machine_id: String, message_json: String, cb_id: i64
 pub fn continue_execution(machine_id: String, input_json: String) -> VmExecResult {
     let mut vms = lock_tolerant(&VMS);
     match vms.get_mut(&machine_id) {
-        Some(vm) => {
+        Some(vm) => drive_turn(vm, |vm| {
             vm.continue_run(input_json);
             check_host_call(vm, "\"done\"")
-        }
+        }),
         None => VmExecResult::done("\"vm_not_found\""),
     }
 }
@@ -432,8 +466,7 @@ pub fn vm_exists(machine_id: String) -> bool {
 /// a host call (e.g. a Godot notification fired synchronously by an engine op)
 /// checks this to defer its drain to the next regular pump instead.
 pub fn vm_is_processing(machine_id: &str) -> bool {
-    VMS.lock()
-        .unwrap()
+    lock_tolerant(&VMS)
         .get(machine_id)
         .map(|vm| vm.is_exec_processing())
         .unwrap_or(false)
@@ -501,8 +534,7 @@ pub fn set_capabilities(machine_id: &str, caps: CapabilitySet) -> bool {
 
 /// Whether a VM currently permits the given host API.
 pub fn capability_allows(machine_id: &str, api_name: &str) -> bool {
-    VMS.lock()
-        .unwrap()
+    lock_tolerant(&VMS)
         .get(machine_id)
         .map(|vm| vm.capabilities().allows_api(api_name))
         .unwrap_or(false)
@@ -569,8 +601,7 @@ pub fn run_state(machine_id: &str) -> Option<RunState> {
 /// The fatal trap reason if a VM was stopped by a limit overrun or runtime
 /// error, else `None`.
 pub fn trap_reason(machine_id: &str) -> Option<String> {
-    VMS.lock()
-        .unwrap()
+    lock_tolerant(&VMS)
         .get(machine_id)
         .and_then(|vm| vm.trap_reason())
 }

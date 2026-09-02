@@ -363,10 +363,10 @@ mod tests {
             c.dispatch(
                 "core",
                 "double.toStringAsFixed",
-                &[json!(3.14159), json!(2)]
+                &[json!(1.23456), json!(2)]
             )
             .unwrap(),
-            json!("3.14")
+            json!("1.23")
         );
         assert_eq!(
             c.dispatch("core", "num.toRadixString", &[json!(255), json!(16)])

@@ -256,8 +256,10 @@ fn c_str<'a>(p: *const c_char) -> Option<&'a str> {
 /// node does). `max_host_calls` / `max_bytes_moved` bound the root's resource
 /// meter (0 = unbounded). Returns NULL on a compile/limit error — read
 /// `elpian_godot_last_error()`.
+/// # Safety
+/// `guest_source` is NULL or a NUL-terminated string valid for this call.
 #[no_mangle]
-pub extern "C" fn elpian_godot_new(
+pub unsafe extern "C" fn elpian_godot_new(
     guest_source: *const c_char,
     prepend_prelude: c_int,
     max_host_calls: u64,
@@ -278,8 +280,10 @@ pub extern "C" fn elpian_godot_new(
 /// composed ahead), anything else (including NULL) means Dart. Children the
 /// tree spawns inherit the root's language unless their spawn options say
 /// otherwise.
+/// # Safety
+/// `guest_source` and `language` are NULL or NUL-terminated strings valid for this call.
 #[no_mangle]
-pub extern "C" fn elpian_godot_new_lang(
+pub unsafe extern "C" fn elpian_godot_new_lang(
     guest_source: *const c_char,
     language: *const c_char,
     prepend_prelude: c_int,
@@ -342,8 +346,10 @@ fn new_runtime(
 
 /// Register the host callback servicing the tree's forwarded `godot.*` calls.
 /// Passing a NULL `host_fn` uninstalls (guests see `null` replies).
+/// # Safety
+/// `rt` is NULL or a live runtime from `elpian_godot_new*`; `user` outlives the bridge.
 #[no_mangle]
-pub extern "C" fn elpian_godot_set_host(
+pub unsafe extern "C" fn elpian_godot_set_host(
     rt: *mut ElpianGodotRuntime,
     host_fn: ElpianGodotHostFn,
     free_fn: ElpianGodotHostFreeFn,
@@ -373,8 +379,10 @@ pub extern "C" fn elpian_godot_set_host(
 /// Uses the real-time drain: a `main()` that installs a `Timer.periodic` (or a
 /// long one-shot `Timer`) returns promptly instead of spinning the event loop
 /// forever — the timer fires later, once per frame, via [`elpian_godot_pump`].
+/// # Safety
+/// `rt` is NULL or a live runtime from `elpian_godot_new*`.
 #[no_mangle]
-pub extern "C" fn elpian_godot_run(rt: *mut ElpianGodotRuntime) -> c_int {
+pub unsafe extern "C" fn elpian_godot_run(rt: *mut ElpianGodotRuntime) -> c_int {
     let Some(rt) = (unsafe { rt.as_mut() }) else {
         return 1;
     };
@@ -397,8 +405,10 @@ pub extern "C" fn elpian_godot_run(rt: *mut ElpianGodotRuntime) -> c_int {
 /// bridged signal emissions (`__godotDispatch([cbId, [args…]])` — routed to
 /// the VM owning the namespaced callback id). Other names are delivered to the
 /// root VM. 0 = ok.
+/// # Safety
+/// `rt` is NULL or a live runtime; `fn_name`/`json_arg` are NULL or NUL-terminated strings valid for this call.
 #[no_mangle]
-pub extern "C" fn elpian_godot_invoke(
+pub unsafe extern "C" fn elpian_godot_invoke(
     rt: *mut ElpianGodotRuntime,
     fn_name: *const c_char,
     json_arg: *const c_char,
@@ -427,8 +437,10 @@ pub extern "C" fn elpian_godot_invoke(
 /// Advance every live VM's guest clock by `delta_ms` real milliseconds (the
 /// engine frame delta), fire whatever timers/microtasks became due, then run
 /// the tree's aggregate-budget sweep. Call once per engine frame. 0 = ok.
+/// # Safety
+/// `rt` is NULL or a live runtime from `elpian_godot_new*`.
 #[no_mangle]
-pub extern "C" fn elpian_godot_pump(rt: *mut ElpianGodotRuntime, delta_ms: u64) -> c_int {
+pub unsafe extern "C" fn elpian_godot_pump(rt: *mut ElpianGodotRuntime, delta_ms: u64) -> c_int {
     let Some(rt) = (unsafe { rt.as_mut() }) else {
         return 1;
     };
@@ -448,8 +460,10 @@ pub extern "C" fn elpian_godot_pump(rt: *mut ElpianGodotRuntime, delta_ms: u64) 
 /// New guest `print`/log lines since the last call — from every VM in the
 /// tree, child lines prefixed `[vm<id>:<label>]` — as a JSON string array.
 /// Caller frees with [`elpian_godot_string_free`]. NULL when nothing new.
+/// # Safety
+/// `rt` is NULL or a live runtime from `elpian_godot_new*`.
 #[no_mangle]
-pub extern "C" fn elpian_godot_take_log(rt: *mut ElpianGodotRuntime) -> *mut c_char {
+pub unsafe extern "C" fn elpian_godot_take_log(rt: *mut ElpianGodotRuntime) -> *mut c_char {
     let Some(rt) = (unsafe { rt.as_mut() }) else {
         return std::ptr::null_mut();
     };
@@ -465,8 +479,10 @@ pub extern "C" fn elpian_godot_take_log(rt: *mut ElpianGodotRuntime) -> *mut c_c
 /// A JSON snapshot of the whole VM tree (ids, labels, states, per-VM and
 /// aggregate usage) for host-side dashboards. Caller frees with
 /// [`elpian_godot_string_free`].
+/// # Safety
+/// `rt` is NULL or a live runtime from `elpian_godot_new*`.
 #[no_mangle]
-pub extern "C" fn elpian_godot_stats_json(rt: *mut ElpianGodotRuntime) -> *mut c_char {
+pub unsafe extern "C" fn elpian_godot_stats_json(rt: *mut ElpianGodotRuntime) -> *mut c_char {
     let Some(rt) = (unsafe { rt.as_ref() }) else {
         return std::ptr::null_mut();
     };
@@ -485,8 +501,10 @@ pub extern "C" fn elpian_godot_last_error() -> *const c_char {
 }
 
 /// Free a string returned by this library.
+/// # Safety
+/// `s` is NULL or a string this library returned and has not yet freed.
 #[no_mangle]
-pub extern "C" fn elpian_godot_string_free(s: *mut c_char) {
+pub unsafe extern "C" fn elpian_godot_string_free(s: *mut c_char) {
     if !s.is_null() {
         unsafe { drop(CString::from_raw(s)) };
     }
@@ -494,8 +512,10 @@ pub extern "C" fn elpian_godot_string_free(s: *mut c_char) {
 
 /// Destroy the VM tree (every VM in it — terminating the root terminates all
 /// descendants by construction).
+/// # Safety
+/// `rt` is NULL or a live runtime this library returned, not yet freed.
 #[no_mangle]
-pub extern "C" fn elpian_godot_free(rt: *mut ElpianGodotRuntime) {
+pub unsafe extern "C" fn elpian_godot_free(rt: *mut ElpianGodotRuntime) {
     if !rt.is_null() {
         unsafe { drop(Box::from_raw(rt)) };
     }

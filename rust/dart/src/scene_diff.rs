@@ -72,12 +72,12 @@ fn diff_into(old: &Value, new: &Value, path: &mut Vec<Value>, out: &mut Vec<Patc
                 path.pop();
             }
             // Appended elements.
-            for i in common..b.len() {
+            for (i, added) in b.iter().enumerate().skip(common) {
                 let mut p = path.clone();
                 p.push(Value::from(i));
                 out.push(Patch {
                     path: p,
-                    value: Some(b[i].clone()),
+                    value: Some(added.clone()),
                 });
             }
             // Removed tail (highest index first so earlier indices stay valid).

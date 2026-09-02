@@ -476,53 +476,64 @@ mod capi_surface {
 
     #[test]
     fn ffi_boot_run_log_teardown() {
-        let src = CString::new(
-            r#"
-void main() {
-  var v = GD.constant("ANY");
-  print("constant was " + v);
-  var n = GD.create("Node");
-  print("handle " + n.id);
-}
-"#,
-        )
-        .unwrap();
-        let rt = elpian_godot_new(src.as_ptr(), 1, 0, 0);
-        assert!(!rt.is_null(), "boot failed: {:?}", unsafe {
-            CStr::from_ptr(elpian_godot_last_error())
-        });
-        elpian_godot_set_host(rt, Some(host), Some(host_free), std::ptr::null_mut());
-        assert_eq!(elpian_godot_run(rt), 0, "run failed: {:?}", unsafe {
-            CStr::from_ptr(elpian_godot_last_error())
-        });
+        // SAFETY: the elpian_godot_* exports are `unsafe extern "C"`; every
+        // pointer below is a live handle or a CString owned by this scope.
+        unsafe {
+            let src = CString::new(
+                r#"
+    void main() {
+      var v = GD.constant("ANY");
+      print("constant was " + v);
+      var n = GD.create("Node");
+      print("handle " + n.id);
+    }
+    "#,
+            )
+            .unwrap();
+            let rt = elpian_godot_new(src.as_ptr(), 1, 0, 0);
+            assert!(
+                !rt.is_null(),
+                "boot failed: {:?}",
+                CStr::from_ptr(elpian_godot_last_error())
+            );
+            elpian_godot_set_host(rt, Some(host), Some(host_free), std::ptr::null_mut());
+            assert_eq!(
+                elpian_godot_run(rt),
+                0,
+                "run failed: {:?}",
+                CStr::from_ptr(elpian_godot_last_error())
+            );
 
-        let log_ptr = elpian_godot_take_log(rt);
-        assert!(!log_ptr.is_null());
-        let log: Value =
-            serde_json::from_str(unsafe { CStr::from_ptr(log_ptr) }.to_str().unwrap()).unwrap();
-        elpian_godot_string_free(log_ptr);
-        assert_eq!(log, json!(["constant was 42", "handle 1"]));
-        // Drained: nothing new.
-        assert!(elpian_godot_take_log(rt).is_null());
+            let log_ptr = elpian_godot_take_log(rt);
+            assert!(!log_ptr.is_null());
+            let log: Value =
+                serde_json::from_str(CStr::from_ptr(log_ptr).to_str().unwrap()).unwrap();
+            elpian_godot_string_free(log_ptr);
+            assert_eq!(log, json!(["constant was 42", "handle 1"]));
+            // Drained: nothing new.
+            assert!(elpian_godot_take_log(rt).is_null());
 
-        // Lifecycle event through the C surface.
-        let name = CString::new("__godotEvent").unwrap();
-        let arg = CString::new(r#"["_process", 0.016]"#).unwrap();
-        assert_eq!(elpian_godot_invoke(rt, name.as_ptr(), arg.as_ptr()), 0);
-        assert_eq!(elpian_godot_pump(rt, 16), 0);
+            // Lifecycle event through the C surface.
+            let name = CString::new("__godotEvent").unwrap();
+            let arg = CString::new(r#"["_process", 0.016]"#).unwrap();
+            assert_eq!(elpian_godot_invoke(rt, name.as_ptr(), arg.as_ptr()), 0);
+            assert_eq!(elpian_godot_pump(rt, 16), 0);
 
-        elpian_godot_free(rt);
+            elpian_godot_free(rt);
+        }
     }
 
     #[test]
     fn ffi_compile_error_reports() {
-        let src = CString::new("void main( {").unwrap();
-        let rt = elpian_godot_new(src.as_ptr(), 1, 0, 0);
-        assert!(rt.is_null());
-        let err = unsafe { CStr::from_ptr(elpian_godot_last_error()) }
-            .to_str()
-            .unwrap();
-        assert!(err.contains("compile"), "unexpected error: {err}");
+        // SAFETY: the elpian_godot_* exports are `unsafe extern "C"`; every
+        // pointer below is a live handle or a CString owned by this scope.
+        unsafe {
+            let src = CString::new("void main( {").unwrap();
+            let rt = elpian_godot_new(src.as_ptr(), 1, 0, 0);
+            assert!(rt.is_null());
+            let err = CStr::from_ptr(elpian_godot_last_error()).to_str().unwrap();
+            assert!(err.contains("compile"), "unexpected error: {err}");
+        }
     }
 }
 
@@ -552,7 +563,9 @@ mod reentrant_engine_callback {
             let rt = RT.load(Ordering::SeqCst);
             let fn_name = CString::new("__godotEvent").unwrap();
             let arg = CString::new(r#"["_notification", 24]"#).unwrap();
-            elpian_godot_invoke(rt, fn_name.as_ptr(), arg.as_ptr());
+            // SAFETY: `rt` is the live runtime published by the test that
+            // installed this callback, and both names are owned CStrings.
+            unsafe { elpian_godot_invoke(rt, fn_name.as_ptr(), arg.as_ptr()) };
             return CString::new("42").unwrap().into_raw();
         }
         CString::new("null").unwrap().into_raw()
@@ -570,52 +583,61 @@ mod reentrant_engine_callback {
     /// the web export, freezing the TritonLand boot gate forever.)
     #[test]
     fn microtasks_survive_reentrant_engine_callbacks() {
-        let src = CString::new(
-            r#"
-__cbReg.push(function () { print("microtask ran"); });
-askHost("dart:async/scheduleMicrotask", [__cbReg.length - 1]);
-var v = askHost("godot.op", [{ "const": "REENTER" }]);
-print("op answered " + v);
-"#,
-        )
-        .unwrap();
-        let lang = CString::new("js").unwrap();
-        let rt = elpian_godot_new_lang(src.as_ptr(), lang.as_ptr(), 1, 0, 0);
-        assert!(!rt.is_null(), "boot failed: {:?}", unsafe {
-            CStr::from_ptr(elpian_godot_last_error())
-        });
-        RT.store(rt, Ordering::SeqCst);
-        elpian_godot_set_host(rt, Some(host), Some(host_free), std::ptr::null_mut());
-        assert_eq!(elpian_godot_run(rt), 0, "run failed: {:?}", unsafe {
-            CStr::from_ptr(elpian_godot_last_error())
-        });
-        // The frame pump is the fallback drain for anything the boot run left
-        // queued (the run's own trailing drain already suffices; this mirrors
-        // the node's per-frame call).
-        elpian_godot_pump(rt, 16);
+        // SAFETY: the elpian_godot_* exports are `unsafe extern "C"`; every
+        // pointer below is a live handle or a CString owned by this scope.
+        unsafe {
+            let src = CString::new(
+                r#"
+    __cbReg.push(function () { print("microtask ran"); });
+    askHost("dart:async/scheduleMicrotask", [__cbReg.length - 1]);
+    var v = askHost("godot.op", [{ "const": "REENTER" }]);
+    print("op answered " + v);
+    "#,
+            )
+            .unwrap();
+            let lang = CString::new("js").unwrap();
+            let rt = elpian_godot_new_lang(src.as_ptr(), lang.as_ptr(), 1, 0, 0);
+            assert!(
+                !rt.is_null(),
+                "boot failed: {:?}",
+                CStr::from_ptr(elpian_godot_last_error())
+            );
+            RT.store(rt, Ordering::SeqCst);
+            elpian_godot_set_host(rt, Some(host), Some(host_free), std::ptr::null_mut());
+            assert_eq!(
+                elpian_godot_run(rt),
+                0,
+                "run failed: {:?}",
+                CStr::from_ptr(elpian_godot_last_error())
+            );
+            // The frame pump is the fallback drain for anything the boot run left
+            // queued (the run's own trailing drain already suffices; this mirrors
+            // the node's per-frame call).
+            elpian_godot_pump(rt, 16);
 
-        let log_ptr = elpian_godot_take_log(rt);
-        assert!(!log_ptr.is_null(), "guest produced no output at all");
-        let log: Value =
-            serde_json::from_str(unsafe { CStr::from_ptr(log_ptr) }.to_str().unwrap()).unwrap();
-        elpian_godot_string_free(log_ptr);
-        let lines: Vec<String> = log
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|v| v.as_str().unwrap_or_default().to_string())
-            .collect();
-        assert!(
-            lines.iter().any(|l| l.contains("op answered 42")),
-            "the re-entered op never completed; log: {lines:?}"
-        );
-        assert!(
-            lines.iter().any(|l| l.contains("microtask ran")),
-            "the microtask scheduled before the re-entrant callback was \
-             consumed unrun; log: {lines:?}"
-        );
+            let log_ptr = elpian_godot_take_log(rt);
+            assert!(!log_ptr.is_null(), "guest produced no output at all");
+            let log: Value =
+                serde_json::from_str(CStr::from_ptr(log_ptr).to_str().unwrap()).unwrap();
+            elpian_godot_string_free(log_ptr);
+            let lines: Vec<String> = log
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| v.as_str().unwrap_or_default().to_string())
+                .collect();
+            assert!(
+                lines.iter().any(|l| l.contains("op answered 42")),
+                "the re-entered op never completed; log: {lines:?}"
+            );
+            assert!(
+                lines.iter().any(|l| l.contains("microtask ran")),
+                "the microtask scheduled before the re-entrant callback was \
+                 consumed unrun; log: {lines:?}"
+            );
 
-        RT.store(std::ptr::null_mut(), Ordering::SeqCst);
-        elpian_godot_free(rt);
+            RT.store(std::ptr::null_mut(), Ordering::SeqCst);
+            elpian_godot_free(rt);
+        }
     }
 }
