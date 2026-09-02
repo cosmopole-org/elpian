@@ -52,7 +52,10 @@ fn program(body: Vec<Value>) -> String {
 /// Register a VM, run its top-level program, then call `func` and return the
 /// stringified result value.
 fn run_and_call(id: &str, ast: &str, func: &str) -> String {
-    assert!(api::create_vm_from_ast(id.to_string(), ast.to_string()), "AST should compile");
+    assert!(
+        api::create_vm_from_ast(id.to_string(), ast.to_string()),
+        "AST should compile"
+    );
     let _ = api::execute_vm(id.to_string());
     let res = api::execute_vm_func(id.to_string(), func.to_string(), 1);
     res.result_value
@@ -78,7 +81,10 @@ fn nested_builtin_calls_compose() {
         vec![],
         vec![ret(call(
             "max",
-            vec![call("gcd", vec![i64v(54), i64v(24)]), call("sqrt", vec![i64v(81)])],
+            vec![
+                call("gcd", vec![i64v(54), i64v(24)]),
+                call("sqrt", vec![i64v(81)]),
+            ],
         ))],
     )]);
     assert_eq!(run_and_call("feat-nested", &ast, "f"), "9");
@@ -90,7 +96,10 @@ fn foundation_string_and_json_builtins() {
     let ast = program(vec![func_def(
         "f",
         vec![],
-        vec![ret(call("upper", vec![call("concat", vec![strv("el"), strv("pa")])]))],
+        vec![ret(call(
+            "upper",
+            vec![call("concat", vec![strv("el"), strv("pa")])],
+        ))],
     )]);
     assert_eq!(run_and_call("feat-str", &ast, "f"), "\"ELPA\"");
 }
@@ -121,7 +130,13 @@ fn closures_capture_mutable_cell_state() {
                 vec![],
                 vec![
                     // cellSet(c, cellGet(c) + 1) — mutate the captured cell.
-                    call("cellSet", vec![ident("c"), arith("+", call("cellGet", vec![ident("c")]), i64v(1))]),
+                    call(
+                        "cellSet",
+                        vec![
+                            ident("c"),
+                            arith("+", call("cellGet", vec![ident("c")]), i64v(1)),
+                        ],
+                    ),
                     ret(call("cellGet", vec![ident("c")])),
                 ],
             ),
@@ -131,16 +146,29 @@ fn closures_capture_mutable_cell_state() {
     let ast = program(vec![
         make_counter,
         def("counter", call("makeCounter", vec![])),
-        func_def("step", vec![], vec![ret(call_val(ident("counter"), vec![]))]),
+        func_def(
+            "step",
+            vec![],
+            vec![ret(call_val(ident("counter"), vec![]))],
+        ),
     ]);
 
     let id = "feat-closure";
     assert!(api::create_vm_from_ast(id.to_string(), ast));
     let _ = api::execute_vm(id.to_string());
 
-    assert_eq!(api::execute_vm_func(id.to_string(), "step".into(), 1).result_value, "1");
-    assert_eq!(api::execute_vm_func(id.to_string(), "step".into(), 2).result_value, "2");
-    assert_eq!(api::execute_vm_func(id.to_string(), "step".into(), 3).result_value, "3");
+    assert_eq!(
+        api::execute_vm_func(id.to_string(), "step".into(), 1).result_value,
+        "1"
+    );
+    assert_eq!(
+        api::execute_vm_func(id.to_string(), "step".into(), 2).result_value,
+        "2"
+    );
+    assert_eq!(
+        api::execute_vm_func(id.to_string(), "step".into(), 3).result_value,
+        "3"
+    );
 }
 
 // ---- OOP --------------------------------------------------------------------
@@ -150,17 +178,41 @@ fn oop_class_extend_new_and_field() {
     // B extends A overriding the default hp; new(B).hp == 20.
     let class_a = call(
         "class",
-        vec![strv("A"), object(json!({ "hp": i64v(10) })), object(json!({}))],
+        vec![
+            strv("A"),
+            object(json!({ "hp": i64v(10) })),
+            object(json!({})),
+        ],
     );
     let class_b = call(
         "extend",
-        vec![class_a.clone(), strv("B"), object(json!({ "hp": i64v(20) })), object(json!({}))],
+        vec![
+            class_a.clone(),
+            strv("B"),
+            object(json!({ "hp": i64v(20) })),
+            object(json!({})),
+        ],
     );
     let ast = program(vec![
         def("A", class_a),
-        def("B", call("extend", vec![ident("A"), strv("B"), object(json!({ "hp": i64v(20) })), object(json!({}))])),
+        def(
+            "B",
+            call(
+                "extend",
+                vec![
+                    ident("A"),
+                    strv("B"),
+                    object(json!({ "hp": i64v(20) })),
+                    object(json!({})),
+                ],
+            ),
+        ),
         def("inst", call("new", vec![ident("B"), object(json!({}))])),
-        func_def("hp", vec![], vec![ret(call("field", vec![ident("inst"), strv("hp")]))]),
+        func_def(
+            "hp",
+            vec![],
+            vec![ret(call("field", vec![ident("inst"), strv("hp")]))],
+        ),
         func_def(
             "isA",
             vec![],
@@ -172,9 +224,15 @@ fn oop_class_extend_new_and_field() {
     let id = "feat-oop";
     assert!(api::create_vm_from_ast(id.to_string(), ast));
     let _ = api::execute_vm(id.to_string());
-    assert_eq!(api::execute_vm_func(id.to_string(), "hp".into(), 1).result_value, "20");
+    assert_eq!(
+        api::execute_vm_func(id.to_string(), "hp".into(), 1).result_value,
+        "20"
+    );
     // Inheritance: an instance of B is also an A.
-    assert_eq!(api::execute_vm_func(id.to_string(), "isA".into(), 2).result_value, "true");
+    assert_eq!(
+        api::execute_vm_func(id.to_string(), "isA".into(), 2).result_value,
+        "true"
+    );
 }
 
 // ---- Control flow: return propagation & switch dispatch ---------------------
@@ -222,8 +280,9 @@ fn switch_dispatches_to_the_matching_case() {
     let id = "feat-switch";
     assert!(api::create_vm_from_ast(id.to_string(), ast));
     let _ = api::execute_vm(id.to_string());
-    let call =
-        |n: &str, cb| api::execute_vm_func_with_input(id.to_string(), "name".into(), n.into(), cb).result_value;
+    let call = |n: &str, cb| {
+        api::execute_vm_func_with_input(id.to_string(), "name".into(), n.into(), cb).result_value
+    };
     assert_eq!(call("1", 1), "\"one\"");
     assert_eq!(call("2", 2), "\"two\"");
     assert_eq!(call("3", 3), "\"other\"");
@@ -243,14 +302,24 @@ fn instruction_limit_traps_a_runaway_loop() {
     ]);
     let id = "feat-limit";
     assert!(api::create_vm_from_ast(id.to_string(), ast));
-    assert!(api::set_limits(id, ResourceLimits { max_instructions: Some(2000), ..ResourceLimits::unlimited() }));
+    assert!(api::set_limits(
+        id,
+        ResourceLimits {
+            max_instructions: Some(2000),
+            ..ResourceLimits::unlimited()
+        }
+    ));
     let _ = api::execute_vm(id.to_string());
 
     assert_eq!(api::run_state(id), Some(RunState::Terminated));
     let trap = api::trap_reason(id).expect("a trap reason");
     assert!(trap.contains("instructions"), "trap was: {trap}");
     let usage = api::usage(id).unwrap();
-    assert!(usage.instructions <= 2000, "instructions capped: {}", usage.instructions);
+    assert!(
+        usage.instructions <= 2000,
+        "instructions capped: {}",
+        usage.instructions
+    );
 }
 
 #[test]
@@ -268,13 +337,19 @@ fn usage_is_reported_for_a_normal_run() {
 
 #[test]
 fn disabled_capability_short_circuits_host_call() {
-    let ast = program(vec![host_call("net.fetch", vec![strv("https://example/x")])]);
+    let ast = program(vec![host_call(
+        "net.fetch",
+        vec![strv("https://example/x")],
+    )]);
 
     // Allowed: the call reaches the host (the VM pauses on it).
     let allowed = "feat-cap-on";
     assert!(api::create_vm_from_ast(allowed.to_string(), ast.clone()));
     let r = api::execute_vm(allowed.to_string());
-    assert!(r.has_host_call, "net.fetch should reach the host when permitted");
+    assert!(
+        r.has_host_call,
+        "net.fetch should reach the host when permitted"
+    );
 
     // Disabled: the call short-circuits to null, no host round-trip, run done.
     let denied = "feat-cap-off";
@@ -303,7 +378,10 @@ fn pause_then_resume_completes_program() {
     // Resume: the top-level runs to completion and defines getx / x.
     let _ = api::resume_execution(id.to_string());
     assert_ne!(api::run_state(id), Some(RunState::Paused));
-    assert_eq!(api::execute_vm_func(id.to_string(), "getx".into(), 1).result_value, "5");
+    assert_eq!(
+        api::execute_vm_func(id.to_string(), "getx".into(), 1).result_value,
+        "5"
+    );
 }
 
 #[test]
@@ -313,7 +391,10 @@ fn terminate_makes_instance_inert() {
     assert!(api::create_vm_from_ast(id.to_string(), ast));
     let _ = api::execute_vm(id.to_string());
     // It works before termination.
-    assert_eq!(api::execute_vm_func(id.to_string(), "getx".into(), 1).result_value, "5");
+    assert_eq!(
+        api::execute_vm_func(id.to_string(), "getx".into(), 1).result_value,
+        "5"
+    );
 
     assert!(api::terminate_vm(id));
     assert_eq!(api::run_state(id), Some(RunState::Terminated));
@@ -327,62 +408,170 @@ fn terminate_makes_instance_inert() {
 #[test]
 fn universal_integer_bit_and_math_builtins() {
     // Bitwise / shift primitives operate on 64-bit integers.
-    assert_eq!(run_and_call("bit-and", &program(vec![func_def("f", vec![],
-        vec![ret(call("bitAnd", vec![i64v(6), i64v(3)]))])]), "f"), "2");
-    assert_eq!(run_and_call("bit-shl", &program(vec![func_def("f", vec![],
-        vec![ret(call("shl", vec![i64v(1), i64v(10)]))])]), "f"), "1024");
+    assert_eq!(
+        run_and_call(
+            "bit-and",
+            &program(vec![func_def(
+                "f",
+                vec![],
+                vec![ret(call("bitAnd", vec![i64v(6), i64v(3)]))]
+            )]),
+            "f"
+        ),
+        "2"
+    );
+    assert_eq!(
+        run_and_call(
+            "bit-shl",
+            &program(vec![func_def(
+                "f",
+                vec![],
+                vec![ret(call("shl", vec![i64v(1), i64v(10)]))]
+            )]),
+            "f"
+        ),
+        "1024"
+    );
     // Truncating integer division and remainder.
-    assert_eq!(run_and_call("intdiv", &program(vec![func_def("f", vec![],
-        vec![ret(call("intDiv", vec![i64v(7), i64v(2)]))])]), "f"), "3");
-    assert_eq!(run_and_call("rem", &program(vec![func_def("f", vec![],
-        vec![ret(call("remainder", vec![i64v(7), i64v(3)]))])]), "f"), "1");
+    assert_eq!(
+        run_and_call(
+            "intdiv",
+            &program(vec![func_def(
+                "f",
+                vec![],
+                vec![ret(call("intDiv", vec![i64v(7), i64v(2)]))]
+            )]),
+            "f"
+        ),
+        "3"
+    );
+    assert_eq!(
+        run_and_call(
+            "rem",
+            &program(vec![func_def(
+                "f",
+                vec![],
+                vec![ret(call("remainder", vec![i64v(7), i64v(3)]))]
+            )]),
+            "f"
+        ),
+        "1"
+    );
     // Radix conversion round-trips.
-    assert_eq!(run_and_call("radix", &program(vec![func_def("f", vec![],
-        vec![ret(call("toRadix", vec![i64v(255), i64v(16)]))])]), "f"), "\"ff\"");
-    assert_eq!(run_and_call("parseradix", &program(vec![func_def("f", vec![],
-        vec![ret(call("parseRadix", vec![strv("ff"), i64v(16)]))])]), "f"), "255");
+    assert_eq!(
+        run_and_call(
+            "radix",
+            &program(vec![func_def(
+                "f",
+                vec![],
+                vec![ret(call("toRadix", vec![i64v(255), i64v(16)]))]
+            )]),
+            "f"
+        ),
+        "\"ff\""
+    );
+    assert_eq!(
+        run_and_call(
+            "parseradix",
+            &program(vec![func_def(
+                "f",
+                vec![],
+                vec![ret(call("parseRadix", vec![strv("ff"), i64v(16)]))]
+            )]),
+            "f"
+        ),
+        "255"
+    );
 }
 
 #[test]
 fn universal_list_builtins() {
     // splice returns the removed slice and mutates in place.
-    let ast = program(vec![func_def("f", vec![], vec![
-        def("xs", json!({ "type": "array", "data": { "value": [i64v(1), i64v(2), i64v(3), i64v(4)] } })),
-        def("removed", call("splice", vec![ident("xs"), i64v(1), i64v(2)])),
-        ret(call("len", vec![ident("removed")])),
-    ])]);
+    let ast = program(vec![func_def(
+        "f",
+        vec![],
+        vec![
+            def(
+                "xs",
+                json!({ "type": "array", "data": { "value": [i64v(1), i64v(2), i64v(3), i64v(4)] } }),
+            ),
+            def(
+                "removed",
+                call("splice", vec![ident("xs"), i64v(1), i64v(2)]),
+            ),
+            ret(call("len", vec![ident("removed")])),
+        ],
+    )]);
     assert_eq!(run_and_call("splice", &ast, "f"), "2");
     // at() with negative index, flatten, toSet.
-    assert_eq!(run_and_call("at", &program(vec![func_def("f", vec![], vec![
-        ret(call("at", vec![json!({ "type": "array", "data": { "value": [i64v(1), i64v(2), i64v(3)] } }), i64v(-1)]))])]), "f"), "3");
-    assert_eq!(run_and_call("toset", &program(vec![func_def("f", vec![], vec![
-        ret(call("len", vec![call("toSet", vec![json!({ "type": "array", "data": { "value": [i64v(1), i64v(1), i64v(2)] } })])]))])]), "f"), "2");
+    assert_eq!(
+        run_and_call(
+            "at",
+            &program(vec![func_def(
+                "f",
+                vec![],
+                vec![ret(call(
+                    "at",
+                    vec![
+                        json!({ "type": "array", "data": { "value": [i64v(1), i64v(2), i64v(3)] } }),
+                        i64v(-1)
+                    ]
+                ))]
+            )]),
+            "f"
+        ),
+        "3"
+    );
+    assert_eq!(
+        run_and_call(
+            "toset",
+            &program(vec![func_def(
+                "f",
+                vec![],
+                vec![ret(call(
+                    "len",
+                    vec![call(
+                        "toSet",
+                        vec![
+                            json!({ "type": "array", "data": { "value": [i64v(1), i64v(1), i64v(2)] } })
+                        ]
+                    )]
+                ))]
+            )]),
+            "f"
+        ),
+        "2"
+    );
 }
 
 #[test]
 fn native_error_is_catchable_and_uncaught_traps() {
     // An out-of-range native error thrown from a builtin is caught by a guest
     // try/catch as an object carrying a message.
-    let ast = program(vec![func_def("f", vec![], vec![
-        json!({ "type": "tryStmt", "data": {
+    let ast = program(vec![func_def(
+        "f",
+        vec![],
+        vec![json!({ "type": "tryStmt", "data": {
             "errName": "e",
             "body": [ ret(call("removeAt", vec![
                 json!({ "type": "array", "data": { "value": [i64v(1)] } }), i64v(9)])) ],
             "catchBody": [ ret(json!({ "type": "indexer", "data": {
                 "target": ident("e"), "index": strv("name") } })) ],
-        } }),
-    ])]);
+        } })],
+    )]);
     assert_eq!(run_and_call("native-catch", &ast, "f"), "\"Error\"");
 }
 
 #[test]
 fn throw_and_catch_binds_the_thrown_value() {
-    let ast = program(vec![func_def("f", vec![], vec![
-        json!({ "type": "tryStmt", "data": {
+    let ast = program(vec![func_def(
+        "f",
+        vec![],
+        vec![json!({ "type": "tryStmt", "data": {
             "errName": "e",
             "body": [ json!({ "type": "throwOperation", "data": { "value": i64v(77) } }) ],
             "catchBody": [ ret(ident("e")) ],
-        } }),
-    ])]);
+        } })],
+    )]);
     assert_eq!(run_and_call("throw-catch", &ast, "f"), "77");
 }

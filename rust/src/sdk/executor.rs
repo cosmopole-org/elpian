@@ -11,7 +11,7 @@ use crate::sdk::{
     type_methods::{self, CoreType, Dispatch},
 };
 use core::panic;
-use std::{cell::RefCell, collections::HashMap, fmt, i16, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, fmt, rc::Rc};
 
 use std::vec;
 
@@ -303,12 +303,12 @@ impl Operation for AssignVariable {
             // The index is only known after `AssignVarExtractIndex`; callers that
             // read `get_data` earlier (e.g. to inspect the target type while still
             // in `AssignVarExtractName`) get a typed-null placeholder for it.
-            let index = self
-                .index
-                .clone()
-                .unwrap_or_else(|| Val { typ: 0, data: Payload::Null });
+            let index = self.index.clone().unwrap_or(Val {
+                typ: 0,
+                data: Payload::Null,
+            });
             if self.var_value.is_none() {
-                return vec![
+                vec![
                     Val {
                         typ: 7,
                         data: Payload::from(self.var_name.clone().unwrap()),
@@ -322,9 +322,9 @@ impl Operation for AssignVariable {
                         typ: 0,
                         data: Payload::Null,
                     },
-                ];
+                ]
             } else {
-                return vec![
+                vec![
                     Val {
                         typ: 7,
                         data: Payload::from(self.var_name.clone().unwrap()),
@@ -335,11 +335,11 @@ impl Operation for AssignVariable {
                     },
                     index,
                     self.var_value.clone().unwrap(),
-                ];
+                ]
             }
         } else {
             if self.var_value.is_none() {
-                return vec![
+                vec![
                     Val {
                         typ: 7,
                         data: Payload::from(self.var_name.clone().unwrap()),
@@ -356,9 +356,9 @@ impl Operation for AssignVariable {
                         typ: 0,
                         data: Payload::Null,
                     },
-                ];
+                ]
             } else {
-                return vec![
+                vec![
                     Val {
                         typ: 7,
                         data: Payload::from(self.var_name.clone().unwrap()),
@@ -372,7 +372,7 @@ impl Operation for AssignVariable {
                         data: Payload::Null,
                     },
                     self.var_value.clone().unwrap(),
-                ];
+                ]
             }
         }
     }
@@ -624,7 +624,10 @@ impl IfStmt {
             condition: if has_condition {
                 None
             } else {
-                Some(Val { typ: 6, data: Payload::from(true) })
+                Some(Val {
+                    typ: 6,
+                    data: Payload::from(true),
+                })
             },
             body_start,
             body_end,
@@ -652,12 +655,27 @@ impl Operation for IfStmt {
 
     fn get_data(&self) -> Vec<Val> {
         vec![
-            Val { typ: 6, data: Payload::from(self.has_condition) },
+            Val {
+                typ: 6,
+                data: Payload::from(self.has_condition),
+            },
             self.condition.clone().unwrap(),
-            Val { typ: 3, data: Payload::from(self.body_start as i64) },
-            Val { typ: 3, data: Payload::from(self.body_end as i64) },
-            Val { typ: 3, data: Payload::from(self.next as i64) },
-            Val { typ: 3, data: Payload::from(self.branch_after as i64) },
+            Val {
+                typ: 3,
+                data: Payload::from(self.body_start as i64),
+            },
+            Val {
+                typ: 3,
+                data: Payload::from(self.body_end as i64),
+            },
+            Val {
+                typ: 3,
+                data: Payload::from(self.next as i64),
+            },
+            Val {
+                typ: 3,
+                data: Payload::from(self.branch_after as i64),
+            },
         ]
     }
 }
@@ -704,9 +722,18 @@ impl Operation for LoopStmt {
     fn get_data(&self) -> Vec<Val> {
         vec![
             self.condition.clone().unwrap(),
-            Val { typ: 3, data: Payload::from(self.body_start as i64) },
-            Val { typ: 3, data: Payload::from(self.body_end as i64) },
-            Val { typ: 3, data: Payload::from(self.branch_after as i64) },
+            Val {
+                typ: 3,
+                data: Payload::from(self.body_start as i64),
+            },
+            Val {
+                typ: 3,
+                data: Payload::from(self.body_end as i64),
+            },
+            Val {
+                typ: 3,
+                data: Payload::from(self.branch_after as i64),
+            },
         ]
     }
 }
@@ -748,7 +775,10 @@ impl Operation for SwitchStmt {
     }
 
     fn next_case_bounds(&self) -> (usize, usize) {
-        self.cases_bounds.get(self.cases.len()).copied().unwrap_or((0, 0))
+        self.cases_bounds
+            .get(self.cases.len())
+            .copied()
+            .unwrap_or((0, 0))
     }
 
     fn set_state(&mut self, state: ExecStates, data: StateData) {
@@ -809,9 +839,7 @@ impl Operation for SwitchStmt {
             },
             Val {
                 typ: 9,
-                data: Payload::from(Rc::new(RefCell::new(Array::new(
-                    case_items,
-                )))),
+                data: Payload::from(Rc::new(RefCell::new(Array::new(case_items)))),
             },
         ]
     }
@@ -1003,9 +1031,7 @@ impl Operation for ObjectExpr {
             },
             Val {
                 typ: 9,
-                data: Payload::from(Rc::new(RefCell::new(Array::new(
-                    self.props.clone(),
-                )))),
+                data: Payload::from(Rc::new(RefCell::new(Array::new(self.props.clone())))),
             },
         ]
     }
@@ -1059,9 +1085,7 @@ impl Operation for ArrayExpr {
             },
             Val {
                 typ: 9,
-                data: Payload::from(Rc::new(RefCell::new(Array::new(
-                    self.items.clone(),
-                )))),
+                data: Payload::from(Rc::new(RefCell::new(Array::new(self.items.clone())))),
             },
         ]
     }
@@ -1117,7 +1141,10 @@ fn flatten_spread(items: &[Val]) -> Vec<Val> {
                 }
                 7 => {
                     for c in inner.as_string().chars() {
-                        out.push(Val { typ: 7, data: Payload::from(c.to_string()) });
+                        out.push(Val {
+                            typ: 7,
+                            data: Payload::from(c.to_string()),
+                        });
                     }
                 }
                 _ => out.push(inner),
@@ -1139,7 +1166,11 @@ struct SpreadOp {
 
 impl SpreadOp {
     pub fn new() -> Self {
-        SpreadOp { typ: OperationTypes::Spread, state: ExecStates::SpreadStarted, value: None }
+        SpreadOp {
+            typ: OperationTypes::Spread,
+            state: ExecStates::SpreadStarted,
+            value: None,
+        }
     }
 }
 
@@ -1205,7 +1236,10 @@ impl Operation for TemplateExpr {
         for p in self.parts.iter() {
             out.push_str(&p.to_display());
         }
-        vec![Val { typ: 7, data: Payload::from(out) }]
+        vec![Val {
+            typ: 7,
+            data: Payload::from(out),
+        }]
     }
 }
 
@@ -1261,7 +1295,10 @@ impl Operation for DestructureOp {
 /// to its declared default (consistent with the VM's `??` null test); a rest
 /// binding gathers whatever the earlier bindings did not consume.
 fn apply_destructure(plan: &DestructurePlan, values: &[Val]) -> Vec<(String, Val)> {
-    let null = Val { typ: 0, data: Payload::Null };
+    let null = Val {
+        typ: 0,
+        data: Payload::Null,
+    };
     let source = values.first().cloned().unwrap_or_else(|| null.clone());
     let mut default_idx = 1usize;
     let mut out: Vec<(String, Val)> = Vec::with_capacity(plan.bindings.len());
@@ -1269,18 +1306,32 @@ fn apply_destructure(plan: &DestructurePlan, values: &[Val]) -> Vec<(String, Val
         let elems: Vec<Val> = if source.typ == 9 {
             source.as_array().borrow().data.clone()
         } else if source.typ == 7 {
-            source.as_string().chars().map(|c| Val { typ: 7, data: Payload::from(c.to_string()) }).collect()
+            source
+                .as_string()
+                .chars()
+                .map(|c| Val {
+                    typ: 7,
+                    data: Payload::from(c.to_string()),
+                })
+                .collect()
         } else {
             vec![]
         };
         let mut pos = 0usize;
         for b in plan.bindings.iter() {
             if b.is_rest {
-                let rest: Vec<Val> = if pos < elems.len() { elems[pos..].to_vec() } else { vec![] };
+                let rest: Vec<Val> = if pos < elems.len() {
+                    elems[pos..].to_vec()
+                } else {
+                    vec![]
+                };
                 pos = elems.len();
                 out.push((
                     b.name.clone(),
-                    Val { typ: 9, data: Payload::from(Rc::new(RefCell::new(Array::new(rest)))) },
+                    Val {
+                        typ: 9,
+                        data: Payload::from(Rc::new(RefCell::new(Array::new(rest)))),
+                    },
                 ));
                 continue;
             }
@@ -1291,7 +1342,10 @@ fn apply_destructure(plan: &DestructurePlan, values: &[Val]) -> Vec<(String, Val
             }
             let mut v = elem.unwrap_or_else(|| null.clone());
             if b.has_default {
-                let dv = values.get(default_idx).cloned().unwrap_or_else(|| null.clone());
+                let dv = values
+                    .get(default_idx)
+                    .cloned()
+                    .unwrap_or_else(|| null.clone());
                 default_idx += 1;
                 if is_null(&v) {
                     v = dv;
@@ -1300,10 +1354,18 @@ fn apply_destructure(plan: &DestructurePlan, values: &[Val]) -> Vec<(String, Val
             out.push((b.name.clone(), v));
         }
     } else {
-        let obj = if source.typ == 8 { Some(source.as_object()) } else { None };
+        let obj = if source.typ == 8 {
+            Some(source.as_object())
+        } else {
+            None
+        };
         // Keys claimed by explicit bindings, excluded from a rest binding.
-        let claimed: Vec<&str> =
-            plan.bindings.iter().filter(|b| !b.is_rest && !b.is_hole).map(|b| b.key.as_str()).collect();
+        let claimed: Vec<&str> = plan
+            .bindings
+            .iter()
+            .filter(|b| !b.is_rest && !b.is_hole)
+            .map(|b| b.key.as_str())
+            .collect();
         for b in plan.bindings.iter() {
             if b.is_rest {
                 let mut map = ValMap::default();
@@ -1318,7 +1380,10 @@ fn apply_destructure(plan: &DestructurePlan, values: &[Val]) -> Vec<(String, Val
                     b.name.clone(),
                     Val {
                         typ: 8,
-                        data: Payload::from(Rc::new(RefCell::new(Object::new(-2, ValGroup::new(map))))),
+                        data: Payload::from(Rc::new(RefCell::new(Object::new(
+                            -2,
+                            ValGroup::new(map),
+                        )))),
                     },
                 ));
                 continue;
@@ -1331,7 +1396,10 @@ fn apply_destructure(plan: &DestructurePlan, values: &[Val]) -> Vec<(String, Val
                 .and_then(|o| o.borrow().data.data.get(&b.key).cloned())
                 .unwrap_or_else(|| null.clone());
             if b.has_default {
-                let dv = values.get(default_idx).cloned().unwrap_or_else(|| null.clone());
+                let dv = values
+                    .get(default_idx)
+                    .cloned()
+                    .unwrap_or_else(|| null.clone());
                 default_idx += 1;
                 if is_null(&v) {
                     v = dv;
@@ -1484,8 +1552,14 @@ impl Operation for TypeTestOp {
     fn get_data(&self) -> Vec<Val> {
         vec![
             self.value.clone().unwrap(),
-            Val { typ: 7, data: Payload::from(self.type_name.clone()) },
-            Val { typ: 6, data: Payload::from(self.cast) },
+            Val {
+                typ: 7,
+                data: Payload::from(self.type_name.clone()),
+            },
+            Val {
+                typ: 6,
+                data: Payload::from(self.cast),
+            },
         ]
     }
 }
@@ -1503,7 +1577,7 @@ impl Operation for TypeTestOp {
 fn value_is_type(value: &Val, type_name: &str) -> bool {
     match type_name {
         "any" => true,
-        "int" => matches!(value.typ, 1 | 2 | 3),
+        "int" => matches!(value.typ, 1..=3),
         "float" => matches!(value.typ, 4 | 5),
         "number" => matches!(value.typ, 1..=5),
         "string" => value.typ == 7,
@@ -1619,8 +1693,14 @@ impl Operation for LogicalOp {
     }
     fn get_data(&self) -> Vec<Val> {
         vec![
-            Val { typ: 1, data: Payload::from(LogicalOp::kind_tag(self.kind)) },
-            Val { typ: 3, data: Payload::from(self.op2_end as i64) },
+            Val {
+                typ: 1,
+                data: Payload::from(LogicalOp::kind_tag(self.kind)),
+            },
+            Val {
+                typ: 3,
+                data: Payload::from(self.op2_end as i64),
+            },
         ]
     }
 }
@@ -1659,8 +1739,14 @@ impl Operation for ConditionalOp {
     }
     fn get_data(&self) -> Vec<Val> {
         vec![
-            Val { typ: 3, data: Payload::from(self.alt_start as i64) },
-            Val { typ: 3, data: Payload::from(self.end as i64) },
+            Val {
+                typ: 3,
+                data: Payload::from(self.alt_start as i64),
+            },
+            Val {
+                typ: 3,
+                data: Payload::from(self.end as i64),
+            },
         ]
     }
 }
@@ -1836,11 +1922,15 @@ impl Executor {
     /// Charge the storage governor on behalf of the host filesystem; returns the
     /// limit error string if the storage cap would be exceeded.
     pub fn charge_storage(&mut self, delta: i64) -> Result<(), String> {
-        self.governor.charge_storage(delta).map_err(|e| e.to_string())
+        self.governor
+            .charge_storage(delta)
+            .map_err(|e| e.to_string())
     }
     /// Reconcile the absolute storage figure with the host filesystem total.
     pub fn set_storage_bytes(&mut self, bytes: u64) -> Result<(), String> {
-        self.governor.set_storage_bytes(bytes).map_err(|e| e.to_string())
+        self.governor
+            .set_storage_bytes(bytes)
+            .map_err(|e| e.to_string())
     }
     /// After `run_from` returns, surface a host-driven stop (trap / terminate /
     /// pause) as the operation result, short-circuiting the normal
@@ -1879,9 +1969,11 @@ impl Executor {
                 // value" instead of leaking the last returned result.
                 self.pending_func_result_value = Val::new(254, Payload::Null);
                 if self.control.is_terminated() {
-                    return (0x06, cb_id, Val::new(7, Payload::from(
-                        self.trap.clone().unwrap_or_default(),
-                    )));
+                    return (
+                        0x06,
+                        cb_id,
+                        Val::new(7, Payload::from(self.trap.clone().unwrap_or_default())),
+                    );
                 }
                 if payload.typ != 9 {
                     self.exec_globally = true;
@@ -1902,20 +1994,20 @@ impl Executor {
                     if self.reserved_host_call.is_some() {
                         let host_call_data = self.reserved_host_call.clone().unwrap();
                         self.reserved_host_call = None;
-                        return host_call_data;
-                    } else if self.pointer == self.ctx.memory.get(0).unwrap().borrow().frozen_end {
+                        host_call_data
+                    } else if self.pointer == self.ctx.memory.first().unwrap().borrow().frozen_end {
                         self.processing = false;
-                        return (0x01, cb_id, result);
+                        (0x01, cb_id, result)
                     } else {
                         self.processing = false;
-                        return (
+                        (
                             0x00,
                             0,
                             Val {
                                 typ: 0,
                                 data: Payload::Null,
                             },
-                        );
+                        )
                     }
                 } else {
                     self.exec_globally = false;
@@ -1953,20 +2045,20 @@ impl Executor {
                         if self.reserved_host_call.is_some() {
                             let host_call_data = self.reserved_host_call.clone().unwrap();
                             self.reserved_host_call = None;
-                            return host_call_data;
+                            host_call_data
                         } else if self.ctx.memory.len() == 1 {
                             self.processing = false;
-                            return (0x01, cb_id, result);
+                            (0x01, cb_id, result)
                         } else {
                             self.processing = false;
-                            return (
+                            (
                                 0x00,
                                 0,
                                 Val {
                                     typ: 0,
                                     data: Payload::Null,
                                 },
-                            );
+                            )
                         }
                     } else {
                         // The host may invoke an *optional* lifecycle handler the
@@ -1978,14 +2070,14 @@ impl Executor {
                         // acquire mutex"), silently freezing a host that simply drove
                         // a handler the app chose not to implement.
                         self.processing = false;
-                        return (
+                        (
                             0x01,
                             cb_id,
                             Val {
                                 typ: 0,
                                 data: Payload::Null,
                             },
-                        );
+                        )
                     }
                 }
             }
@@ -2002,14 +2094,14 @@ impl Executor {
                             println!("{{ key: {}, val: {} }}", key, val.stringify());
                         });
                 });
-                return (
+                (
                     0x00,
                     0,
                     Val {
                         typ: 0,
                         data: Payload::Null,
                     },
-                );
+                )
             }
             0x03 | 0x04 => {
                 // 0x03 resumes after a host call (injecting `payload` as the
@@ -2019,9 +2111,11 @@ impl Executor {
                 self.governor.begin_turn();
                 self.paused_out = false;
                 if self.control.is_terminated() {
-                    return (0x06, cb_id, Val::new(7, Payload::from(
-                        self.trap.clone().unwrap_or_default(),
-                    )));
+                    return (
+                        0x06,
+                        cb_id,
+                        Val::new(7, Payload::from(self.trap.clone().unwrap_or_default())),
+                    );
                 }
                 self.processing = true;
                 let result = self.run_from(
@@ -2039,65 +2133,65 @@ impl Executor {
                         if self.reserved_host_call.is_some() {
                             let host_call_data = self.reserved_host_call.clone().unwrap();
                             self.reserved_host_call = None;
-                            return host_call_data;
+                            host_call_data
                         } else if self.pointer
-                            == self.ctx.memory.get(0).unwrap().borrow().frozen_end
+                            == self.ctx.memory.first().unwrap().borrow().frozen_end
                         {
                             self.processing = false;
-                            return (0x01, cb_id, result);
+                            (0x01, cb_id, result)
                         } else {
                             self.processing = false;
-                            return (
+                            (
                                 0x00,
                                 0,
                                 Val {
                                     typ: 0,
                                     data: Payload::Null,
                                 },
-                            );
+                            )
                         }
                     } else {
                         if self.reserved_host_call.is_some() {
                             let host_call_data = self.reserved_host_call.clone().unwrap();
                             self.reserved_host_call = None;
-                            return host_call_data;
+                            host_call_data
                         } else if self.ctx.memory.len() == 1 {
                             self.processing = false;
-                            return (0x01, cb_id, result);
+                            (0x01, cb_id, result)
                         } else {
                             self.processing = false;
-                            return (
+                            (
                                 0x00,
                                 0,
                                 Val {
                                     typ: 0,
                                     data: Payload::Null,
                                 },
-                            );
+                            )
                         }
                     }
                 } else {
                     self.processing = false;
-                    return (
+                    (
                         0x00,
                         0,
                         Val {
                             typ: 0,
                             data: Payload::Null,
                         },
-                    );
+                    )
                 }
             }
             _ => {
                 self.processing = false;
-                return (
+                (
                     0x00,
                     0,
                     Val {
                         typ: 0,
                         data: Payload::Null,
                     },
-                );
+                )
             }
         }
     }
@@ -2106,7 +2200,10 @@ impl Executor {
     /// known standard-library builtin resolves to its native handle (typ 252).
     fn resolve_ident(&mut self, id: &str) -> Val {
         if id == "askHost" {
-            return Val { typ: 255, data: Payload::Null };
+            return Val {
+                typ: 255,
+                data: Payload::Null,
+            };
         }
         // A scope binding — even one currently holding null — shadows a builtin;
         // only a name bound nowhere falls through to the builtin table, and an
@@ -2115,21 +2212,27 @@ impl Executor {
             return bound;
         }
         if stdlib::is_builtin(id) {
-            return Val { typ: 252, data: Payload::from(id.to_string()) };
+            return Val {
+                typ: 252,
+                data: Payload::from(id.to_string()),
+            };
         }
-        Val { typ: 0, data: Payload::Null }
+        Val {
+            typ: 0,
+            data: Payload::Null,
+        }
     }
     fn check_float_range(&self, num: f64) -> Val {
         if num < f32::MAX.into() {
-            return Val {
+            Val {
                 typ: 4,
                 data: Payload::from(num as f32),
-            };
+            }
         } else {
-            return Val {
+            Val {
                 typ: 5,
                 data: Payload::from(num),
-            };
+            }
         }
     }
     /// Build the value that reading a resolved built-in type member yields. This
@@ -2141,14 +2244,23 @@ impl Executor {
             // A getter reads eagerly through stdlib — the member name is the
             // universal builtin name, invoked directly. A getter that errors
             // reads as null, like any other absent member.
-            Dispatch::Getter => stdlib::invoke(&member.name, &[receiver.clone()])
-                .unwrap_or_else(|_| Val { typ: 0, data: Payload::Null }),
+            Dispatch::Getter => stdlib::invoke(&member.name, std::slice::from_ref(receiver))
+                .unwrap_or(Val {
+                    typ: 0,
+                    data: Payload::Null,
+                }),
             // A method becomes a bound native (typ 253) carrying `[recv, name]`;
             // the call machinery appends the args and calls `stdlib::invoke`.
             Dispatch::Method => {
-                let name_val = Val { typ: 7, data: Payload::from(member.name.clone()) };
+                let name_val = Val {
+                    typ: 7,
+                    data: Payload::from(member.name.clone()),
+                };
                 let holder = Array::new(vec![receiver.clone(), name_val]);
-                Val { typ: 253, data: Payload::from(Rc::new(RefCell::new(holder))) }
+                Val {
+                    typ: 253,
+                    data: Payload::from(Rc::new(RefCell::new(holder))),
+                }
             }
             // A higher-order method binds the guest prelude fn `__<Type>_<name>`
             // to the receiver, so its closure argument runs as guest bytecode.
@@ -2156,9 +2268,15 @@ impl Executor {
                 let g = self.ctx.find_val_globally(&member.prelude_fn);
                 if g.typ == 10 {
                     let bound = g.as_func().borrow().bind(receiver.clone());
-                    Val { typ: 10, data: Payload::from(Rc::new(RefCell::new(bound))) }
+                    Val {
+                        typ: 10,
+                        data: Payload::from(Rc::new(RefCell::new(bound))),
+                    }
                 } else {
-                    Val { typ: 0, data: Payload::Null }
+                    Val {
+                        typ: 0,
+                        data: Payload::Null,
+                    }
                 }
             }
         }
@@ -2166,29 +2284,29 @@ impl Executor {
 
     fn check_int_range(&self, num: i64) -> Val {
         if num < i16::MAX.into() {
-            return Val {
+            Val {
                 typ: 1,
                 data: Payload::from(num as i16),
-            };
+            }
         } else if num < i32::MAX.into() {
-            return Val {
+            Val {
                 typ: 2,
                 data: Payload::from(num as i32),
-            };
+            }
         } else {
-            return Val {
+            Val {
                 typ: 3,
                 data: Payload::from(num),
-            };
+            }
         }
     }
     fn operate_sum(&self, arg1: Val, arg2: Val) -> Val {
         match arg1.typ {
-            1 | 2 | 3 => {
+            1..=3 => {
                 let val1 = match arg1.typ {
                     1 => arg1.as_i16() as i64,
                     2 => arg1.as_i32() as i64,
-                    3 => arg1.as_i64() as i64,
+                    3 => arg1.as_i64(),
                     _ => 0,
                 };
                 match arg2.typ {
@@ -2201,7 +2319,7 @@ impl Executor {
                         self.check_int_range(val1 + val2)
                     }
                     3 => {
-                        let val2 = arg2.as_i64() as i64;
+                        let val2 = arg2.as_i64();
                         self.check_int_range(val1 + val2)
                     }
                     4 => {
@@ -2210,7 +2328,7 @@ impl Executor {
                         self.check_float_range(val1_temp + val2)
                     }
                     5 => {
-                        let val2 = arg2.as_f64() as f64;
+                        let val2 = arg2.as_f64();
                         let val1_temp = val1 as f64;
                         self.check_float_range(val1_temp + val2)
                     }
@@ -2252,7 +2370,7 @@ impl Executor {
             4 | 5 => {
                 let val1 = match arg1.typ {
                     4 => arg1.as_f32() as f64,
-                    5 => arg1.as_f64() as f64,
+                    5 => arg1.as_f64(),
                     _ => 0.0,
                 };
                 match arg2.typ {
@@ -2273,7 +2391,7 @@ impl Executor {
                         self.check_float_range(val1 + val2)
                     }
                     5 => {
-                        let val2 = arg2.as_f64() as f64;
+                        let val2 = arg2.as_f64();
                         self.check_float_range(val1 + val2)
                     }
                     6 => {
@@ -2532,8 +2650,11 @@ impl Executor {
             // display coercion ("null") in a string concat — mirrors the
             // null-on-the-right arms above.
             0 => match arg2.typ {
-                0 => Val { typ: 1, data: Payload::from(0i16) },
-                1 | 2 | 3 => self.check_int_range(match arg2.typ {
+                0 => Val {
+                    typ: 1,
+                    data: Payload::from(0i16),
+                },
+                1..=3 => self.check_int_range(match arg2.typ {
                     1 => arg2.as_i16() as i64,
                     2 => arg2.as_i32() as i64,
                     _ => arg2.as_i64(),
@@ -2555,11 +2676,11 @@ impl Executor {
     }
     fn operate_multiply(&self, arg1: Val, arg2: Val) -> Val {
         match arg1.typ {
-            1 | 2 | 3 => {
+            1..=3 => {
                 let val1 = match arg1.typ {
                     1 => arg1.as_i16() as i64,
                     2 => arg1.as_i32() as i64,
-                    3 => arg1.as_i64() as i64,
+                    3 => arg1.as_i64(),
                     _ => 0,
                 };
                 match arg2.typ {
@@ -2572,7 +2693,7 @@ impl Executor {
                         self.check_int_range(val1 * val2)
                     }
                     3 => {
-                        let val2 = arg2.as_i64() as i64;
+                        let val2 = arg2.as_i64();
                         self.check_int_range(val1 * val2)
                     }
                     4 => {
@@ -2581,7 +2702,7 @@ impl Executor {
                         self.check_float_range(val1_temp * val2)
                     }
                     5 => {
-                        let val2 = arg2.as_f64() as f64;
+                        let val2 = arg2.as_f64();
                         let val1_temp = val1 as f64;
                         self.check_float_range(val1_temp * val2)
                     }
@@ -2610,9 +2731,7 @@ impl Executor {
                         }
                         Val {
                             typ: 9,
-                            data: Payload::from(Rc::new(RefCell::new(
-                                Array::new(res),
-                            ))),
+                            data: Payload::from(Rc::new(RefCell::new(Array::new(res)))),
                         }
                     }
                     10 => {
@@ -2626,7 +2745,7 @@ impl Executor {
             4 | 5 => {
                 let val1 = match arg1.typ {
                     4 => arg1.as_f32() as f64,
-                    5 => arg1.as_f64() as f64,
+                    5 => arg1.as_f64(),
                     _ => 0.0,
                 };
                 match arg2.typ {
@@ -2647,7 +2766,7 @@ impl Executor {
                         self.check_float_range(val1 * val2)
                     }
                     5 => {
-                        let val2 = arg2.as_f64() as f64;
+                        let val2 = arg2.as_f64();
                         self.check_float_range(val1 * val2)
                     }
                     6 => {
@@ -2710,26 +2829,25 @@ impl Executor {
                     }
                     8 => {
                         if val1 {
-                            return arg2.clone();
+                            arg2.clone()
                         } else {
-                            return Val {
+                            Val {
                                 typ: 8,
-                                data: Payload::from(Rc::new(RefCell::new(
-                                    Object::new(-2, ValGroup::new_empty()),
-                                ))),
-                            };
+                                data: Payload::from(Rc::new(RefCell::new(Object::new(
+                                    -2,
+                                    ValGroup::new_empty(),
+                                )))),
+                            }
                         }
                     }
                     9 => {
                         if val1 {
-                            return arg2.clone();
+                            arg2.clone()
                         } else {
-                            return Val {
+                            Val {
                                 typ: 9,
-                                data: Payload::from(Rc::new(RefCell::new(
-                                    Array::new_empty(),
-                                ))),
-                            };
+                                data: Payload::from(Rc::new(RefCell::new(Array::new_empty()))),
+                            }
                         }
                     }
                     10 => {
@@ -2812,9 +2930,7 @@ impl Executor {
                         }
                         Val {
                             typ: 9,
-                            data: Payload::from(Rc::new(RefCell::new(
-                                Array::new(res),
-                            ))),
+                            data: Payload::from(Rc::new(RefCell::new(Array::new(res)))),
                         }
                     }
                     2 => {
@@ -2824,9 +2940,7 @@ impl Executor {
                         }
                         Val {
                             typ: 9,
-                            data: Payload::from(Rc::new(RefCell::new(
-                                Array::new(res),
-                            ))),
+                            data: Payload::from(Rc::new(RefCell::new(Array::new(res)))),
                         }
                     }
                     3 => {
@@ -2836,9 +2950,7 @@ impl Executor {
                         }
                         Val {
                             typ: 9,
-                            data: Payload::from(Rc::new(RefCell::new(
-                                Array::new(res),
-                            ))),
+                            data: Payload::from(Rc::new(RefCell::new(Array::new(res)))),
                         }
                     }
                     4 | 5 => {
@@ -2846,14 +2958,12 @@ impl Executor {
                     }
                     6 => {
                         if arg2.as_bool() {
-                            return arg1.clone();
+                            arg1.clone()
                         } else {
-                            return Val {
+                            Val {
                                 typ: 9,
-                                data: Payload::from(Rc::new(RefCell::new(
-                                    Array::new_empty(),
-                                ))),
-                            };
+                                data: Payload::from(Rc::new(RefCell::new(Array::new_empty()))),
+                            }
                         }
                     }
                     7 => {
@@ -2880,11 +2990,11 @@ impl Executor {
     }
     fn operate_subtract(&self, arg1: Val, arg2: Val) -> Val {
         match arg1.typ {
-            1 | 2 | 3 => {
+            1..=3 => {
                 let val1 = match arg1.typ {
                     1 => arg1.as_i16() as i64,
                     2 => arg1.as_i32() as i64,
-                    3 => arg1.as_i64() as i64,
+                    3 => arg1.as_i64(),
                     _ => 0,
                 };
                 match arg2.typ {
@@ -2897,7 +3007,7 @@ impl Executor {
                         self.check_int_range(val1 - val2)
                     }
                     3 => {
-                        let val2 = arg2.as_i64() as i64;
+                        let val2 = arg2.as_i64();
                         self.check_int_range(val1 - val2)
                     }
                     4 => {
@@ -2906,7 +3016,7 @@ impl Executor {
                         self.check_float_range(val1_temp - val2)
                     }
                     5 => {
-                        let val2 = arg2.as_f64() as f64;
+                        let val2 = arg2.as_f64();
                         let val1_temp = val1 as f64;
                         self.check_float_range(val1_temp - val2)
                     }
@@ -2933,7 +3043,7 @@ impl Executor {
             4 | 5 => {
                 let val1 = match arg1.typ {
                     4 => arg1.as_f32() as f64,
-                    5 => arg1.as_f64() as f64,
+                    5 => arg1.as_f64(),
                     _ => 0.0,
                 };
                 match arg2.typ {
@@ -2954,7 +3064,7 @@ impl Executor {
                         self.check_float_range(val1 - val2)
                     }
                     5 => {
-                        let val2 = arg2.as_f64() as f64;
+                        let val2 = arg2.as_f64();
                         self.check_float_range(val1 - val2)
                     }
                     6 => {
@@ -3178,9 +3288,9 @@ impl Executor {
                             .iter()
                             .filter_map(|item| {
                                 if self.is_eq(item.clone(), arg2.clone()) {
-                                    return None;
+                                    None
                                 } else {
-                                    return Some(item.clone());
+                                    Some(item.clone())
                                 }
                             })
                             .collect();
@@ -3201,7 +3311,7 @@ impl Executor {
                                         return None;
                                     }
                                 }
-                                return Some(item.clone());
+                                Some(item.clone())
                             })
                             .collect();
                         Val {
@@ -3224,7 +3334,7 @@ impl Executor {
     }
     fn operate_division(&self, arg1: Val, arg2: Val) -> Val {
         match arg1.typ {
-            1 | 2 | 3 => {
+            1..=3 => {
                 let val1 = match arg1.typ {
                     1 => arg1.as_i16() as f64,
                     2 => arg1.as_i32() as f64,
@@ -3249,7 +3359,7 @@ impl Executor {
                         self.check_float_range(val1 / val2)
                     }
                     5 => {
-                        let val2 = arg2.as_f64() as f64;
+                        let val2 = arg2.as_f64();
                         self.check_float_range(val1 / val2)
                     }
                     6 => {
@@ -3275,7 +3385,7 @@ impl Executor {
             4 | 5 => {
                 let val1 = match arg1.typ {
                     4 => arg1.as_f32() as f64,
-                    5 => arg1.as_f64() as f64,
+                    5 => arg1.as_f64(),
                     _ => 0.0,
                 };
                 match arg2.typ {
@@ -3296,7 +3406,7 @@ impl Executor {
                         self.check_float_range(val1 / val2)
                     }
                     5 => {
-                        let val2 = arg2.as_f64() as f64;
+                        let val2 = arg2.as_f64();
                         self.check_float_range(val1 / val2)
                     }
                     6 => {
@@ -3344,7 +3454,7 @@ impl Executor {
             // Integer dividend: keep an integer remainder for integer divisors,
             // promote to float when the divisor is a float (matching the rest of
             // the arithmetic ops, e.g. `operate_subtract`).
-            1 | 2 | 3 => {
+            1..=3 => {
                 let val1 = match arg1.typ {
                     1 => arg1.as_i16() as i64,
                     2 => arg1.as_i32() as i64,
@@ -3398,7 +3508,7 @@ impl Executor {
             // Integer base raised to a non-negative integer exponent stays an
             // integer (falling back to float on overflow); any float operand or
             // negative exponent yields a float, like the other arithmetic ops.
-            1 | 2 | 3 => {
+            1..=3 => {
                 let val1 = match arg1.typ {
                     1 => arg1.as_i16() as i64,
                     2 => arg1.as_i32() as i64,
@@ -3426,7 +3536,9 @@ impl Executor {
                     8 => panic!("elpian error: integer and object can not be exponentiated"),
                     9 => panic!("elpian error: integer and array can not be exponentiated"),
                     10 => panic!("elpian error: integer and function can not be exponentiated"),
-                    _ => panic!("elpian error: integer and unknown data type can not be exponentiated"),
+                    _ => panic!(
+                        "elpian error: integer and unknown data type can not be exponentiated"
+                    ),
                 }
             }
             4 | 5 => {
@@ -3446,7 +3558,9 @@ impl Executor {
                     8 => panic!("elpian error: float and object can not be exponentiated"),
                     9 => panic!("elpian error: float and array can not be exponentiated"),
                     10 => panic!("elpian error: float and function can not be exponentiated"),
-                    _ => panic!("elpian error: float and unknown data type can not be exponentiated"),
+                    _ => {
+                        panic!("elpian error: float and unknown data type can not be exponentiated")
+                    }
                 }
             }
             6 => panic!("elpian error: bool can not be exponentiated with other types"),
@@ -3465,20 +3579,20 @@ impl Executor {
         if v.typ == 0 || v2.typ == 0 {
             return is_null(&v) && is_null(&v2);
         }
-        return match v.typ {
-            1 | 2 | 3 => {
+        match v.typ {
+            1..=3 => {
                 let v_val = match v.typ {
                     1 => v.as_i16() as i64,
                     2 => v.as_i32() as i64,
-                    3 => v.as_i64() as i64,
+                    3 => v.as_i64(),
                     _ => 0,
                 };
                 match v2.typ {
-                    1 | 2 | 3 => {
+                    1..=3 => {
                         let v2_val = match v2.typ {
                             1 => v2.as_i16() as i64,
                             2 => v2.as_i32() as i64,
-                            3 => v2.as_i64() as i64,
+                            3 => v2.as_i64(),
                             _ => 0,
                         };
                         v_val == v2_val
@@ -3487,7 +3601,7 @@ impl Executor {
                         let v_val_temp = v_val as f64;
                         let v2_val = match v2.typ {
                             4 => v2.as_f32() as f64,
-                            5 => v2.as_f64() as f64,
+                            5 => v2.as_f64(),
                             _ => 0.0,
                         };
                         v_val_temp == v2_val
@@ -3498,11 +3612,11 @@ impl Executor {
             4 | 5 => {
                 let v_val = match v.typ {
                     4 => v.as_f32() as f64,
-                    5 => v.as_f64() as f64,
+                    5 => v.as_f64(),
                     _ => 0.0,
                 };
                 match v2.typ {
-                    1 | 2 | 3 => {
+                    1..=3 => {
                         let v2_val = match v2.typ {
                             1 => v2.as_i16() as f64,
                             2 => v2.as_i32() as f64,
@@ -3514,7 +3628,7 @@ impl Executor {
                     4 | 5 => {
                         let v2_val = match v2.typ {
                             4 => v2.as_f32() as f64,
-                            5 => v2.as_f64() as f64,
+                            5 => v2.as_f64(),
                             _ => 0.0,
                         };
                         v_val == v2_val
@@ -3598,9 +3712,9 @@ impl Executor {
                                 v2_val.borrow().data.get(counter).unwrap().clone(),
                             ) {
                                 counter += 1;
-                                return true;
+                                true
                             } else {
-                                return false;
+                                false
                             }
                         });
                     }
@@ -3619,23 +3733,23 @@ impl Executor {
                 }
             }
             _ => false,
-        };
+        }
     }
     fn is_ge(&self, v: Val, v2: Val) -> bool {
-        return match v.typ {
-            1 | 2 | 3 => {
+        match v.typ {
+            1..=3 => {
                 let v_val = match v.typ {
                     1 => v.as_i16() as i64,
                     2 => v.as_i32() as i64,
-                    3 => v.as_i64() as i64,
+                    3 => v.as_i64(),
                     _ => 0,
                 };
                 match v2.typ {
-                    1 | 2 | 3 => {
+                    1..=3 => {
                         let v2_val = match v2.typ {
                             1 => v2.as_i16() as i64,
                             2 => v2.as_i32() as i64,
-                            3 => v2.as_i64() as i64,
+                            3 => v2.as_i64(),
                             _ => 0,
                         };
                         v_val > v2_val
@@ -3644,7 +3758,7 @@ impl Executor {
                         let v_val_temp = v_val as f64;
                         let v2_val = match v2.typ {
                             4 => v2.as_f32() as f64,
-                            5 => v2.as_f64() as f64,
+                            5 => v2.as_f64(),
                             _ => 0.0,
                         };
                         v_val_temp > v2_val
@@ -3657,11 +3771,11 @@ impl Executor {
             4 | 5 => {
                 let v_val = match v.typ {
                     4 => v.as_f32() as f64,
-                    5 => v.as_f64() as f64,
+                    5 => v.as_f64(),
                     _ => 0.0,
                 };
                 match v2.typ {
-                    1 | 2 | 3 => {
+                    1..=3 => {
                         let v2_val = match v2.typ {
                             1 => v2.as_i16() as f64,
                             2 => v2.as_i32() as f64,
@@ -3673,7 +3787,7 @@ impl Executor {
                     4 | 5 => {
                         let v2_val = match v2.typ {
                             4 => v2.as_f32() as f64,
-                            5 => v2.as_f64() as f64,
+                            5 => v2.as_f64(),
                             _ => 0.0,
                         };
                         v_val > v2_val
@@ -3688,7 +3802,7 @@ impl Executor {
                 match v2.typ {
                     6 => {
                         let v2_val = v2.as_bool();
-                        v_val > v2_val
+                        v_val & !v2_val
                     }
                     _ => panic!(
                         "elpian error: boolean and non boolean values are not comparable unless it is just equality check"
@@ -3766,7 +3880,7 @@ impl Executor {
                             }
                             counter += 1;
                         });
-                        return counter1 > counter2;
+                        counter1 > counter2
                     }
                     _ => panic!(
                         "elpian error: array and non array values are not comparable unless it is just equality check"
@@ -3777,23 +3891,23 @@ impl Executor {
                 "elpian error: function types are not comparable unless it is just equality check"
             ),
             _ => panic!("elpian error: unknown types are not comparable"),
-        };
+        }
     }
     fn is_gee(&self, v: Val, v2: Val) -> bool {
-        return match v.typ {
-            1 | 2 | 3 => {
+        match v.typ {
+            1..=3 => {
                 let v_val = match v.typ {
                     1 => v.as_i16() as i64,
                     2 => v.as_i32() as i64,
-                    3 => v.as_i64() as i64,
+                    3 => v.as_i64(),
                     _ => 0,
                 };
                 match v2.typ {
-                    1 | 2 | 3 => {
+                    1..=3 => {
                         let v2_val = match v2.typ {
                             1 => v2.as_i16() as i64,
                             2 => v2.as_i32() as i64,
-                            3 => v2.as_i64() as i64,
+                            3 => v2.as_i64(),
                             _ => 0,
                         };
                         v_val >= v2_val
@@ -3802,7 +3916,7 @@ impl Executor {
                         let v_val_temp = v_val as f64;
                         let v2_val = match v2.typ {
                             4 => v2.as_f32() as f64,
-                            5 => v2.as_f64() as f64,
+                            5 => v2.as_f64(),
                             _ => 0.0,
                         };
                         v_val_temp >= v2_val
@@ -3815,11 +3929,11 @@ impl Executor {
             4 | 5 => {
                 let v_val = match v.typ {
                     4 => v.as_f32() as f64,
-                    5 => v.as_f64() as f64,
+                    5 => v.as_f64(),
                     _ => 0.0,
                 };
                 match v2.typ {
-                    1 | 2 | 3 => {
+                    1..=3 => {
                         let v2_val = match v2.typ {
                             1 => v2.as_i16() as f64,
                             2 => v2.as_i32() as f64,
@@ -3831,7 +3945,7 @@ impl Executor {
                     4 | 5 => {
                         let v2_val = match v2.typ {
                             4 => v2.as_f32() as f64,
-                            5 => v2.as_f64() as f64,
+                            5 => v2.as_f64(),
                             _ => 0.0,
                         };
                         v_val >= v2_val
@@ -3924,7 +4038,7 @@ impl Executor {
                             }
                             counter += 1;
                         });
-                        return counter1 >= counter2;
+                        counter1 >= counter2
                     }
                     _ => panic!(
                         "elpian error: array and non array values are not comparable unless it is just equality check"
@@ -3935,23 +4049,23 @@ impl Executor {
                 "elpian error: function types are not comparable unless it is just equality check"
             ),
             _ => panic!("elpian error: unknown types are not comparable"),
-        };
+        }
     }
     fn is_le(&self, v: Val, v2: Val) -> bool {
-        return match v.typ {
-            1 | 2 | 3 => {
+        match v.typ {
+            1..=3 => {
                 let v_val = match v.typ {
                     1 => v.as_i16() as i64,
                     2 => v.as_i32() as i64,
-                    3 => v.as_i64() as i64,
+                    3 => v.as_i64(),
                     _ => 0,
                 };
                 match v2.typ {
-                    1 | 2 | 3 => {
+                    1..=3 => {
                         let v2_val = match v2.typ {
                             1 => v2.as_i16() as i64,
                             2 => v2.as_i32() as i64,
-                            3 => v2.as_i64() as i64,
+                            3 => v2.as_i64(),
                             _ => 0,
                         };
                         v_val < v2_val
@@ -3960,7 +4074,7 @@ impl Executor {
                         let v_val_temp = v_val as f64;
                         let v2_val = match v2.typ {
                             4 => v2.as_f32() as f64,
-                            5 => v2.as_f64() as f64,
+                            5 => v2.as_f64(),
                             _ => 0.0,
                         };
                         v_val_temp < v2_val
@@ -3973,11 +4087,11 @@ impl Executor {
             4 | 5 => {
                 let v_val = match v.typ {
                     4 => v.as_f32() as f64,
-                    5 => v.as_f64() as f64,
+                    5 => v.as_f64(),
                     _ => 0.0,
                 };
                 match v2.typ {
-                    1 | 2 | 3 => {
+                    1..=3 => {
                         let v2_val = match v2.typ {
                             1 => v2.as_i16() as f64,
                             2 => v2.as_i32() as f64,
@@ -3989,7 +4103,7 @@ impl Executor {
                     4 | 5 => {
                         let v2_val = match v2.typ {
                             4 => v2.as_f32() as f64,
-                            5 => v2.as_f64() as f64,
+                            5 => v2.as_f64(),
                             _ => 0.0,
                         };
                         v_val < v2_val
@@ -4004,7 +4118,7 @@ impl Executor {
                 match v2.typ {
                     6 => {
                         let v2_val = v2.as_bool();
-                        v_val < v2_val
+                        !v_val & v2_val
                     }
                     _ => panic!(
                         "elpian error: boolean and non boolean values are not comparable unless it is just equality check"
@@ -4082,7 +4196,7 @@ impl Executor {
                             }
                             counter += 1;
                         });
-                        return counter1 < counter2;
+                        counter1 < counter2
                     }
                     _ => panic!(
                         "elpian error: array and non array values are not comparable unless it is just equality check"
@@ -4093,23 +4207,23 @@ impl Executor {
                 "elpian error: function types are not comparable unless it is just equality check"
             ),
             _ => panic!("elpian error: unknown types are not comparable"),
-        };
+        }
     }
     fn is_lee(&self, v: Val, v2: Val) -> bool {
-        return match v.typ {
-            1 | 2 | 3 => {
+        match v.typ {
+            1..=3 => {
                 let v_val = match v.typ {
                     1 => v.as_i16() as i64,
                     2 => v.as_i32() as i64,
-                    3 => v.as_i64() as i64,
+                    3 => v.as_i64(),
                     _ => 0,
                 };
                 match v2.typ {
-                    1 | 2 | 3 => {
+                    1..=3 => {
                         let v2_val = match v2.typ {
                             1 => v2.as_i16() as i64,
                             2 => v2.as_i32() as i64,
-                            3 => v2.as_i64() as i64,
+                            3 => v2.as_i64(),
                             _ => 0,
                         };
                         v_val <= v2_val
@@ -4118,7 +4232,7 @@ impl Executor {
                         let v_val_temp = v_val as f64;
                         let v2_val = match v2.typ {
                             4 => v2.as_f32() as f64,
-                            5 => v2.as_f64() as f64,
+                            5 => v2.as_f64(),
                             _ => 0.0,
                         };
                         v_val_temp <= v2_val
@@ -4131,11 +4245,11 @@ impl Executor {
             4 | 5 => {
                 let v_val = match v.typ {
                     4 => v.as_f32() as f64,
-                    5 => v.as_f64() as f64,
+                    5 => v.as_f64(),
                     _ => 0.0,
                 };
                 match v2.typ {
-                    1 | 2 | 3 => {
+                    1..=3 => {
                         let v2_val = match v2.typ {
                             1 => v2.as_i16() as f64,
                             2 => v2.as_i32() as f64,
@@ -4147,7 +4261,7 @@ impl Executor {
                     4 | 5 => {
                         let v2_val = match v2.typ {
                             4 => v2.as_f32() as f64,
-                            5 => v2.as_f64() as f64,
+                            5 => v2.as_f64(),
                             _ => 0.0,
                         };
                         v_val <= v2_val
@@ -4240,7 +4354,7 @@ impl Executor {
                             }
                             counter += 1;
                         });
-                        return counter1 <= counter2;
+                        counter1 <= counter2
                     }
                     _ => panic!(
                         "elpian error: array and non array values are not comparable unless it is just equality check"
@@ -4251,7 +4365,7 @@ impl Executor {
                 "elpian error: function types are not comparable unless it is just equality check"
             ),
             _ => panic!("elpian error: unknown types are not comparable"),
-        };
+        }
     }
     fn define(&mut self, id_name: String, val: Val) {
         if let Err(e) = self.governor.charge_memory(val.approx_size()) {
@@ -4274,7 +4388,13 @@ impl Executor {
         if let Some(scope) = self.ctx.memory.last() {
             let (bytes, is_func) = {
                 let s = scope.borrow();
-                let bytes: u64 = s.memory.borrow().data.values().map(|v| v.approx_size()).sum();
+                let bytes: u64 = s
+                    .memory
+                    .borrow()
+                    .data
+                    .values()
+                    .map(|v| v.approx_size())
+                    .sum();
                 (bytes, s.tag == "funcBody")
             };
             self.governor.release_memory(bytes);
@@ -4290,7 +4410,7 @@ impl Executor {
         while self
             .try_stack
             .last()
-            .map_or(false, |f| f.scope_depth >= self.ctx.memory.len())
+            .is_some_and(|f| f.scope_depth >= self.ctx.memory.len())
         {
             self.try_stack.pop();
         }
@@ -4311,7 +4431,10 @@ impl Executor {
                 self.registers.truncate(frame.register_depth);
                 // Any return value mid-propagation died with the frames it was
                 // travelling through.
-                self.pending_func_result_value = Val { typ: 254, data: Payload::Null };
+                self.pending_func_result_value = Val {
+                    typ: 254,
+                    data: Payload::Null,
+                };
                 let mut args = ValMap::default();
                 args.insert(frame.err_name.to_string(), err);
                 self.ctx.push_scope_with_args(
@@ -4336,8 +4459,20 @@ impl Executor {
     /// handlers can read `e.message` in any source language.
     fn native_error(&self, message: String) -> Val {
         let mut m = ValMap::default();
-        m.insert("name".to_string(), Val { typ: 7, data: Payload::from("Error".to_string()) });
-        m.insert("message".to_string(), Val { typ: 7, data: Payload::from(message) });
+        m.insert(
+            "name".to_string(),
+            Val {
+                typ: 7,
+                data: Payload::from("Error".to_string()),
+            },
+        );
+        m.insert(
+            "message".to_string(),
+            Val {
+                typ: 7,
+                data: Payload::from(message),
+            },
+        );
         Val {
             typ: 8,
             data: Payload::from(Rc::new(RefCell::new(Object::new(-2, ValGroup::new(m))))),
@@ -4412,12 +4547,18 @@ impl Executor {
             let (entry, parent) = {
                 let pb = p.as_object();
                 let b = pb.borrow();
-                (b.data.data.get(key).cloned(), b.data.data.get("__parent").cloned())
+                (
+                    b.data.data.get(key).cloned(),
+                    b.data.data.get("__parent").cloned(),
+                )
             };
             if let Some(m) = entry {
                 if m.typ == 10 {
                     let bound = m.as_func().borrow().bind(receiver.clone());
-                    return Some(Val { typ: 10, data: Payload::from(Rc::new(RefCell::new(bound))) });
+                    return Some(Val {
+                        typ: 10,
+                        data: Payload::from(Rc::new(RefCell::new(bound))),
+                    });
                 }
                 return Some(m);
             }
@@ -4445,17 +4586,15 @@ impl Executor {
         }
         let mut main_reg: Option<Val> = None;
         let mut is_reg_state_final = false;
-        if continue_exec {
-            if self.pending_func_result_value.typ != 254 {
-                let returned_val = self.pending_func_result_value.clone();
-                self.pending_func_result_value = Val {
-                    typ: 254,
-                    data: Payload::Null,
-                };
-                if !self.registers.is_empty() {
-                    main_reg = Some(returned_val);
-                    is_reg_state_final = false;
-                }
+        if continue_exec && self.pending_func_result_value.typ != 254 {
+            let returned_val = self.pending_func_result_value.clone();
+            self.pending_func_result_value = Val {
+                typ: 254,
+                data: Payload::Null,
+            };
+            if !self.registers.is_empty() {
+                main_reg = Some(returned_val);
+                is_reg_state_final = false;
             }
         }
         loop {
@@ -4498,8 +4637,7 @@ impl Executor {
                         main_reg = None;
                         continue;
                     }
-                    if op_type == OperationTypes::ArrExpr
-                    {
+                    if op_type == OperationTypes::ArrExpr {
                         if self.registers.last().unwrap().get_state()
                             == ExecStates::ArrExprExtractInfo
                             || self.registers.last().unwrap().get_state()
@@ -4510,14 +4648,11 @@ impl Executor {
                                 StateData::Val(main_reg.take().unwrap()),
                             );
                             main_reg = None;
-                            is_reg_state_final =
-                                self.registers.last().unwrap().get_state()
-                                    == ExecStates::ArrExprFinished;
+                            is_reg_state_final = self.registers.last().unwrap().get_state()
+                                == ExecStates::ArrExprFinished;
                             continue;
                         }
-                    } else if op_type
-                        == OperationTypes::ObjExpr
-                    {
+                    } else if op_type == OperationTypes::ObjExpr {
                         if self.registers.last().unwrap().get_state()
                             == ExecStates::ObjExprExtractInfo
                             || self.registers.last().unwrap().get_state()
@@ -4528,16 +4663,12 @@ impl Executor {
                                 StateData::Val(main_reg.take().unwrap()),
                             );
                             main_reg = None;
-                            is_reg_state_final =
-                                self.registers.last().unwrap().get_state()
-                                    == ExecStates::ObjExprFinished;
+                            is_reg_state_final = self.registers.last().unwrap().get_state()
+                                == ExecStates::ObjExprFinished;
                             continue;
                         }
-                    } else if op_type
-                        == OperationTypes::CallFunc
-                    {
-                        if self.registers.last().unwrap().get_state()
-                            == ExecStates::CallFuncStarted
+                    } else if op_type == OperationTypes::CallFunc {
+                        if self.registers.last().unwrap().get_state() == ExecStates::CallFuncStarted
                         {
                             // The callee just evaluated; the argument count is
                             // already stored in the operation (folded into the
@@ -4547,9 +4678,8 @@ impl Executor {
                                 StateData::Val(main_reg.take().unwrap()),
                             );
                             main_reg = None;
-                            is_reg_state_final =
-                                self.registers.last().unwrap().get_state()
-                                    == ExecStates::CallFuncFinished;
+                            is_reg_state_final = self.registers.last().unwrap().get_state()
+                                == ExecStates::CallFuncFinished;
                             continue;
                         } else if self.registers.last().unwrap().get_state()
                             == ExecStates::CallFuncExtractFunc
@@ -4561,14 +4691,11 @@ impl Executor {
                                 StateData::Val(main_reg.take().unwrap()),
                             );
                             main_reg = None;
-                            is_reg_state_final =
-                                self.registers.last().unwrap().get_state()
-                                    == ExecStates::CallFuncFinished;
+                            is_reg_state_final = self.registers.last().unwrap().get_state()
+                                == ExecStates::CallFuncFinished;
                             continue;
                         }
-                    } else if op_type
-                        == OperationTypes::ReturnVal
-                    {
+                    } else if op_type == OperationTypes::ReturnVal {
                         if self.registers.last().unwrap().get_state()
                             == ExecStates::ReturnValStarted
                         {
@@ -4577,14 +4704,12 @@ impl Executor {
                                 StateData::Val(main_reg.take().unwrap()),
                             );
                             main_reg = None;
-                            is_reg_state_final =
-                                self.registers.last().unwrap().get_state()
-                                    == ExecStates::ReturnValFinished;
+                            is_reg_state_final = self.registers.last().unwrap().get_state()
+                                == ExecStates::ReturnValFinished;
                             continue;
                         }
                     } else if op_type == OperationTypes::ThrowVal {
-                        if self.registers.last().unwrap().get_state()
-                            == ExecStates::ThrowValStarted
+                        if self.registers.last().unwrap().get_state() == ExecStates::ThrowValStarted
                         {
                             self.registers.last_mut().unwrap().set_state(
                                 ExecStates::ThrowValFinished,
@@ -4594,9 +4719,7 @@ impl Executor {
                             is_reg_state_final = true;
                             continue;
                         }
-                    } else if op_type
-                        == OperationTypes::DefineVar
-                    {
+                    } else if op_type == OperationTypes::DefineVar {
                         if self.registers.last().unwrap().get_state()
                             == ExecStates::DefineVarExtractName
                         {
@@ -4605,14 +4728,11 @@ impl Executor {
                                 StateData::Val(main_reg.take().unwrap()),
                             );
                             main_reg = None;
-                            is_reg_state_final =
-                                self.registers.last().unwrap().get_state()
-                                    == ExecStates::DefineVarExtractValue;
+                            is_reg_state_final = self.registers.last().unwrap().get_state()
+                                == ExecStates::DefineVarExtractValue;
                             continue;
                         }
-                    } else if op_type
-                        == OperationTypes::AssignVar
-                    {
+                    } else if op_type == OperationTypes::AssignVar {
                         if self.registers.last().unwrap().get_state()
                             == ExecStates::AssignVarExtractName
                         {
@@ -4622,21 +4742,17 @@ impl Executor {
                                     StateData::Val(main_reg.take().unwrap()),
                                 );
                                 main_reg = None;
-                                is_reg_state_final =
-                                    self.registers.last().unwrap().get_state()
-                                        == ExecStates::AssignVarExtractValue;
+                                is_reg_state_final = self.registers.last().unwrap().get_state()
+                                    == ExecStates::AssignVarExtractValue;
                                 continue;
-                            } else if self.registers.last().unwrap().get_data()[1].as_i16()
-                                == 2
-                            {
+                            } else if self.registers.last().unwrap().get_data()[1].as_i16() == 2 {
                                 self.registers.last_mut().unwrap().set_state(
                                     ExecStates::AssignVarExtractIndex,
                                     StateData::Val(main_reg.take().unwrap()),
                                 );
                                 main_reg = None;
-                                is_reg_state_final =
-                                    self.registers.last().unwrap().get_state()
-                                        == ExecStates::AssignVarExtractValue;
+                                is_reg_state_final = self.registers.last().unwrap().get_state()
+                                    == ExecStates::AssignVarExtractValue;
                                 continue;
                             }
                         } else if self.registers.last().unwrap().get_state()
@@ -4647,14 +4763,11 @@ impl Executor {
                                 StateData::Val(main_reg.take().unwrap()),
                             );
                             main_reg = None;
-                            is_reg_state_final =
-                                self.registers.last().unwrap().get_state()
-                                    == ExecStates::AssignVarExtractValue;
+                            is_reg_state_final = self.registers.last().unwrap().get_state()
+                                == ExecStates::AssignVarExtractValue;
                             continue;
                         }
-                    } else if op_type
-                        == OperationTypes::IfStmt
-                    {
+                    } else if op_type == OperationTypes::IfStmt {
                         if self.registers.last().unwrap().get_state()
                             == ExecStates::IfStmtIsConditioned
                         {
@@ -4663,30 +4776,23 @@ impl Executor {
                                 StateData::Val(main_reg.take().unwrap()),
                             );
                             main_reg = None;
-                            is_reg_state_final =
-                                self.registers.last().unwrap().get_state()
-                                    == ExecStates::IfStmtFinished;
+                            is_reg_state_final = self.registers.last().unwrap().get_state()
+                                == ExecStates::IfStmtFinished;
                             continue;
                         }
-                    } else if op_type
-                        == OperationTypes::LoopStmt
-                    {
-                        if self.registers.last().unwrap().get_state()
-                            == ExecStates::LoopStmtStarted
+                    } else if op_type == OperationTypes::LoopStmt {
+                        if self.registers.last().unwrap().get_state() == ExecStates::LoopStmtStarted
                         {
                             self.registers.last_mut().unwrap().set_state(
                                 ExecStates::LoopStmtFinished,
                                 StateData::Val(main_reg.take().unwrap()),
                             );
                             main_reg = None;
-                            is_reg_state_final =
-                                self.registers.last().unwrap().get_state()
-                                    == ExecStates::LoopStmtFinished;
+                            is_reg_state_final = self.registers.last().unwrap().get_state()
+                                == ExecStates::LoopStmtFinished;
                             continue;
                         }
-                    } else if op_type
-                        == OperationTypes::SwitchStmt
-                    {
+                    } else if op_type == OperationTypes::SwitchStmt {
                         if self.registers.last().unwrap().get_state()
                             == ExecStates::SwitchStmtStarted
                         {
@@ -4698,9 +4804,8 @@ impl Executor {
                                 StateData::Val(main_reg.take().unwrap()),
                             );
                             main_reg = None;
-                            is_reg_state_final =
-                                self.registers.last().unwrap().get_state()
-                                    == ExecStates::SwitchStmtFinished;
+                            is_reg_state_final = self.registers.last().unwrap().get_state()
+                                == ExecStates::SwitchStmtFinished;
                             continue;
                         } else if self.registers.last().unwrap().get_state()
                             == ExecStates::SwitchStmtExtractVal
@@ -4717,9 +4822,8 @@ impl Executor {
                                 StateData::Val(main_reg.take().unwrap()),
                             );
                             main_reg = None;
-                            is_reg_state_final =
-                                self.registers.last().unwrap().get_state()
-                                    == ExecStates::SwitchStmtFinished;
+                            is_reg_state_final = self.registers.last().unwrap().get_state()
+                                == ExecStates::SwitchStmtFinished;
                             // Skip past this case's body to the next case's value
                             // expression. Without this the scan would fall into
                             // the body and execute it while still collecting
@@ -4729,9 +4833,7 @@ impl Executor {
                             self.pointer = branch_true_end;
                             continue;
                         }
-                    } else if op_type
-                        == OperationTypes::Arithmetic
-                    {
+                    } else if op_type == OperationTypes::Arithmetic {
                         if self.registers.last().unwrap().get_state()
                             == ExecStates::ArithmeticExtractOp
                         {
@@ -4740,9 +4842,8 @@ impl Executor {
                                 StateData::Val(main_reg.take().unwrap()),
                             );
                             main_reg = None;
-                            is_reg_state_final =
-                                self.registers.last().unwrap().get_state()
-                                    == ExecStates::ArithmeticExtractArg2;
+                            is_reg_state_final = self.registers.last().unwrap().get_state()
+                                == ExecStates::ArithmeticExtractArg2;
                             continue;
                         } else if self.registers.last().unwrap().get_state()
                             == ExecStates::ArithmeticExtractArg1
@@ -4752,25 +4853,20 @@ impl Executor {
                                 StateData::Val(main_reg.take().unwrap()),
                             );
                             main_reg = None;
-                            is_reg_state_final =
-                                self.registers.last().unwrap().get_state()
-                                    == ExecStates::ArithmeticExtractArg2;
+                            is_reg_state_final = self.registers.last().unwrap().get_state()
+                                == ExecStates::ArithmeticExtractArg2;
                             continue;
                         }
-                    } else if op_type
-                        == OperationTypes::Indexer
-                    {
-                        if self.registers.last().unwrap().get_state()
-                            == ExecStates::IndexerStarted
+                    } else if op_type == OperationTypes::Indexer {
+                        if self.registers.last().unwrap().get_state() == ExecStates::IndexerStarted
                         {
                             self.registers.last_mut().unwrap().set_state(
                                 ExecStates::IndexerExtractVarName,
                                 StateData::Val(main_reg.take().unwrap()),
                             );
                             main_reg = None;
-                            is_reg_state_final =
-                                self.registers.last().unwrap().get_state()
-                                    == ExecStates::IndexerExtractIndex;
+                            is_reg_state_final = self.registers.last().unwrap().get_state()
+                                == ExecStates::IndexerExtractIndex;
                             continue;
                         } else if self.registers.last().unwrap().get_state()
                             == ExecStates::IndexerExtractVarName
@@ -4780,39 +4876,30 @@ impl Executor {
                                 StateData::Val(main_reg.take().unwrap()),
                             );
                             main_reg = None;
-                            is_reg_state_final =
-                                self.registers.last().unwrap().get_state()
-                                    == ExecStates::IndexerExtractIndex;
+                            is_reg_state_final = self.registers.last().unwrap().get_state()
+                                == ExecStates::IndexerExtractIndex;
                             continue;
                         }
-                    } else if op_type
-                        == OperationTypes::NotVal
-                    {
-                        if self.registers.last().unwrap().get_state()
-                            == ExecStates::NotValStarted
-                        {
+                    } else if op_type == OperationTypes::NotVal {
+                        if self.registers.last().unwrap().get_state() == ExecStates::NotValStarted {
                             self.registers.last_mut().unwrap().set_state(
                                 ExecStates::NotValFinished,
                                 StateData::Val(main_reg.take().unwrap()),
                             );
                             main_reg = None;
-                            is_reg_state_final =
-                                self.registers.last().unwrap().get_state()
-                                    == ExecStates::NotValFinished;
+                            is_reg_state_final = self.registers.last().unwrap().get_state()
+                                == ExecStates::NotValFinished;
                             continue;
                         }
                     } else if op_type == OperationTypes::Spread {
-                        if self.registers.last().unwrap().get_state()
-                            == ExecStates::SpreadStarted
-                        {
+                        if self.registers.last().unwrap().get_state() == ExecStates::SpreadStarted {
                             self.registers.last_mut().unwrap().set_state(
                                 ExecStates::SpreadFinished,
                                 StateData::Val(main_reg.take().unwrap()),
                             );
                             main_reg = None;
-                            is_reg_state_final =
-                                self.registers.last().unwrap().get_state()
-                                    == ExecStates::SpreadFinished;
+                            is_reg_state_final = self.registers.last().unwrap().get_state()
+                                == ExecStates::SpreadFinished;
                             continue;
                         }
                     } else if op_type == OperationTypes::Template {
@@ -4826,9 +4913,8 @@ impl Executor {
                                 StateData::Val(main_reg.take().unwrap()),
                             );
                             main_reg = None;
-                            is_reg_state_final =
-                                self.registers.last().unwrap().get_state()
-                                    == ExecStates::TemplateFinished;
+                            is_reg_state_final = self.registers.last().unwrap().get_state()
+                                == ExecStates::TemplateFinished;
                             continue;
                         }
                     } else if op_type == OperationTypes::Destructure {
@@ -4840,14 +4926,11 @@ impl Executor {
                                 StateData::Val(main_reg.take().unwrap()),
                             );
                             main_reg = None;
-                            is_reg_state_final =
-                                self.registers.last().unwrap().get_state()
-                                    == ExecStates::DestructureFinished;
+                            is_reg_state_final = self.registers.last().unwrap().get_state()
+                                == ExecStates::DestructureFinished;
                             continue;
                         }
-                    } else if op_type
-                        == OperationTypes::CondBrch
-                    {
+                    } else if op_type == OperationTypes::CondBrch {
                         if self.registers.last().unwrap().get_state()
                             == ExecStates::CondBranchStarted
                         {
@@ -4859,16 +4942,12 @@ impl Executor {
                                 StateData::Val(main_reg.take().unwrap()),
                             );
                             main_reg = None;
-                            is_reg_state_final =
-                                self.registers.last().unwrap().get_state()
-                                    == ExecStates::CondBranchFinished;
+                            is_reg_state_final = self.registers.last().unwrap().get_state()
+                                == ExecStates::CondBranchFinished;
                             continue;
                         }
-                    } else if op_type
-                        == OperationTypes::CastOprt
-                    {
-                        if self.registers.last().unwrap().get_state()
-                            == ExecStates::CastOprtStarted
+                    } else if op_type == OperationTypes::CastOprt {
+                        if self.registers.last().unwrap().get_state() == ExecStates::CastOprtStarted
                         {
                             // The value just evaluated; the target type is already
                             // stored in the operation (folded into the `Cast` unit).
@@ -4877,14 +4956,12 @@ impl Executor {
                                 StateData::Val(main_reg.take().unwrap()),
                             );
                             main_reg = None;
-                            is_reg_state_final =
-                                self.registers.last().unwrap().get_state()
-                                    == ExecStates::CastOprtFinished;
+                            is_reg_state_final = self.registers.last().unwrap().get_state()
+                                == ExecStates::CastOprtFinished;
                             continue;
                         }
                     } else if op_type == OperationTypes::TypeTest {
-                        if self.registers.last().unwrap().get_state()
-                            == ExecStates::TypeTestStarted
+                        if self.registers.last().unwrap().get_state() == ExecStates::TypeTestStarted
                         {
                             // The value just evaluated; the type name + mode are
                             // already folded into the operation.
@@ -4893,9 +4970,8 @@ impl Executor {
                                 StateData::Val(main_reg.take().unwrap()),
                             );
                             main_reg = None;
-                            is_reg_state_final =
-                                self.registers.last().unwrap().get_state()
-                                    == ExecStates::TypeTestFinished;
+                            is_reg_state_final = self.registers.last().unwrap().get_state()
+                                == ExecStates::TypeTestFinished;
                             continue;
                         }
                     } else if op_type == OperationTypes::Logical {
@@ -4976,9 +5052,7 @@ impl Executor {
                 }
             } else if is_reg_state_final {
                 if !self.registers.is_empty() {
-                    if self.registers.last().unwrap().get_state()
-                        == ExecStates::ArrExprFinished
-                    {
+                    if self.registers.last().unwrap().get_state() == ExecStates::ArrExprFinished {
                         let regs = self.registers.last().unwrap().get_data();
                         let items_arr = regs[1].as_array();
                         // Expand any spread elements (`[...xs, y]`) in place before
@@ -5017,9 +5091,10 @@ impl Executor {
                         }
                         let result = Val {
                             typ: 8,
-                            data: Payload::from(Rc::new(RefCell::new(
-                                Object::new(typ_id, ValGroup::new(props_map)),
-                            ))),
+                            data: Payload::from(Rc::new(RefCell::new(Object::new(
+                                typ_id,
+                                ValGroup::new(props_map),
+                            )))),
                         };
                         self.registers.pop();
                         main_reg = Some(result);
@@ -5081,8 +5156,7 @@ impl Executor {
                             self.pointer = func.borrow().start;
                             self.end_at = func.borrow().end;
                             self.registers.pop();
-                            self.registers
-                                .push(Box::new(DummyOp::new()));
+                            self.registers.push(Box::new(DummyOp::new()));
                             is_reg_state_final = false;
                             continue;
                         } else {
@@ -5159,16 +5233,14 @@ impl Executor {
                                 cb_id,
                                 Val {
                                     typ: 9,
-                                    data: Payload::from(Rc::new(RefCell::new(
-                                        Array::new(vec![
-                                            arg1,
-                                            Val {
-                                                typ: 1,
-                                                data: Payload::from(self.executor_id),
-                                            },
-                                            arg2,
-                                        ]),
-                                    ))),
+                                    data: Payload::from(Rc::new(RefCell::new(Array::new(vec![
+                                        arg1,
+                                        Val {
+                                            typ: 1,
+                                            data: Payload::from(self.executor_id),
+                                        },
+                                        arg2,
+                                    ])))),
                                 },
                             ));
                             break;
@@ -5263,7 +5335,13 @@ impl Executor {
                                     // an indexed store to the `setAt` builtin, which
                                     // traps on an out-of-range index, instead.
                                     if idx >= b.data.len() {
-                                        b.data.resize(idx + 1, Val { typ: 0, data: Payload::Null });
+                                        b.data.resize(
+                                            idx + 1,
+                                            Val {
+                                                typ: 0,
+                                                data: Payload::Null,
+                                            },
+                                        );
                                     }
                                     b.data[idx] = data;
                                 } else {
@@ -5544,13 +5622,12 @@ impl Executor {
                                 } else {
                                     // A plain Map (no `__class` tag) exposes Map
                                     // members; class instances do not.
-                                    let is_plain_map = indexed
+                                    let is_plain_map = !indexed
                                         .as_object()
                                         .borrow()
                                         .data
                                         .data
-                                        .get("__class")
-                                        .is_none();
+                                        .contains_key("__class");
                                     let map_member = if is_plain_map {
                                         type_methods::resolve(CoreType::Map, &key)
                                     } else {
@@ -5560,11 +5637,15 @@ impl Executor {
                                         // A plain-Map member (`length`/`keys`/`values`/
                                         // `isEmpty`/`has`/…): delivered by the same
                                         // registry-driven path as List/String/num.
-                                        main_reg = Some(self.deliver_type_member(&indexed, &member));
+                                        main_reg =
+                                            Some(self.deliver_type_member(&indexed, &member));
                                     } else {
                                         // An absent key/field reads as the first-class
                                         // null — the VM's single "absent value".
-                                        main_reg = Some(Val { typ: 0, data: Payload::Null });
+                                        main_reg = Some(Val {
+                                            typ: 0,
+                                            data: Payload::Null,
+                                        });
                                     }
                                 }
                             } else {
@@ -5580,8 +5661,7 @@ impl Executor {
                             if indexed.typ == 9 {
                                 let arr = indexed.as_array();
                                 if index.typ == 1 {
-                                    if let Some(o) =
-                                        arr.borrow().data.get(index.as_i16() as usize).clone()
+                                    if let Some(o) = arr.borrow().data.get(index.as_i16() as usize)
                                     {
                                         main_reg = Some(o.clone());
                                     } else {
@@ -5591,8 +5671,7 @@ impl Executor {
                                         });
                                     }
                                 } else if index.typ == 2 {
-                                    if let Some(o) =
-                                        arr.borrow().data.get(index.as_i32() as usize).clone()
+                                    if let Some(o) = arr.borrow().data.get(index.as_i32() as usize)
                                     {
                                         main_reg = Some(o.clone());
                                     } else {
@@ -5602,8 +5681,7 @@ impl Executor {
                                         });
                                     }
                                 } else {
-                                    if let Some(o) =
-                                        arr.borrow().data.get(index.as_i64() as usize).clone()
+                                    if let Some(o) = arr.borrow().data.get(index.as_i64() as usize)
                                     {
                                         main_reg = Some(o.clone());
                                     } else {
@@ -5723,7 +5801,10 @@ impl Executor {
                             }
                         } else {
                             // `is`: the boolean result of the type test.
-                            main_reg = Some(Val { typ: 6, data: Payload::from(matches) });
+                            main_reg = Some(Val {
+                                typ: 6,
+                                data: Payload::from(matches),
+                            });
                         }
                         is_reg_state_final = false;
                         continue;
@@ -5738,7 +5819,7 @@ impl Executor {
                                 1 => {
                                     main_reg = Some(Val {
                                         typ: 1,
-                                        data: Payload::from(data.as_i16() as i16),
+                                        data: Payload::from(data.as_i16()),
                                     });
                                 }
                                 2 => {
@@ -5766,13 +5847,12 @@ impl Executor {
                                     });
                                 }
                                 6 => {
-                                    main_reg =
-                                        Some(Val {
-                                            typ: 1,
-                                            data: Payload::from(
-                                                if data.as_bool() { 1 } else { 0 } as i16,
-                                            ),
-                                        });
+                                    main_reg = Some(Val {
+                                        typ: 1,
+                                        data: Payload::from(
+                                            if data.as_bool() { 1 } else { 0 } as i16
+                                        ),
+                                    });
                                 }
                                 7 => {
                                     main_reg = Some(Val {
@@ -5800,7 +5880,7 @@ impl Executor {
                                 2 => {
                                     main_reg = Some(Val {
                                         typ: 2,
-                                        data: Payload::from(data.as_i32() as i32),
+                                        data: Payload::from(data.as_i32()),
                                     });
                                 }
                                 3 => {
@@ -5822,13 +5902,10 @@ impl Executor {
                                     });
                                 }
                                 6 => {
-                                    main_reg =
-                                        Some(Val {
-                                            typ: 2,
-                                            data: Payload::from(
-                                                if data.as_bool() { 1 } else { 0 } as i32,
-                                            ),
-                                        });
+                                    main_reg = Some(Val {
+                                        typ: 2,
+                                        data: Payload::from(if data.as_bool() { 1 } else { 0 }),
+                                    });
                                 }
                                 7 => {
                                     main_reg = Some(Val {
@@ -5862,7 +5939,7 @@ impl Executor {
                                 3 => {
                                     main_reg = Some(Val {
                                         typ: 3,
-                                        data: Payload::from(data.as_i64() as i64),
+                                        data: Payload::from(data.as_i64()),
                                     });
                                 }
                                 4 => {
@@ -5878,13 +5955,12 @@ impl Executor {
                                     });
                                 }
                                 6 => {
-                                    main_reg =
-                                        Some(Val {
-                                            typ: 3,
-                                            data: Payload::from(
-                                                if data.as_bool() { 1 } else { 0 } as i64,
-                                            ),
-                                        });
+                                    main_reg = Some(Val {
+                                        typ: 3,
+                                        data: Payload::from(
+                                            if data.as_bool() { 1 } else { 0 } as i64
+                                        ),
+                                    });
                                 }
                                 7 => {
                                     main_reg = Some(Val {
@@ -5924,7 +6000,7 @@ impl Executor {
                                 4 => {
                                     main_reg = Some(Val {
                                         typ: 4,
-                                        data: Payload::from(data.as_f32() as f32),
+                                        data: Payload::from(data.as_f32()),
                                     });
                                 }
                                 5 => {
@@ -5934,13 +6010,12 @@ impl Executor {
                                     });
                                 }
                                 6 => {
-                                    main_reg =
-                                        Some(Val {
-                                            typ: 4,
-                                            data: Payload::from(
-                                                if data.as_bool() { 1 } else { 0 } as f32,
-                                            ),
-                                        });
+                                    main_reg = Some(Val {
+                                        typ: 4,
+                                        data: Payload::from(
+                                            if data.as_bool() { 1 } else { 0 } as f32
+                                        ),
+                                    });
                                 }
                                 7 => {
                                     main_reg = Some(Val {
@@ -5988,17 +6063,16 @@ impl Executor {
                                 5 => {
                                     main_reg = Some(Val {
                                         typ: 5,
-                                        data: Payload::from(data.as_f64() as f64),
+                                        data: Payload::from(data.as_f64()),
                                     });
                                 }
                                 6 => {
-                                    main_reg =
-                                        Some(Val {
-                                            typ: 5,
-                                            data: Payload::from(
-                                                if data.as_bool() { 1 } else { 0 } as f64,
-                                            ),
-                                        });
+                                    main_reg = Some(Val {
+                                        typ: 5,
+                                        data: Payload::from(
+                                            if data.as_bool() { 1 } else { 0 } as f64
+                                        ),
+                                    });
                                 }
                                 7 => {
                                     main_reg = Some(Val {
@@ -6056,9 +6130,7 @@ impl Executor {
                                 7 => {
                                     main_reg = Some(Val {
                                         typ: 6,
-                                        data: Payload::from(
-                                            data.as_string() == "true",
-                                        ),
+                                        data: Payload::from(data.as_string() == "true"),
                                     });
                                 }
                                 _ => {
@@ -6073,49 +6145,37 @@ impl Executor {
                                 1 => {
                                     main_reg = Some(Val {
                                         typ: 7,
-                                        data: Payload::from(
-                                            data.as_i16().to_string(),
-                                        ),
+                                        data: Payload::from(data.as_i16().to_string()),
                                     });
                                 }
                                 2 => {
                                     main_reg = Some(Val {
                                         typ: 7,
-                                        data: Payload::from(
-                                            data.as_i32().to_string(),
-                                        ),
+                                        data: Payload::from(data.as_i32().to_string()),
                                     });
                                 }
                                 3 => {
                                     main_reg = Some(Val {
                                         typ: 7,
-                                        data: Payload::from(
-                                            data.as_i64().to_string(),
-                                        ),
+                                        data: Payload::from(data.as_i64().to_string()),
                                     });
                                 }
                                 4 => {
                                     main_reg = Some(Val {
                                         typ: 7,
-                                        data: Payload::from(
-                                            data.as_f32().to_string(),
-                                        ),
+                                        data: Payload::from(data.as_f32().to_string()),
                                     });
                                 }
                                 5 => {
                                     main_reg = Some(Val {
                                         typ: 7,
-                                        data: Payload::from(
-                                            data.as_f64().to_string(),
-                                        ),
+                                        data: Payload::from(data.as_f64().to_string()),
                                     });
                                 }
                                 6 => {
                                     main_reg = Some(Val {
                                         typ: 7,
-                                        data: Payload::from(
-                                            data.as_bool().to_string(),
-                                        ),
+                                        data: Payload::from(data.as_bool().to_string()),
                                     });
                                 }
                                 7 => {
@@ -6174,8 +6234,7 @@ impl Executor {
                     }
                     if popped_tag == "funcBody"
                         && !self.registers.is_empty()
-                        && self.registers.last().unwrap().get_type()
-                            == OperationTypes::Dummy
+                        && self.registers.last().unwrap().get_type() == OperationTypes::Dummy
                     {
                         self.registers.pop();
                     }
@@ -6237,15 +6296,18 @@ impl Executor {
                 }
                 // conditional / ternary expression
                 UnitKind::Conditional { alt_start, end } => {
-                    self.registers.push(Box::new(ConditionalOp::new(alt_start, end)));
+                    self.registers
+                        .push(Box::new(ConditionalOp::new(alt_start, end)));
                 }
                 // cast operation (target type folded into the unit)
                 UnitKind::Cast { target_type } => {
-                    self.registers.push(Box::new(CastOp::new(target_type.to_string())));
+                    self.registers
+                        .push(Box::new(CastOp::new(target_type.to_string())));
                 }
                 // reified type test `is` / `as` (type name + mode folded in)
                 UnitKind::TypeTest { type_name, cast } => {
-                    self.registers.push(Box::new(TypeTestOp::new(type_name.to_string(), cast)));
+                    self.registers
+                        .push(Box::new(TypeTestOp::new(type_name.to_string(), cast)));
                 }
                 // ----------------------------------
                 // program operators:
@@ -6255,7 +6317,8 @@ impl Executor {
                 }
                 // function call (argument count folded into the unit)
                 UnitKind::Call { argc } => {
-                    self.registers.push(Box::new(CallFunction::new(argc as i32)));
+                    self.registers
+                        .push(Box::new(CallFunction::new(argc as i32)));
                 }
                 // definition statement (name pre-decoded; value expression follows)
                 UnitKind::DefineVar(name) => {
@@ -6274,7 +6337,13 @@ impl Executor {
                     );
                 }
                 // if statement (one arm of an if/else chain; targets folded in)
-                UnitKind::IfHead { has_condition, body_start, body_end, next, branch_after } => {
+                UnitKind::IfHead {
+                    has_condition,
+                    body_start,
+                    body_end,
+                    next,
+                    branch_after,
+                } => {
                     self.registers.push(Box::new(IfStmt::new(
                         has_condition,
                         body_start,
@@ -6291,18 +6360,34 @@ impl Executor {
                     }
                 }
                 // loop statement (bounds folded into the unit)
-                UnitKind::Loop { body_start, body_end, branch_after } => {
-                    self.registers
-                        .push(Box::new(LoopStmt::new(body_start, body_end, branch_after)));
+                UnitKind::Loop {
+                    body_start,
+                    body_end,
+                    branch_after,
+                } => {
+                    self.registers.push(Box::new(LoopStmt::new(
+                        body_start,
+                        body_end,
+                        branch_after,
+                    )));
                 }
                 // switch case statement (branch-after + case table folded in)
-                UnitKind::Switch { branch_after, cases } => {
-                    self.registers.push(Box::new(SwitchStmt::new(branch_after, cases)));
+                UnitKind::Switch {
+                    branch_after,
+                    cases,
+                } => {
+                    self.registers
+                        .push(Box::new(SwitchStmt::new(branch_after, cases)));
                 }
                 // function definition (header pre-decoded; body skipped here)
-                UnitKind::FuncDef { name, params, frees, start, end } => {
-                    let mut func =
-                        Function::new(name.to_string(), start, end, (*params).clone());
+                UnitKind::FuncDef {
+                    name,
+                    params,
+                    frees,
+                    start,
+                    end,
+                } => {
+                    let mut func = Function::new(name.to_string(), start, end, (*params).clone());
                     // A function defined inside another function closes over the
                     // enclosing locals it uses (e.g. a factory returning a
                     // counter). Capture just those free variables; at top level
@@ -6331,7 +6416,13 @@ impl Executor {
                 // tears the body scope down like any block and resumes at
                 // `catch_end`; a throw anywhere inside (any call depth) unwinds
                 // back here and enters the catch body instead.
-                UnitKind::TryHead { body_start, body_end, catch_start, catch_end, err_name } => {
+                UnitKind::TryHead {
+                    body_start,
+                    body_end,
+                    catch_start,
+                    catch_end,
+                    err_name,
+                } => {
                     self.ctx
                         .memory
                         .last()
@@ -6345,12 +6436,8 @@ impl Executor {
                         scope_depth: self.ctx.memory.len(),
                         register_depth: self.registers.len(),
                     });
-                    self.ctx.push_scope(
-                        "tryBody".to_string(),
-                        body_start,
-                        body_start,
-                        body_end,
-                    );
+                    self.ctx
+                        .push_scope("tryBody".to_string(), body_start, body_start, body_end);
                     self.pointer = body_start;
                     self.end_at = body_end;
                 }
@@ -6382,24 +6469,26 @@ impl Executor {
                 }
                 // `break` — unwind to the nearest enclosing loop or switch body and
                 // fall through its end so the normal teardown resumes after it.
-                UnitKind::Break => {
-                    loop {
-                        let tag = self.ctx.memory.last().unwrap().borrow().tag.clone();
-                        if tag == "loopBody" || tag == "switchBody" {
-                            let body_end = self.ctx.memory.last().unwrap().borrow().frozen_end;
-                            self.end_at = body_end;
-                            self.pointer = body_end;
-                            break;
-                        }
-                        if tag == "funcBody" || self.ctx.memory.len() == 1 {
-                            break;
-                        }
-                        self.pop_scope_governed();
+                UnitKind::Break => loop {
+                    let tag = self.ctx.memory.last().unwrap().borrow().tag.clone();
+                    if tag == "loopBody" || tag == "switchBody" {
+                        let body_end = self.ctx.memory.last().unwrap().borrow().frozen_end;
+                        self.end_at = body_end;
+                        self.pointer = body_end;
+                        break;
                     }
-                }
+                    if tag == "funcBody" || self.ctx.memory.len() == 1 {
+                        break;
+                    }
+                    self.pop_scope_governed();
+                },
                 // conditional branch (targets folded into the unit)
-                UnitKind::CondBranch { true_branch, false_branch } => {
-                    self.registers.push(Box::new(CondBranch::new(true_branch, false_branch)));
+                UnitKind::CondBranch {
+                    true_branch,
+                    false_branch,
+                } => {
+                    self.registers
+                        .push(Box::new(CondBranch::new(true_branch, false_branch)));
                 }
                 // ----------------------------------
                 // expressions
@@ -6427,10 +6516,10 @@ impl Executor {
                 // object expression
                 UnitKind::ObjHead { typ, props_len } => {
                     self.registers.push(Box::new(ObjectExpr::new()));
-                    self.registers
-                        .last_mut()
-                        .unwrap()
-                        .set_state(ExecStates::ObjExprExtractInfo, StateData::I64I32(typ, props_len));
+                    self.registers.last_mut().unwrap().set_state(
+                        ExecStates::ObjExprExtractInfo,
+                        StateData::I64I32(typ, props_len),
+                    );
                     if self.registers.last().unwrap().get_state() == ExecStates::ObjExprFinished {
                         main_reg = None;
                         is_reg_state_final = true;
@@ -6457,16 +6546,19 @@ impl Executor {
                 // object-spread key marker: emits the marker value directly (no
                 // operand), exactly like a literal.
                 UnitKind::SpreadKey => {
-                    main_reg = Some(Val { typ: SPREAD_KEY_MARKER, data: Payload::Null });
+                    main_reg = Some(Val {
+                        typ: SPREAD_KEY_MARKER,
+                        data: Payload::Null,
+                    });
                     continue;
                 }
                 // interpolated / template string (part count folded into the unit)
                 UnitKind::Template { count } => {
                     self.registers.push(Box::new(TemplateExpr::new()));
-                    self.registers
-                        .last_mut()
-                        .unwrap()
-                        .set_state(ExecStates::TemplateExtractInfo, StateData::I32(count as i32));
+                    self.registers.last_mut().unwrap().set_state(
+                        ExecStates::TemplateExtractInfo,
+                        StateData::I32(count as i32),
+                    );
                     if self.registers.last().unwrap().get_state() == ExecStates::TemplateFinished {
                         main_reg = None;
                         is_reg_state_final = true;

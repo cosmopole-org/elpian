@@ -110,7 +110,11 @@ pub enum UnitKind {
     Ident(Rc<str>),
     /// A function *literal* (`0x0a`). Closes over the live lexical environment
     /// when evaluated. `start`/`end` are unit indices.
-    FuncLit { start: usize, end: usize, params: Rc<Vec<String>> },
+    FuncLit {
+        start: usize,
+        end: usize,
+        params: Rc<Vec<String>>,
+    },
 
     // ---- operators / control, each carrying its own operands ----------------
     /// `0x0c` — indexer (`target[index]`).
@@ -141,14 +145,24 @@ pub enum UnitKind {
     Return,
     /// `0x11` — `while`/`for` loop head (condition follows; bounds are unit
     /// indices).
-    Loop { body_start: usize, body_end: usize, branch_after: usize },
+    Loop {
+        body_start: usize,
+        body_end: usize,
+        branch_after: usize,
+    },
     /// `0x12` — `switch` (value follows; `cases` is the `(body_start, body_end)`
     /// unit-index range of each case, in order; `branch_after` is where the whole
     /// switch ends).
-    Switch { branch_after: usize, cases: Rc<Vec<(usize, usize)>> },
+    Switch {
+        branch_after: usize,
+        cases: Rc<Vec<(usize, usize)>>,
+    },
     /// `0x16` — low-level conditional branch (condition follows; both targets are
     /// unit indices).
-    CondBranch { true_branch: usize, false_branch: usize },
+    CondBranch {
+        true_branch: usize,
+        false_branch: usize,
+    },
 
     // ---- statement heads ----------------------------------------------------
     /// `0x0e` — `let`/`const`/`var` of a simple name (value expression follows).
@@ -230,7 +244,11 @@ impl DecodedProgram {
     /// byte-offset target into a unit index. Mirrors the compiler's emission
     /// grammar; see the module docs.
     pub fn decode(bytes: &[u8]) -> DecodedProgram {
-        let mut d = Decoder { bytes, units: Vec::new(), index_at: vec![NONE; bytes.len()] };
+        let mut d = Decoder {
+            bytes,
+            units: Vec::new(),
+            index_at: vec![NONE; bytes.len()],
+        };
         if !bytes.is_empty() {
             d.decode_stmt_seq(0, bytes.len());
         }
@@ -278,25 +296,39 @@ impl<'a> Decoder<'a> {
         for i in 0..self.units.len() {
             let translated = match &self.units[i] {
                 UnitKind::Jump(off) => UnitKind::Jump(self.target_unit(*off)),
-                UnitKind::CondBranch { true_branch, false_branch } => UnitKind::CondBranch {
+                UnitKind::CondBranch {
+                    true_branch,
+                    false_branch,
+                } => UnitKind::CondBranch {
                     true_branch: self.target_unit(*true_branch),
                     false_branch: self.target_unit(*false_branch),
                 },
-                UnitKind::Loop { body_start, body_end, branch_after } => UnitKind::Loop {
+                UnitKind::Loop {
+                    body_start,
+                    body_end,
+                    branch_after,
+                } => UnitKind::Loop {
                     body_start: self.target_unit(*body_start),
                     body_end: self.target_unit(*body_end),
                     branch_after: self.target_unit(*branch_after),
                 },
-                UnitKind::IfHead { has_condition, body_start, body_end, next, branch_after } => {
-                    UnitKind::IfHead {
-                        has_condition: *has_condition,
-                        body_start: self.target_unit(*body_start),
-                        body_end: self.target_unit(*body_end),
-                        next: self.target_unit(*next),
-                        branch_after: self.target_unit(*branch_after),
-                    }
-                }
-                UnitKind::Switch { branch_after, cases } => {
+                UnitKind::IfHead {
+                    has_condition,
+                    body_start,
+                    body_end,
+                    next,
+                    branch_after,
+                } => UnitKind::IfHead {
+                    has_condition: *has_condition,
+                    body_start: self.target_unit(*body_start),
+                    body_end: self.target_unit(*body_end),
+                    next: self.target_unit(*next),
+                    branch_after: self.target_unit(*branch_after),
+                },
+                UnitKind::Switch {
+                    branch_after,
+                    cases,
+                } => {
                     let cases: Vec<(usize, usize)> = cases
                         .iter()
                         .map(|(s, e)| (self.target_unit(*s), self.target_unit(*e)))
@@ -306,22 +338,32 @@ impl<'a> Decoder<'a> {
                         cases: Rc::new(cases),
                     }
                 }
-                UnitKind::FuncDef { name, params, frees, start, end } => UnitKind::FuncDef {
+                UnitKind::FuncDef {
+                    name,
+                    params,
+                    frees,
+                    start,
+                    end,
+                } => UnitKind::FuncDef {
                     name: name.clone(),
                     params: params.clone(),
                     frees: frees.clone(),
                     start: self.target_unit(*start),
                     end: self.target_unit(*end),
                 },
-                UnitKind::TryHead { body_start, body_end, catch_start, catch_end, err_name } => {
-                    UnitKind::TryHead {
-                        body_start: self.target_unit(*body_start),
-                        body_end: self.target_unit(*body_end),
-                        catch_start: self.target_unit(*catch_start),
-                        catch_end: self.target_unit(*catch_end),
-                        err_name: err_name.clone(),
-                    }
-                }
+                UnitKind::TryHead {
+                    body_start,
+                    body_end,
+                    catch_start,
+                    catch_end,
+                    err_name,
+                } => UnitKind::TryHead {
+                    body_start: self.target_unit(*body_start),
+                    body_end: self.target_unit(*body_end),
+                    catch_start: self.target_unit(*catch_start),
+                    catch_end: self.target_unit(*catch_end),
+                    err_name: err_name.clone(),
+                },
                 UnitKind::FuncLit { start, end, params } => UnitKind::FuncLit {
                     start: self.target_unit(*start),
                     end: self.target_unit(*end),
@@ -374,23 +416,38 @@ impl<'a> Decoder<'a> {
                 pos + 1
             }
             1 => {
-                self.emit(pos, UnitKind::Lit(Val::new(1, Payload::from(self.read_i16(pos + 1)))));
+                self.emit(
+                    pos,
+                    UnitKind::Lit(Val::new(1, Payload::from(self.read_i16(pos + 1)))),
+                );
                 pos + 3
             }
             2 => {
-                self.emit(pos, UnitKind::Lit(Val::new(2, Payload::from(self.read_i32(pos + 1)))));
+                self.emit(
+                    pos,
+                    UnitKind::Lit(Val::new(2, Payload::from(self.read_i32(pos + 1)))),
+                );
                 pos + 5
             }
             3 => {
-                self.emit(pos, UnitKind::Lit(Val::new(3, Payload::from(self.read_i64(pos + 1)))));
+                self.emit(
+                    pos,
+                    UnitKind::Lit(Val::new(3, Payload::from(self.read_i64(pos + 1)))),
+                );
                 pos + 9
             }
             4 => {
-                self.emit(pos, UnitKind::Lit(Val::new(4, Payload::from(self.read_f32(pos + 1)))));
+                self.emit(
+                    pos,
+                    UnitKind::Lit(Val::new(4, Payload::from(self.read_f32(pos + 1)))),
+                );
                 pos + 5
             }
             5 => {
-                self.emit(pos, UnitKind::Lit(Val::new(5, Payload::from(self.read_f64(pos + 1)))));
+                self.emit(
+                    pos,
+                    UnitKind::Lit(Val::new(5, Payload::from(self.read_f64(pos + 1)))),
+                );
                 pos + 9
             }
             6 => {
@@ -417,7 +474,14 @@ impl<'a> Decoder<'a> {
                 }
                 // start/end stashed as byte offsets; `relocate` turns them into
                 // unit indices.
-                self.emit(pos, UnitKind::FuncLit { start, end, params: Rc::new(params) });
+                self.emit(
+                    pos,
+                    UnitKind::FuncLit {
+                        start,
+                        end,
+                        params: Rc::new(params),
+                    },
+                );
                 p
             }
             0x0b => {
@@ -442,43 +506,74 @@ impl<'a> Decoder<'a> {
                 // decoded — a unit index already, needing no relocation.
                 let idx = self.emit(
                     pos,
-                    UnitKind::Logical { kind: LogicalKind::And, op2_end: 0 },
+                    UnitKind::Logical {
+                        kind: LogicalKind::And,
+                        op2_end: 0,
+                    },
                 );
                 let kind = LogicalKind::from_flag(self.bytes[pos + 1]);
                 let after_op1 = self.decode_value(pos + 2);
                 let after_op2 = self.decode_value(after_op1);
-                self.units[idx] = UnitKind::Logical { kind, op2_end: self.units.len() };
+                self.units[idx] = UnitKind::Logical {
+                    kind,
+                    op2_end: self.units.len(),
+                };
                 after_op2
             }
             0xee => {
                 // Conditional: opcode, cond, consequent, alternate. `alt_start` is
                 // the unit index where the alternate begins (units emitted so far,
                 // just after the consequent); `end` is one past the alternate.
-                let idx = self.emit(pos, UnitKind::Conditional { alt_start: 0, end: 0 });
+                let idx = self.emit(
+                    pos,
+                    UnitKind::Conditional {
+                        alt_start: 0,
+                        end: 0,
+                    },
+                );
                 let after_cond = self.decode_value(pos + 1);
                 let after_conseq = self.decode_value(after_cond);
                 let alt_start = self.units.len();
                 let after_alt = self.decode_value(after_conseq);
-                self.units[idx] = UnitKind::Conditional { alt_start, end: self.units.len() };
+                self.units[idx] = UnitKind::Conditional {
+                    alt_start,
+                    end: self.units.len(),
+                };
                 after_alt
             }
             0xfd => {
                 // Cast: opcode, value expression, then the target-type string —
                 // which is folded straight into the unit (no trailing immediate).
-                let idx = self.emit(pos, UnitKind::Cast { target_type: Rc::from("") });
+                let idx = self.emit(
+                    pos,
+                    UnitKind::Cast {
+                        target_type: Rc::from(""),
+                    },
+                );
                 let after_val = self.decode_value(pos + 1);
                 let (ty, consumed) = self.read_str(after_val);
-                self.units[idx] = UnitKind::Cast { target_type: Rc::from(ty.as_str()) };
+                self.units[idx] = UnitKind::Cast {
+                    target_type: Rc::from(ty.as_str()),
+                };
                 after_val + consumed
             }
             0xed => {
                 // Reified type test: opcode, cast flag, value expression, then the
                 // type-name string, folded into the unit.
                 let cast = self.bytes[pos + 1] == 1;
-                let idx = self.emit(pos, UnitKind::TypeTest { type_name: Rc::from(""), cast });
+                let idx = self.emit(
+                    pos,
+                    UnitKind::TypeTest {
+                        type_name: Rc::from(""),
+                        cast,
+                    },
+                );
                 let after_val = self.decode_value(pos + 2);
                 let (ty, consumed) = self.read_str(after_val);
-                self.units[idx] = UnitKind::TypeTest { type_name: Rc::from(ty.as_str()), cast };
+                self.units[idx] = UnitKind::TypeTest {
+                    type_name: Rc::from(ty.as_str()),
+                    cast,
+                };
                 after_val + consumed
             }
             0xf0..=0xfb => {
@@ -570,13 +665,22 @@ impl<'a> Decoder<'a> {
                 pos + 9
             }
             0x16 => {
-                let idx = self.emit(pos, UnitKind::CondBranch { true_branch: 0, false_branch: 0 });
+                let idx = self.emit(
+                    pos,
+                    UnitKind::CondBranch {
+                        true_branch: 0,
+                        false_branch: 0,
+                    },
+                );
                 let mut p = self.decode_value(pos + 1); // condition
                 let tb = self.read_i64(p) as usize;
                 p += 8;
                 let fb = self.read_i64(p) as usize;
                 p += 8;
-                self.units[idx] = UnitKind::CondBranch { true_branch: tb, false_branch: fb };
+                self.units[idx] = UnitKind::CondBranch {
+                    true_branch: tb,
+                    false_branch: fb,
+                };
                 p
             }
             0x0d => self.decode_call(pos),
@@ -601,7 +705,11 @@ impl<'a> Decoder<'a> {
                 // loop: opcode, condition, body_start, body_end, branch_after, body.
                 let idx = self.emit(
                     pos,
-                    UnitKind::Loop { body_start: 0, body_end: 0, branch_after: 0 },
+                    UnitKind::Loop {
+                        body_start: 0,
+                        body_end: 0,
+                        branch_after: 0,
+                    },
                 );
                 let mut p = self.decode_value(pos + 1); // condition
                 let body_start = self.read_i64(p) as usize;
@@ -611,7 +719,11 @@ impl<'a> Decoder<'a> {
                 let branch_after = self.read_i64(p) as usize;
                 p += 8;
                 debug_assert_eq!(p, body_start);
-                self.units[idx] = UnitKind::Loop { body_start, body_end, branch_after };
+                self.units[idx] = UnitKind::Loop {
+                    body_start,
+                    body_end,
+                    branch_after,
+                };
                 self.decode_stmt_seq(body_start, body_end);
                 body_end
             }
@@ -672,7 +784,13 @@ impl<'a> Decoder<'a> {
                 let disc = self.bytes[pos + 1];
                 let kind = if disc == 0x0c { 2 } else { 1 };
                 let (name, consumed) = self.read_str(pos + 2);
-                self.emit(pos, UnitKind::AssignVar { name: Rc::from(name.as_str()), kind });
+                self.emit(
+                    pos,
+                    UnitKind::AssignVar {
+                        name: Rc::from(name.as_str()),
+                        kind,
+                    },
+                );
                 let mut p = pos + 2 + consumed;
                 if kind == 2 {
                     p = self.decode_value(p); // index expression
@@ -740,7 +858,13 @@ impl<'a> Decoder<'a> {
     }
 
     fn decode_switch(&mut self, pos: usize) -> usize {
-        let idx = self.emit(pos, UnitKind::Switch { branch_after: 0, cases: Rc::new(vec![]) });
+        let idx = self.emit(
+            pos,
+            UnitKind::Switch {
+                branch_after: 0,
+                cases: Rc::new(vec![]),
+            },
+        );
         let mut p = self.decode_value(pos + 1); // switch value
         let branch_after = self.read_i64(p) as usize;
         p += 8;
@@ -758,7 +882,10 @@ impl<'a> Decoder<'a> {
             self.decode_stmt_seq(case_start, case_end);
             p = case_end;
         }
-        self.units[idx] = UnitKind::Switch { branch_after, cases: Rc::new(cases) };
+        self.units[idx] = UnitKind::Switch {
+            branch_after,
+            cases: Rc::new(cases),
+        };
         branch_after
     }
 
@@ -799,12 +926,25 @@ impl<'a> Decoder<'a> {
             }
             let (name, consumed) = self.read_str(p);
             p += consumed;
-            bindings.push(DestructureBinding { name, key, has_default, is_rest, is_hole });
+            bindings.push(DestructureBinding {
+                name,
+                key,
+                has_default,
+                is_rest,
+                is_hole,
+            });
         }
         let value_count = 1 + num_defaults;
-        self.emit(pos, UnitKind::Destructure {
-            plan: Rc::new(DestructurePlan { is_array, bindings, value_count }),
-        });
+        self.emit(
+            pos,
+            UnitKind::Destructure {
+                plan: Rc::new(DestructurePlan {
+                    is_array,
+                    bindings,
+                    value_count,
+                }),
+            },
+        );
         // Source expression, then each default expression, all emitted as value
         // units the executor evaluates in order.
         p = self.decode_value(p);

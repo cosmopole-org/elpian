@@ -5,8 +5,9 @@ import '../css/css_properties.dart';
 class HtmlLabel {
   static Widget build(ElpianNode node, List<Widget> children) {
     final text = node.props['text'] as String? ?? '';
-    
-    Widget result = Text(text, style: const TextStyle(fontWeight: FontWeight.w500));
+
+    Widget result =
+        Text(text, style: const TextStyle(fontWeight: FontWeight.w500));
 
     if (node.style != null) {
       result = CSSProperties.applyStyle(result, node.style);

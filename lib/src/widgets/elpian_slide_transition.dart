@@ -21,7 +21,8 @@ class _ElpianSlideTransitionWidget extends StatefulWidget {
       _ElpianSlideTransitionWidgetState();
 }
 
-class _ElpianSlideTransitionWidgetState extends State<_ElpianSlideTransitionWidget>
+class _ElpianSlideTransitionWidgetState
+    extends State<_ElpianSlideTransitionWidget>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<Offset> _animation;

@@ -1,9 +1,9 @@
 //! Repro: a one-shot GTimer scheduled in the same turn as VMs.spawn must
 //! still fire (the sheet-close queueFree and toast dismiss depend on it).
-use std::cell::RefCell;
-use std::rc::Rc;
 use elpian_godot::{GuestLang, VmManager};
 use serde_json::{json, Value};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 fn boot(id: &str, src: &str) -> VmManager {
     let mut mgr = VmManager::new_root_lang(id.into(), src, GuestLang::Js, true, 0, 0).unwrap();
@@ -44,8 +44,14 @@ fn one_shot_timer_scheduled_beside_spawn_still_fires() {
     let log = mgr.take_log().join("\n");
     eprintln!("LOG:\n{log}");
     assert!(log.contains("spawned ok=true"), "spawn failed: {log}");
-    assert!(log.contains("timer-170 fired"), "pre-spawn one-shot timer was dropped: {log}");
-    assert!(log.contains("timer-120 fired"), "post-spawn one-shot timer was dropped: {log}");
+    assert!(
+        log.contains("timer-170 fired"),
+        "pre-spawn one-shot timer was dropped: {log}"
+    );
+    assert!(
+        log.contains("timer-120 fired"),
+        "post-spawn one-shot timer was dropped: {log}"
+    );
 }
 
 #[test]
@@ -69,7 +75,8 @@ fn one_shot_timer_beside_spawn_in_dispatch_turn_fires() {
         }
         main();
     "#;
-    let mut mgr = VmManager::new_root_lang("timer-spawn-c".into(), src, GuestLang::Js, true, 0, 0).unwrap();
+    let mut mgr =
+        VmManager::new_root_lang("timer-spawn-c".into(), src, GuestLang::Js, true, 0, 0).unwrap();
     let ops: Rc<RefCell<Vec<Value>>> = Rc::new(RefCell::new(Vec::new()));
     let sink = ops.clone();
     mgr.set_bridge(Some(Box::new(move |_n, a| {
@@ -100,7 +107,10 @@ fn one_shot_timer_beside_spawn_in_dispatch_turn_fires() {
     }
     let log = mgr.take_log().join("\n");
     eprintln!("LOG:\n{log}");
-    assert!(log.contains("tile tapped"), "callable was not delivered: {log}");
+    assert!(
+        log.contains("tile tapped"),
+        "callable was not delivered: {log}"
+    );
     assert!(log.contains("spawned ok=true"), "spawn failed: {log}");
     assert!(log.contains("game up"), "child VM did not boot: {log}");
     assert!(
@@ -127,7 +137,8 @@ fn one_shot_timer_scheduled_in_callable_dispatch_turn_fires() {
         }
         main();
     "#;
-    let mut mgr = VmManager::new_root_lang("timer-spawn-b".into(), src, GuestLang::Js, true, 0, 0).unwrap();
+    let mut mgr =
+        VmManager::new_root_lang("timer-spawn-b".into(), src, GuestLang::Js, true, 0, 0).unwrap();
     let ops: Rc<RefCell<Vec<Value>>> = Rc::new(RefCell::new(Vec::new()));
     let sink = ops.clone();
     mgr.set_bridge(Some(Box::new(move |_n, a| {
@@ -160,7 +171,10 @@ fn one_shot_timer_scheduled_in_callable_dispatch_turn_fires() {
     }
     let log = mgr.take_log().join("\n");
     eprintln!("LOG:\n{log}");
-    assert!(log.contains("pressed handler"), "callable was not delivered: {log}");
+    assert!(
+        log.contains("pressed handler"),
+        "callable was not delivered: {log}"
+    );
     assert!(
         log.contains("dispatch-turn timer fired"),
         "one-shot timer scheduled during a __godotDispatch turn was dropped: {log}"

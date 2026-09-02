@@ -65,7 +65,10 @@ fn program(body: Vec<Value>) -> String {
 }
 
 fn run_and_call(id: &str, ast: &str, func: &str) -> String {
-    assert!(api::create_vm_from_ast(id.to_string(), ast.to_string()), "AST should compile");
+    assert!(
+        api::create_vm_from_ast(id.to_string(), ast.to_string()),
+        "AST should compile"
+    );
     let _ = api::execute_vm(id.to_string());
     api::execute_vm_func(id.to_string(), func.to_string(), 1).result_value
 }
@@ -110,7 +113,10 @@ fn object_spread_merges_and_overrides() {
             "f",
             vec![],
             vec![
-                def("o", obj_entries(vec![entry("a", i64v(1)), entry("b", i64v(2))])),
+                def(
+                    "o",
+                    obj_entries(vec![entry("a", i64v(1)), entry("b", i64v(2))]),
+                ),
                 def(
                     "p",
                     obj_entries(vec![
@@ -133,13 +139,20 @@ fn call_spread_expands_arguments() {
     let sum3 = func_def(
         "sum3",
         vec!["a", "b", "c"],
-        vec![ret(arith("+", arith("+", ident("a"), ident("b")), ident("c")))],
+        vec![ret(arith(
+            "+",
+            arith("+", ident("a"), ident("b")),
+            ident("c"),
+        ))],
     );
     // sum3(...[1,2,3]) and sum3(1, ...[2,3]) both == 6
     let f_all = func_def(
         "f",
         vec![],
-        vec![ret(call("sum3", vec![spread(arr(vec![i64v(1), i64v(2), i64v(3)]))]))],
+        vec![ret(call(
+            "sum3",
+            vec![spread(arr(vec![i64v(1), i64v(2), i64v(3)]))],
+        ))],
     );
     let ast = program(vec![sum3.clone(), f_all]);
     assert_eq!(run_and_call("spread-call-all", &ast, "f"), "6");
@@ -147,7 +160,10 @@ fn call_spread_expands_arguments() {
     let f_mix = func_def(
         "f",
         vec![],
-        vec![ret(call("sum3", vec![i64v(1), spread(arr(vec![i64v(2), i64v(3)]))]))],
+        vec![ret(call(
+            "sum3",
+            vec![i64v(1), spread(arr(vec![i64v(2), i64v(3)]))],
+        ))],
     );
     let ast = program(vec![sum3, f_mix]);
     assert_eq!(run_and_call("spread-call-mix", &ast, "f"), "6");
@@ -160,10 +176,18 @@ fn template_interpolates_values() {
     let body = vec![
         def("name", strv("World")),
         def("n", i64v(42)),
-        ret(template(vec![strv("Hello, "), ident("name"), strv("! answer="), ident("n")])),
+        ret(template(vec![
+            strv("Hello, "),
+            ident("name"),
+            strv("! answer="),
+            ident("n"),
+        ])),
     ];
     let ast = program(vec![func_def("f", vec![], body)]);
-    assert_eq!(run_and_call("tmpl-basic", &ast, "f"), "\"Hello, World! answer=42\"");
+    assert_eq!(
+        run_and_call("tmpl-basic", &ast, "f"),
+        "\"Hello, World! answer=42\""
+    );
 }
 
 #[test]
@@ -190,7 +214,10 @@ fn empty_template_is_empty_string() {
 #[test]
 fn object_destructuring_binds_members() {
     let body = vec![
-        def("o", obj_entries(vec![entry("x", i64v(10)), entry("y", i64v(20))])),
+        def(
+            "o",
+            obj_entries(vec![entry("x", i64v(10)), entry("y", i64v(20))]),
+        ),
         destructure_obj(ident("o"), vec![json!({"name":"x"}), json!({"name":"y"})]),
         ret(arith("+", ident("x"), ident("y"))),
     ];
@@ -222,7 +249,11 @@ fn object_destructuring_rest_collects_remainder() {
     let body = vec![
         def(
             "o",
-            obj_entries(vec![entry("x", i64v(1)), entry("y", i64v(2)), entry("z", i64v(3))]),
+            obj_entries(vec![
+                entry("x", i64v(1)),
+                entry("y", i64v(2)),
+                entry("z", i64v(3)),
+            ]),
         ),
         destructure_obj(
             ident("o"),
@@ -243,7 +274,11 @@ fn array_destructuring_binds_positions() {
     let body = vec![
         destructure_arr(
             arr(vec![i64v(1), i64v(2), i64v(3)]),
-            vec![json!({"name":"a"}), json!({"name":"b"}), json!({"name":"c"})],
+            vec![
+                json!({"name":"a"}),
+                json!({"name":"b"}),
+                json!({"name":"c"}),
+            ],
         ),
         ret(arith("+", arith("+", ident("a"), ident("b")), ident("c"))),
     ];
@@ -257,7 +292,11 @@ fn array_destructuring_with_hole_and_default() {
     let body = vec![
         destructure_arr(
             arr(vec![i64v(1), i64v(2), i64v(3)]),
-            vec![json!({"name":"a"}), json!({"hole":true}), json!({"name":"c"})],
+            vec![
+                json!({"name":"a"}),
+                json!({"hole":true}),
+                json!({"name":"c"}),
+            ],
         ),
         ret(arith("+", ident("a"), ident("c"))),
     ];

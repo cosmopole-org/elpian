@@ -104,7 +104,11 @@ pub const GODOT_REACTNATIVE_JS: &str = include_str!("../../prelude/reactnative.j
 /// Return NULL (or leave unregistered) to decline — the guest then sees `null`.
 /// The returned buffer is released via the paired [`ElpianGodotHostFreeFn`].
 pub type ElpianGodotHostFn = Option<
-    extern "C" fn(user: *mut c_void, api_name: *const c_char, args_json: *const c_char) -> *mut c_char,
+    extern "C" fn(
+        user: *mut c_void,
+        api_name: *const c_char,
+        args_json: *const c_char,
+    ) -> *mut c_char,
 >;
 
 /// Release a buffer previously returned by the host callback (same allocator).
@@ -133,7 +137,9 @@ impl HostBridge {
         if reply_ptr.is_null() {
             return None;
         }
-        let reply = unsafe { CStr::from_ptr(reply_ptr) }.to_string_lossy().into_owned();
+        let reply = unsafe { CStr::from_ptr(reply_ptr) }
+            .to_string_lossy()
+            .into_owned();
         if let Some(free) = self.free {
             free(self.user, reply_ptr);
         }
@@ -158,7 +164,13 @@ static NEXT_MACHINE: AtomicU64 = AtomicU64::new(1);
 pub fn compose_godot_program(user_source: &str) -> String {
     let strip = |src: &str| -> String {
         src.lines()
-            .map(|l| if l.trim_start().starts_with("import ") { "" } else { l })
+            .map(|l| {
+                if l.trim_start().starts_with("import ") {
+                    ""
+                } else {
+                    l
+                }
+            })
             .collect::<Vec<_>>()
             .join("\n")
     };
@@ -175,7 +187,13 @@ pub fn compose_godot_program(user_source: &str) -> String {
 pub fn compose_godot_program_js(user_source: &str) -> String {
     let strip = |src: &str| -> String {
         src.lines()
-            .map(|l| if l.trim_start().starts_with("import ") { "" } else { l })
+            .map(|l| {
+                if l.trim_start().starts_with("import ") {
+                    ""
+                } else {
+                    l
+                }
+            })
             .collect::<Vec<_>>()
             .join("\n")
     };
@@ -245,7 +263,13 @@ pub extern "C" fn elpian_godot_new(
     max_host_calls: u64,
     max_bytes_moved: u64,
 ) -> *mut ElpianGodotRuntime {
-    new_runtime(guest_source, GuestLang::Dart, prepend_prelude, max_host_calls, max_bytes_moved)
+    new_runtime(
+        guest_source,
+        GuestLang::Dart,
+        prepend_prelude,
+        max_host_calls,
+        max_bytes_moved,
+    )
 }
 
 /// [`elpian_godot_new`] with an explicit guest language: `language` is
@@ -263,12 +287,20 @@ pub extern "C" fn elpian_godot_new_lang(
     max_bytes_moved: u64,
 ) -> *mut ElpianGodotRuntime {
     let lang = match c_str(language) {
-        Some(name) if name.eq_ignore_ascii_case("js") || name.eq_ignore_ascii_case("javascript") => {
+        Some(name)
+            if name.eq_ignore_ascii_case("js") || name.eq_ignore_ascii_case("javascript") =>
+        {
             GuestLang::Js
         }
         _ => GuestLang::Dart,
     };
-    new_runtime(guest_source, lang, prepend_prelude, max_host_calls, max_bytes_moved)
+    new_runtime(
+        guest_source,
+        lang,
+        prepend_prelude,
+        max_host_calls,
+        max_bytes_moved,
+    )
 }
 
 fn new_runtime(
@@ -317,11 +349,19 @@ pub extern "C" fn elpian_godot_set_host(
     free_fn: ElpianGodotHostFreeFn,
     user: *mut c_void,
 ) {
-    let Some(rt) = (unsafe { rt.as_mut() }) else { return };
+    let Some(rt) = (unsafe { rt.as_mut() }) else {
+        return;
+    };
     match host_fn {
         Some(call) => {
-            let bridge = HostBridge { call, free: free_fn, user };
-            rt.mgr.set_bridge(Some(Box::new(move |name, args| bridge.dispatch(name, args))));
+            let bridge = HostBridge {
+                call,
+                free: free_fn,
+                user,
+            };
+            rt.mgr.set_bridge(Some(Box::new(move |name, args| {
+                bridge.dispatch(name, args)
+            })));
         }
         None => rt.mgr.set_bridge(None),
     }
@@ -335,7 +375,9 @@ pub extern "C" fn elpian_godot_set_host(
 /// forever — the timer fires later, once per frame, via [`elpian_godot_pump`].
 #[no_mangle]
 pub extern "C" fn elpian_godot_run(rt: *mut ElpianGodotRuntime) -> c_int {
-    let Some(rt) = (unsafe { rt.as_mut() }) else { return 1 };
+    let Some(rt) = (unsafe { rt.as_mut() }) else {
+        return 1;
+    };
     match catch_unwind(AssertUnwindSafe(|| rt.mgr.run_root())) {
         Ok(Ok(())) => 0,
         Ok(Err(e)) => {
@@ -361,7 +403,9 @@ pub extern "C" fn elpian_godot_invoke(
     fn_name: *const c_char,
     json_arg: *const c_char,
 ) -> c_int {
-    let Some(rt) = (unsafe { rt.as_mut() }) else { return 1 };
+    let Some(rt) = (unsafe { rt.as_mut() }) else {
+        return 1;
+    };
     let Some(name) = c_str(fn_name) else {
         set_error("fn_name is null or not UTF-8");
         return 1;
@@ -385,7 +429,9 @@ pub extern "C" fn elpian_godot_invoke(
 /// the tree's aggregate-budget sweep. Call once per engine frame. 0 = ok.
 #[no_mangle]
 pub extern "C" fn elpian_godot_pump(rt: *mut ElpianGodotRuntime, delta_ms: u64) -> c_int {
-    let Some(rt) = (unsafe { rt.as_mut() }) else { return 1 };
+    let Some(rt) = (unsafe { rt.as_mut() }) else {
+        return 1;
+    };
     match catch_unwind(AssertUnwindSafe(|| rt.mgr.pump(delta_ms))) {
         Ok(Ok(())) => 0,
         Ok(Err(e)) => {
@@ -404,7 +450,9 @@ pub extern "C" fn elpian_godot_pump(rt: *mut ElpianGodotRuntime, delta_ms: u64) 
 /// Caller frees with [`elpian_godot_string_free`]. NULL when nothing new.
 #[no_mangle]
 pub extern "C" fn elpian_godot_take_log(rt: *mut ElpianGodotRuntime) -> *mut c_char {
-    let Some(rt) = (unsafe { rt.as_mut() }) else { return std::ptr::null_mut() };
+    let Some(rt) = (unsafe { rt.as_mut() }) else {
+        return std::ptr::null_mut();
+    };
     let fresh = rt.mgr.take_log();
     if fresh.is_empty() {
         return std::ptr::null_mut();
@@ -419,10 +467,14 @@ pub extern "C" fn elpian_godot_take_log(rt: *mut ElpianGodotRuntime) -> *mut c_c
 /// [`elpian_godot_string_free`].
 #[no_mangle]
 pub extern "C" fn elpian_godot_stats_json(rt: *mut ElpianGodotRuntime) -> *mut c_char {
-    let Some(rt) = (unsafe { rt.as_ref() }) else { return std::ptr::null_mut() };
+    let Some(rt) = (unsafe { rt.as_ref() }) else {
+        return std::ptr::null_mut();
+    };
     let stats = catch_unwind(AssertUnwindSafe(|| rt.mgr.stats().to_string()))
         .unwrap_or_else(|_| "null".to_string());
-    CString::new(stats).map(|c| c.into_raw()).unwrap_or(std::ptr::null_mut())
+    CString::new(stats)
+        .map(|c| c.into_raw())
+        .unwrap_or(std::ptr::null_mut())
 }
 
 /// The last error message for this thread ("" when none). Borrowed — do not

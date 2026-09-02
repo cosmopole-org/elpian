@@ -53,7 +53,9 @@ pub struct ExecControl {
 
 impl Default for ExecControl {
     fn default() -> Self {
-        ExecControl { state: RunState::Running }
+        ExecControl {
+            state: RunState::Running,
+        }
     }
 }
 
@@ -89,11 +91,17 @@ impl ExecControl {
 
     /// Executor: has the host asked us to stop stepping (pause or terminate)?
     pub fn should_suspend(&self) -> bool {
-        matches!(self.state, RunState::PauseRequested | RunState::TerminateRequested)
+        matches!(
+            self.state,
+            RunState::PauseRequested | RunState::TerminateRequested
+        )
     }
 
     pub fn is_terminating(&self) -> bool {
-        matches!(self.state, RunState::TerminateRequested | RunState::Terminated)
+        matches!(
+            self.state,
+            RunState::TerminateRequested | RunState::Terminated
+        )
     }
 
     pub fn is_paused(&self) -> bool {

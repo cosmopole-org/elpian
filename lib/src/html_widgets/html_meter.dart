@@ -6,9 +6,9 @@ class HtmlMeter {
     final value = (node.props['value'] as num?)?.toDouble() ?? 0.5;
     final min = (node.props['min'] as num?)?.toDouble() ?? 0.0;
     final max = (node.props['max'] as num?)?.toDouble() ?? 1.0;
-    
+
     final normalized = (value - min) / (max - min);
-    
+
     return LinearProgressIndicator(
       value: normalized,
       backgroundColor: Colors.grey[200],

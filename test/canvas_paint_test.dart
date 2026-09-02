@@ -66,7 +66,8 @@ void main() {
               type: CanvasCommandType.setFont,
               params: {'font': 'bold 24px Arial'}),
           const CanvasCommand(
-              type: CanvasCommandType.setTextAlign, params: {'align': 'center'}),
+              type: CanvasCommandType.setTextAlign,
+              params: {'align': 'center'}),
           const CanvasCommand(
               type: CanvasCommandType.setShadowBlur, params: {'blur': 12}),
           const CanvasCommand(
@@ -79,9 +80,9 @@ void main() {
           const CanvasCommand(
               type: CanvasCommandType.setGlobalCompositeOperation,
               params: {'operation': 'multiply'}),
-          const CanvasCommand(
-              type: CanvasCommandType.setLineDash,
-              params: {'segments': [4, 2]}),
+          const CanvasCommand(type: CanvasCommandType.setLineDash, params: {
+            'segments': [4, 2]
+          }),
           const CanvasCommand(
               type: CanvasCommandType.setMiterLimit, params: {'limit': 8}),
         ]);

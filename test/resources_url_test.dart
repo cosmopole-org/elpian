@@ -9,7 +9,8 @@ void main() {
 
   test('absolute and data URLs pass through', () {
     ElpianResources.baseUrl = 'https://game.example.com';
-    expect(ElpianResources.resolve('https://cdn.x/y.png'), 'https://cdn.x/y.png');
+    expect(
+        ElpianResources.resolve('https://cdn.x/y.png'), 'https://cdn.x/y.png');
     expect(ElpianResources.resolve('data:image/png;base64,AA=='),
         'data:image/png;base64,AA==');
   });

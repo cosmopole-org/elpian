@@ -10,7 +10,10 @@ use elpian_vm::api;
 /// and return the stringified result.
 fn run_dart(id: &str, dart: &str) -> String {
     let js = dart2elpian::transpile(dart).expect("Dart should transpile");
-    assert!(js2elpian::create_vm_from_js(id.to_string(), js), "emitted JS should compile");
+    assert!(
+        js2elpian::create_vm_from_js(id.to_string(), js),
+        "emitted JS should compile"
+    );
     let _ = api::execute_vm(id.to_string());
     api::execute_vm_func(id.to_string(), "f".to_string(), 1).result_value
 }
@@ -27,7 +30,8 @@ fn bitwise_and_shift() {
 
 #[test]
 fn do_while_loop() {
-    let dart = "int f() { var i = 0; var s = 0; do { s = s + i; i = i + 1; } while (i < 5); return s; }";
+    let dart =
+        "int f() { var i = 0; var s = 0; do { s = s + i; i = i + 1; } while (i < 5); return s; }";
     assert_eq!(run_dart("d-dowhile", dart), "10");
 }
 
@@ -82,7 +86,8 @@ fn closure_by_reference_capture_via_js_layer() {
     // A closure mutating a captured local must propagate — boxing is applied by
     // the downstream JS layer, so the Dart-side removal of its own transform is
     // covered end-to-end.
-    let dart = "int f() { var acc = 0; var add = (x) { acc = acc + x; }; add(3); add(4); return acc; }";
+    let dart =
+        "int f() { var acc = 0; var add = (x) { acc = acc + x; }; add(3); add(4); return acc; }";
     assert_eq!(run_dart("d-closure", dart), "7");
 }
 
@@ -90,13 +95,20 @@ fn closure_by_reference_capture_via_js_layer() {
 fn map_methods() {
     let dart = "int f() { var m = {\"a\": 1, \"b\": 2}; var s = 0; m.forEach((k, v) { s = s + v; }); return s; }";
     assert_eq!(run_dart("d-mapfe", dart), "3");
-    let dart2 = "bool f() { var m = {\"a\": 1}; return m.containsKey(\"a\") && !m.containsKey(\"z\"); }";
+    let dart2 =
+        "bool f() { var m = {\"a\": 1}; return m.containsKey(\"a\") && !m.containsKey(\"z\"); }";
     assert_eq!(run_dart("d-mapck", dart2), "true");
 }
 
 #[test]
 fn string_and_num_methods() {
-    assert_eq!(run_dart("d-str", "String f() { return \"hello\".toUpperCase(); }"), "\"HELLO\"");
-    assert_eq!(run_dart("d-radix", "String f() { return (255).toRadixString(16); }"), "\"ff\"");
+    assert_eq!(
+        run_dart("d-str", "String f() { return \"hello\".toUpperCase(); }"),
+        "\"HELLO\""
+    );
+    assert_eq!(
+        run_dart("d-radix", "String f() { return (255).toRadixString(16); }"),
+        "\"ff\""
+    );
     assert_eq!(run_dart("d-int", "int f() { return (3.9).toInt(); }"), "3");
 }

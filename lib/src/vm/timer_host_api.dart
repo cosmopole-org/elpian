@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
-typedef VmTimerInvoke = Future<void> Function(String funcName, String? inputJson);
+typedef VmTimerInvoke = Future<void> Function(
+    String funcName, String? inputJson);
 
 class VmTimerHostApi {
   final VmTimerInvoke _invoke;

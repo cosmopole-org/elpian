@@ -75,7 +75,12 @@ pub extern "C" fn elpian_result_ptr() -> *const u8 {
 pub unsafe extern "C" fn elpian_init(ptr: *const u8, len: usize) -> i32 {
     let src = std::str::from_utf8(std::slice::from_raw_parts(ptr, len)).unwrap_or("");
     let id = format!("live-{}", next_id());
-    match DartRuntime::from_dart(id, src, DartCapabilitySet::full(), ResourceMeter::unbounded()) {
+    match DartRuntime::from_dart(
+        id,
+        src,
+        DartCapabilitySet::full(),
+        ResourceMeter::unbounded(),
+    ) {
         Ok(rt) => {
             let mut rt = rt.with_fixed_clock(0);
             let _ = rt.run();
@@ -94,7 +99,12 @@ pub unsafe extern "C" fn elpian_init(ptr: *const u8, len: usize) -> i32 {
 pub unsafe extern "C" fn elpian_init_widgets(ptr: *const u8, len: usize) -> i32 {
     let src = std::str::from_utf8(std::slice::from_raw_parts(ptr, len)).unwrap_or("");
     let id = format!("live-{}", next_id());
-    match DartRuntime::from_widget_app(id, src, DartCapabilitySet::full(), ResourceMeter::unbounded()) {
+    match DartRuntime::from_widget_app(
+        id,
+        src,
+        DartCapabilitySet::full(),
+        ResourceMeter::unbounded(),
+    ) {
         Ok(rt) => {
             let mut rt = rt.with_fixed_clock(0);
             let _ = rt.run();
@@ -113,7 +123,12 @@ pub unsafe extern "C" fn elpian_init_widgets(ptr: *const u8, len: usize) -> i32 
 pub unsafe extern "C" fn elpian_init_flutter(ptr: *const u8, len: usize) -> i32 {
     let src = std::str::from_utf8(std::slice::from_raw_parts(ptr, len)).unwrap_or("");
     let id = format!("live-{}", next_id());
-    match DartRuntime::from_flutter_app(id, src, DartCapabilitySet::full(), ResourceMeter::unbounded()) {
+    match DartRuntime::from_flutter_app(
+        id,
+        src,
+        DartCapabilitySet::full(),
+        ResourceMeter::unbounded(),
+    ) {
         Ok(rt) => {
             let mut rt = rt.with_fixed_clock(0);
             let _ = rt.run();
@@ -128,8 +143,17 @@ pub unsafe extern "C" fn elpian_init_flutter(ptr: *const u8, len: usize) -> i32 
 #[no_mangle]
 pub extern "C" fn elpian_pointer(x: f64, y: f64, down: i32) {
     if let Some(rt) = LIVE.lock().unwrap().as_mut() {
-        let phase = if down == 1 { PointerPhase::Down } else { PointerPhase::Up };
-        rt.dispatch_pointer(PointerEvent { pointer: 1, phase, x, y });
+        let phase = if down == 1 {
+            PointerPhase::Down
+        } else {
+            PointerPhase::Up
+        };
+        rt.dispatch_pointer(PointerEvent {
+            pointer: 1,
+            phase,
+            x,
+            y,
+        });
     }
 }
 

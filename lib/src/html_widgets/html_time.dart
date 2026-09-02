@@ -5,7 +5,7 @@ import '../css/css_properties.dart';
 class HtmlTime {
   static Widget build(ElpianNode node, List<Widget> children) {
     final text = node.props['text'] as String? ?? '';
-    
+
     Widget result = Text(text);
 
     if (node.style != null) {

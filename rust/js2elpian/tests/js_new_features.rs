@@ -1,16 +1,37 @@
 use elpian_vm::api;
 
 fn run(id: &str, js: &str) -> String {
-    assert!(js2elpian::create_vm_from_js(id.to_string(), js.to_string()), "JS should compile: {id}");
+    assert!(
+        js2elpian::create_vm_from_js(id.to_string(), js.to_string()),
+        "JS should compile: {id}"
+    );
     let _ = api::execute_vm(id.to_string());
     api::execute_vm_func(id.to_string(), "f".to_string(), 1).result_value
 }
 
 #[test]
 fn logical_and_or_basic() {
-    assert_eq!(run("t1", "function f(){ if (1 < 2 && 3 < 4) { return 1; } return 0; }"), "1");
-    assert_eq!(run("t2", "function f(){ if (1 > 2 || 3 < 4) { return 1; } return 0; }"), "1");
-    assert_eq!(run("t3", "function f(){ if (1 > 2 && 3 < 4) { return 1; } return 0; }"), "0");
+    assert_eq!(
+        run(
+            "t1",
+            "function f(){ if (1 < 2 && 3 < 4) { return 1; } return 0; }"
+        ),
+        "1"
+    );
+    assert_eq!(
+        run(
+            "t2",
+            "function f(){ if (1 > 2 || 3 < 4) { return 1; } return 0; }"
+        ),
+        "1"
+    );
+    assert_eq!(
+        run(
+            "t3",
+            "function f(){ if (1 > 2 && 3 < 4) { return 1; } return 0; }"
+        ),
+        "0"
+    );
 }
 
 #[test]
@@ -34,10 +55,22 @@ fn logical_short_circuit_guards() {
 
 #[test]
 fn ternary_basic() {
-    assert_eq!(run("t10", "function f(){ let x = 1 < 2 ? 10 : 20; return x; }"), "10");
-    assert_eq!(run("t11", "function f(){ let x = 1 > 2 ? 10 : 20; return x; }"), "20");
+    assert_eq!(
+        run("t10", "function f(){ let x = 1 < 2 ? 10 : 20; return x; }"),
+        "10"
+    );
+    assert_eq!(
+        run("t11", "function f(){ let x = 1 > 2 ? 10 : 20; return x; }"),
+        "20"
+    );
     // nested
-    assert_eq!(run("t12", "function f(){ let n = 5; return n > 10 ? 1 : n > 3 ? 2 : 3; }"), "2");
+    assert_eq!(
+        run(
+            "t12",
+            "function f(){ let n = 5; return n > 10 ? 1 : n > 3 ? 2 : 3; }"
+        ),
+        "2"
+    );
 }
 
 #[test]
@@ -71,7 +104,8 @@ fn break_in_for() {
 
 #[test]
 fn break_in_while() {
-    let js = "function f(){ let i = 0; while (true) { if (i >= 5) { break; } i = i + 1; } return i; }";
+    let js =
+        "function f(){ let i = 0; while (true) { if (i >= 5) { break; } i = i + 1; } return i; }";
     assert_eq!(run("t17", js), "5");
 }
 
@@ -111,9 +145,18 @@ fn implicit_ctor_forwards_args() {
 
 #[test]
 fn typeof_number() {
-    assert_eq!(run("t22", "function f(){ return typeOf(5); }"), "\"number\"");
-    assert_eq!(run("t23", "function f(){ return typeOf(5.5); }"), "\"number\"");
-    assert_eq!(run("t24", "function f(){ return typeOf(\"hi\"); }"), "\"string\"");
+    assert_eq!(
+        run("t22", "function f(){ return typeOf(5); }"),
+        "\"number\""
+    );
+    assert_eq!(
+        run("t23", "function f(){ return typeOf(5.5); }"),
+        "\"number\""
+    );
+    assert_eq!(
+        run("t24", "function f(){ return typeOf(\"hi\"); }"),
+        "\"string\""
+    );
 }
 
 #[test]
@@ -210,7 +253,7 @@ fn user_method_named_like_a_js_builtin_is_not_rewritten() {
             constructor() { this.n = 7; }
             includes(x) { return this.n + x; }
         }
-        function f(){ let b = new Bag(); return b.includes(5); }";  // 7 + 5 = 12
+        function f(){ let b = new Bag(); return b.includes(5); }"; // 7 + 5 = 12
     assert_eq!(run("js-user-includes", js), "12");
 }
 

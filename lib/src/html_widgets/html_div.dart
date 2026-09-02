@@ -11,7 +11,8 @@ class HtmlDiv {
     if (children.isEmpty) {
       Widget result = const SizedBox.shrink();
       if (node.style != null) {
-        result = CSSProperties.applyStyle(result, node.style, layoutHandled: true);
+        result =
+            CSSProperties.applyStyle(result, node.style, layoutHandled: true);
       }
       return result;
     }
@@ -27,7 +28,8 @@ class HtmlDiv {
     if (positioned != null) {
       Widget result = Container(child: positioned);
       if (node.style != null) {
-        result = CSSProperties.applyStyle(result, node.style, layoutHandled: true);
+        result =
+            CSSProperties.applyStyle(result, node.style, layoutHandled: true);
       }
       return result;
     }
@@ -35,7 +37,8 @@ class HtmlDiv {
     Widget result = Container(child: _buildFlow(node, children));
 
     if (node.style != null) {
-      result = CSSProperties.applyStyle(result, node.style, layoutHandled: true);
+      result =
+          CSSProperties.applyStyle(result, node.style, layoutHandled: true);
     }
 
     return result;
@@ -207,7 +210,8 @@ class HtmlDiv {
   /// of the whole subtree and leaves a blank screen whose reported error points
   /// nowhere near the offending node. Degrading to the unwrapped child keeps a
   /// guest's misplaced `flex` a cosmetic no-op instead of a fatal one.
-  static Widget _unflex(Widget child) => child is Flexible ? child.child : child;
+  static Widget _unflex(Widget child) =>
+      child is Flexible ? child.child : child;
 
   /// Resolve a child node's **fully cascaded** style — the stylesheet
   /// (tag/class/id + matching `@media`, honouring `!important`) merged with the

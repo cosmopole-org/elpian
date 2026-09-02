@@ -45,7 +45,10 @@ fn diff_into(old: &Value, new: &Value, path: &mut Vec<Value>, out: &mut Vec<Patc
                 if !b.contains_key(k) {
                     let mut p = path.clone();
                     p.push(Value::from(k.clone()));
-                    out.push(Patch { path: p, value: None });
+                    out.push(Patch {
+                        path: p,
+                        value: None,
+                    });
                 }
             }
             // Added / changed keys.
@@ -53,7 +56,10 @@ fn diff_into(old: &Value, new: &Value, path: &mut Vec<Value>, out: &mut Vec<Patc
                 path.push(Value::from(k.clone()));
                 match a.get(k) {
                     Some(av) => diff_into(av, bv, path, out),
-                    None => out.push(Patch { path: path.clone(), value: Some(bv.clone()) }),
+                    None => out.push(Patch {
+                        path: path.clone(),
+                        value: Some(bv.clone()),
+                    }),
                 }
                 path.pop();
             }
@@ -69,17 +75,26 @@ fn diff_into(old: &Value, new: &Value, path: &mut Vec<Value>, out: &mut Vec<Patc
             for i in common..b.len() {
                 let mut p = path.clone();
                 p.push(Value::from(i));
-                out.push(Patch { path: p, value: Some(b[i].clone()) });
+                out.push(Patch {
+                    path: p,
+                    value: Some(b[i].clone()),
+                });
             }
             // Removed tail (highest index first so earlier indices stay valid).
             for i in (common..a.len()).rev() {
                 let mut p = path.clone();
                 p.push(Value::from(i));
-                out.push(Patch { path: p, value: None });
+                out.push(Patch {
+                    path: p,
+                    value: None,
+                });
             }
         }
         _ => {
-            out.push(Patch { path: path.clone(), value: Some(new.clone()) });
+            out.push(Patch {
+                path: path.clone(),
+                value: Some(new.clone()),
+            });
         }
     }
 }

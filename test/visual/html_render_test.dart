@@ -49,7 +49,10 @@ void main() {
                 'style': {'fontSize': 18, 'fontWeight': 'bold'}
               },
               'children': [
-                {'type': 'text', 'props': {'text': 'Merged Card'}}
+                {
+                  'type': 'text',
+                  'props': {'text': 'Merged Card'}
+                }
               ],
             },
           ],

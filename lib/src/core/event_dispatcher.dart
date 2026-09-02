@@ -8,75 +8,75 @@ class EventDispatcher {
   static final EventDispatcher _instance = EventDispatcher._internal();
   factory EventDispatcher() => _instance;
   EventDispatcher._internal();
-  
+
   final Map<String, ElpianNode> _nodeRegistry = {};
   final Map<String, String?> _parentRegistry = {};
   final EventBus _eventBus = EventBus();
-  
+
   /// Global event callback for all events
   ElpianEventListener? globalEventHandler;
-  
+
   /// Register a node in the tree
   void registerNode(String id, ElpianNode node, {String? parentId}) {
     _nodeRegistry[id] = node;
     _parentRegistry[id] = parentId;
   }
-  
+
   /// Unregister a node
   void unregisterNode(String id) {
     _nodeRegistry.remove(id);
     _parentRegistry.remove(id);
   }
-  
+
   /// Get node by ID
   ElpianNode? getNode(String id) {
     return _nodeRegistry[id];
   }
-  
+
   /// Get parent chain for event bubbling
   List<String> _getParentChain(String elementId) {
     final chain = <String>[];
     String? currentId = elementId;
-    
+
     while (currentId != null) {
       chain.add(currentId);
       currentId = _parentRegistry[currentId];
     }
-    
+
     return chain;
   }
-  
+
   /// Dispatch event with full propagation (capturing -> target -> bubbling)
   void dispatchEvent(ElpianEvent event, String elementId) {
     // Get the parent chain
     final chain = _getParentChain(elementId);
-    
+
     if (chain.isEmpty) {
       // Call global handler if exists
       globalEventHandler?.call(event);
       return;
     }
-    
+
     // CAPTURING PHASE: from root to target
     for (var i = chain.length - 1; i > 0; i--) {
       final nodeId = chain[i];
       final node = _nodeRegistry[nodeId];
-      
+
       if (node == null) continue;
-      
+
       final capturingEvent = event.copyWith(
         currentTarget: nodeId,
         phase: EventPhase.capturing,
       );
-      
+
       _dispatchToNode(node, capturingEvent);
-      
+
       if (capturingEvent.isPropagationStopped) {
         globalEventHandler?.call(capturingEvent);
         return;
       }
     }
-    
+
     // AT TARGET PHASE
     final targetNode = _nodeRegistry[elementId];
     if (targetNode != null) {
@@ -84,52 +84,52 @@ class EventDispatcher {
         currentTarget: elementId,
         phase: EventPhase.atTarget,
       );
-      
+
       _dispatchToNode(targetNode, targetEvent);
-      
+
       if (targetEvent.isPropagationStopped) {
         globalEventHandler?.call(targetEvent);
         return;
       }
-      
+
       // Use targetEvent for bubbling phase
       event = targetEvent;
     }
-    
+
     // BUBBLING PHASE: from target to root
     for (var i = 1; i < chain.length; i++) {
       final nodeId = chain[i];
       final node = _nodeRegistry[nodeId];
-      
+
       if (node == null) continue;
-      
+
       final bubblingEvent = event.copyWith(
         currentTarget: nodeId,
         phase: EventPhase.bubbling,
       );
-      
+
       _dispatchToNode(node, bubblingEvent);
-      
+
       if (bubblingEvent.isPropagationStopped) {
         globalEventHandler?.call(bubblingEvent);
         return;
       }
     }
-    
+
     // Broadcast to event bus
     _eventBus.broadcast(event);
-    
+
     // Call global handler
     globalEventHandler?.call(event);
   }
-  
+
   /// Dispatch event to a specific node
   void _dispatchToNode(ElpianNode node, ElpianEvent event) {
     if (node.events == null) return;
-    
+
     final eventHandlers = node.events![event.type];
     if (eventHandlers == null) return;
-    
+
     // If it's a function, call it
     if (eventHandlers is Function) {
       try {
@@ -143,7 +143,7 @@ class EventDispatcher {
       }
     }
   }
-  
+
   /// Quick dispatch methods for common events
   void dispatchClick(String elementId, {Offset? position}) {
     final event = position != null
@@ -159,10 +159,10 @@ class EventDispatcher {
             eventType: ElpianEventType.click,
             target: elementId,
           );
-    
+
     dispatchEvent(event, elementId);
   }
-  
+
   void dispatchChange(String elementId, dynamic value) {
     final event = ElpianInputEvent(
       type: 'change',
@@ -170,10 +170,10 @@ class EventDispatcher {
       target: elementId,
       value: value,
     );
-    
+
     dispatchEvent(event, elementId);
   }
-  
+
   void dispatchInput(String elementId, dynamic value) {
     final event = ElpianInputEvent(
       type: 'input',
@@ -181,40 +181,40 @@ class EventDispatcher {
       target: elementId,
       value: value,
     );
-    
+
     dispatchEvent(event, elementId);
   }
-  
+
   void dispatchSubmit(String elementId) {
     final event = ElpianEvent(
       type: 'submit',
       eventType: ElpianEventType.submit,
       target: elementId,
     );
-    
+
     dispatchEvent(event, elementId);
   }
-  
+
   void dispatchFocus(String elementId) {
     final event = ElpianEvent(
       type: 'focus',
       eventType: ElpianEventType.focus,
       target: elementId,
     );
-    
+
     dispatchEvent(event, elementId);
   }
-  
+
   void dispatchBlur(String elementId) {
     final event = ElpianEvent(
       type: 'blur',
       eventType: ElpianEventType.blur,
       target: elementId,
     );
-    
+
     dispatchEvent(event, elementId);
   }
-  
+
   void dispatchKeyDown(String elementId, String key, int keyCode) {
     final event = ElpianKeyboardEvent(
       type: 'keydown',
@@ -223,10 +223,10 @@ class EventDispatcher {
       key: key,
       keyCode: keyCode,
     );
-    
+
     dispatchEvent(event, elementId);
   }
-  
+
   void dispatchKeyUp(String elementId, String key, int keyCode) {
     final event = ElpianKeyboardEvent(
       type: 'keyup',
@@ -235,11 +235,12 @@ class EventDispatcher {
       key: key,
       keyCode: keyCode,
     );
-    
+
     dispatchEvent(event, elementId);
   }
-  
-  void dispatchDragStart(String elementId, Offset position, {Offset? localPosition}) {
+
+  void dispatchDragStart(String elementId, Offset position,
+      {Offset? localPosition}) {
     final event = ElpianPointerEvent(
       type: 'dragstart',
       eventType: ElpianEventType.dragStart,
@@ -247,11 +248,12 @@ class EventDispatcher {
       position: position,
       localPosition: localPosition ?? position,
     );
-    
+
     dispatchEvent(event, elementId);
   }
-  
-  void dispatchDrag(String elementId, Offset position, Offset delta, {Offset? localPosition}) {
+
+  void dispatchDrag(String elementId, Offset position, Offset delta,
+      {Offset? localPosition}) {
     final event = ElpianPointerEvent(
       type: 'drag',
       eventType: ElpianEventType.drag,
@@ -260,11 +262,12 @@ class EventDispatcher {
       localPosition: localPosition ?? position,
       delta: delta,
     );
-    
+
     dispatchEvent(event, elementId);
   }
-  
-  void dispatchDragEnd(String elementId, Offset position, {Offset? localPosition}) {
+
+  void dispatchDragEnd(String elementId, Offset position,
+      {Offset? localPosition}) {
     final event = ElpianPointerEvent(
       type: 'dragend',
       eventType: ElpianEventType.dragEnd,
@@ -272,10 +275,10 @@ class EventDispatcher {
       position: position,
       localPosition: localPosition ?? position,
     );
-    
+
     dispatchEvent(event, elementId);
   }
-  
+
   void dispatchPointerDown(String elementId, PointerDownEvent details) {
     final event = ElpianPointerEvent(
       type: 'pointerdown',
@@ -288,10 +291,10 @@ class EventDispatcher {
       distance: details.distance,
       pointerId: details.pointer,
     );
-    
+
     dispatchEvent(event, elementId);
   }
-  
+
   void dispatchPointerUp(String elementId, PointerUpEvent details) {
     final event = ElpianPointerEvent(
       type: 'pointerup',
@@ -301,10 +304,10 @@ class EventDispatcher {
       localPosition: details.localPosition,
       pointerId: details.pointer,
     );
-    
+
     dispatchEvent(event, elementId);
   }
-  
+
   void dispatchPointerMove(String elementId, PointerMoveEvent details) {
     final event = ElpianPointerEvent(
       type: 'pointermove',
@@ -315,11 +318,13 @@ class EventDispatcher {
       delta: details.delta,
       pointerId: details.pointer,
     );
-    
+
     dispatchEvent(event, elementId);
   }
-  
-  void dispatchGesture(String elementId, ElpianEventType type, {
+
+  void dispatchGesture(
+    String elementId,
+    ElpianEventType type, {
     Offset? velocity,
     double? scale,
     double? rotation,
@@ -334,26 +339,26 @@ class EventDispatcher {
       rotation: rotation ?? 0.0,
       focalPoint: focalPoint ?? Offset.zero,
     );
-    
+
     dispatchEvent(event, elementId);
   }
-  
+
   /// Subscribe to global events
   void onGlobalEvent(ElpianEventListener listener) {
     globalEventHandler = listener;
   }
-  
+
   /// Subscribe to specific event type globally
   void onEventType(ElpianEventType type, ElpianEventListener listener) {
     _eventBus.addEventListener(type.name, listener);
   }
-  
+
   /// Clear all registrations
   void clear() {
     _nodeRegistry.clear();
     _parentRegistry.clear();
   }
-  
+
   /// Get statistics
   Map<String, int> getStats() {
     return {

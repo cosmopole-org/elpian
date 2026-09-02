@@ -53,13 +53,19 @@ pub(crate) enum Expr {
     Cascade(Box<Expr>, Vec<CascadeOp>),
 }
 
+/// A parsed Dart call argument list: positional arguments, then named ones as
+/// `(label, value)` pairs. Dart allows both in one call, and every construct
+/// that accepts arguments — calls, constructors, cascade members — carries the
+/// same pair, so it is named once here rather than spelled out at each site.
+pub(crate) type ArgList = (Vec<Expr>, Vec<(String, Expr)>);
+
 /// One section of a cascade (`..member`, `..method(args)`, `..[i] = v`, …),
 /// applied to the cascade's shared target.
 #[derive(Debug, Clone)]
 pub(crate) enum CascadeOp {
     /// `..name` / `..name = value` (when `assign` is set) / `..name(args)`
     /// (when `call` is set).
-    Member(String, Option<Box<Expr>>, Option<(Vec<Expr>, Vec<(String, Expr)>)>),
+    Member(String, Option<Box<Expr>>, Option<ArgList>),
     /// `..[index] = value`.
     IndexSet(Box<Expr>, Box<Expr>),
 }
@@ -139,7 +145,6 @@ pub(crate) struct ClassDecl {
     pub(crate) static_fields: Vec<(String, Option<Expr>)>,
     pub(crate) ctor_params: ParamList,
     pub(crate) ctor_body: Vec<Stmt>,
-    pub(crate) has_ctor: bool,
     pub(crate) calls_super: bool,
     pub(crate) methods: Vec<Method>,
 }
@@ -159,4 +164,3 @@ pub(crate) enum Item {
     Enum(EnumDecl),
     Stmt(Stmt),
 }
-

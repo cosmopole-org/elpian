@@ -183,7 +183,10 @@ impl DartRuntime {
     /// way, then drain already-due event-loop work. A no-op for an instance
     /// that is not parked in the paused state.
     pub fn resume_paused(&mut self) {
-        if !matches!(api::run_state(&self.machine_id), Some(api::RunState::Paused)) {
+        if !matches!(
+            api::run_state(&self.machine_id),
+            Some(api::RunState::Paused)
+        ) {
             return;
         }
         let res = api::resume_execution(self.machine_id.clone());
@@ -440,7 +443,10 @@ impl DartRuntime {
         let new = self.render_frame(frame_time_micros).unwrap_or(Value::Null);
         let patches = match &self.last_frame {
             Some(old) => crate::scene_diff::diff(old, &new),
-            None => vec![crate::scene_diff::Patch { path: vec![], value: Some(new.clone()) }],
+            None => vec![crate::scene_diff::Patch {
+                path: vec![],
+                value: Some(new.clone()),
+            }],
         };
         self.last_frame = Some(new);
         patches
@@ -465,7 +471,8 @@ impl DartRuntime {
                 Value::Null
             }
             "test.emit" => {
-                self.emitted.push(args.first().cloned().unwrap_or(Value::Null));
+                self.emitted
+                    .push(args.first().cloned().unwrap_or(Value::Null));
                 Value::Null
             }
             name if name.starts_with("dart:") => self.service_dart(&name["dart:".len()..], &args),
@@ -540,7 +547,9 @@ impl DartRuntime {
             // host-bridge service here.
             "async" => self.dispatch_async(method, args),
             "isolate" => self.dispatch_isolate(method, args),
-            other => Err(format!("unimplemented library dart:{other} (method {method})")),
+            other => Err(format!(
+                "unimplemented library dart:{other} (method {method})"
+            )),
         };
 
         match result {
@@ -578,7 +587,9 @@ impl DartRuntime {
                     .and_then(|v| v.as_u64())
                     .ok_or("Timer.periodic requires a callback id")?;
                 let interval = args.get(1).and_then(|v| v.as_u64()).unwrap_or(1);
-                Ok(serde_json::json!(self.events.schedule_periodic(cb, interval)))
+                Ok(serde_json::json!(self
+                    .events
+                    .schedule_periodic(cb, interval)))
             }
             // Timer.cancel(timerId) -> bool
             "Timer.cancel" => {

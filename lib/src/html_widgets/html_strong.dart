@@ -19,7 +19,8 @@ class HtmlStrong {
       opacity: node.style?.opacity,
     );
 
-    Widget result = Text(text, style: CSSProperties.createTextStyle(mergedStyle));
+    Widget result =
+        Text(text, style: CSSProperties.createTextStyle(mergedStyle));
 
     result = CSSProperties.applyStyle(result, mergedStyle);
 

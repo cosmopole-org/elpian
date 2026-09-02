@@ -42,4 +42,3 @@ pub(crate) const KEYWORDS: &[&str] = &[
     "await", "do", "switch", "case", "default", "break", "continue", "try", "catch", "finally",
     "throw", "rethrow",
 ];
-

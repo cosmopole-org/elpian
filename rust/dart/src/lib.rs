@@ -64,11 +64,11 @@ pub mod governance;
 #[cfg(feature = "dart")]
 pub mod isolate;
 #[cfg(feature = "dart")]
-pub mod sha256;
+pub mod runtime;
 #[cfg(feature = "dart")]
 pub mod scene_diff;
 #[cfg(feature = "dart")]
-pub mod runtime;
+pub mod sha256;
 #[cfg(feature = "dart")]
 pub mod typed_data;
 #[cfg(feature = "dart")]

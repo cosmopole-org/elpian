@@ -55,7 +55,7 @@ impl Mock {
             || op.get("self").is_some()
             || op.get("load").is_some()
         {
-            return op.get("def").map(|d| d.clone()).unwrap_or_else(|| {
+            return op.get("def").cloned().unwrap_or_else(|| {
                 self.next_host_handle -= 1;
                 json!(self.next_host_handle)
             });
@@ -92,7 +92,11 @@ fn boot_js(id: &str, source: &str) -> (VmManager, Rc<RefCell<Mock>>) {
         match name {
             "godot.op" => Some(m.exec(args.first().unwrap_or(&Value::Null))),
             "godot.batch" => {
-                let ops = args.first().and_then(|v| v.as_array()).cloned().unwrap_or_default();
+                let ops = args
+                    .first()
+                    .and_then(|v| v.as_array())
+                    .cloned()
+                    .unwrap_or_default();
                 Some(Value::Array(ops.iter().map(|op| m.exec(op)).collect()))
             }
             _ => None,
@@ -178,7 +182,12 @@ fn js_signal_connect_dispatches_back_into_the_closure() {
         main();
     "#;
     let (mut mgr, mock) = boot_js("js-signal", src);
-    let (_, signal, cb) = mock.borrow().connects.first().cloned().expect("a connect op");
+    let (_, signal, cb) = mock
+        .borrow()
+        .connects
+        .first()
+        .cloned()
+        .expect("a connect op");
     assert_eq!(signal, "pressed");
     // Namespaced by the manager: root VM (1) rides the high 32 bits.
     assert_eq!(cb >> 32, 1);
@@ -275,9 +284,9 @@ fn ui_kit_composes_on_import_and_builds_control_nodes() {
         // Portrait: on a desktop mock (no 'mobile' feature) the window itself
         // is sized to the portrait design resolution.
         assert!(
-            m.ops.iter().any(|op| {
-                op.get("method").and_then(|v| v.as_str()) == Some("window_set_size")
-            }),
+            m.ops
+                .iter()
+                .any(|op| { op.get("method").and_then(|v| v.as_str()) == Some("window_set_size") }),
             "portrait mode must size the window"
         );
     }
@@ -336,8 +345,7 @@ fn net_composes_on_import_and_speaks_http_with_a_cookie_jar() {
     let args = request_args.as_array().unwrap();
     assert_eq!(args[0], json!("https://play.example/api/auth/signin"));
     assert_eq!(args[2], json!({ "int": 2 }), "POST method code");
-    let body: Value =
-        serde_json::from_str(args[3].as_str().expect("json body string")).unwrap();
+    let body: Value = serde_json::from_str(args[3].as_str().expect("json body string")).unwrap();
     assert_eq!(body, json!({ "email": "k@example.com", "password": "pw" }));
 
     // Complete the request through the dispatch path: 200, a Set-Cookie header
@@ -385,7 +393,10 @@ fn socket_io_frames_ride_a_websocket_peer() {
             .cloned()
             .expect("connect_to_url invoked");
         let url = dial["args"][0].as_str().unwrap();
-        assert_eq!(url, "wss://play.example/socket.io/?EIO=4&transport=websocket");
+        assert_eq!(
+            url,
+            "wss://play.example/socket.io/?EIO=4&transport=websocket"
+        );
     }
     let log = mgr.take_log().join("\n");
     assert!(log.contains("sio dialing"), "log was: {log}");

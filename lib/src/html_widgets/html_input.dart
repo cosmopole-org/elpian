@@ -108,7 +108,8 @@ class _HtmlInputState extends State<HtmlInput> {
             borderSide: const BorderSide(color: fieldBorderFocus),
           ),
         ),
-        onChanged: (value) => EventDispatcher().dispatchInput(_elementId, value),
+        onChanged: (value) =>
+            EventDispatcher().dispatchInput(_elementId, value),
         onSubmitted: (value) => EventDispatcher().dispatchSubmit(_elementId),
       );
     }

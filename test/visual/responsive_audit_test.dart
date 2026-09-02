@@ -28,13 +28,18 @@ void main() {
   ];
 
   final screens = screensDir.existsSync()
-      ? (screensDir.listSync().whereType<File>().where((f) => f.path.endsWith('.json')).toList()
+      ? (screensDir
+          .listSync()
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.json'))
+          .toList()
         ..sort((a, b) => a.path.compareTo(b.path)))
       : <File>[];
 
   for (final file in screens) {
     final name = file.uri.pathSegments.last.replaceAll('.json', '');
-    final envelope = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+    final envelope =
+        jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
 
     for (final size in sizes) {
       final label = size[0] as String;
@@ -46,7 +51,8 @@ void main() {
         tester.view.devicePixelRatio = 1.0;
         addTearDown(tester.view.reset);
 
-        final bridge = NextjsBridge()..onNavigate = (_, {bool replace = false}) {};
+        final bridge = NextjsBridge()
+          ..onNavigate = (_, {bool replace = false}) {};
         // 3D scenes are kept with their real type so the engine treats their
         // screens as full-bleed stages; render them as a cheap placeholder that
         // fills the slot (no embedded Godot surface in a layout audit).

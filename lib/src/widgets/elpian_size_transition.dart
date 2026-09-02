@@ -21,7 +21,8 @@ class _ElpianSizeTransitionWidget extends StatefulWidget {
       _ElpianSizeTransitionWidgetState();
 }
 
-class _ElpianSizeTransitionWidgetState extends State<_ElpianSizeTransitionWidget>
+class _ElpianSizeTransitionWidgetState
+    extends State<_ElpianSizeTransitionWidget>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _animation;

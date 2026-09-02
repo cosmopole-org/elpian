@@ -7,7 +7,8 @@ class HtmlAside {
     if (children.isEmpty) {
       Widget result = const SizedBox.shrink();
       if (node.style != null) {
-        result = CSSProperties.applyStyle(result, node.style, layoutHandled: true);
+        result =
+            CSSProperties.applyStyle(result, node.style, layoutHandled: true);
       }
       return result;
     }
@@ -24,15 +25,19 @@ class HtmlAside {
           flexDirection == 'row-reverse';
       if (isRow) {
         child = Row(
-          mainAxisAlignment: CSSProperties.getMainAxisAlignment(node.style?.justifyContent),
-          crossAxisAlignment: CSSProperties.getCrossAxisAlignment(node.style?.alignItems),
+          mainAxisAlignment:
+              CSSProperties.getMainAxisAlignment(node.style?.justifyContent),
+          crossAxisAlignment:
+              CSSProperties.getCrossAxisAlignment(node.style?.alignItems),
           mainAxisSize: MainAxisSize.max,
           children: _addGap(children, gap, Axis.horizontal),
         );
       } else {
         child = Column(
-          mainAxisAlignment: CSSProperties.getMainAxisAlignment(node.style?.justifyContent),
-          crossAxisAlignment: CSSProperties.getCrossAxisAlignment(node.style?.alignItems),
+          mainAxisAlignment:
+              CSSProperties.getMainAxisAlignment(node.style?.justifyContent),
+          crossAxisAlignment:
+              CSSProperties.getCrossAxisAlignment(node.style?.alignItems),
           mainAxisSize: MainAxisSize.max,
           children: _addGap(children, gap, Axis.vertical),
         );
@@ -48,7 +53,8 @@ class HtmlAside {
     Widget result = child;
 
     if (node.style != null) {
-      result = CSSProperties.applyStyle(result, node.style, layoutHandled: true);
+      result =
+          CSSProperties.applyStyle(result, node.style, layoutHandled: true);
     }
 
     return result;

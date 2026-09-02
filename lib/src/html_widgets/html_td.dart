@@ -6,7 +6,7 @@ class HtmlTd {
   static Widget build(ElpianNode node, List<Widget> children) {
     final text = node.props['text'] as String? ?? '';
     final child = children.isNotEmpty ? children.first : Text(text);
-    
+
     Widget result = Container(
       padding: const EdgeInsets.all(8.0),
       child: child,

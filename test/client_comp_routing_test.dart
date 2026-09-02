@@ -66,8 +66,10 @@ void main() {
       expect((a['events'] as Map)['click'], 'cc0::__h0');
       expect((b['events'] as Map)['click'], 'cc1::__h0');
       // Routing each back resolves to the correct distinct VM.
-      expect(ClientCompRouting.parse((a['events'] as Map)['click'])!.mountId, 'cc0');
-      expect(ClientCompRouting.parse((b['events'] as Map)['click'])!.mountId, 'cc1');
+      expect(ClientCompRouting.parse((a['events'] as Map)['click'])!.mountId,
+          'cc0');
+      expect(ClientCompRouting.parse((b['events'] as Map)['click'])!.mountId,
+          'cc1');
     });
   });
 }

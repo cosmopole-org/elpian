@@ -24,7 +24,8 @@ void main() {
       expect(store.hasSession, isFalse);
     });
 
-    test('SharedPrefsTokenStore persists + hydrates on every platform', () async {
+    test('SharedPrefsTokenStore persists + hydrates on every platform',
+        () async {
       // shared_preferences works on web/mobile/desktop; the test backend mocks it.
       SharedPreferences.setMockInitialValues({});
       final store = SharedPrefsTokenStore(namespace: 'test');

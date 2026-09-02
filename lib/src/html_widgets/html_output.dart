@@ -5,7 +5,7 @@ import '../css/css_properties.dart';
 class HtmlOutput {
   static Widget build(ElpianNode node, List<Widget> children) {
     final text = node.props['text'] as String? ?? '';
-    
+
     Widget result = Container(
       padding: const EdgeInsets.all(8.0),
       decoration: BoxDecoration(

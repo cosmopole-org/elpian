@@ -56,17 +56,19 @@ class CSSProperties {
     }
 
     // Apply transform
-    if (style.transform != null || style.rotate != null || style.scale != null) {
+    if (style.transform != null ||
+        style.rotate != null ||
+        style.scale != null) {
       Matrix4 transform = style.transform ?? Matrix4.identity();
-      
+
       if (style.rotate != null) {
         transform = Matrix4.rotationZ(style.rotate! * 3.14159 / 180);
       }
-      
+
       if (style.scale != null) {
         transform = Matrix4.diagonal3Values(style.scale!, style.scale!, 1.0);
       }
-      
+
       result = Transform(
         transform: transform,
         alignment: Alignment.center,
@@ -139,9 +141,12 @@ class CSSProperties {
     final hf = style.heightFactor;
     final fixedWidth = wf == null ? style.width : null;
     final fixedHeight = hf == null ? style.height : null;
-    if (fixedWidth != null || fixedHeight != null ||
-        style.minWidth != null || style.maxWidth != null ||
-        style.minHeight != null || style.maxHeight != null) {
+    if (fixedWidth != null ||
+        fixedHeight != null ||
+        style.minWidth != null ||
+        style.maxWidth != null ||
+        style.minHeight != null ||
+        style.maxHeight != null) {
       result = ConstrainedBox(
         constraints: BoxConstraints(
           minWidth: style.minWidth ?? 0.0,
@@ -164,12 +169,13 @@ class CSSProperties {
         decoration: BoxDecoration(
           color: style.backgroundColor,
           gradient: style.gradient,
-          border: style.border ?? (style.borderColor != null && style.borderWidth != null
-              ? Border.all(
-                  color: style.borderColor!,
-                  width: style.borderWidth!,
-                )
-              : null),
+          border: style.border ??
+              (style.borderColor != null && style.borderWidth != null
+                  ? Border.all(
+                      color: style.borderColor!,
+                      width: style.borderWidth!,
+                    )
+                  : null),
           borderRadius: style.borderRadius,
           boxShadow: style.boxShadow,
         ),
@@ -258,7 +264,8 @@ class CSSProperties {
   /// Wrap widget with implicit animation wrappers based on style
   static Widget _wrapWithAnimations(Widget child, CSSStyle style) {
     Widget result = child;
-    final duration = style.transitionDuration ?? const Duration(milliseconds: 300);
+    final duration =
+        style.transitionDuration ?? const Duration(milliseconds: 300);
     final curve = style.transitionCurve ?? Curves.linear;
 
     if (style.opacity != null) {
@@ -318,9 +325,11 @@ class CSSProperties {
   static String? resolveFontFamily(String? family) {
     if (family == null) return null;
     for (final raw in family.split(',')) {
-      final name = raw.trim().replaceAll(RegExp("^['\"]|['\"]\$"), '').toLowerCase();
+      final name =
+          raw.trim().replaceAll(RegExp("^['\"]|['\"]\$"), '').toLowerCase();
       if (name.isEmpty) continue;
-      if (_serifFamilies.contains(name) || name.contains('serif') && !name.contains('sans')) {
+      if (_serifFamilies.contains(name) ||
+          name.contains('serif') && !name.contains('sans')) {
         return _serifFamily;
       }
       if (_monoFamilies.contains(name) || name.contains('mono')) {
@@ -347,18 +356,50 @@ class CSSProperties {
   static const String _monoFamily = 'packages/elpian_ui/monospace';
 
   static const Set<String> _serifFamilies = {
-    'serif', 'georgia', 'times', 'times new roman', 'cambria', 'garamond',
-    'cinzel', 'playfair display', 'merriweather', 'crimson', 'crimson pro',
-    'pt serif', 'noto serif', 'liberation serif', 'roboto serif',
+    'serif',
+    'georgia',
+    'times',
+    'times new roman',
+    'cambria',
+    'garamond',
+    'cinzel',
+    'playfair display',
+    'merriweather',
+    'crimson',
+    'crimson pro',
+    'pt serif',
+    'noto serif',
+    'liberation serif',
+    'roboto serif',
   };
   static const Set<String> _monoFamilies = {
-    'monospace', 'courier', 'courier new', 'consolas', 'menlo', 'monaco',
-    'roboto mono', 'sf mono', 'source code pro', 'fira code', 'jetbrains mono',
-    'liberation mono', 'ui-monospace',
+    'monospace',
+    'courier',
+    'courier new',
+    'consolas',
+    'menlo',
+    'monaco',
+    'roboto mono',
+    'sf mono',
+    'source code pro',
+    'fira code',
+    'jetbrains mono',
+    'liberation mono',
+    'ui-monospace',
   };
   static const Set<String> _sansFamilies = {
-    'sans-serif', 'arial', 'helvetica', 'helvetica neue', 'roboto', 'inter',
-    'segoe ui', 'verdana', 'tahoma', 'noto sans', 'liberation sans', 'ubuntu',
+    'sans-serif',
+    'arial',
+    'helvetica',
+    'helvetica neue',
+    'roboto',
+    'inter',
+    'segoe ui',
+    'verdana',
+    'tahoma',
+    'noto sans',
+    'liberation sans',
+    'ubuntu',
   };
 
   /// Create a TextStyle from CSS style
@@ -421,7 +462,8 @@ class CSSProperties {
 
   /// Get main axis alignment from CSS justifyContent
   static MainAxisAlignment getMainAxisAlignment(String? justifyContent) {
-    return _mainAxisAlignmentMap[justifyContent?.toLowerCase()] ?? MainAxisAlignment.start;
+    return _mainAxisAlignmentMap[justifyContent?.toLowerCase()] ??
+        MainAxisAlignment.start;
   }
 
   static const _crossAxisAlignmentMap = <String, CrossAxisAlignment>{
@@ -436,6 +478,7 @@ class CSSProperties {
 
   /// Get cross axis alignment from CSS alignItems
   static CrossAxisAlignment getCrossAxisAlignment(String? alignItems) {
-    return _crossAxisAlignmentMap[alignItems?.toLowerCase()] ?? CrossAxisAlignment.start;
+    return _crossAxisAlignmentMap[alignItems?.toLowerCase()] ??
+        CrossAxisAlignment.start;
   }
 }

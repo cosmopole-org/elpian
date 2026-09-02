@@ -25,7 +25,12 @@ impl CodeBundle {
     /// source, length-delimited so fields cannot be shifted across boundaries.
     pub fn signing_input(&self) -> Vec<u8> {
         let mut buf = Vec::new();
-        for field in [&self.id, &self.version.to_string(), &self.entrypoint, &self.source] {
+        for field in [
+            &self.id,
+            &self.version.to_string(),
+            &self.entrypoint,
+            &self.source,
+        ] {
             buf.extend_from_slice(&(field.len() as u64).to_be_bytes());
             buf.extend_from_slice(field.as_bytes());
         }
@@ -79,7 +84,10 @@ pub struct BundleLoader<S: SignatureScheme> {
 
 impl<S: SignatureScheme> BundleLoader<S> {
     pub fn new(scheme: S) -> Self {
-        BundleLoader { scheme, installed_version: None }
+        BundleLoader {
+            scheme,
+            installed_version: None,
+        }
     }
 
     /// The currently-installed version, if any.
@@ -96,7 +104,10 @@ impl<S: SignatureScheme> BundleLoader<S> {
     /// returns the trusted source ready for the front-end. On failure the
     /// source is never returned, so it can never reach the VM.
     pub fn accept(&mut self, bundle: &CodeBundle) -> Result<String, BundleError> {
-        if !self.scheme.verify(&bundle.signing_input(), &bundle.signature) {
+        if !self
+            .scheme
+            .verify(&bundle.signing_input(), &bundle.signature)
+        {
             return Err(BundleError::BadSignature);
         }
         if let Some(installed) = self.installed_version {
@@ -186,7 +197,10 @@ impl<S: SignatureScheme> ManifestLoader<S> {
         manifest: &Manifest,
         bundles: &[CodeBundle],
     ) -> Result<Vec<String>, ManifestError> {
-        if !self.scheme.verify(&manifest.signing_input(), &manifest.signature) {
+        if !self
+            .scheme
+            .verify(&manifest.signing_input(), &manifest.signature)
+        {
             return Err(ManifestError::BadSignature);
         }
         let mut sources = Vec::new();
@@ -263,7 +277,10 @@ mod tests {
         signer.sign(&mut v1);
         assert_eq!(
             loader.accept(&v1),
-            Err(BundleError::Downgrade { installed: 2, offered: 1 })
+            Err(BundleError::Downgrade {
+                installed: 2,
+                offered: 1
+            })
         );
     }
 
@@ -272,15 +289,35 @@ mod tests {
         let key = *b"manifest-key";
         let signer = ManifestLoader::new(HmacSha256Scheme::new(key));
 
-        let app = CodeBundle { id: "app".into(), version: 3, entrypoint: "main".into(), source: "void main(){}".into(), signature: vec![] };
-        let dep = CodeBundle { id: "widgets".into(), version: 3, entrypoint: "".into(), source: "class W {}".into(), signature: vec![] };
+        let app = CodeBundle {
+            id: "app".into(),
+            version: 3,
+            entrypoint: "main".into(),
+            source: "void main(){}".into(),
+            signature: vec![],
+        };
+        let dep = CodeBundle {
+            id: "widgets".into(),
+            version: 3,
+            entrypoint: "".into(),
+            source: "class W {}".into(),
+            signature: vec![],
+        };
 
-        let mut manifest = Manifest { entries: vec![pin(&app), pin(&dep)], signature: vec![] };
+        let mut manifest = Manifest {
+            entries: vec![pin(&app), pin(&dep)],
+            signature: vec![],
+        };
         signer.sign(&mut manifest);
 
         let loader = ManifestLoader::new(HmacSha256Scheme::new(key));
-        let sources = loader.resolve(&manifest, &[dep.clone(), app.clone()]).expect("resolves");
-        assert_eq!(sources, vec!["void main(){}".to_string(), "class W {}".to_string()]);
+        let sources = loader
+            .resolve(&manifest, &[dep.clone(), app.clone()])
+            .expect("resolves");
+        assert_eq!(
+            sources,
+            vec!["void main(){}".to_string(), "class W {}".to_string()]
+        );
 
         // A bundle whose content doesn't match its pin is rejected.
         let mut evil = app.clone();

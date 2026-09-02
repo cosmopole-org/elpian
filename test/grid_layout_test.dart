@@ -14,7 +14,8 @@ void main() {
         'gap': 8,
       });
       expect(style.display, 'grid');
-      expect(style.gridTemplateColumns, 'repeat(auto-fill, minmax(120px, 1fr))');
+      expect(
+          style.gridTemplateColumns, 'repeat(auto-fill, minmax(120px, 1fr))');
       expect(style.gap, 8);
     });
 
@@ -60,7 +61,10 @@ void main() {
   testWidgets('grid renders a Wrap (not a forced single column)',
       (tester) async {
     await tester.pumpWidget(gridOf(
-      {'gridTemplateColumns': 'repeat(auto-fill, minmax(120px, 1fr))', 'gap': 8},
+      {
+        'gridTemplateColumns': 'repeat(auto-fill, minmax(120px, 1fr))',
+        'gap': 8
+      },
       6,
     ));
     expect(find.byType(Wrap), findsOneWidget);
@@ -71,7 +75,10 @@ void main() {
     // 400px wide, 8px gap, min 120 => floor((400+8)/(120+8)) = 3 columns.
     // Item width = (400 - 8*2) / 3 = 128.
     await tester.pumpWidget(gridOf(
-      {'gridTemplateColumns': 'repeat(auto-fill, minmax(120px, 1fr))', 'gap': 8},
+      {
+        'gridTemplateColumns': 'repeat(auto-fill, minmax(120px, 1fr))',
+        'gap': 8
+      },
       6,
     ));
     expect(widthOfKey(tester, 'cell0'), closeTo(128, 0.5));

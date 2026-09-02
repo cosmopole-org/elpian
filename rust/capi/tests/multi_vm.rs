@@ -70,7 +70,11 @@ fn install_bridge(mgr: &mut VmManager, mock: &Rc<RefCell<MockEngine>>) {
                 Some(m.exec(&op))
             }
             "godot.batch" => {
-                let ops = args.first().and_then(|v| v.as_array()).cloned().unwrap_or_default();
+                let ops = args
+                    .first()
+                    .and_then(|v| v.as_array())
+                    .cloned()
+                    .unwrap_or_default();
                 Some(Value::Array(ops.iter().map(|op| m.exec(op)).collect()))
             }
             _ => None,
@@ -99,7 +103,9 @@ fn boot(root_source: &str) -> (VmManager, Rc<RefCell<MockEngine>>) {
 }
 
 fn emitted(mgr: &mut VmManager, vm: u64) -> Vec<Value> {
-    mgr.runtime_mut(vm).map(|rt| rt.emitted().to_vec()).unwrap_or_default()
+    mgr.runtime_mut(vm)
+        .map(|rt| rt.emitted().to_vec())
+        .unwrap_or_default()
 }
 
 /// Escape a (plain) Dart source string for embedding into a Dart string
@@ -137,14 +143,24 @@ void main() {{
 
     let m = mock.borrow();
     // Root ops carry no sandbox tag (whole-scene role)…
-    let root_new =
-        m.ops.iter().find(|op| op.get("new").and_then(|v| v.as_str()) == Some("Node3D")).unwrap();
+    let root_new = m
+        .ops
+        .iter()
+        .find(|op| op.get("new").and_then(|v| v.as_str()) == Some("Node3D"))
+        .unwrap();
     assert!(root_new.get("__sbx").is_none(), "root is unrestricted");
     // …the child's ops are stamped with its assigned node handle (the pod,
     // guest handle 1 from the root's allocator, namespaced into vm 1's space).
-    let child_new =
-        m.ops.iter().find(|op| op.get("new").and_then(|v| v.as_str()) == Some("Sprite2D")).unwrap();
-    assert_eq!(child_new.get("__sbx"), Some(&json!(ns(1, 1))), "child ops confined to its pod");
+    let child_new = m
+        .ops
+        .iter()
+        .find(|op| op.get("new").and_then(|v| v.as_str()) == Some("Sprite2D"))
+        .unwrap();
+    assert_eq!(
+        child_new.get("__sbx"),
+        Some(&json!(ns(1, 1))),
+        "child ops confined to its pod"
+    );
     let child_set = m.ops.iter().find(|op| op.get("set").is_some()).unwrap();
     assert_eq!(child_set.get("__sbx"), Some(&json!(ns(1, 1))));
     // The containment probe ran against the parent's (unrestricted) view.
@@ -200,7 +216,11 @@ void main() {{
     // Global ids carry the owning vm in the high 32 bits; both were local cb 1.
     assert_eq!(root_cb >> 32, 1, "root's callback namespaced under vm 1");
     assert_eq!(child_cb >> 32, 2, "child's callback namespaced under vm 2");
-    assert_eq!(root_cb & 0xFFFF_FFFF, child_cb & 0xFFFF_FFFF, "both were local id 1");
+    assert_eq!(
+        root_cb & 0xFFFF_FFFF,
+        child_cb & 0xFFFF_FFFF,
+        "both were local id 1"
+    );
 
     // The engine fires both; each lands in its own VM.
     mgr.invoke("__godotDispatch", json!([root_cb, ["ping"]]));
@@ -239,11 +259,17 @@ void revoke(a) {{
 
     // Root revokes vm_manage on the child, then the child tries again.
     mgr.invoke("revoke", Value::Null);
-    mgr.runtime_mut(2).unwrap().deliver_event("again", Value::Null);
+    mgr.runtime_mut(2)
+        .unwrap()
+        .deliver_event("again", Value::Null);
     mgr.settle();
     let e = emitted(&mut mgr, 2);
     assert_eq!(e.len(), 2);
-    assert_eq!(e[1], json!(true), "vm.spawn short-circuited to null after revoke");
+    assert_eq!(
+        e[1],
+        json!(true),
+        "vm.spawn short-circuited to null after revoke"
+    );
     assert_eq!(mgr.vm_ids().len(), 3, "no fourth VM was created");
 }
 
@@ -277,7 +303,9 @@ void grant(a) {{ child.setPermission("vm_manage", true); }}
 
     // Revoke on the middle VM: the grandchild (vm 3) loses spawn too.
     mgr.invoke("revoke", Value::Null);
-    mgr.runtime_mut(3).unwrap().deliver_event("trySpawnLeaf", Value::Null);
+    mgr.runtime_mut(3)
+        .unwrap()
+        .deliver_event("trySpawnLeaf", Value::Null);
     mgr.settle();
     assert_eq!(
         emitted(&mut mgr, 3),
@@ -287,11 +315,17 @@ void grant(a) {{ child.setPermission("vm_manage", true); }}
 
     // Re-grant on the middle VM: the grandchild can spawn again.
     mgr.invoke("grant", Value::Null);
-    mgr.runtime_mut(3).unwrap().deliver_event("trySpawnLeaf", Value::Null);
+    mgr.runtime_mut(3)
+        .unwrap()
+        .deliver_event("trySpawnLeaf", Value::Null);
     mgr.settle();
     let e = emitted(&mut mgr, 3);
     assert_eq!(e[2], json!(false), "spawn works again");
-    assert_eq!(emitted(&mut mgr, 4), vec![json!("leaf")], "the new leaf booted");
+    assert_eq!(
+        emitted(&mut mgr, 4),
+        vec![json!("leaf")],
+        "the new leaf booted"
+    );
 }
 
 #[test]
@@ -405,7 +439,10 @@ void main() {{
 "#,
         dq(&middle)
     ));
-    assert!(!mgr.vm_alive(2), "middle VM terminated by the aggregate rule");
+    assert!(
+        !mgr.vm_alive(2),
+        "middle VM terminated by the aggregate rule"
+    );
     assert!(!mgr.vm_alive(3), "worker terminated with its parent");
     let root_events = emitted(&mut mgr, ROOT_VM);
     assert!(
@@ -439,7 +476,11 @@ void main() {{
     .unwrap();
     install_bridge(&mut mgr, &mock);
     mgr.run_root().unwrap();
-    assert_eq!(emitted(&mut mgr, ROOT_VM), vec![json!(true)], "spawn errored");
+    assert_eq!(
+        emitted(&mut mgr, ROOT_VM),
+        vec![json!(true)],
+        "spawn errored"
+    );
     assert_eq!(mgr.vm_ids().len(), 1, "no child VM was created");
 }
 
@@ -462,7 +503,10 @@ void ping(a) {{ child.send("hello"); }}
     ));
     mgr.invoke("ping", Value::Null);
     assert_eq!(emitted(&mut mgr, 2), vec![json!("from 1: hello")]);
-    assert_eq!(emitted(&mut mgr, ROOT_VM), vec![json!("reply from 2: ack hello")]);
+    assert_eq!(
+        emitted(&mut mgr, ROOT_VM),
+        vec![json!("reply from 2: ack hello")]
+    );
 }
 
 #[test]
@@ -488,15 +532,27 @@ void dropSandbox(a) {{ child.setPermission("scene", false); }}
             .map(|op| op.get("__sbx").cloned())
             .collect::<Vec<_>>()
     };
-    assert_eq!(tags(&mock), vec![Some(json!(ns(1, 1)))], "sandboxed at boot");
+    assert_eq!(
+        tags(&mock),
+        vec![Some(json!(ns(1, 1)))],
+        "sandboxed at boot"
+    );
 
     mgr.invoke("liftSandbox", Value::Null);
-    mgr.runtime_mut(2).unwrap().deliver_event("makeMore", Value::Null);
+    mgr.runtime_mut(2)
+        .unwrap()
+        .deliver_event("makeMore", Value::Null);
     assert_eq!(tags(&mock)[1], None, "scene access lifts the tag");
 
     mgr.invoke("dropSandbox", Value::Null);
-    mgr.runtime_mut(2).unwrap().deliver_event("makeMore", Value::Null);
-    assert_eq!(tags(&mock)[2], Some(json!(ns(1, 1))), "revocation restores the sandbox");
+    mgr.runtime_mut(2)
+        .unwrap()
+        .deliver_event("makeMore", Value::Null);
+    assert_eq!(
+        tags(&mock)[2],
+        Some(json!(ns(1, 1))),
+        "revocation restores the sandbox"
+    );
 }
 
 #[test]

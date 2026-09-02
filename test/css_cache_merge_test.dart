@@ -7,9 +7,11 @@ void main() {
 
   group('D1 — CSSParser.parse memoization', () {
     test('identical maps return the same cached CSSStyle instance', () {
-      final a = CSSParser.parse(<String, dynamic>{'width': 100, 'color': 'red'});
+      final a =
+          CSSParser.parse(<String, dynamic>{'width': 100, 'color': 'red'});
       // Distinct map object with equal content must hit the cache.
-      final b = CSSParser.parse(<String, dynamic>{'width': 100, 'color': 'red'});
+      final b =
+          CSSParser.parse(<String, dynamic>{'width': 100, 'color': 'red'});
       expect(identical(a, b), isTrue);
       expect(CSSParser.cacheSize, 1);
     });

@@ -18,7 +18,8 @@ void main() {
     GlobalStylesheetManager().clear();
   });
 
-  testWidgets('select dispatches a change event with the chosen value', (tester) async {
+  testWidgets('select dispatches a change event with the chosen value',
+      (tester) async {
     ElpianEvent? captured;
     dispatcher.globalEventHandler = (e) => captured ??= e;
 
@@ -35,7 +36,8 @@ void main() {
         ],
       },
     };
-    await tester.pumpWidget(MaterialApp(home: Scaffold(body: engine.renderFromJson(node))));
+    await tester.pumpWidget(
+        MaterialApp(home: Scaffold(body: engine.renderFromJson(node))));
     await tester.pumpAndSettle();
 
     // Open the dropdown and pick "Marble".
@@ -52,7 +54,8 @@ void main() {
     expect(captured!.currentTarget, 'offer');
   });
 
-  testWidgets('input dispatches an input event with the typed value', (tester) async {
+  testWidgets('input dispatches an input event with the typed value',
+      (tester) async {
     ElpianInputEvent? captured;
     dispatcher.globalEventHandler = (e) {
       if (e is ElpianInputEvent && e.type == 'input') captured = e;
@@ -65,7 +68,8 @@ void main() {
       'events': {'input': '__field_amount'},
       'props': {'type': 'number', 'value': '200'},
     };
-    await tester.pumpWidget(MaterialApp(home: Scaffold(body: engine.renderFromJson(node))));
+    await tester.pumpWidget(
+        MaterialApp(home: Scaffold(body: engine.renderFromJson(node))));
     await tester.pump();
 
     // Seeded from props.value, then edited.

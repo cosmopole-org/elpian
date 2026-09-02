@@ -156,7 +156,10 @@ pub struct Governor {
 
 impl Governor {
     pub fn new(limits: ResourceLimits) -> Self {
-        Governor { limits, usage: ResourceUsage::default() }
+        Governor {
+            limits,
+            usage: ResourceUsage::default(),
+        }
     }
 
     pub fn limits(&self) -> ResourceLimits {
@@ -212,7 +215,11 @@ impl Governor {
         let next = self.usage.memory_bytes.saturating_add(bytes);
         if let Some(max) = self.limits.max_memory_bytes {
             if next > max {
-                return Err(LimitError { kind: LimitKind::Memory, limit: max, requested: next });
+                return Err(LimitError {
+                    kind: LimitKind::Memory,
+                    limit: max,
+                    requested: next,
+                });
             }
         }
         self.usage.memory_bytes = next;
@@ -237,7 +244,11 @@ impl Governor {
         };
         if let Some(max) = self.limits.max_storage_bytes {
             if next > max {
-                return Err(LimitError { kind: LimitKind::Storage, limit: max, requested: next });
+                return Err(LimitError {
+                    kind: LimitKind::Storage,
+                    limit: max,
+                    requested: next,
+                });
             }
         }
         self.usage.storage_bytes = next;
@@ -249,7 +260,11 @@ impl Governor {
     pub fn set_storage_bytes(&mut self, bytes: u64) -> Result<(), LimitError> {
         if let Some(max) = self.limits.max_storage_bytes {
             if bytes > max {
-                return Err(LimitError { kind: LimitKind::Storage, limit: max, requested: bytes });
+                return Err(LimitError {
+                    kind: LimitKind::Storage,
+                    limit: max,
+                    requested: bytes,
+                });
             }
         }
         self.usage.storage_bytes = bytes;
@@ -297,7 +312,10 @@ mod tests {
 
     #[test]
     fn instruction_cap_traps_at_boundary() {
-        let mut g = Governor::new(ResourceLimits { max_instructions: Some(3), ..ResourceLimits::unlimited() });
+        let mut g = Governor::new(ResourceLimits {
+            max_instructions: Some(3),
+            ..ResourceLimits::unlimited()
+        });
         g.charge_instruction().unwrap();
         g.charge_instruction().unwrap();
         g.charge_instruction().unwrap();
@@ -317,13 +335,20 @@ mod tests {
         assert!(g.charge_instruction().is_err());
         g.begin_turn();
         g.charge_instruction().unwrap();
-        assert_eq!(g.usage().instructions, 3, "lifetime tally carries across turns");
+        assert_eq!(
+            g.usage().instructions,
+            3,
+            "lifetime tally carries across turns"
+        );
         assert_eq!(g.usage().instructions_this_turn, 1);
     }
 
     #[test]
     fn memory_charge_and_release_track_peak() {
-        let mut g = Governor::new(ResourceLimits { max_memory_bytes: Some(100), ..ResourceLimits::unlimited() });
+        let mut g = Governor::new(ResourceLimits {
+            max_memory_bytes: Some(100),
+            ..ResourceLimits::unlimited()
+        });
         g.charge_memory(60).unwrap();
         g.charge_memory(40).unwrap();
         assert_eq!(g.usage().memory_bytes, 100);
@@ -336,7 +361,10 @@ mod tests {
 
     #[test]
     fn storage_delta_can_credit() {
-        let mut g = Governor::new(ResourceLimits { max_storage_bytes: Some(1000), ..ResourceLimits::unlimited() });
+        let mut g = Governor::new(ResourceLimits {
+            max_storage_bytes: Some(1000),
+            ..ResourceLimits::unlimited()
+        });
         g.charge_storage(800).unwrap();
         assert!(g.charge_storage(300).is_err());
         g.charge_storage(-500).unwrap();
@@ -345,7 +373,10 @@ mod tests {
 
     #[test]
     fn call_depth_guards_recursion() {
-        let mut g = Governor::new(ResourceLimits { max_call_depth: Some(2), ..ResourceLimits::unlimited() });
+        let mut g = Governor::new(ResourceLimits {
+            max_call_depth: Some(2),
+            ..ResourceLimits::unlimited()
+        });
         g.enter_call().unwrap();
         g.enter_call().unwrap();
         assert!(g.enter_call().is_err());

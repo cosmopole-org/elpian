@@ -96,7 +96,10 @@ void main() {
           'zIndex': 61,
         },
         'children': [
-          {'type': 'span', 'props': {'text': 'PANEL BODY'}},
+          {
+            'type': 'span',
+            'props': {'text': 'PANEL BODY'}
+          },
         ],
       };
 
@@ -143,7 +146,8 @@ void main() {
         ],
       };
 
-  Future<void> pumpStage(WidgetTester tester, {required bool withWindow}) async {
+  Future<void> pumpStage(WidgetTester tester,
+      {required bool withWindow}) async {
     tester.view.physicalSize = mobile;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -151,12 +155,14 @@ void main() {
     final engine = ElpianEngine();
     engine.loadStylesheet(shellWindowMediaSheet());
     await tester.pumpWidget(MaterialApp(
-      home: Scaffold(body: engine.renderFromJson(stage(withWindow: withWindow))),
+      home:
+          Scaffold(body: engine.renderFromJson(stage(withWindow: withWindow))),
     ));
     await tester.pump();
   }
 
-  testWidgets('navbar paints as a content-sized strip at the top', (tester) async {
+  testWidgets('navbar paints as a content-sized strip at the top',
+      (tester) async {
     await pumpStage(tester, withWindow: false);
 
     expect(find.text('NAVBAR'), findsOneWidget);
@@ -170,7 +176,8 @@ void main() {
     expect(nav.size.height, lessThan(120));
   });
 
-  testWidgets('open panel window is not clipped to the navbar band', (tester) async {
+  testWidgets('open panel window is not clipped to the navbar band',
+      (tester) async {
     await pumpStage(tester, withWindow: true);
 
     // The navbar still shows...

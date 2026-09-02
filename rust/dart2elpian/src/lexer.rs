@@ -1,6 +1,6 @@
 //! The Dart-subset lexer: source text -> a token stream.
 
-use crate::token::{Tok, StrPart, KEYWORDS};
+use crate::token::{StrPart, Tok, KEYWORDS};
 
 // ---------------------------------------------------------------------------
 // Lexer
@@ -13,7 +13,10 @@ pub(crate) struct Lexer<'a> {
 
 impl<'a> Lexer<'a> {
     pub(crate) fn new(src: &'a str) -> Self {
-        Lexer { src: src.as_bytes(), pos: 0 }
+        Lexer {
+            src: src.as_bytes(),
+            pos: 0,
+        }
     }
 
     fn peek(&self) -> u8 {
@@ -84,7 +87,9 @@ impl<'a> Lexer<'a> {
         } {
             self.pos += 1;
         }
-        let s = std::str::from_utf8(&self.src[start..self.pos]).unwrap().to_string();
+        let s = std::str::from_utf8(&self.src[start..self.pos])
+            .unwrap()
+            .to_string();
         match s.as_str() {
             "true" => Tok::Bool(true),
             "false" => Tok::Bool(false),
@@ -99,7 +104,7 @@ impl<'a> Lexer<'a> {
     /// Annotations carry no runtime meaning here, so they are dropped.
     fn skip_annotation(&mut self) {
         self.pos += 1; // '@'
-        // dotted identifier
+                       // dotted identifier
         loop {
             while {
                 let c = self.peek();
@@ -148,7 +153,9 @@ impl<'a> Lexer<'a> {
                 return Err("bad hex literal".into());
             }
             let s = std::str::from_utf8(&self.src[hstart..self.pos]).unwrap();
-            return Ok(Tok::Int(i64::from_str_radix(s, 16).map_err(|_| "bad hex literal")?));
+            return Ok(Tok::Int(
+                i64::from_str_radix(s, 16).map_err(|_| "bad hex literal")?,
+            ));
         }
         let mut is_double = false;
         while self.peek().is_ascii_digit() {
@@ -215,7 +222,9 @@ impl<'a> Lexer<'a> {
                             _ => {}
                         }
                     }
-                    let raw = std::str::from_utf8(&self.src[start..self.pos - 1]).unwrap().to_string();
+                    let raw = std::str::from_utf8(&self.src[start..self.pos - 1])
+                        .unwrap()
+                        .to_string();
                     parts.push(StrPart::Expr(raw));
                 } else {
                     let start = self.pos;
@@ -225,7 +234,9 @@ impl<'a> Lexer<'a> {
                     } {
                         self.pos += 1;
                     }
-                    let raw = std::str::from_utf8(&self.src[start..self.pos]).unwrap().to_string();
+                    let raw = std::str::from_utf8(&self.src[start..self.pos])
+                        .unwrap()
+                        .to_string();
                     parts.push(StrPart::Expr(raw));
                 }
                 continue;
@@ -413,4 +424,3 @@ impl<'a> Lexer<'a> {
         Ok(tok)
     }
 }
-

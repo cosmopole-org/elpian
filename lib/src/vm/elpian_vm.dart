@@ -195,7 +195,8 @@ class ElpianVm implements VmRuntimeClient {
       // often serialized them before building the host-call envelope. Keep the
       // Dart HostCallHandler contract stable for both forms.
       final rawPayload = hostCallData['payload'];
-      final payload = rawPayload is String ? rawPayload : jsonEncode(rawPayload);
+      final payload =
+          rawPayload is String ? rawPayload : jsonEncode(rawPayload);
 
       // Route to the appropriate handler
       String response;

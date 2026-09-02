@@ -70,18 +70,12 @@ pub(crate) fn vstr(s: String) -> Val {
     Val::new(7, Payload::from(s))
 }
 pub(crate) fn varr(items: Vec<Val>) -> Val {
-    Val::new(
-        9,
-        Payload::from(Rc::new(RefCell::new(Array::new(items)))),
-    )
+    Val::new(9, Payload::from(Rc::new(RefCell::new(Array::new(items)))))
 }
 pub(crate) fn vobj(typ: i64, map: ValMap) -> Val {
     Val::new(
         8,
-        Payload::from(Rc::new(RefCell::new(Object::new(
-            typ,
-            ValGroup::new(map),
-        )))),
+        Payload::from(Rc::new(RefCell::new(Object::new(typ, ValGroup::new(map))))),
     )
 }
 
@@ -115,7 +109,10 @@ pub(crate) fn num_result(x: f64) -> Val {
 
 pub(crate) fn arity(name: &str, args: &[Val], n: usize) -> Result<(), String> {
     if args.len() != n {
-        Err(format!("{name} expects {n} argument(s), got {}", args.len()))
+        Err(format!(
+            "{name} expects {n} argument(s), got {}",
+            args.len()
+        ))
     } else {
         Ok(())
     }
@@ -123,7 +120,10 @@ pub(crate) fn arity(name: &str, args: &[Val], n: usize) -> Result<(), String> {
 
 pub(crate) fn at_least(name: &str, args: &[Val], n: usize) -> Result<(), String> {
     if args.len() < n {
-        Err(format!("{name} expects at least {n} argument(s), got {}", args.len()))
+        Err(format!(
+            "{name} expects at least {n} argument(s), got {}",
+            args.len()
+        ))
     } else {
         Ok(())
     }
@@ -156,8 +156,12 @@ pub fn val_to_json(v: &Val) -> serde_json::Value {
         1 => J::from(v.as_i16()),
         2 => J::from(v.as_i32()),
         3 => J::from(v.as_i64()),
-        4 => serde_json::Number::from_f64(v.as_f32() as f64).map(J::Number).unwrap_or(J::Null),
-        5 => serde_json::Number::from_f64(v.as_f64()).map(J::Number).unwrap_or(J::Null),
+        4 => serde_json::Number::from_f64(v.as_f32() as f64)
+            .map(J::Number)
+            .unwrap_or(J::Null),
+        5 => serde_json::Number::from_f64(v.as_f64())
+            .map(J::Number)
+            .unwrap_or(J::Null),
         6 => J::Bool(v.as_bool()),
         7 => J::String(v.as_string()),
         8 => {
@@ -212,41 +216,181 @@ pub fn json_to_val(j: &serde_json::Value) -> Val {
 /// in sync with `invoke`.
 pub const BUILTINS: &[&str] = &[
     // math — constants
-    "PI", "E", "TAU", "SQRT2", "LN2", "LN10", "INF", "NAN",
+    "PI",
+    "E",
+    "TAU",
+    "SQRT2",
+    "LN2",
+    "LN10",
+    "INF",
+    "NAN",
     // math — unary
-    "abs", "floor", "ceil", "round", "trunc", "fract", "sign", "sqrt", "cbrt", "exp", "expm1",
-    "ln", "log2", "log10", "sin", "cos", "tan", "asin", "acos", "atan", "sinh", "cosh", "tanh",
-    "asinh", "acosh", "atanh", "degrees", "radians", "isNaN", "isFinite", "factorial",
+    "abs",
+    "floor",
+    "ceil",
+    "round",
+    "trunc",
+    "fract",
+    "sign",
+    "sqrt",
+    "cbrt",
+    "exp",
+    "expm1",
+    "ln",
+    "log2",
+    "log10",
+    "sin",
+    "cos",
+    "tan",
+    "asin",
+    "acos",
+    "atan",
+    "sinh",
+    "cosh",
+    "tanh",
+    "asinh",
+    "acosh",
+    "atanh",
+    "degrees",
+    "radians",
+    "isNaN",
+    "isFinite",
+    "factorial",
     // math — binary / variadic
-    "pow", "log", "atan2", "hypot", "min", "max", "clamp", "gcd", "lcm", "sum", "mean",
-    "intDiv", "remainder", "isEven", "isOdd", "random", "seedRandom",
+    "pow",
+    "log",
+    "atan2",
+    "hypot",
+    "min",
+    "max",
+    "clamp",
+    "gcd",
+    "lcm",
+    "sum",
+    "mean",
+    "intDiv",
+    "remainder",
+    "isEven",
+    "isOdd",
+    "random",
+    "seedRandom",
     // integer bit operations + 32-bit wrap conversions
-    "bitAnd", "bitOr", "bitXor", "bitNot", "shl", "shr", "ushr", "toInt32", "toUint32",
+    "bitAnd",
+    "bitOr",
+    "bitXor",
+    "bitNot",
+    "shl",
+    "shr",
+    "ushr",
+    "toInt32",
+    "toUint32",
     // radix / lenient numeric parsing
-    "toRadix", "parseRadix", "tryNum", "compareTo",
+    "toRadix",
+    "parseRadix",
+    "tryNum",
+    "compareTo",
     // foundation — reflection / conversion + codecs
-    "typeOf", "len", "length", "isEmpty", "isNotEmpty", "str", "num", "int", "bool", "isNull",
-    "jsonParse", "jsonStringify",
-    "base64Encode", "base64Decode", "utf8Encode", "utf8Decode",
+    "typeOf",
+    "len",
+    "length",
+    "isEmpty",
+    "isNotEmpty",
+    "str",
+    "num",
+    "int",
+    "bool",
+    "isNull",
+    "jsonParse",
+    "jsonStringify",
+    "base64Encode",
+    "base64Decode",
+    "utf8Encode",
+    "utf8Decode",
     // foundation — numeric members (universal names for the num core-type members)
-    "toDouble", "isNegative", "toString", "toStringAsFixed",
+    "toDouble",
+    "isNegative",
+    "toString",
+    "toStringAsFixed",
     // foundation — object / map
-    "keys", "values", "entries", "has", "get", "setKey", "delKey", "merge", "__setIndex",
-    "remove", "putIfAbsent", "hasValue",
+    "keys",
+    "values",
+    "entries",
+    "has",
+    "get",
+    "setKey",
+    "delKey",
+    "merge",
+    "__setIndex",
+    "remove",
+    "putIfAbsent",
+    "hasValue",
     // foundation — array
-    "push", "emit", "pop", "shift", "unshift", "slice", "concat", "reverse", "reversed",
-    "contains", "indexOf", "join", "range", "first", "last", "sort", "fill",
-    "pushAll", "removeAt", "insert", "clear", "setAt", "at", "lastIndexOf", "splice",
-    "flatten", "take", "skip", "toSet", "shuffle",
+    "push",
+    "emit",
+    "pop",
+    "shift",
+    "unshift",
+    "slice",
+    "concat",
+    "reverse",
+    "reversed",
+    "contains",
+    "indexOf",
+    "join",
+    "range",
+    "first",
+    "last",
+    "sort",
+    "fill",
+    "pushAll",
+    "removeAt",
+    "insert",
+    "clear",
+    "setAt",
+    "at",
+    "lastIndexOf",
+    "splice",
+    "flatten",
+    "take",
+    "skip",
+    "toSet",
+    "shuffle",
     // foundation — string
-    "upper", "lower", "trim", "trimStart", "trimEnd", "split", "substring", "charAt", "replace",
-    "replaceFirst", "repeat", "startsWith", "endsWith", "padStart", "padEnd", "ord", "chr",
-    "codeUnitAt", "codeUnits",
+    "upper",
+    "lower",
+    "trim",
+    "trimStart",
+    "trimEnd",
+    "split",
+    "substring",
+    "charAt",
+    "replace",
+    "replaceFirst",
+    "repeat",
+    "startsWith",
+    "endsWith",
+    "padStart",
+    "padEnd",
+    "ord",
+    "chr",
+    "codeUnitAt",
+    "codeUnits",
     // oop
-    "class", "extend", "new", "method", "field", "setField", "isInstance", "className",
-    "parentMethod", "classOf", "superMethod",
+    "class",
+    "extend",
+    "new",
+    "method",
+    "field",
+    "setField",
+    "isInstance",
+    "className",
+    "parentMethod",
+    "classOf",
+    "superMethod",
     // closures
-    "cell", "cellGet", "cellSet",
+    "cell",
+    "cellGet",
+    "cellSet",
 ];
 
 /// Set form of [`BUILTINS`] for O(1) membership tests. `is_builtin` is called on
@@ -280,7 +424,7 @@ pub fn invoke(name: &str, args: &[Val]) -> Result<Val, String> {
         // stays a float (so `(-3.0).abs()` is the double `3.0`, not the int `3`).
         "abs" => {
             arity(name, args, 1)?;
-            if matches!(args[0].typ, 1 | 2 | 3) {
+            if matches!(args[0].typ, 1..=3) {
                 Ok(vi64(as_int(&args[0])?.abs()))
             } else {
                 Ok(vf64(as_num(&args[0])?.abs()))
@@ -384,7 +528,7 @@ pub fn invoke(name: &str, args: &[Val]) -> Result<Val, String> {
         // `int(a / b)`, …). Division by zero is an error (a trap in the guest).
         "intDiv" => {
             arity(name, args, 2)?;
-            if matches!(args[0].typ, 1 | 2 | 3) && matches!(args[1].typ, 1 | 2 | 3) {
+            if matches!(args[0].typ, 1..=3) && matches!(args[1].typ, 1..=3) {
                 let a = as_int(&args[0])?;
                 let b = as_int(&args[1])?;
                 if b == 0 {
@@ -445,7 +589,7 @@ pub fn invoke(name: &str, args: &[Val]) -> Result<Val, String> {
         // member of numbers.
         "remainder" => {
             arity(name, args, 2)?;
-            if matches!(args[0].typ, 1 | 2 | 3) && matches!(args[1].typ, 1 | 2 | 3) {
+            if matches!(args[0].typ, 1..=3) && matches!(args[1].typ, 1..=3) {
                 let b = as_int(&args[1])?;
                 if b == 0 {
                     return Err("remainder by zero".to_string());
@@ -637,11 +781,15 @@ pub fn invoke(name: &str, args: &[Val]) -> Result<Val, String> {
         // always keep a decimal point (`3.0`), matching Dart's `num.toString()`.
         "toString" => {
             arity(name, args, 1)?;
-            if matches!(args[0].typ, 1 | 2 | 3) {
+            if matches!(args[0].typ, 1..=3) {
                 Ok(vstr(as_int(&args[0])?.to_string()))
             } else if matches!(args[0].typ, 4 | 5) {
                 let d = as_num(&args[0])?;
-                Ok(vstr(if d.fract() == 0.0 { format!("{d:.1}") } else { format!("{d}") }))
+                Ok(vstr(if d.fract() == 0.0 {
+                    format!("{d:.1}")
+                } else {
+                    format!("{d}")
+                }))
             } else {
                 // Any other value stringifies via the VM's display coercion, so
                 // `x.toString()` is total.
@@ -673,7 +821,9 @@ pub fn invoke(name: &str, args: &[Val]) -> Result<Val, String> {
         "utf8Encode" => {
             arity(name, args, 1)?;
             let s = expect_string(name, &args[0])?;
-            Ok(varr(s.into_bytes().into_iter().map(|b| vi64(b as i64)).collect()))
+            Ok(varr(
+                s.into_bytes().into_iter().map(|b| vi64(b as i64)).collect(),
+            ))
         }
         "utf8Decode" => {
             arity(name, args, 1)?;
@@ -703,18 +853,33 @@ pub fn invoke(name: &str, args: &[Val]) -> Result<Val, String> {
         "values" => {
             arity(name, args, 1)?;
             let o = expect_object(name, &args[0])?;
-            let mut pairs: Vec<(String, Val)> =
-                o.borrow().data.data.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+            let mut pairs: Vec<(String, Val)> = o
+                .borrow()
+                .data
+                .data
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
             pairs.sort_by(|a, b| a.0.cmp(&b.0));
             Ok(varr(pairs.into_iter().map(|(_, v)| v).collect()))
         }
         "entries" => {
             arity(name, args, 1)?;
             let o = expect_object(name, &args[0])?;
-            let mut pairs: Vec<(String, Val)> =
-                o.borrow().data.data.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+            let mut pairs: Vec<(String, Val)> = o
+                .borrow()
+                .data
+                .data
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
             pairs.sort_by(|a, b| a.0.cmp(&b.0));
-            Ok(varr(pairs.into_iter().map(|(k, v)| varr(vec![vstr(k), v])).collect()))
+            Ok(varr(
+                pairs
+                    .into_iter()
+                    .map(|(k, v)| varr(vec![vstr(k), v]))
+                    .collect(),
+            ))
         }
         "has" => {
             arity(name, args, 2)?;
@@ -736,7 +901,13 @@ pub fn invoke(name: &str, args: &[Val]) -> Result<Val, String> {
                 9 => {
                     let a = args[0].as_array();
                     let idx = as_int(&args[1])?;
-                    let v = { a.borrow().data.get(idx as usize).cloned().unwrap_or(default) };
+                    let v = {
+                        a.borrow()
+                            .data
+                            .get(idx as usize)
+                            .cloned()
+                            .unwrap_or(default)
+                    };
                     Ok(v)
                 }
                 _ => Err("get expects an object or array".to_string()),
@@ -771,9 +942,9 @@ pub fn invoke(name: &str, args: &[Val]) -> Result<Val, String> {
                 o.borrow_mut().data.data.insert(key, args[2].clone());
             } else if c.typ == 9 {
                 let a = c.as_array();
-                let idx = as_num(&args[1]).map_err(|_| {
-                    format!("{name}: array index must be a number")
-                })? as i64;
+                let idx = as_num(&args[1])
+                    .map_err(|_| format!("{name}: array index must be a number"))?
+                    as i64;
                 if idx >= 0 {
                     let i = idx as usize;
                     let mut b = a.borrow_mut();
@@ -832,7 +1003,11 @@ pub fn invoke(name: &str, args: &[Val]) -> Result<Val, String> {
                 return Ok(vbool(pos.is_some()));
             }
             let o = expect_object(name, &args[0])?;
-            let removed = o.borrow_mut().data.data.remove(&expect_string(name, &args[1])?);
+            let removed = o
+                .borrow_mut()
+                .data
+                .data
+                .remove(&expect_string(name, &args[1])?);
             Ok(removed.unwrap_or_else(vnull))
         }
         // Insert `value` under `key` only if absent, then return the value now
@@ -941,11 +1116,7 @@ pub fn invoke(name: &str, args: &[Val]) -> Result<Val, String> {
                     out.extend(b_ref.data.iter().cloned());
                     Ok(varr(out))
                 }
-                (7, _) | (_, 7) => Ok(vstr(format!(
-                    "{}{}",
-                    str_of(&args[0]),
-                    str_of(&args[1])
-                ))),
+                (7, _) | (_, 7) => Ok(vstr(format!("{}{}", str_of(&args[0]), str_of(&args[1])))),
                 _ => Err("concat expects two arrays or a string".to_string()),
             }
         }
@@ -1074,7 +1245,13 @@ pub fn invoke(name: &str, args: &[Val]) -> Result<Val, String> {
                         .get(2)
                         .map(as_int)
                         .transpose()?
-                        .map(|i| if i < 0 { (b.data.len() as i64 + i).max(-1) } else { i })
+                        .map(|i| {
+                            if i < 0 {
+                                (b.data.len() as i64 + i).max(-1)
+                            } else {
+                                i
+                            }
+                        })
                         .unwrap_or(b.data.len() as i64 - 1);
                     let mut found = -1i64;
                     for (i, v) in b.data.iter().enumerate() {
@@ -1088,7 +1265,9 @@ pub fn invoke(name: &str, args: &[Val]) -> Result<Val, String> {
                     let hay = args[0].as_string();
                     let needle = str_of(&args[1]);
                     Ok(vi64(
-                        hay.rfind(&needle).map(|b| hay[..b].chars().count() as i64).unwrap_or(-1),
+                        hay.rfind(&needle)
+                            .map(|b| hay[..b].chars().count() as i64)
+                            .unwrap_or(-1),
                     ))
                 }
                 _ => Err("lastIndexOf expects a string or array".to_string()),
@@ -1137,7 +1316,10 @@ pub fn invoke(name: &str, args: &[Val]) -> Result<Val, String> {
                 Some(v) => (as_int(v)?.max(0) as usize).min(len - start),
                 None => len - start,
             };
-            let removed: Vec<Val> = b.data.splice(start..start + del, args[3..].iter().cloned()).collect();
+            let removed: Vec<Val> = b
+                .data
+                .splice(start..start + del, args[3..].iter().cloned())
+                .collect();
             Ok(varr(removed))
         }
         // A new list with nested lists expanded in place, `depth` levels deep
@@ -1164,7 +1346,12 @@ pub fn invoke(name: &str, args: &[Val]) -> Result<Val, String> {
         "hasValue" => {
             arity(name, args, 2)?;
             let o = expect_object(name, &args[0])?;
-            let found = o.borrow().data.data.values().any(|v| values_equal(v, &args[1]));
+            let found = o
+                .borrow()
+                .data
+                .data
+                .values()
+                .any(|v| values_equal(v, &args[1]));
             Ok(vbool(found))
         }
         // The string's UTF-16-ish code units as a list of ints (chars here — the
@@ -1187,7 +1374,13 @@ pub fn invoke(name: &str, args: &[Val]) -> Result<Val, String> {
                 }));
             }
             let (a, b) = (as_num(&args[0])?, as_num(&args[1])?);
-            Ok(vi64(if a < b { -1 } else if a > b { 1 } else { 0 }))
+            Ok(vi64(if a < b {
+                -1
+            } else if a > b {
+                1
+            } else {
+                0
+            }))
         }
         "join" => {
             at_least(name, args, 1)?;
@@ -1246,7 +1439,7 @@ pub fn invoke(name: &str, args: &[Val]) -> Result<Val, String> {
                     .data
                     .sort_by(|x, y| as_num(x).unwrap().partial_cmp(&as_num(y).unwrap()).unwrap());
             } else {
-                a.borrow_mut().data.sort_by(|x, y| str_of(x).cmp(&str_of(y)));
+                a.borrow_mut().data.sort_by_key(str_of);
             }
             Ok(args[0].clone())
         }
@@ -1376,11 +1569,15 @@ pub fn invoke(name: &str, args: &[Val]) -> Result<Val, String> {
         }
         "startsWith" => {
             arity(name, args, 2)?;
-            Ok(vbool(expect_string(name, &args[0])?.starts_with(&expect_string(name, &args[1])?)))
+            Ok(vbool(
+                expect_string(name, &args[0])?.starts_with(&expect_string(name, &args[1])?),
+            ))
         }
         "endsWith" => {
             arity(name, args, 2)?;
-            Ok(vbool(expect_string(name, &args[0])?.ends_with(&expect_string(name, &args[1])?)))
+            Ok(vbool(
+                expect_string(name, &args[0])?.ends_with(&expect_string(name, &args[1])?),
+            ))
         }
         "padStart" => pad(name, args, true),
         "padEnd" => pad(name, args, false),
@@ -1412,7 +1609,14 @@ pub fn invoke(name: &str, args: &[Val]) -> Result<Val, String> {
             arity(name, args, 2)?;
             let o = expect_object(name, &args[0])?;
             let key = expect_string(name, &args[1])?;
-            let v = { o.borrow().data.data.get(&key).cloned().unwrap_or_else(vnull) };
+            let v = {
+                o.borrow()
+                    .data
+                    .data
+                    .get(&key)
+                    .cloned()
+                    .unwrap_or_else(vnull)
+            };
             Ok(v)
         }
         "setField" => {
@@ -1433,26 +1637,43 @@ pub fn invoke(name: &str, args: &[Val]) -> Result<Val, String> {
             }
             let o = args[0].as_object();
             let b = o.borrow();
-            Ok(b.data.data.get("__class_name").cloned().unwrap_or_else(vnull))
+            Ok(b.data
+                .data
+                .get("__class_name")
+                .cloned()
+                .unwrap_or_else(vnull))
         }
 
         // ---- closures -------------------------------------------------------
         "cell" => {
             at_least(name, args, 0)?;
             let mut m = ValMap::default();
-            m.insert("value".to_string(), args.first().cloned().unwrap_or_else(vnull));
+            m.insert(
+                "value".to_string(),
+                args.first().cloned().unwrap_or_else(vnull),
+            );
             Ok(vobj(CELL_TYPE, m))
         }
         "cellGet" => {
             arity(name, args, 1)?;
             let o = expect_object(name, &args[0])?;
-            let v = { o.borrow().data.data.get("value").cloned().unwrap_or_else(vnull) };
+            let v = {
+                o.borrow()
+                    .data
+                    .data
+                    .get("value")
+                    .cloned()
+                    .unwrap_or_else(vnull)
+            };
             Ok(v)
         }
         "cellSet" => {
             arity(name, args, 2)?;
             let o = expect_object(name, &args[0])?;
-            o.borrow_mut().data.data.insert("value".to_string(), args[1].clone());
+            o.borrow_mut()
+                .data
+                .data
+                .insert("value".to_string(), args[1].clone());
             Ok(args[0].clone())
         }
 
@@ -1481,7 +1702,11 @@ pub(crate) fn binary(name: &str, args: &[Val], f: impl Fn(f64, f64) -> f64) -> R
     Ok(num_result(f(as_num(&args[0])?, as_num(&args[1])?)))
 }
 
-pub(crate) fn str_map(name: &str, args: &[Val], f: impl Fn(String) -> String) -> Result<Val, String> {
+pub(crate) fn str_map(
+    name: &str,
+    args: &[Val],
+    f: impl Fn(String) -> String,
+) -> Result<Val, String> {
     arity(name, args, 1)?;
     Ok(vstr(f(expect_string(name, &args[0])?)))
 }
@@ -1499,8 +1724,12 @@ pub(crate) fn pad(name: &str, args: &[Val], start: bool) -> Result<Val, String> 
     if len >= width {
         return Ok(vstr(s));
     }
-    let fill: String = std::iter::repeat(pad_char).take(width - len).collect();
-    Ok(vstr(if start { format!("{fill}{s}") } else { format!("{s}{fill}") }))
+    let fill: String = std::iter::repeat_n(pad_char, width - len).collect();
+    Ok(vstr(if start {
+        format!("{fill}{s}")
+    } else {
+        format!("{s}{fill}")
+    }))
 }
 
 pub(crate) fn expect_object(name: &str, v: &Val) -> Result<Rc<RefCell<Object>>, String> {
@@ -1544,21 +1773,36 @@ pub(crate) fn expect_bytes(name: &str, v: &Val) -> Result<Vec<u8>, String> {
 const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 pub(crate) fn base64_encode(data: &[u8]) -> String {
-    let mut out = String::with_capacity((data.len() + 2) / 3 * 4);
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
     for chunk in data.chunks(3) {
-        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let b = [
+            chunk[0],
+            *chunk.get(1).unwrap_or(&0),
+            *chunk.get(2).unwrap_or(&0),
+        ];
         let n = ((b[0] as u32) << 16) | ((b[1] as u32) << 8) | (b[2] as u32);
         out.push(B64[((n >> 18) & 63) as usize] as char);
         out.push(B64[((n >> 12) & 63) as usize] as char);
-        out.push(if chunk.len() > 1 { B64[((n >> 6) & 63) as usize] as char } else { '=' });
-        out.push(if chunk.len() > 2 { B64[(n & 63) as usize] as char } else { '=' });
+        out.push(if chunk.len() > 1 {
+            B64[((n >> 6) & 63) as usize] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            B64[(n & 63) as usize] as char
+        } else {
+            '='
+        });
     }
     out
 }
 
 pub(crate) fn base64_decode(s: &str) -> Result<Vec<u8>, String> {
     let inv = |c: u8| -> Option<u32> { B64.iter().position(|&x| x == c).map(|p| p as u32) };
-    let clean: Vec<u8> = s.bytes().filter(|&c| c != b'=' && !c.is_ascii_whitespace()).collect();
+    let clean: Vec<u8> = s
+        .bytes()
+        .filter(|&c| c != b'=' && !c.is_ascii_whitespace())
+        .collect();
     let mut out = Vec::with_capacity(clean.len() / 4 * 3);
     for chunk in clean.chunks(4) {
         let mut n = 0u32;
@@ -1666,8 +1910,12 @@ pub(crate) fn oop_extend(args: &[Val]) -> Result<Val, String> {
     let defaults = args.get(2).cloned().unwrap_or_else(vnull);
     let methods = args.get(3).cloned().unwrap_or_else(vnull);
 
-    let merged_defaults = merge_objects(class_field(&parent, "__defaults"), normalize_object(defaults));
-    let merged_methods = merge_objects(class_field(&parent, "__methods"), normalize_object(methods));
+    let merged_defaults = merge_objects(
+        class_field(&parent, "__defaults"),
+        normalize_object(defaults),
+    );
+    let merged_methods =
+        merge_objects(class_field(&parent, "__methods"), normalize_object(methods));
 
     let mut m = ValMap::default();
     m.insert("__class_name".to_string(), vstr(name));
@@ -1708,7 +1956,10 @@ pub(crate) fn oop_new(args: &[Val]) -> Result<Val, String> {
             }
         }
     }
-    fields.insert("__class_name".to_string(), class_field(&class, "__class_name"));
+    fields.insert(
+        "__class_name".to_string(),
+        class_field(&class, "__class_name"),
+    );
     fields.insert("__class".to_string(), class);
     Ok(vobj(INSTANCE_TYPE, fields))
 }
@@ -1767,12 +2018,18 @@ pub(crate) fn super_method(args: &[Val]) -> Result<Val, String> {
         let (entry, parent) = {
             let p = proto.as_object();
             let b = p.borrow();
-            (b.data.data.get(&name).cloned(), b.data.data.get("__parent").cloned())
+            (
+                b.data.data.get(&name).cloned(),
+                b.data.data.get("__parent").cloned(),
+            )
         };
         if let Some(m) = entry {
             if m.typ == 10 {
                 let bound = m.as_func().borrow().bind(receiver);
-                return Ok(Val { typ: 10, data: Payload::from(Rc::new(RefCell::new(bound))) });
+                return Ok(Val {
+                    typ: 10,
+                    data: Payload::from(Rc::new(RefCell::new(bound))),
+                });
             }
             return Ok(m);
         }
@@ -1788,7 +2045,13 @@ pub(crate) fn lookup_method(class: &Val, name: &str) -> Option<Val> {
     if class.typ != 8 {
         return None;
     }
-    let methods = class.as_object().borrow().data.data.get("__methods").cloned();
+    let methods = class
+        .as_object()
+        .borrow()
+        .data
+        .data
+        .get("__methods")
+        .cloned();
     if let Some(m) = methods {
         if m.typ == 8 {
             if let Some(f) = m.as_object().borrow().data.data.get(name).cloned() {
@@ -1809,14 +2072,20 @@ pub(crate) fn is_instance_of(inst: &Val, class: &Val) -> bool {
         .data
         .data
         .get("__class_name")
-        .map(|n| str_of(n))
+        .map(str_of)
         .unwrap_or_default();
     let mut cur = inst.as_object().borrow().data.data.get("__class").cloned();
     while let Some(c) = cur {
         if c.typ != 8 {
             break;
         }
-        let cname = c.as_object().borrow().data.data.get("__class_name").map(|n| str_of(n));
+        let cname = c
+            .as_object()
+            .borrow()
+            .data
+            .data
+            .get("__class_name")
+            .map(str_of);
         if cname.as_deref() == Some(target.as_str()) {
             return true;
         }
@@ -1877,8 +2146,12 @@ pub(crate) fn copy_value(v: &Val) -> Val {
         8 => {
             let src = v.as_object();
             let b = src.borrow();
-            let m: ValMap =
-                b.data.data.iter().map(|(k, val)| (k.clone(), copy_value(val))).collect();
+            let m: ValMap = b
+                .data
+                .data
+                .iter()
+                .map(|(k, val)| (k.clone(), copy_value(val)))
+                .collect();
             vobj(b.typ, m)
         }
         9 => {
@@ -1898,30 +2171,61 @@ mod tests {
     fn math_core() {
         // Whole results collapse to integers (num_result); fractional stay f64.
         assert_eq!(invoke("sqrt", &[vf64(16.0)]).unwrap().as_i64(), 4);
-        assert!((invoke("sqrt", &[vf64(2.0)]).unwrap().as_f64() - std::f64::consts::SQRT_2).abs() < 1e-12);
+        assert!(
+            (invoke("sqrt", &[vf64(2.0)]).unwrap().as_f64() - std::f64::consts::SQRT_2).abs()
+                < 1e-12
+        );
         assert_eq!(invoke("abs", &[vi64(-7)]).unwrap().as_i64(), 7);
         assert_eq!(invoke("pow", &[vi64(2), vi64(10)]).unwrap().as_i64(), 1024);
         assert_eq!(invoke("gcd", &[vi64(54), vi64(24)]).unwrap().as_i64(), 6);
-        assert_eq!(invoke("max", &[vi64(3), vi64(9), vi64(5)]).unwrap().as_i64(), 9);
-        assert_eq!(invoke("clamp", &[vi64(12), vi64(0), vi64(10)]).unwrap().as_i64(), 10);
+        assert_eq!(
+            invoke("max", &[vi64(3), vi64(9), vi64(5)])
+                .unwrap()
+                .as_i64(),
+            9
+        );
+        assert_eq!(
+            invoke("clamp", &[vi64(12), vi64(0), vi64(10)])
+                .unwrap()
+                .as_i64(),
+            10
+        );
         assert_eq!(invoke("factorial", &[vi64(5)]).unwrap().as_i64(), 120);
         assert!((invoke("PI", &[]).unwrap().as_f64() - std::f64::consts::PI).abs() < 1e-12);
-        assert!(invoke("isNaN", &[invoke("NAN", &[]).unwrap()]).unwrap().as_bool());
+        assert!(invoke("isNaN", &[invoke("NAN", &[]).unwrap()])
+            .unwrap()
+            .as_bool());
     }
 
     #[test]
     fn foundation_collections() {
         let arr = varr(vec![vi64(3), vi64(1), vi64(2)]);
-        assert_eq!(invoke("len", &[arr.clone()]).unwrap().as_i64(), 3);
+        assert_eq!(
+            invoke("len", std::slice::from_ref(&arr)).unwrap().as_i64(),
+            3
+        );
         invoke("push", &[arr.clone(), vi64(9)]).unwrap();
-        assert_eq!(invoke("len", &[arr.clone()]).unwrap().as_i64(), 4);
+        assert_eq!(
+            invoke("len", std::slice::from_ref(&arr)).unwrap().as_i64(),
+            4
+        );
         // push is variadic, like JS `Array.prototype.push(...items)` — the
         // transpiler emits `push(xs, a, b, c)` for `xs.push(a, b, c)`.
         invoke("push", &[arr.clone(), vi64(5), vi64(6), vi64(7)]).unwrap();
-        assert_eq!(invoke("len", &[arr.clone()]).unwrap().as_i64(), 7);
+        assert_eq!(
+            invoke("len", std::slice::from_ref(&arr)).unwrap().as_i64(),
+            7
+        );
         let sorted = invoke("sort", &[varr(vec![vi64(3), vi64(1), vi64(2)])]).unwrap();
         assert_eq!(sorted.as_array().borrow().data[0].as_i64(), 1);
-        let joined = invoke("join", &[varr(vec![vstr("a".into()), vstr("b".into())]), vstr("-".into())]).unwrap();
+        let joined = invoke(
+            "join",
+            &[
+                varr(vec![vstr("a".into()), vstr("b".into())]),
+                vstr("-".into()),
+            ],
+        )
+        .unwrap();
         assert_eq!(joined.as_string(), "a-b");
         let r = invoke("range", &[vi64(0), vi64(5)]).unwrap();
         assert_eq!(r.as_array().borrow().data.len(), 5);
@@ -1929,7 +2233,10 @@ mod tests {
 
     #[test]
     fn foundation_strings_and_json() {
-        assert_eq!(invoke("upper", &[vstr("abc".into())]).unwrap().as_string(), "ABC");
+        assert_eq!(
+            invoke("upper", &[vstr("abc".into())]).unwrap().as_string(),
+            "ABC"
+        );
         let parts = invoke("split", &[vstr("a,b,c".into()), vstr(",".into())]).unwrap();
         assert_eq!(parts.as_array().borrow().data.len(), 3);
         let parsed = invoke("jsonParse", &[vstr(r#"{"x":1,"y":[2,3]}"#.into())]).unwrap();
@@ -1945,12 +2252,15 @@ mod tests {
             let mut m = ValMap::default();
             m.insert("legs".to_string(), {
                 use crate::sdk::data::Function;
-                Val::new(10, Payload::from(Rc::new(RefCell::new(Function::new(
-                    "legs".into(),
-                    0,
-                    0,
-                    vec!["self".into()],
-                )))))
+                Val::new(
+                    10,
+                    Payload::from(Rc::new(RefCell::new(Function::new(
+                        "legs".into(),
+                        0,
+                        0,
+                        vec!["self".into()],
+                    )))),
+                )
             });
             m
         });
@@ -1968,15 +2278,33 @@ mod tests {
             m.insert("name".to_string(), vstr("dog".into()));
             m
         });
-        let dog = invoke("extend", &[animal.clone(), vstr("Dog".into()), dog_defaults, vnull()]).unwrap();
+        let dog = invoke(
+            "extend",
+            &[animal.clone(), vstr("Dog".into()), dog_defaults, vnull()],
+        )
+        .unwrap();
 
-        let rex = invoke("new", &[dog.clone()]).unwrap();
-        assert_eq!(invoke("field", &[rex.clone(), vstr("name".into())]).unwrap().as_string(), "dog");
-        assert!(invoke("isInstance", &[rex.clone(), dog.clone()]).unwrap().as_bool());
+        let rex = invoke("new", std::slice::from_ref(&dog)).unwrap();
+        assert_eq!(
+            invoke("field", &[rex.clone(), vstr("name".into())])
+                .unwrap()
+                .as_string(),
+            "dog"
+        );
+        assert!(invoke("isInstance", &[rex.clone(), dog.clone()])
+            .unwrap()
+            .as_bool());
         // Inheritance: a Dog is also an Animal.
-        assert!(invoke("isInstance", &[rex.clone(), animal.clone()]).unwrap().as_bool());
+        assert!(invoke("isInstance", &[rex.clone(), animal.clone()])
+            .unwrap()
+            .as_bool());
         // The inherited method resolves to a function value.
-        assert_eq!(invoke("method", &[rex.clone(), vstr("legs".into())]).unwrap().typ, 10);
+        assert_eq!(
+            invoke("method", &[rex.clone(), vstr("legs".into())])
+                .unwrap()
+                .typ,
+            10
+        );
         assert_eq!(invoke("className", &[rex]).unwrap().as_string(), "Dog");
     }
 
@@ -1988,12 +2316,16 @@ mod tests {
             m
         });
         let c = invoke("class", &[vstr("Box".into()), defaults, vnull()]).unwrap();
-        let a = invoke("new", &[c.clone()]).unwrap();
+        let a = invoke("new", std::slice::from_ref(&c)).unwrap();
         let b = invoke("new", &[c]).unwrap();
         let a_tags = invoke("field", &[a, vstr("tags".into())]).unwrap();
         invoke("push", &[a_tags, vi64(1)]).unwrap();
         let b_tags = invoke("field", &[b, vstr("tags".into())]).unwrap();
-        assert_eq!(b_tags.as_array().borrow().data.len(), 0, "instance b unaffected");
+        assert_eq!(
+            b_tags.as_array().borrow().data.len(),
+            0,
+            "instance b unaffected"
+        );
     }
 
     #[test]
@@ -2002,23 +2334,38 @@ mod tests {
         // name reaching the *same* implementation — no separate `Type.method`
         // surface, no proxy. A member call is just `invoke(name, [recv, ..args])`.
         let list = varr(vec![vi64(1), vi64(2), vi64(3)]);
-        assert!(invoke("contains", &[list.clone(), vi64(2)]).unwrap().as_bool());
-        assert_eq!(invoke("upper", &[vstr("abc".into())]).unwrap().as_string(), "ABC");
+        assert!(invoke("contains", &[list.clone(), vi64(2)])
+            .unwrap()
+            .as_bool());
+        assert_eq!(
+            invoke("upper", &[vstr("abc".into())]).unwrap().as_string(),
+            "ABC"
+        );
 
         // `reversed` copies (non-mutating), unlike the in-place `reverse`.
         let src = varr(vec![vi64(1), vi64(2), vi64(3)]);
-        let rev = invoke("reversed", &[src.clone()]).unwrap();
+        let rev = invoke("reversed", std::slice::from_ref(&src)).unwrap();
         assert_eq!(rev.as_array().borrow().data[0].as_i64(), 3);
-        assert_eq!(src.as_array().borrow().data[0].as_i64(), 1, "receiver untouched");
+        assert_eq!(
+            src.as_array().borrow().data[0].as_i64(),
+            1,
+            "receiver untouched"
+        );
 
         // `extend` appends in place and returns null; `removeAt`/`insert`/`clear`.
         let xs = varr(vec![vi64(1)]);
         invoke("pushAll", &[xs.clone(), varr(vec![vi64(2), vi64(3)])]).unwrap();
-        assert_eq!(invoke("len", &[xs.clone()]).unwrap().as_i64(), 3);
+        assert_eq!(
+            invoke("len", std::slice::from_ref(&xs)).unwrap().as_i64(),
+            3
+        );
         invoke("insert", &[xs.clone(), vi64(0), vi64(9)]).unwrap();
         assert_eq!(xs.as_array().borrow().data[0].as_i64(), 9);
-        assert_eq!(invoke("removeAt", &[xs.clone(), vi64(0)]).unwrap().as_i64(), 9);
-        invoke("clear", &[xs.clone()]).unwrap();
+        assert_eq!(
+            invoke("removeAt", &[xs.clone(), vi64(0)]).unwrap().as_i64(),
+            9
+        );
+        invoke("clear", std::slice::from_ref(&xs)).unwrap();
         assert_eq!(invoke("len", &[xs]).unwrap().as_i64(), 0);
 
         // `abs` preserves the numeric kind (a double stays a double).
@@ -2030,7 +2377,12 @@ mod tests {
         assert_eq!(invoke("toDouble", &[vi64(4)]).unwrap().typ, 5);
         assert_eq!(invoke("toString", &[vf64(3.0)]).unwrap().as_string(), "3.0");
         assert_eq!(invoke("toString", &[vi64(3)]).unwrap().as_string(), "3");
-        assert_eq!(invoke("toStringAsFixed", &[vf64(3.14159), vi64(2)]).unwrap().as_string(), "3.14");
+        assert_eq!(
+            invoke("toStringAsFixed", &[vf64(1.23456), vi64(2)])
+                .unwrap()
+                .as_string(),
+            "1.23"
+        );
 
         // map members: `remove` returns the removed value; `putIfAbsent`.
         let map = vobj(-2, {
@@ -2038,13 +2390,27 @@ mod tests {
             m.insert("k".into(), vi64(9));
             m
         });
-        assert_eq!(invoke("remove", &[map.clone(), vstr("k".into())]).unwrap().as_i64(), 9);
-        assert_eq!(invoke("has", &[map.clone(), vstr("k".into())]).unwrap().as_bool(), false);
-        assert_eq!(invoke("putIfAbsent", &[map, vstr("k".into()), vi64(5)]).unwrap().as_i64(), 5);
+        assert_eq!(
+            invoke("remove", &[map.clone(), vstr("k".into())])
+                .unwrap()
+                .as_i64(),
+            9
+        );
+        assert!(!invoke("has", &[map.clone(), vstr("k".into())])
+            .unwrap()
+            .as_bool());
+        assert_eq!(
+            invoke("putIfAbsent", &[map, vstr("k".into()), vi64(5)])
+                .unwrap()
+                .as_i64(),
+            5
+        );
 
         // `join`'s separator is optional (defaults to "").
         assert_eq!(
-            invoke("join", &[varr(vec![vi64(1), vi64(2)])]).unwrap().as_string(),
+            invoke("join", &[varr(vec![vi64(1), vi64(2)])])
+                .unwrap()
+                .as_string(),
             "12"
         );
     }
@@ -2055,23 +2421,36 @@ mod tests {
         let bytes = invoke("utf8Encode", &[vstr("hé".into())]).unwrap();
         let b = bytes.as_array();
         assert_eq!(
-            b.borrow().data.iter().map(|v| v.as_i64()).collect::<Vec<_>>(),
+            b.borrow()
+                .data
+                .iter()
+                .map(|v| v.as_i64())
+                .collect::<Vec<_>>(),
             vec![0x68, 0xC3, 0xA9]
         );
         assert_eq!(invoke("utf8Decode", &[bytes]).unwrap().as_string(), "hé");
 
         // Base64 RFC 4648 vectors, including padding.
         assert_eq!(
-            invoke("base64Encode", &[varr(vec![vi64(77), vi64(97), vi64(110)])]).unwrap().as_string(),
+            invoke("base64Encode", &[varr(vec![vi64(77), vi64(97), vi64(110)])])
+                .unwrap()
+                .as_string(),
             "TWFu"
         );
         assert_eq!(
-            invoke("base64Encode", &[varr(vec![vi64(77)])]).unwrap().as_string(),
+            invoke("base64Encode", &[varr(vec![vi64(77)])])
+                .unwrap()
+                .as_string(),
             "TQ=="
         );
         let dec = invoke("base64Decode", &[vstr("TWFu".into())]).unwrap();
         assert_eq!(
-            dec.as_array().borrow().data.iter().map(|v| v.as_i64()).collect::<Vec<_>>(),
+            dec.as_array()
+                .borrow()
+                .data
+                .iter()
+                .map(|v| v.as_i64())
+                .collect::<Vec<_>>(),
             vec![77, 97, 110]
         );
     }
@@ -2079,7 +2458,12 @@ mod tests {
     #[test]
     fn closure_cells_hold_mutable_state() {
         let c = invoke("cell", &[vi64(0)]).unwrap();
-        assert_eq!(invoke("cellGet", &[c.clone()]).unwrap().as_i64(), 0);
+        assert_eq!(
+            invoke("cellGet", std::slice::from_ref(&c))
+                .unwrap()
+                .as_i64(),
+            0
+        );
         invoke("cellSet", &[c.clone(), vi64(42)]).unwrap();
         assert_eq!(invoke("cellGet", &[c]).unwrap().as_i64(), 42);
     }

@@ -21,7 +21,9 @@ fn app(machine_id: &str, source: &str) -> DartRuntime {
 
 /// Return the flat op list of the frame's scene (`scene.root.ops`).
 fn ops(frame: &Value) -> &Vec<Value> {
-    frame["root"]["ops"].as_array().expect("scene has an ops array")
+    frame["root"]["ops"]
+        .as_array()
+        .expect("scene has an ops array")
 }
 
 /// Find the first `drawParagraph` op's text.
@@ -35,8 +37,18 @@ fn first_text(frame: &Value) -> String {
 }
 
 fn tap(rt: &mut DartRuntime, x: f64, y: f64) {
-    rt.dispatch_pointer(PointerEvent { pointer: 1, phase: PointerPhase::Down, x, y });
-    rt.dispatch_pointer(PointerEvent { pointer: 1, phase: PointerPhase::Up, x, y });
+    rt.dispatch_pointer(PointerEvent {
+        pointer: 1,
+        phase: PointerPhase::Down,
+        x,
+        y,
+    });
+    rt.dispatch_pointer(PointerEvent {
+        pointer: 1,
+        phase: PointerPhase::Up,
+        x,
+        y,
+    });
 }
 
 /// The headline case: a `StatefulWidget` counter with a `GestureDetector`
@@ -45,7 +57,8 @@ fn tap(rt: &mut DartRuntime, x: f64, y: f64) {
 /// the whole runApp → build → layout → paint → event → setState → repaint loop.
 #[test]
 fn stateful_counter_renders_and_responds_to_taps() {
-    let mut rt = app("counter_app",
+    let mut rt = app(
+        "counter_app",
         r#"
         class CounterApp extends StatelessWidget {
             Widget build() {
@@ -111,7 +124,8 @@ fn stateful_counter_renders_and_responds_to_taps() {
 /// Proves the compositional widget tree lays out and paints in order.
 #[test]
 fn nested_widgets_compose_and_lay_out() {
-    let mut rt = app("nested_app",
+    let mut rt = app(
+        "nested_app",
         r#"
         class Label extends StatelessWidget {
             String text;
@@ -159,14 +173,18 @@ fn nested_widgets_compose_and_lay_out() {
         .filter(|op| op["op"] == "drawRect")
         .map(|op| op["color"].as_u64().unwrap())
         .collect();
-    assert!(colors.contains(&4294901760), "middle red container painted: {colors:?}");
+    assert!(
+        colors.contains(&4294901760),
+        "middle red container painted: {colors:?}"
+    );
 }
 
 /// Independent `State` per `StatefulWidget` position: two counters in a Column
 /// keep separate counts, matched by build order (position-based reconciliation).
 #[test]
 fn multiple_stateful_widgets_keep_independent_state() {
-    let mut rt = app("multi_app",
+    let mut rt = app(
+        "multi_app",
         r#"
         class Counter extends StatefulWidget {
             State createState() { return CounterState(); }

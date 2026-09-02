@@ -51,7 +51,8 @@ JSArray<JSString>? get _queue =>
 set _queue(JSArray<JSString>? value) =>
     globalContext.setProperty(_queueKey.toJS, value);
 
-JSObject? get _replies => globalContext.getProperty(_repliesKey.toJS) as JSObject?;
+JSObject? get _replies =>
+    globalContext.getProperty(_repliesKey.toJS) as JSObject?;
 
 class WebGodotBinding implements GodotBinding {
   WebGodotBinding() {

@@ -8,29 +8,29 @@ class CSSStylesheet {
   final Map<String, Map<String, dynamic>> _idRules = {};
   final List<CSSRule> _orderedRules = [];
   final Map<String, List<KeyframeFrame>> _keyframes = {};
-  
+
   /// Parse CSS string
   void parseCSS(String cssString) {
     final lines = cssString.split('}');
-    
+
     for (final line in lines) {
       if (line.trim().isEmpty) continue;
-      
+
       final parts = line.split('{');
       if (parts.length != 2) continue;
-      
+
       final selector = parts[0].trim();
       final declarations = parts[1].trim();
-      
+
       final styles = _parseDeclarations(declarations);
-      
+
       final rule = CSSRule(
         selector: selector,
         styles: styles,
       );
-      
+
       _orderedRules.add(rule);
-      
+
       _storeRuleByType(selector, styles);
     }
   }
@@ -48,40 +48,40 @@ class CSSStylesheet {
   Map<String, dynamic> _parseDeclarations(String declarations) {
     final styles = <String, dynamic>{};
     final properties = declarations.split(';');
-    
+
     for (final property in properties) {
       if (property.trim().isEmpty) continue;
-      
+
       final parts = property.split(':');
       if (parts.length != 2) continue;
-      
+
       final key = parts[0].trim();
       final value = parts[1].trim();
-      
+
       styles[key] = _parseValue(key, value);
     }
-    
+
     return styles;
   }
-  
+
   dynamic _parseValue(String property, String value) {
     // Handle numeric values
     if (RegExp(r'^\d+(\.\d+)?(px|em|rem|%)?$').hasMatch(value)) {
       final numStr = value.replaceAll(RegExp(r'[^0-9.]'), '');
       return double.tryParse(numStr) ?? value;
     }
-    
+
     // Return as string for complex values
     return value;
   }
-  
+
   /// Add a CSS rule
   void addRule(String selector, Map<String, dynamic> styles) {
     final rule = CSSRule(
       selector: selector,
       styles: styles,
     );
-    
+
     _orderedRules.add(rule);
     _storeRuleByType(selector, styles);
   }
@@ -89,7 +89,7 @@ class CSSStylesheet {
   /// Remove a rule by selector
   void removeRule(String selector) {
     _orderedRules.removeWhere((rule) => rule.selector == selector);
-    
+
     if (selector.startsWith('#')) {
       _idRules.remove(selector.substring(1));
     } else if (selector.startsWith('.')) {
@@ -98,7 +98,7 @@ class CSSStylesheet {
       _rules.remove(selector);
     }
   }
-  
+
   /// Build the merged raw style map for an element (cascade order), before
   /// parsing into a [CSSStyle]. Exposed so callers can merge further raw maps
   /// (e.g. inline styles) and parse exactly once — see [getComputedStyle].
@@ -151,7 +151,7 @@ class CSSStylesheet {
       inlineStyles: inlineStyles,
     ));
   }
-  
+
   /// Get style for a specific selector
   Map<String, dynamic>? getStyle(String selector) {
     if (selector.startsWith('#')) {
@@ -162,18 +162,18 @@ class CSSStylesheet {
       return _rules[selector];
     }
   }
-  
+
   /// Export to CSS string
   String toCSS() {
     final buffer = StringBuffer();
-    
+
     for (final rule in _orderedRules) {
       buffer.writeln(rule.toCSS());
     }
-    
+
     return buffer.toString();
   }
-  
+
   /// Clear all rules
   void clear() {
     _rules.clear();
@@ -181,7 +181,7 @@ class CSSStylesheet {
     _idRules.clear();
     _orderedRules.clear();
   }
-  
+
   /// Get all rules
   List<CSSRule> get rules => List.unmodifiable(_orderedRules);
 
@@ -201,24 +201,24 @@ class CSSStylesheet {
 class CSSRule {
   final String selector;
   final Map<String, dynamic> styles;
-  
+
   CSSRule({
     required this.selector,
     required this.styles,
   });
-  
+
   String toCSS() {
     final buffer = StringBuffer();
     buffer.writeln('$selector {');
-    
+
     styles.forEach((key, value) {
       buffer.writeln('  $key: $value;');
     });
-    
+
     buffer.writeln('}');
     return buffer.toString();
   }
-  
+
   @override
   String toString() => toCSS();
 }
@@ -227,12 +227,12 @@ class CSSRule {
 class MediaQuery {
   final String query;
   final CSSStylesheet stylesheet;
-  
+
   MediaQuery({
     required this.query,
     required this.stylesheet,
   });
-  
+
   static final _dimensionPattern = RegExp(r'(min|max)-(width|height):\s*(\d+)');
   static final _orientationPattern =
       RegExp(r'orientation:\s*(portrait|landscape)');
@@ -269,15 +269,16 @@ class KeyframeFrame {
 
 /// Global stylesheet manager
 class GlobalStylesheetManager {
-  static final GlobalStylesheetManager _instance = GlobalStylesheetManager._internal();
+  static final GlobalStylesheetManager _instance =
+      GlobalStylesheetManager._internal();
   factory GlobalStylesheetManager() => _instance;
   GlobalStylesheetManager._internal();
-  
+
   final CSSStylesheet _globalStylesheet = CSSStylesheet();
   final List<MediaQuery> _mediaQueries = [];
-  
+
   CSSStylesheet get global => _globalStylesheet;
-  
+
   void addMediaQuery(String query, CSSStylesheet stylesheet) {
     // Dedupe by query so re-applying the same theme on every render (the
     // server-driven host re-loads the stylesheet each build) can't accumulate
@@ -288,7 +289,7 @@ class GlobalStylesheetManager {
       stylesheet: stylesheet,
     ));
   }
-  
+
   /// Build the merged **raw** style map for an element (global + matching
   /// `@media` + inline cascade), before parsing. Lets callers merge further raw
   /// maps and parse exactly once.
@@ -386,7 +387,7 @@ class GlobalStylesheetManager {
       screenHeight: screenHeight,
     ));
   }
-  
+
   void clear() {
     _globalStylesheet.clear();
     _mediaQueries.clear();

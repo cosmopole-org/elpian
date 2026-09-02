@@ -5,7 +5,10 @@
 use elpian_vm::api;
 
 fn run(id: &str, js: &str) -> String {
-    assert!(js2elpian::create_vm_from_js(id.to_string(), js.to_string()), "JS should compile: {id}");
+    assert!(
+        js2elpian::create_vm_from_js(id.to_string(), js.to_string()),
+        "JS should compile: {id}"
+    );
     let _ = api::execute_vm(id.to_string());
     api::execute_vm_func(id.to_string(), "f".to_string(), 1).result_value
 }
@@ -14,12 +17,24 @@ fn run(id: &str, js: &str) -> String {
 
 #[test]
 fn array_spread() {
-    assert_eq!(run("js-arr-spread", "function f(){ let a=[1,2]; let b=[0,...a,3]; return b; }"), "[0, 1, 2, 3]");
+    assert_eq!(
+        run(
+            "js-arr-spread",
+            "function f(){ let a=[1,2]; let b=[0,...a,3]; return b; }"
+        ),
+        "[0, 1, 2, 3]"
+    );
 }
 
 #[test]
 fn array_spread_concat() {
-    assert_eq!(run("js-arr-cat", "function f(){ let a=[1,2]; let b=[3,4]; return [...a,...b]; }"), "[1, 2, 3, 4]");
+    assert_eq!(
+        run(
+            "js-arr-cat",
+            "function f(){ let a=[1,2]; let b=[3,4]; return [...a,...b]; }"
+        ),
+        "[1, 2, 3, 4]"
+    );
 }
 
 #[test]
@@ -31,7 +46,8 @@ fn object_spread() {
 
 #[test]
 fn call_spread() {
-    let js = "function sum3(a,b,c){ return a+b+c; } function f(){ let xs=[1,2,3]; return sum3(...xs); }";
+    let js =
+        "function sum3(a,b,c){ return a+b+c; } function f(){ let xs=[1,2,3]; return sum3(...xs); }";
     assert_eq!(run("js-call-spread", js), "6");
 }
 
@@ -57,7 +73,10 @@ fn template_with_expression() {
 
 #[test]
 fn template_plain_text() {
-    assert_eq!(run("js-tmpl-plain", "function f(){ return `just text`; }"), "\"just text\"");
+    assert_eq!(
+        run("js-tmpl-plain", "function f(){ return `just text`; }"),
+        "\"just text\""
+    );
 }
 
 // ---- destructuring ----------------------------------------------------------
@@ -82,18 +101,42 @@ fn object_destructuring_rest() {
 
 #[test]
 fn array_destructuring() {
-    assert_eq!(run("js-dstr-arr", "function f(){ let [a,b,c]=[1,2,3]; return a+b+c; }"), "6");
+    assert_eq!(
+        run(
+            "js-dstr-arr",
+            "function f(){ let [a,b,c]=[1,2,3]; return a+b+c; }"
+        ),
+        "6"
+    );
 }
 
 #[test]
 fn array_destructuring_hole_default() {
-    assert_eq!(run("js-dstr-arr-hole", "function f(){ let [a,,c]=[1,2,3]; return a+c; }"), "4");
-    assert_eq!(run("js-dstr-arr-def", "function f(){ let [a,b=9]=[1]; return a+b; }"), "10");
+    assert_eq!(
+        run(
+            "js-dstr-arr-hole",
+            "function f(){ let [a,,c]=[1,2,3]; return a+c; }"
+        ),
+        "4"
+    );
+    assert_eq!(
+        run(
+            "js-dstr-arr-def",
+            "function f(){ let [a,b=9]=[1]; return a+b; }"
+        ),
+        "10"
+    );
 }
 
 #[test]
 fn array_destructuring_rest() {
-    assert_eq!(run("js-dstr-arr-rest", "function f(){ let [a,...rest]=[1,2,3,4]; return rest; }"), "[2, 3, 4]");
+    assert_eq!(
+        run(
+            "js-dstr-arr-rest",
+            "function f(){ let [a,...rest]=[1,2,3,4]; return rest; }"
+        ),
+        "[2, 3, 4]"
+    );
 }
 
 #[test]

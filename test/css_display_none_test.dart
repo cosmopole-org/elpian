@@ -68,7 +68,8 @@ void main() {
     expect(find.text('VISIBLE'), findsOneWidget);
   });
 
-  testWidgets('display:none from a matching @media rule hides; non-matching shows',
+  testWidgets(
+      'display:none from a matching @media rule hides; non-matching shows',
       (tester) async {
     final mgr = GlobalStylesheetManager();
     final mobile = CSSStylesheet();

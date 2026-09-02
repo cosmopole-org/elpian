@@ -79,6 +79,11 @@ impl Capability {
     }
 
     /// Parse a capability from its stable name (host config ingestion).
+    ///
+    /// Deliberately an inherent `Option`-returning method rather than a
+    /// `FromStr` impl: an unknown capability name is an ordinary "not one of
+    /// ours" answer for a host reading config, not an error worth a type.
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(name: &str) -> Option<Capability> {
         Some(match name {
             "logging" => Capability::Logging,
@@ -123,20 +128,29 @@ impl Default for CapabilitySet {
         // Default posture mirrors the historical VM: everything the embedder
         // wires up is reachable. Hosts running untrusted code start from
         // `deny_all()` and grant explicitly.
-        CapabilitySet { overrides: HashMap::new(), default_allow: true }
+        CapabilitySet {
+            overrides: HashMap::new(),
+            default_allow: true,
+        }
     }
 }
 
 impl CapabilitySet {
     /// All capabilities permitted unless explicitly revoked.
     pub fn allow_all() -> Self {
-        CapabilitySet { overrides: HashMap::new(), default_allow: true }
+        CapabilitySet {
+            overrides: HashMap::new(),
+            default_allow: true,
+        }
     }
 
     /// All capabilities denied unless explicitly granted. The starting point
     /// for sandboxing untrusted guests.
     pub fn deny_all() -> Self {
-        CapabilitySet { overrides: HashMap::new(), default_allow: false }
+        CapabilitySet {
+            overrides: HashMap::new(),
+            default_allow: false,
+        }
     }
 
     /// Turn a single capability on or off. Takes effect on the next guest call.
@@ -156,7 +170,10 @@ impl CapabilitySet {
 
     /// Whether a capability is currently permitted.
     pub fn is_allowed(&self, cap: Capability) -> bool {
-        self.overrides.get(&cap).copied().unwrap_or(self.default_allow)
+        self.overrides
+            .get(&cap)
+            .copied()
+            .unwrap_or(self.default_allow)
     }
 
     /// Whether the host API named `api_name` is currently permitted, resolving
@@ -190,7 +207,10 @@ mod tests {
         assert!(caps.allows_api("net.fetch"));
         caps.revoke(Capability::Network);
         assert!(!caps.allows_api("net.fetch"));
-        assert!(caps.allows_api("gpu.submit"), "other capabilities unaffected");
+        assert!(
+            caps.allows_api("gpu.submit"),
+            "other capabilities unaffected"
+        );
     }
 
     #[test]

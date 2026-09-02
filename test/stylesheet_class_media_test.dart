@@ -42,7 +42,10 @@ void main() {
         {
           'media': '(max-width: 820px)',
           'selector': '.game-window',
-          'styles': {'width': '100% !important', 'position': 'fixed !important'},
+          'styles': {
+            'width': '100% !important',
+            'position': 'fixed !important'
+          },
         },
       ],
     });

@@ -14,8 +14,10 @@ class ElpianImage {
     final cacheHeight = (h != null && h > 0) ? h.round() : null;
 
     Widget result = src.startsWith('http')
-      ? Image.network(src, fit: fit, cacheWidth: cacheWidth, cacheHeight: cacheHeight)
-      : Image.asset(src, fit: fit, cacheWidth: cacheWidth, cacheHeight: cacheHeight);
+        ? Image.network(src,
+            fit: fit, cacheWidth: cacheWidth, cacheHeight: cacheHeight)
+        : Image.asset(src,
+            fit: fit, cacheWidth: cacheWidth, cacheHeight: cacheHeight);
 
     if (node.style != null) {
       result = CSSProperties.applyStyle(result, node.style);

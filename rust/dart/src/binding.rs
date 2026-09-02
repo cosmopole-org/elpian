@@ -94,7 +94,12 @@ mod tests {
 
     #[test]
     fn pointer_event_serializes() {
-        let ev = PointerEvent { pointer: 1, phase: PointerPhase::Down, x: 12.0, y: 34.0 };
+        let ev = PointerEvent {
+            pointer: 1,
+            phase: PointerPhase::Down,
+            x: 12.0,
+            y: 34.0,
+        };
         let j = ev.to_json();
         assert_eq!(j["phase"], "down");
         assert_eq!(j["x"], 12.0);

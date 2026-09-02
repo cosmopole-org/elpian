@@ -68,18 +68,17 @@
 //! with super-args, async closures / awaits inside control flow, generic
 //! *typed-local* declarations, and by-reference closure capture.
 
-
 pub mod ast;
 pub mod emitter;
 pub mod lexer;
 pub mod parser;
 pub mod token;
 
-use crate::token::Tok;
 use crate::ast::Item;
+use crate::emitter::Emitter;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
-use crate::emitter::Emitter;
+use crate::token::Tok;
 
 /// Transpile Dart-subset source to the JS subset the Elpian VM ingests.
 pub fn transpile(dart: &str) -> Result<String, String> {
@@ -132,12 +131,16 @@ mod tests {
         // front-end lowers it to the universal `intDiv` builtin at compile time.
         let js = transpile("int x = 7 ~/ 2;").unwrap();
         assert!(js.contains("var x = intDiv(7, 2)"), "got: {js}");
-        assert!(!js.contains("~/"), "no Dart operator in the emitted program: {js}");
+        assert!(
+            !js.contains("~/"),
+            "no Dart operator in the emitted program: {js}"
+        );
     }
 
     #[test]
     fn lowers_for_to_while_and_print_to_host_call() {
-        let js = transpile("void main() { for (int i = 0; i < 3; i = i + 1) { print(i); } }").unwrap();
+        let js =
+            transpile("void main() { for (int i = 0; i < 3; i = i + 1) { print(i); } }").unwrap();
         assert!(js.contains("while ("), "got: {js}");
         assert!(js.contains("askHost(\"log\""), "got: {js}");
         assert!(js.contains("main();"), "should auto-call main: {js}");
@@ -155,9 +158,15 @@ mod tests {
         let dart = "@immutable\nabstract class Shape { const Shape(); }\n\
                     var s = const Shape();";
         let js = transpile(dart).unwrap();
-        assert!(js.contains("class Shape"), "abstract erased to a class: {js}");
+        assert!(
+            js.contains("class Shape"),
+            "abstract erased to a class: {js}"
+        );
         assert!(!js.contains('@'), "annotation stripped: {js}");
-        assert!(js.contains("new Shape()"), "const erased to instantiation: {js}");
+        assert!(
+            js.contains("new Shape()"),
+            "const erased to instantiation: {js}"
+        );
     }
 
     #[test]
@@ -170,7 +179,10 @@ mod tests {
                       int get red => (value ~/ 65536) % 256;\n\
                     }";
         let js = transpile(dart).unwrap();
-        assert!(js.contains("static black = 4278190080"), "static field: {js}");
+        assert!(
+            js.contains("static black = 4278190080"),
+            "static field: {js}"
+        );
         assert!(js.contains("static fromValue"), "static method: {js}");
         // A getter is emitted as a method and *called* when read as a bare member.
         assert!(js.contains("red("), "getter emitted as method: {js}");
@@ -196,10 +208,22 @@ mod tests {
             "var a = x is List<int>; var b = y as Foo; var c = z is double; var d = w is String;",
         )
         .unwrap();
-        assert!(js.contains("__isType(x, \"list\")"), "is -> neutral name: {js}");
-        assert!(js.contains("__asType(y, \"Foo\")"), "as -> class passthrough: {js}");
-        assert!(js.contains("__isType(z, \"float\")"), "double -> float: {js}");
-        assert!(js.contains("__isType(w, \"string\")"), "String -> string: {js}");
+        assert!(
+            js.contains("__isType(x, \"list\")"),
+            "is -> neutral name: {js}"
+        );
+        assert!(
+            js.contains("__asType(y, \"Foo\")"),
+            "as -> class passthrough: {js}"
+        );
+        assert!(
+            js.contains("__isType(z, \"float\")"),
+            "double -> float: {js}"
+        );
+        assert!(
+            js.contains("__isType(w, \"string\")"),
+            "String -> string: {js}"
+        );
         assert!(!js.contains("isType\""), "no isType host round-trip: {js}");
         assert!(!js.contains("asType\""), "no asType host round-trip: {js}");
     }
@@ -208,11 +232,15 @@ mod tests {
     fn is_object_and_dynamic_are_pure_compile_time_lowerings() {
         // `Object` / `dynamic` never reach the VM's type-test opcode: their Dart
         // semantics are decided here in the front-end.
-        let js = transpile("var a = x is Object; var b = y as Object; var c = z is dynamic;").unwrap();
+        let js =
+            transpile("var a = x is Object; var b = y as Object; var c = z is dynamic;").unwrap();
         assert!(js.contains("(x != null)"), "is Object -> null test: {js}");
         assert!(!js.contains("__isType(x"), "no opcode for is Object: {js}");
         assert!(js.contains("var b = y"), "as Object -> value: {js}");
-        assert!(js.contains("__isType(z, \"any\")"), "is dynamic -> any: {js}");
+        assert!(
+            js.contains("__isType(z, \"any\")"),
+            "is dynamic -> any: {js}"
+        );
     }
 
     #[test]
@@ -228,7 +256,10 @@ mod tests {
         // A void arrow function must not `return` its call's value.
         let js = transpile("void main() => run();").unwrap();
         assert!(js.contains("function main"), "got: {js}");
-        assert!(!js.contains("return run()"), "void arrow must be a statement: {js}");
+        assert!(
+            !js.contains("return run()"),
+            "void arrow must be a statement: {js}"
+        );
     }
 
     #[test]
@@ -246,8 +277,14 @@ mod tests {
              for (int i = 0; i < 3; i = i + 1) { print(i); } }",
         )
         .unwrap();
-        assert!(js.contains("__for_it0"), "for-in should bind an iterator temp: {js}");
-        assert!(js.contains(".length"), "for-in should bound on length: {js}");
+        assert!(
+            js.contains("__for_it0"),
+            "for-in should bind an iterator temp: {js}"
+        );
+        assert!(
+            js.contains(".length"),
+            "for-in should bound on length: {js}"
+        );
         assert!(js.contains("while"), "for-in lowers to while: {js}");
     }
 
@@ -314,7 +351,10 @@ mod tests {
         assert!(js.contains(".has("), "containsKey -> has: {js}");
         // None of the Dart spellings survive into the emitted program.
         assert!(!js.contains(".add(1)"), "no Dart add spelling: {js}");
-        assert!(!js.contains("toUpperCase"), "no Dart toUpperCase spelling: {js}");
+        assert!(
+            !js.contains("toUpperCase"),
+            "no Dart toUpperCase spelling: {js}"
+        );
     }
 
     #[test]
@@ -326,8 +366,13 @@ mod tests {
                     }\n\
                     void main() { var b = Bag(); b.add(5); }";
         let js = transpile(dart).unwrap();
-        assert!(js.contains("b.add(5)"), "user add() preserved, not renamed: {js}");
-        assert!(!js.contains("b.push(5)"), "user method not turned into a builtin: {js}");
+        assert!(
+            js.contains("b.add(5)"),
+            "user add() preserved, not renamed: {js}"
+        );
+        assert!(
+            !js.contains("b.push(5)"),
+            "user method not turned into a builtin: {js}"
+        );
     }
 }
-

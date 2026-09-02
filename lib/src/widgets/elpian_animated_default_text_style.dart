@@ -4,9 +4,12 @@ import '../css/css_properties.dart';
 
 class ElpianAnimatedDefaultTextStyle {
   static Widget build(ElpianNode node, List<Widget> children) {
-    final child = children.isNotEmpty ? children.first : const SizedBox.shrink();
-    final textStyle = CSSProperties.createTextStyle(node.style) ?? const TextStyle();
-    final duration = node.style?.transitionDuration ?? const Duration(milliseconds: 300);
+    final child =
+        children.isNotEmpty ? children.first : const SizedBox.shrink();
+    final textStyle =
+        CSSProperties.createTextStyle(node.style) ?? const TextStyle();
+    final duration =
+        node.style?.transitionDuration ?? const Duration(milliseconds: 300);
     final curve = node.style?.transitionCurve ?? Curves.linear;
 
     return AnimatedDefaultTextStyle(

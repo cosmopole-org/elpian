@@ -164,7 +164,10 @@ impl EventLoop {
                 period: Some(interval),
             });
         }
-        DueTask { cb: t.cb, is_timer: true }
+        DueTask {
+            cb: t.cb,
+            is_timer: true,
+        }
     }
 
     /// Return the next task to run, honoring Dart ordering: any pending
@@ -177,7 +180,10 @@ impl EventLoop {
     /// frame-pumped embedder must use [`advance`] + [`next_due_task`] instead.
     pub fn next_task(&mut self) -> Option<DueTask> {
         if let Some(cb) = self.microtasks.pop_front() {
-            return Some(DueTask { cb, is_timer: false });
+            return Some(DueTask {
+                cb,
+                is_timer: false,
+            });
         }
         let idx = self.earliest_timer(false)?;
         Some(self.fire_timer(idx))
@@ -190,7 +196,10 @@ impl EventLoop {
     /// making a per-frame drain terminate.
     pub fn next_due_task(&mut self) -> Option<DueTask> {
         if let Some(cb) = self.microtasks.pop_front() {
-            return Some(DueTask { cb, is_timer: false });
+            return Some(DueTask {
+                cb,
+                is_timer: false,
+            });
         }
         let idx = self.earliest_timer(true)?;
         Some(self.fire_timer(idx))

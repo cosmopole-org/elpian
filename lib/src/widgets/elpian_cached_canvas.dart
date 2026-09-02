@@ -5,7 +5,8 @@ import '../models/elpian_node.dart';
 
 class ElpianCachedCanvas {
   static Widget build(ElpianNode node, List<Widget> children) {
-    final contextId = node.props['contextId']?.toString() ?? node.props['id']?.toString();
+    final contextId =
+        node.props['contextId']?.toString() ?? node.props['id']?.toString();
     final width = _toDouble(node.props['width']) ?? node.style?.width;
     final height = _toDouble(node.props['height']) ?? node.style?.height;
     final backgroundColor = node.props['backgroundColor'] as Color?;

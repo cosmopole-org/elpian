@@ -54,9 +54,17 @@ void main() {
 
       final scene = SceneDsl(controller).build(const {
         'environment': {'bg': '#0d1117'},
-        'camera': {'id': 'cam', 'position': [0, 3, 8], 'fov': 55},
+        'camera': {
+          'id': 'cam',
+          'position': [0, 3, 8],
+          'fov': 55
+        },
         'lights': [
-          {'type': 'directional', 'shadow': true, 'rotation': [-50, -30, 0]}
+          {
+            'type': 'directional',
+            'shadow': true,
+            'rotation': [-50, -30, 0]
+          }
         ],
         'nodes': [
           {
@@ -80,14 +88,16 @@ void main() {
 
       final created =
           binding.ops.where((o) => o.containsKey('new')).map((o) => o['new']);
-      expect(created, containsAll(<String>[
-        'WorldEnvironment',
-        'Environment',
-        'Camera3D',
-        'DirectionalLight3D',
-        'TorusMesh',
-        'SphereMesh',
-      ]));
+      expect(
+          created,
+          containsAll(<String>[
+            'WorldEnvironment',
+            'Environment',
+            'Camera3D',
+            'DirectionalLight3D',
+            'TorusMesh',
+            'SphereMesh',
+          ]));
     });
 
     test('a whole scene build costs one crossing', () async {
@@ -114,7 +124,11 @@ void main() {
 
       SceneDsl(controller).build(const {
         'nodes': [
-          {'type': 'CSGBox3D', 'id': 'csg', 'position': [1, 0, 0]}
+          {
+            'type': 'CSGBox3D',
+            'id': 'csg',
+            'position': [1, 0, 0]
+          }
         ]
       });
       await controller.flush();
@@ -251,7 +265,8 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      await tester.pumpWidget(const MaterialApp(home: Scaffold(body: SizedBox())));
+      await tester
+          .pumpWidget(const MaterialApp(home: Scaffold(body: SizedBox())));
       await tester.pumpAndSettle();
 
       // Still usable: the controller is the caller's, not the widget's.

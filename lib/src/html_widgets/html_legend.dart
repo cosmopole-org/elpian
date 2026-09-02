@@ -5,7 +5,7 @@ import '../css/css_properties.dart';
 class HtmlLegend {
   static Widget build(ElpianNode node, List<Widget> children) {
     final text = node.props['text'] as String? ?? '';
-    
+
     Widget result = Text(
       text,
       style: const TextStyle(fontWeight: FontWeight.bold),

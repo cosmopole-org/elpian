@@ -181,13 +181,8 @@ fn resource_meter_bounds_host_calls() {
     "#;
     // Cap host calls at 5; the guest tries ~100.
     let meter = ResourceMeter::new(Some(5), None);
-    let mut rt = DartRuntime::from_js(
-        "meter_test",
-        code,
-        DartCapabilitySet::full(),
-        meter,
-    )
-    .expect("compiles");
+    let mut rt = DartRuntime::from_js("meter_test", code, DartCapabilitySet::full(), meter)
+        .expect("compiles");
     rt.run().expect("runs");
     // Once the ceiling is hit, subsequent dart: calls are denied.
     assert!(!rt.denied().is_empty(), "meter should have denied calls");
@@ -222,8 +217,18 @@ fn binding_delivers_events_and_collects_a_frame() {
     rt.run().expect("defines handlers");
 
     // Deliver two taps.
-    rt.dispatch_pointer(PointerEvent { pointer: 1, phase: PointerPhase::Down, x: 5.0, y: 5.0 });
-    rt.dispatch_pointer(PointerEvent { pointer: 1, phase: PointerPhase::Up, x: 5.0, y: 5.0 });
+    rt.dispatch_pointer(PointerEvent {
+        pointer: 1,
+        phase: PointerPhase::Down,
+        x: 5.0,
+        y: 5.0,
+    });
+    rt.dispatch_pointer(PointerEvent {
+        pointer: 1,
+        phase: PointerPhase::Up,
+        x: 5.0,
+        y: 5.0,
+    });
     assert_eq!(
         rt.emitted(),
         &[serde_json::json!("tap1"), serde_json::json!("tap2")]
@@ -294,7 +299,11 @@ fn isolate_ports_and_spawn() {
     )
     .expect("compiles");
     rt.run().expect("runs");
-    let out: Vec<String> = rt.emitted().iter().map(|v| v.as_str().unwrap().to_string()).collect();
+    let out: Vec<String> = rt
+        .emitted()
+        .iter()
+        .map(|v| v.as_str().unwrap().to_string())
+        .collect();
     // spawn drains before port messages in the pump priority order.
     assert_eq!(out, vec!["worker:hi", "got:one", "got:two"]);
 }
@@ -320,7 +329,11 @@ fn periodic_timer_end_to_end() {
     )
     .expect("compiles");
     rt.run().expect("runs");
-    let out: Vec<String> = rt.emitted().iter().map(|v| v.as_str().unwrap().to_string()).collect();
+    let out: Vec<String> = rt
+        .emitted()
+        .iter()
+        .map(|v| v.as_str().unwrap().to_string())
+        .collect();
     assert_eq!(out, vec!["tick1", "tick2", "tick3"]);
 }
 
@@ -412,11 +425,11 @@ fn reified_is_and_as_from_dart() {
     assert_eq!(
         rt.emitted(),
         &[
-            serde_json::json!(true),   // Dog is Animal
-            serde_json::json!(false),  // Dog is Cat
-            serde_json::json!(true),   // 5 is int
-            serde_json::json!(true),   // "hi" is String
-            serde_json::json!(true),   // (d as Animal) is Dog
+            serde_json::json!(true),  // Dog is Animal
+            serde_json::json!(false), // Dog is Cat
+            serde_json::json!(true),  // 5 is int
+            serde_json::json!(true),  // "hi" is String
+            serde_json::json!(true),  // (d as Animal) is Dog
         ]
     );
 }
@@ -448,7 +461,12 @@ fn frame_diff_is_minimal() {
     let p0 = rt.render_frame_patch(16_000);
     assert_eq!(p0.len(), 1); // first frame: full set
 
-    rt.dispatch_pointer(PointerEvent { pointer: 1, phase: PointerPhase::Down, x: 1.0, y: 1.0 });
+    rt.dispatch_pointer(PointerEvent {
+        pointer: 1,
+        phase: PointerPhase::Down,
+        x: 1.0,
+        y: 1.0,
+    });
     let p1 = rt.render_frame_patch(32_000);
     assert_eq!(p1.len(), 1, "only the color should differ");
     assert_eq!(p1[0].value, Some(serde_json::json!(200)));
@@ -479,7 +497,11 @@ fn dart_list_and_string_length() {
     rt.run().expect("runs");
     assert_eq!(
         rt.emitted(),
-        &[serde_json::json!(100), serde_json::json!(7), serde_json::json!(false)]
+        &[
+            serde_json::json!(100),
+            serde_json::json!(7),
+            serde_json::json!(false)
+        ]
     );
 }
 
@@ -518,13 +540,13 @@ fn dart_core_type_methods() {
     assert_eq!(
         rt.emitted(),
         &[
-            serde_json::json!(5),                 // 3 + add(4) + add(5)
-            serde_json::json!(true),              // contains(4)
-            serde_json::json!(2),                 // indexOf(3)
+            serde_json::json!(5),    // 3 + add(4) + add(5)
+            serde_json::json!(true), // contains(4)
+            serde_json::json!(2),    // indexOf(3)
             serde_json::json!("HELLO, FLUTTER"),
             serde_json::json!("Flutter"),
-            serde_json::json!(2),                 // split(", ").length
-            serde_json::json!("hi world"),        // instance method still works
+            serde_json::json!(2),          // split(", ").length
+            serde_json::json!("hi world"), // instance method still works
         ]
     );
 }
@@ -562,14 +584,14 @@ fn dart_closures_and_higher_order() {
     assert_eq!(
         rt.emitted(),
         &[
-            serde_json::json!([2, 4, 6, 8, 10]),  // map
-            serde_json::json!([1, 3, 5]),         // where (odds)
-            serde_json::json!(15),                // fold sum
-            serde_json::json!(15),                // reduce sum
-            serde_json::json!(true),              // any > 4
-            serde_json::json!(true),              // every > 0
-            serde_json::json!(36),                // sq(6) arrow-body fn
-            serde_json::json!(55),                // sum of squares 1..5
+            serde_json::json!([2, 4, 6, 8, 10]), // map
+            serde_json::json!([1, 3, 5]),        // where (odds)
+            serde_json::json!(15),               // fold sum
+            serde_json::json!(15),               // reduce sum
+            serde_json::json!(true),             // any > 4
+            serde_json::json!(true),             // every > 0
+            serde_json::json!(36),               // sq(6) arrow-body fn
+            serde_json::json!(55),               // sum of squares 1..5
         ]
     );
 }
@@ -605,9 +627,9 @@ fn dart_named_parameters() {
         rt.emitted(),
         &[
             serde_json::json!("btn:10x20"),
-            serde_json::json!(10),   // 5*2 + 0
-            serde_json::json!(15),   // 5*3 + 0
-            serde_json::json!(16),   // 5*3 + 1
+            serde_json::json!(10), // 5*2 + 0
+            serde_json::json!(15), // 5*3 + 0
+            serde_json::json!(16), // 5*3 + 1
         ]
     );
 }
@@ -644,8 +666,14 @@ fn dart_async_await() {
     rt.run().expect("runs");
     // Both futures resolve during the microtask pump; order is deterministic.
     let out = rt.emitted();
-    assert!(out.contains(&serde_json::json!(30)), "sumTwo -> 30, got {out:?}");
-    assert!(out.contains(&serde_json::json!("total=30")), "label -> total=30, got {out:?}");
+    assert!(
+        out.contains(&serde_json::json!(30)),
+        "sumTwo -> 30, got {out:?}"
+    );
+    assert!(
+        out.contains(&serde_json::json!("total=30")),
+        "label -> total=30, got {out:?}"
+    );
 }
 
 /// VM conformance: broadened dart:core surface — num methods/getters, more
@@ -683,17 +711,17 @@ fn dart_core_surface() {
     assert_eq!(
         rt.emitted(),
         &[
-            serde_json::json!(3),          // 3.7.toInt
-            serde_json::json!(5),          // (-5).abs
-            serde_json::json!("3.14"),     // toStringAsFixed
-            serde_json::json!(5),          // clamp(9 -> 0..5)
-            serde_json::json!(5),          // length after addAll+insert
-            serde_json::json!(0),          // first (inserted 0)
+            serde_json::json!(3),               // 3.7.toInt
+            serde_json::json!(5),               // (-5).abs
+            serde_json::json!("3.14"),          // toStringAsFixed
+            serde_json::json!(5),               // clamp(9 -> 0..5)
+            serde_json::json!(5),               // length after addAll+insert
+            serde_json::json!(0),               // first (inserted 0)
             serde_json::json!([4, 2, 1, 3, 0]), // reversed
-            serde_json::json!(3),          // map length
-            serde_json::json!(true),       // containsKey
-            serde_json::json!(3),          // keys.length
-            serde_json::json!("hi..."),    // padRight
+            serde_json::json!(3),               // map length
+            serde_json::json!(true),            // containsKey
+            serde_json::json!(3),               // keys.length
+            serde_json::json!("hi..."),         // padRight
         ]
     );
 }
@@ -736,9 +764,9 @@ fn dart_by_reference_closure_capture() {
     assert_eq!(
         rt.emitted(),
         &[
-            serde_json::json!(15),          // 1+2+3+4+5 via forEach mutation
-            serde_json::json!(3),           // closure counter
-            serde_json::json!([3, 4]),      // where with captured threshold
+            serde_json::json!(15),     // 1+2+3+4+5 via forEach mutation
+            serde_json::json!(3),      // closure counter
+            serde_json::json!([3, 4]), // where with captured threshold
         ]
     );
 }

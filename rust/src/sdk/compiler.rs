@@ -1,8 +1,4 @@
-use std::{
-    cell::RefCell,
-    collections::HashMap,
-    rc::Rc,
-};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use serde_json::{json, Value};
 
@@ -46,9 +42,7 @@ fn serialize_expr(val: serde_json::Value) -> Vec<u8> {
         }
         "i64" => {
             result.push(3);
-            result.append(
-                &mut i64::to_be_bytes(val["data"]["value"].as_i64().unwrap() as i64).to_vec(),
-            );
+            result.append(&mut i64::to_be_bytes(val["data"]["value"].as_i64().unwrap()).to_vec());
         }
         "f32" => {
             result.push(4);
@@ -58,9 +52,7 @@ fn serialize_expr(val: serde_json::Value) -> Vec<u8> {
         }
         "f64" => {
             result.push(5);
-            result.append(
-                &mut f64::to_be_bytes(val["data"]["value"].as_f64().unwrap() as f64).to_vec(),
-            );
+            result.append(&mut f64::to_be_bytes(val["data"]["value"].as_f64().unwrap()).to_vec());
         }
         "bool" => {
             result.push(6);
@@ -104,9 +96,17 @@ fn serialize_expr(val: serde_json::Value) -> Vec<u8> {
             // value, trapping on a mismatch). The type name is the base type as a
             // length-prefixed string.
             result.push(0xed);
-            result.push(if val["data"]["cast"].as_bool().unwrap_or(false) { 1 } else { 0 });
+            result.push(if val["data"]["cast"].as_bool().unwrap_or(false) {
+                1
+            } else {
+                0
+            });
             result.append(&mut serialize_expr(val["data"]["value"].clone()));
-            let type_bytes = val["data"]["typeName"].as_str().unwrap_or("").as_bytes().to_vec();
+            let type_bytes = val["data"]["typeName"]
+                .as_str()
+                .unwrap_or("")
+                .as_bytes()
+                .to_vec();
             result.append(&mut i32::to_be_bytes(type_bytes.len() as i32).to_vec());
             result.append(&mut type_bytes.clone());
         }
@@ -138,7 +138,12 @@ fn serialize_expr(val: serde_json::Value) -> Vec<u8> {
                     }
                 }
             } else {
-                result.append(&mut i32::to_be_bytes(val["data"]["value"].as_object().unwrap().iter().len() as i32).to_vec());
+                result.append(
+                    &mut i32::to_be_bytes(
+                        val["data"]["value"].as_object().unwrap().iter().len() as i32
+                    )
+                    .to_vec(),
+                );
                 for (k, v) in val["data"]["value"].as_object().unwrap().iter() {
                     result.push(7);
                     let mut key_bytes = k.as_bytes().to_vec();
@@ -330,9 +335,15 @@ fn serialize_destructure(data: &Value) -> Vec<u8> {
         let is_rest = b.get("rest").and_then(|v| v.as_bool()).unwrap_or(false);
         let has_default = b.get("default").is_some();
         let mut flags = 0u8;
-        if has_default { flags |= 1; }
-        if is_rest { flags |= 2; }
-        if is_hole { flags |= 4; }
+        if has_default {
+            flags |= 1;
+        }
+        if is_rest {
+            flags |= 2;
+        }
+        if is_hole {
+            flags |= 4;
+        }
         result.push(flags);
         if is_hole {
             continue;
@@ -438,23 +449,49 @@ fn collect_bound(node: &Value, bound: &mut std::collections::BTreeSet<String>) {
         }
         "ifStmt" => {
             let d = &node["data"];
-            if let Some(b) = d["body"].as_array() { for s in b { collect_bound(s, bound); } }
-            if d.get("elseifStmt").is_some() { collect_bound(&d["elseifStmt"], bound); }
+            if let Some(b) = d["body"].as_array() {
+                for s in b {
+                    collect_bound(s, bound);
+                }
+            }
+            if d.get("elseifStmt").is_some() {
+                collect_bound(&d["elseifStmt"], bound);
+            }
             if let Some(e) = d.get("elseStmt") {
-                if let Some(b) = e["data"]["body"].as_array() { for s in b { collect_bound(s, bound); } }
+                if let Some(b) = e["data"]["body"].as_array() {
+                    for s in b {
+                        collect_bound(s, bound);
+                    }
+                }
             }
         }
         "loopStmt" => {
-            if let Some(b) = node["data"]["body"].as_array() { for s in b { collect_bound(s, bound); } }
+            if let Some(b) = node["data"]["body"].as_array() {
+                for s in b {
+                    collect_bound(s, bound);
+                }
+            }
         }
         "tryStmt" => {
-            if let Some(b) = node["data"]["body"].as_array() { for s in b { collect_bound(s, bound); } }
-            if let Some(b) = node["data"]["catchBody"].as_array() { for s in b { collect_bound(s, bound); } }
+            if let Some(b) = node["data"]["body"].as_array() {
+                for s in b {
+                    collect_bound(s, bound);
+                }
+            }
+            if let Some(b) = node["data"]["catchBody"].as_array() {
+                for s in b {
+                    collect_bound(s, bound);
+                }
+            }
         }
         "switchStmt" => {
             if let Some(cases) = node["data"]["cases"].as_array() {
                 for c in cases {
-                    if let Some(b) = c["body"]["body"].as_array() { for s in b { collect_bound(s, bound); } }
+                    if let Some(b) = c["body"]["body"].as_array() {
+                        for s in b {
+                            collect_bound(s, bound);
+                        }
+                    }
                 }
             }
         }
@@ -462,8 +499,12 @@ fn collect_bound(node: &Value, bound: &mut std::collections::BTreeSet<String>) {
             // Every non-hole binding introduces a name at this scope level.
             if let Some(bindings) = node["data"]["bindings"].as_array() {
                 for b in bindings {
-                    if b.get("hole").and_then(|v| v.as_bool()).unwrap_or(false) { continue; }
-                    if let Some(n) = b["name"].as_str() { bound.insert(n.to_string()); }
+                    if b.get("hole").and_then(|v| v.as_bool()).unwrap_or(false) {
+                        continue;
+                    }
+                    if let Some(n) = b["name"].as_str() {
+                        bound.insert(n.to_string());
+                    }
                 }
             }
         }
@@ -478,12 +519,19 @@ fn collect_bound(node: &Value, bound: &mut std::collections::BTreeSet<String>) {
 fn collect_used(node: &Value, used: &mut std::collections::BTreeSet<String>) {
     match node["type"].as_str().unwrap_or("") {
         "identifier" => {
-            if let Some(n) = node["data"]["name"].as_str() { used.insert(n.to_string()); }
+            if let Some(n) = node["data"]["name"].as_str() {
+                used.insert(n.to_string());
+            }
         }
         "functionDefinition" => {
-            let nparams = node["data"]["params"].as_array().cloned().unwrap_or_default();
+            let nparams = node["data"]["params"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
             let nbody = node["data"]["body"].as_array().cloned().unwrap_or_default();
-            for f in free_vars(&nparams, &nbody) { used.insert(f); }
+            for f in free_vars(&nparams, &nbody) {
+                used.insert(f);
+            }
         }
         "indexer" => {
             collect_used(&node["data"]["target"], used);
@@ -491,7 +539,11 @@ fn collect_used(node: &Value, used: &mut std::collections::BTreeSet<String>) {
         }
         "functionCall" => {
             collect_used(&node["data"]["callee"], used);
-            if let Some(args) = node["data"]["args"].as_array() { for a in args { collect_used(a, used); } }
+            if let Some(args) = node["data"]["args"].as_array() {
+                for a in args {
+                    collect_used(a, used);
+                }
+            }
         }
         "arithmetic" | "logical" => {
             collect_used(&node["data"]["operand1"], used);
@@ -512,60 +564,97 @@ fn collect_used(node: &Value, used: &mut std::collections::BTreeSet<String>) {
         "object" => {
             if let Some(entries) = node["data"].get("entries").and_then(|e| e.as_array()) {
                 for entry in entries {
-                    if let Some(spread) = entry.get("spread") { collect_used(spread, used); }
-                    else { collect_used(&entry["value"], used); }
+                    if let Some(spread) = entry.get("spread") {
+                        collect_used(spread, used);
+                    } else {
+                        collect_used(&entry["value"], used);
+                    }
                 }
             }
             if let Some(obj) = node["data"]["value"].as_object() {
-                for (_k, v) in obj { collect_used(v, used); }
+                for (_k, v) in obj {
+                    collect_used(v, used);
+                }
             }
         }
         "array" => {
             if let Some(arr) = node["data"]["value"].as_array() {
-                for v in arr { collect_used(v, used); }
+                for v in arr {
+                    collect_used(v, used);
+                }
             }
         }
         "spread" => collect_used(&node["data"]["value"], used),
         "template" => {
             if let Some(parts) = node["data"]["parts"].as_array() {
-                for p in parts { collect_used(p, used); }
+                for p in parts {
+                    collect_used(p, used);
+                }
             }
         }
         "destructure" => {
             collect_used(&node["data"]["source"], used);
             if let Some(bindings) = node["data"]["bindings"].as_array() {
                 for b in bindings {
-                    if let Some(def) = b.get("default") { collect_used(def, used); }
+                    if let Some(def) = b.get("default") {
+                        collect_used(def, used);
+                    }
                 }
             }
         }
         "ifStmt" => {
             let d = &node["data"];
             collect_used(&d["condition"], used);
-            if let Some(b) = d["body"].as_array() { for s in b { collect_used(s, used); } }
-            if d.get("elseifStmt").is_some() { collect_used(&d["elseifStmt"], used); }
+            if let Some(b) = d["body"].as_array() {
+                for s in b {
+                    collect_used(s, used);
+                }
+            }
+            if d.get("elseifStmt").is_some() {
+                collect_used(&d["elseifStmt"], used);
+            }
             if let Some(e) = d.get("elseStmt") {
-                if let Some(b) = e["data"]["body"].as_array() { for s in b { collect_used(s, used); } }
+                if let Some(b) = e["data"]["body"].as_array() {
+                    for s in b {
+                        collect_used(s, used);
+                    }
+                }
             }
         }
         "loopStmt" => {
             collect_used(&node["data"]["condition"], used);
-            if let Some(b) = node["data"]["body"].as_array() { for s in b { collect_used(s, used); } }
+            if let Some(b) = node["data"]["body"].as_array() {
+                for s in b {
+                    collect_used(s, used);
+                }
+            }
         }
         "throwOperation" => collect_used(&node["data"]["value"], used),
         "tryStmt" => {
             // The catch binding (`errName`) is a runtime scope binding; treating
             // its uses as free at worst captures an outer same-named variable
             // needlessly, which is harmless.
-            if let Some(b) = node["data"]["body"].as_array() { for s in b { collect_used(s, used); } }
-            if let Some(b) = node["data"]["catchBody"].as_array() { for s in b { collect_used(s, used); } }
+            if let Some(b) = node["data"]["body"].as_array() {
+                for s in b {
+                    collect_used(s, used);
+                }
+            }
+            if let Some(b) = node["data"]["catchBody"].as_array() {
+                for s in b {
+                    collect_used(s, used);
+                }
+            }
         }
         "switchStmt" => {
             collect_used(&node["data"]["value"], used);
             if let Some(cases) = node["data"]["cases"].as_array() {
                 for c in cases {
                     collect_used(&c["value"], used);
-                    if let Some(b) = c["body"]["body"].as_array() { for s in b { collect_used(s, used); } }
+                    if let Some(b) = c["body"]["body"].as_array() {
+                        for s in b {
+                            collect_used(s, used);
+                        }
+                    }
                 }
             }
         }
@@ -576,20 +665,28 @@ fn collect_used(node: &Value, used: &mut std::collections::BTreeSet<String>) {
 /// The free variables of a function: identifiers it (transitively) references,
 /// minus everything bound at its own level (params, locals, nested-fn names).
 fn free_vars(params: &[Value], body: &[Value]) -> Vec<String> {
-    let mut bound: std::collections::BTreeSet<String> =
-        params.iter().filter_map(|p| p.as_str().map(|s| s.to_string())).collect();
-    for stmt in body { collect_bound(stmt, &mut bound); }
+    let mut bound: std::collections::BTreeSet<String> = params
+        .iter()
+        .filter_map(|p| p.as_str().map(|s| s.to_string()))
+        .collect();
+    for stmt in body {
+        collect_bound(stmt, &mut bound);
+    }
     let mut used: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-    for stmt in body { collect_used(stmt, &mut used); }
+    for stmt in body {
+        collect_used(stmt, &mut used);
+    }
     used.into_iter().filter(|n| !bound.contains(n)).collect()
 }
 
 pub fn compile_ast(program: serde_json::Value, start_point: usize) -> Vec<u8> {
     let mut result: Vec<u8> = vec![];
-    let mut op_counter: i64 = 1;
     let mut step_start_map: HashMap<i64, usize> = HashMap::new();
     let mut reserved_branch_map: HashMap<i64, Vec<usize>> = HashMap::new();
-    for operation in program["body"].as_array().unwrap().iter() {
+    // Step numbers are 1-based and must stay in lockstep with the iteration,
+    // so they are derived from it rather than tracked in a parallel counter.
+    for (index, operation) in program["body"].as_array().unwrap().iter().enumerate() {
+        let op_counter: i64 = index as i64 + 1;
         step_start_map
             .entry(op_counter)
             .or_insert(start_point + result.len());
@@ -792,8 +889,12 @@ pub fn compile_ast(program: serde_json::Value, start_point: usize) -> Vec<u8> {
                 // than cloning the whole enclosing scope.
                 let empty_params = vec![];
                 let frees = free_vars(
-                    operation["data"]["params"].as_array().unwrap_or(&empty_params),
-                    operation["data"]["body"].as_array().unwrap_or(&empty_params),
+                    operation["data"]["params"]
+                        .as_array()
+                        .unwrap_or(&empty_params),
+                    operation["data"]["body"]
+                        .as_array()
+                        .unwrap_or(&empty_params),
                 );
                 result.append(&mut i32::to_be_bytes(frees.len() as i32).to_vec());
                 for f in frees.iter() {
@@ -878,7 +979,6 @@ pub fn compile_ast(program: serde_json::Value, start_point: usize) -> Vec<u8> {
                 // skip
             }
         }
-        op_counter += 1;
     }
     for (key, value) in reserved_branch_map {
         let step_point = *step_start_map.get(&key).unwrap();
@@ -914,7 +1014,7 @@ pub fn parse_code(program: String) -> serde_json::Value {
         }
         let c_stred: &str = &c.to_string();
         if c == ' ' || c == '\n' || c == '\t' {
-            if temp_token.len() > 0 {
+            if !temp_token.is_empty() {
                 tokens.push(temp_token);
                 temp_token = "".to_string();
             }
@@ -925,7 +1025,7 @@ pub fn parse_code(program: String) -> serde_json::Value {
         ]
         .contains(&c_stred)
         {
-            if temp_token.len() > 0 {
+            if !temp_token.is_empty() {
                 tokens.push(temp_token);
                 temp_token = "".to_string();
             }
@@ -934,7 +1034,7 @@ pub fn parse_code(program: String) -> serde_json::Value {
         }
         temp_token.push(c);
     }
-    if temp_token.len() > 0 {
+    if !temp_token.is_empty() {
         tokens.push(temp_token);
     }
     // log(&format!("{:?}", tokens));
@@ -957,7 +1057,7 @@ pub fn parse_code(program: String) -> serde_json::Value {
         if counter > 50 {
             break;
         }
-        if stack.len() == 0 && p >= tokens.len() {
+        if stack.is_empty() && p >= tokens.len() {
             break;
         }
         if p >= tokens.len() {
@@ -967,14 +1067,7 @@ pub fn parse_code(program: String) -> serde_json::Value {
                 stack.pop();
                 continue;
             } else if state_num == 101 {
-                if current_reg
-                    .get("type")
-                    .unwrap()
-                    .as_str()
-                    .unwrap()
-                    .to_string()
-                    == "functionCall"
-                {
+                if current_reg.get("type").unwrap().as_str().unwrap() == "functionCall" {
                     stack
                         .last_mut()
                         .unwrap()
@@ -1123,61 +1216,55 @@ pub fn parse_code(program: String) -> serde_json::Value {
                 p += 1;
                 continue;
             }
-            let parse_res_i16 = token.parse::<i16>();
-            if parse_res_i16.is_ok() {
+            if let Ok(parsed) = token.parse::<i16>() {
                 current_reg = json!({
                     "type": "i16",
-                    "data": { "value": parse_res_i16.unwrap() }
+                    "data": { "value": parsed }
                 });
                 p += 1;
                 state_num = 101;
                 continue;
             }
-            let parse_res_i32 = token.parse::<i32>();
-            if parse_res_i32.is_ok() {
+            if let Ok(parsed) = token.parse::<i32>() {
                 current_reg = json!({
                     "type": "i32",
-                    "data": { "value": parse_res_i32.unwrap() }
+                    "data": { "value": parsed }
                 });
                 p += 1;
                 state_num = 101;
                 continue;
             }
-            let parse_res_i64 = token.parse::<i64>();
-            if parse_res_i64.is_ok() {
+            if let Ok(parsed) = token.parse::<i64>() {
                 current_reg = json!({
                     "type": "i64",
-                    "data": { "value": parse_res_i64.unwrap() }
+                    "data": { "value": parsed }
                 });
                 p += 1;
                 state_num = 101;
                 continue;
             }
-            let parse_res_f32 = token.parse::<f32>();
-            if parse_res_f32.is_ok() {
+            if let Ok(parsed) = token.parse::<f32>() {
                 current_reg = json!({
                     "type": "f32",
-                    "data": { "value": parse_res_f32.unwrap() }
+                    "data": { "value": parsed }
                 });
                 p += 1;
                 state_num = 101;
                 continue;
             }
-            let parse_res_f64 = token.parse::<f64>();
-            if parse_res_f64.is_ok() {
+            if let Ok(parsed) = token.parse::<f64>() {
                 current_reg = json!({
                     "type": "f64",
-                    "data": { "value": parse_res_f64.unwrap() }
+                    "data": { "value": parsed }
                 });
                 p += 1;
                 state_num = 101;
                 continue;
             }
-            let parse_res_bool = token.parse::<bool>();
-            if parse_res_bool.is_ok() {
+            if let Ok(parsed) = token.parse::<bool>() {
                 current_reg = json!({
                     "type": "bool",
-                    "data": { "value": parse_res_bool.unwrap() }
+                    "data": { "value": parsed }
                 });
                 p += 1;
                 state_num = 101;
@@ -1221,16 +1308,7 @@ pub fn parse_code(program: String) -> serde_json::Value {
                     .insert(key, current_reg.clone());
                 state_num = 103;
                 continue;
-            } else if stack
-                .last()
-                .unwrap()
-                .get("type")
-                .unwrap()
-                .as_str()
-                .unwrap()
-                .to_string()
-                == "arithmetic"
-            {
+            } else if stack.last().unwrap().get("type").unwrap().as_str().unwrap() == "arithmetic" {
                 let last_stage = stack.last().unwrap().clone();
                 stack.pop();
                 current_reg = json!({
@@ -1242,16 +1320,7 @@ pub fn parse_code(program: String) -> serde_json::Value {
                     }
                 });
                 continue;
-            } else if stack
-                .last()
-                .unwrap()
-                .get("type")
-                .unwrap()
-                .as_str()
-                .unwrap()
-                .to_string()
-                == "definition"
-            {
+            } else if stack.last().unwrap().get("type").unwrap().as_str().unwrap() == "definition" {
                 let last_stage = stack.last().unwrap().clone();
                 stack.pop();
                 stack.last_mut().unwrap().get_mut("body").unwrap().as_array_mut().unwrap().push(json!({
@@ -1268,16 +1337,7 @@ pub fn parse_code(program: String) -> serde_json::Value {
                     }));
                 state_num = 0;
                 continue;
-            } else if stack
-                .last()
-                .unwrap()
-                .get("type")
-                .unwrap()
-                .as_str()
-                .unwrap()
-                .to_string()
-                == "assignment"
-            {
+            } else if stack.last().unwrap().get("type").unwrap().as_str().unwrap() == "assignment" {
                 let last_stage = stack.last().unwrap().clone();
                 stack.pop();
                 stack.last_mut().unwrap().get_mut("body").unwrap().as_array_mut().unwrap().push(json!({
@@ -1297,14 +1357,7 @@ pub fn parse_code(program: String) -> serde_json::Value {
             } else {
                 if token == "}" {
                     p += 1;
-                    if stack
-                        .last()
-                        .unwrap()
-                        .get("type")
-                        .unwrap()
-                        .as_str()
-                        .unwrap()
-                        .to_string()
+                    if stack.last().unwrap().get("type").unwrap().as_str().unwrap()
                         == "objPropValue"
                     {
                         stack.pop();
@@ -1324,14 +1377,7 @@ pub fn parse_code(program: String) -> serde_json::Value {
                     }
                     let last_stage = stack.last().unwrap().clone();
                     stack.pop();
-                    if last_stage
-                        .get("type")
-                        .unwrap()
-                        .as_str()
-                        .unwrap()
-                        .to_string()
-                        == "objectExpr"
-                    {
+                    if last_stage.get("type").unwrap().as_str().unwrap() == "objectExpr" {
                         current_reg = json!({
                             "type": "object",
                             "data": {
@@ -1341,27 +1387,11 @@ pub fn parse_code(program: String) -> serde_json::Value {
                     }
                     continue;
                 } else if token == ")" {
-                    if stack
-                        .last()
-                        .unwrap()
-                        .get("type")
-                        .unwrap()
-                        .as_str()
-                        .unwrap()
-                        .to_string()
-                        == "paren"
-                    {
+                    if stack.last().unwrap().get("type").unwrap().as_str().unwrap() == "paren" {
                         p += 1;
                         stack.pop();
                         continue;
-                    } else if stack
-                        .last()
-                        .unwrap()
-                        .get("type")
-                        .unwrap()
-                        .as_str()
-                        .unwrap()
-                        .to_string()
+                    } else if stack.last().unwrap().get("type").unwrap().as_str().unwrap()
                         == "functionCall"
                     {
                         p += 1;
@@ -1381,10 +1411,7 @@ pub fn parse_code(program: String) -> serde_json::Value {
                         });
                         continue;
                     }
-                } else if vec!["+", "-", "/", "*", "^", "%"]
-                    .iter()
-                    .any(|op| op.to_string() == token)
-                {
+                } else if ["+", "-", "/", "*", "^", "%"].iter().any(|op| *op == token) {
                     stack.push(HashMap::new());
                     stack
                         .last_mut()
@@ -1401,40 +1428,25 @@ pub fn parse_code(program: String) -> serde_json::Value {
                     p += 1;
                     state_num = 100;
                     continue;
-                } else if token == "," {
-                    if stack
-                        .last()
-                        .unwrap()
-                        .get("type")
-                        .unwrap()
-                        .as_str()
-                        .unwrap()
-                        .to_string()
+                } else if token == ","
+                    && stack.last().unwrap().get("type").unwrap().as_str().unwrap()
                         == "functionCall"
-                    {
-                        p += 1;
-                        stack
-                            .last_mut()
-                            .unwrap()
-                            .get_mut("args")
-                            .unwrap()
-                            .as_array_mut()
-                            .unwrap()
-                            .push(current_reg.clone());
-                        state_num = 100;
-                        continue;
-                    }
+                {
+                    p += 1;
+                    stack
+                        .last_mut()
+                        .unwrap()
+                        .get_mut("args")
+                        .unwrap()
+                        .as_array_mut()
+                        .unwrap()
+                        .push(current_reg.clone());
+                    state_num = 100;
+                    continue;
                 }
             }
             if !stack.last().unwrap().get("body").is_none() {
-                if current_reg
-                    .get("type")
-                    .unwrap()
-                    .as_str()
-                    .unwrap()
-                    .to_string()
-                    == "functionCall"
-                {
+                if current_reg.get("type").unwrap().as_str().unwrap() == "functionCall" {
                     stack
                         .last_mut()
                         .unwrap()
@@ -1470,11 +1482,9 @@ pub fn parse_code(program: String) -> serde_json::Value {
                 state_num = 101;
                 continue;
             }
-        } else if state_num == 104 {
-            if token == ":" {
-                p += 1;
-                state_num = 100;
-            }
+        } else if state_num == 104 && token == ":" {
+            p += 1;
+            state_num = 100;
         }
     }
     result
@@ -1513,7 +1523,7 @@ pub fn compile_code(p: String) -> Vec<u8> {
         }
         let c_stred: &str = &c.to_string();
         if c == ' ' || c == '\n' || c == '\t' {
-            if temp_token.len() > 0 {
+            if !temp_token.is_empty() {
                 tokens.push(temp_token);
                 temp_token = "".to_string();
             }
@@ -1524,7 +1534,7 @@ pub fn compile_code(p: String) -> Vec<u8> {
         ]
         .contains(&c_stred)
         {
-            if temp_token.len() > 0 {
+            if !temp_token.is_empty() {
                 tokens.push(temp_token);
                 temp_token = "".to_string();
             }
@@ -1533,7 +1543,7 @@ pub fn compile_code(p: String) -> Vec<u8> {
         }
         temp_token.push(c);
     }
-    if temp_token.len() > 0 {
+    if !temp_token.is_empty() {
         tokens.push(temp_token);
     }
     log(&format!("{:?}", tokens));
@@ -1670,7 +1680,7 @@ pub fn compile_code(p: String) -> Vec<u8> {
                 continue;
             }
             let path = pa.borrow().clone();
-            if path.prefix == "" {
+            if path.prefix.is_empty() {
                 let mut prev_exists = false;
                 for hist in stack.clone().into_iter().rev() {
                     if hist.1.id == path.id && hist.3 == stack.len() {
@@ -1745,12 +1755,10 @@ pub fn compile_code(p: String) -> Vec<u8> {
             println!("Finished !");
             break;
         }
-        if !found {
-            if stack.len() > 0 {
-                stack.pop();
-            }
+        if !found && !stack.is_empty() {
+            stack.pop();
         }
-        if stack.len() == 0 {
+        if stack.is_empty() {
             break;
         }
     }

@@ -8,10 +8,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:elpian_ui/elpian_ui.dart';
 
 void main() {
-  setUp(() { GlobalStylesheetManager().clear(); CSSParser.viewportOverride = const Size(412, 915); });
-  tearDown(() { GlobalStylesheetManager().clear(); CSSParser.viewportOverride = null; });
+  setUp(() {
+    GlobalStylesheetManager().clear();
+    CSSParser.viewportOverride = const Size(412, 915);
+  });
+  tearDown(() {
+    GlobalStylesheetManager().clear();
+    CSSParser.viewportOverride = null;
+  });
 
-  testWidgets('flex pill with inner event face lays out without ParentData error', (tester) async {
+  testWidgets(
+      'flex pill with inner event face lays out without ParentData error',
+      (tester) async {
     tester.view.physicalSize = const Size(412, 915);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -22,10 +30,17 @@ void main() {
           'children': [
             {
               'type': 'div',
-              'style': {'display': 'flex', 'flexDirection': 'row', 'justifyContent': 'center'},
+              'style': {
+                'display': 'flex',
+                'flexDirection': 'row',
+                'justifyContent': 'center'
+              },
               'events': {'click': handler},
               'children': [
-                {'type': 'span', 'props': {'text': label}},
+                {
+                  'type': 'span',
+                  'props': {'text': label}
+                },
               ],
             },
           ],
@@ -34,11 +49,15 @@ void main() {
     final dock = {
       'type': 'div',
       'style': {'display': 'flex', 'flexDirection': 'row', 'gap': 7},
-      'children': [pill('GOLD', '__openRes_gold'), pill('WOOD', '__openRes_wood')],
+      'children': [
+        pill('GOLD', '__openRes_gold'),
+        pill('WOOD', '__openRes_wood')
+      ],
     };
 
     final engine = ElpianEngine();
-    await tester.pumpWidget(MaterialApp(home: Scaffold(body: engine.renderFromJson(dock))));
+    await tester.pumpWidget(
+        MaterialApp(home: Scaffold(body: engine.renderFromJson(dock))));
     await tester.pump();
 
     expect(tester.takeException(), isNull);

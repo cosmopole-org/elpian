@@ -77,7 +77,8 @@ class _HtmlSelectState extends State<HtmlSelect> {
       // Fall back to `<option>` children.
       for (final child in widget.node.children) {
         if (child.type == 'option') {
-          final v = (child.props['value'] ?? child.props['text'] ?? '').toString();
+          final v =
+              (child.props['value'] ?? child.props['text'] ?? '').toString();
           out.add(_SelectOption(v, (child.props['text'] ?? v).toString()));
         }
       }

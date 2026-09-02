@@ -49,8 +49,8 @@ class _ElpianStaggeredAnimationWidgetState
 
   @override
   Widget build(BuildContext context) {
-    final staggerDelay = widget.node.style?.staggerDelay ??
-        const Duration(milliseconds: 100);
+    final staggerDelay =
+        widget.node.style?.staggerDelay ?? const Duration(milliseconds: 100);
     final curve = widget.node.style?.transitionCurve ?? Curves.easeOut;
     final childCount = widget.children.length;
     if (childCount == 0) return const SizedBox.shrink();
@@ -61,8 +61,7 @@ class _ElpianStaggeredAnimationWidgetState
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: List.generate(childCount, (index) {
-        final startFraction =
-            (staggerDelay.inMilliseconds * index) / totalMs;
+        final startFraction = (staggerDelay.inMilliseconds * index) / totalMs;
         final endFraction =
             ((staggerDelay.inMilliseconds * index) + (totalMs - totalDelayMs)) /
                 totalMs;

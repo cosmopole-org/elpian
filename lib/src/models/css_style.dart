@@ -623,7 +623,8 @@ class CSSStyle {
       animationDuration: animationDuration ?? this.animationDuration,
       animationName: animationName ?? this.animationName,
       animationDelay: animationDelay ?? this.animationDelay,
-      animationIterationCount: animationIterationCount ?? this.animationIterationCount,
+      animationIterationCount:
+          animationIterationCount ?? this.animationIterationCount,
       animationDirection: animationDirection ?? this.animationDirection,
       animationFillMode: animationFillMode ?? this.animationFillMode,
       animationPlayState: animationPlayState ?? this.animationPlayState,
@@ -647,7 +648,8 @@ class CSSStyle {
       alignmentBegin: alignmentBegin ?? this.alignmentBegin,
       alignmentEnd: alignmentEnd ?? this.alignmentEnd,
       shimmerBaseColor: shimmerBaseColor ?? this.shimmerBaseColor,
-      shimmerHighlightColor: shimmerHighlightColor ?? this.shimmerHighlightColor,
+      shimmerHighlightColor:
+          shimmerHighlightColor ?? this.shimmerHighlightColor,
       animationAutoReverse: animationAutoReverse ?? this.animationAutoReverse,
       animationRepeat: animationRepeat ?? this.animationRepeat,
       keyframes: keyframes ?? this.keyframes,

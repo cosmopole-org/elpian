@@ -27,7 +27,8 @@ void main() {
     });
 
     test('unsupported multiply yields null (property dropped, not wrong)', () {
-      expect(CSSParser.parseDimension('calc(100vh * 2)', isWidth: false), isNull);
+      expect(
+          CSSParser.parseDimension('calc(100vh * 2)', isWidth: false), isNull);
     });
   });
 
@@ -36,14 +37,16 @@ void main() {
       // CSS `env()` uses the *actual* inset; the fallback applies only when the
       // variable is unknown. The headless test view has no safe-area padding.
       expect(
-        CSSParser.parseDimension('env(safe-area-inset-bottom, 16px)', isWidth: false),
+        CSSParser.parseDimension('env(safe-area-inset-bottom, 16px)',
+            isWidth: false),
         0,
       );
     });
 
     test('an unknown env var uses its fallback', () {
       expect(
-        CSSParser.parseDimension('env(safe-area-inset-xyz, 16px)', isWidth: false),
+        CSSParser.parseDimension('env(safe-area-inset-xyz, 16px)',
+            isWidth: false),
         16,
       );
     });
@@ -68,9 +71,16 @@ void main() {
       final engine = ElpianEngine();
       final node = {
         'type': 'div',
-        'style': {'width': 300, 'aspectRatio': '3/1', 'backgroundColor': '#222'},
+        'style': {
+          'width': 300,
+          'aspectRatio': '3/1',
+          'backgroundColor': '#222'
+        },
         'children': [
-          {'type': 'span', 'props': {'text': 'x'}},
+          {
+            'type': 'span',
+            'props': {'text': 'x'}
+          },
         ],
       };
       await tester.pumpWidget(MaterialApp(
@@ -88,8 +98,10 @@ void main() {
   });
 
   group('@media orientation', () {
-    final landscape = css.MediaQuery(query: '(orientation: landscape)', stylesheet: css.CSSStylesheet());
-    final portrait = css.MediaQuery(query: '(orientation: portrait)', stylesheet: css.CSSStylesheet());
+    final landscape = css.MediaQuery(
+        query: '(orientation: landscape)', stylesheet: css.CSSStylesheet());
+    final portrait = css.MediaQuery(
+        query: '(orientation: portrait)', stylesheet: css.CSSStylesheet());
 
     test('landscape matches wide viewports only', () {
       expect(landscape.matches(800, 400), isTrue);
@@ -117,8 +129,14 @@ void main() {
         'type': 'div',
         'style': {'display': 'flex', 'flexDirection': 'row', 'width': 400},
         'children': [
-          {'type': 'div', 'style': {'flexGrow': 1, 'height': 10, 'backgroundColor': '#a00'}},
-          {'type': 'div', 'style': {'width': 100, 'height': 10, 'backgroundColor': '#0a0'}},
+          {
+            'type': 'div',
+            'style': {'flexGrow': 1, 'height': 10, 'backgroundColor': '#a00'}
+          },
+          {
+            'type': 'div',
+            'style': {'width': 100, 'height': 10, 'backgroundColor': '#0a0'}
+          },
         ],
       };
       await tester.pumpWidget(MaterialApp(

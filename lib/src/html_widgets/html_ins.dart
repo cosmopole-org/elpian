@@ -6,13 +6,14 @@ import '../models/css_style.dart';
 class HtmlIns {
   static Widget build(ElpianNode node, List<Widget> children) {
     final text = node.props['text'] as String? ?? '';
-    
+
     const defaultStyle = CSSStyle(
       textDecoration: TextDecoration.underline,
     );
-    
+
     final mergedStyle = node.style ?? defaultStyle;
-    Widget result = Text(text, style: CSSProperties.createTextStyle(mergedStyle));
+    Widget result =
+        Text(text, style: CSSProperties.createTextStyle(mergedStyle));
     result = CSSProperties.applyStyle(result, mergedStyle);
 
     return result;

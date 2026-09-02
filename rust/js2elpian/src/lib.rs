@@ -138,7 +138,10 @@ enum JsBinOp {
 /// resolved to universal builtins / intrinsics at compile time (see
 /// [`JsParser::resolve_namespace`]).
 fn is_js_namespace(name: &str) -> bool {
-    matches!(name, "Math" | "JSON" | "Object" | "Number" | "Array" | "console")
+    matches!(
+        name,
+        "Math" | "JSON" | "Object" | "Number" | "Array" | "console"
+    )
 }
 
 /// Decode one backslash escape starting at `chars[i]` (the backslash) inside a
@@ -235,10 +238,10 @@ fn tokenize_js(src: &str) -> Vec<JsTok> {
     // Longest punctuators first so the greedy scan never splits `===` into
     // `==` + `=`, `>>>` into `>>` + `>`, and so on.
     let puncts: &[&str] = &[
-        ">>>=", "...", "===", "!==", "**=", "<<=", ">>=", ">>>", "&&=", "||=", "??=", "**",
-        "??", "==", "!=", "<=", ">=", "=>", "&&", "||", "++", "--", "+=", "-=", "*=", "/=",
-        "%=", "&=", "|=", "^=", "?.", "<<", ">>", "(", ")", "{", "}", "[", "]", ";", ",", ".",
-        ":", "?", "<", ">", "=", "+", "-", "*", "/", "%", "!", "^", "&", "|", "~",
+        ">>>=", "...", "===", "!==", "**=", "<<=", ">>=", ">>>", "&&=", "||=", "??=", "**", "??",
+        "==", "!=", "<=", ">=", "=>", "&&", "||", "++", "--", "+=", "-=", "*=", "/=", "%=", "&=",
+        "|=", "^=", "?.", "<<", ">>", "(", ")", "{", "}", "[", "]", ";", ",", ".", ":", "?", "<",
+        ">", "=", "+", "-", "*", "/", "%", "!", "^", "&", "|", "~",
     ];
     while i < n {
         let c = chars[i];
@@ -353,7 +356,10 @@ fn tokenize_js(src: &str) -> Vec<JsTok> {
             }
             // Emit with the leading zero restored so every downstream consumer
             // sees a conventional literal.
-            toks.push(JsTok::Num(format!("0{}", chars[start..i].iter().collect::<String>())));
+            toks.push(JsTok::Num(format!(
+                "0{}",
+                chars[start..i].iter().collect::<String>()
+            )));
             continue;
         }
         if c.is_ascii_digit() {
@@ -437,7 +443,9 @@ fn js_num_literal(s: &str) -> Value {
     } else {
         match s.parse::<i64>() {
             Ok(v) => json!({ "type": "i64", "data": { "value": v } }),
-            Err(_) => json!({ "type": "f64", "data": { "value": s.parse::<f64>().unwrap_or(0.0) } }),
+            Err(_) => {
+                json!({ "type": "f64", "data": { "value": s.parse::<f64>().unwrap_or(0.0) } })
+            }
         }
     }
 }
@@ -483,7 +491,9 @@ fn js_assign(target: Value, rhs: Value) -> Option<Value> {
         }
         "indexer" => {
             if target["data"]["target"]["type"] == "identifier" {
-                Some(json!({ "type": "assignment", "data": { "leftSide": target, "rightSide": rhs } }))
+                Some(
+                    json!({ "type": "assignment", "data": { "leftSide": target, "rightSide": rhs } }),
+                )
             } else {
                 let base = target["data"]["target"].clone();
                 let index = target["data"]["index"].clone();
@@ -966,7 +976,11 @@ impl JsParser {
                 }
             } else {
                 // Class field: `name = expr;` or bare `name;` (defaults to null).
-                let val = if self.eat_punct("=") { self.parse_expr() } else { js_null() };
+                let val = if self.eat_punct("=") {
+                    self.parse_expr()
+                } else {
+                    js_null()
+                };
                 self.eat_punct(";");
                 if is_static {
                     static_fields.push((member, val));
@@ -989,7 +1003,8 @@ impl JsParser {
                 }
             }
         }
-        self.class_ctor_params.insert(name.clone(), ctor_params.clone());
+        self.class_ctor_params
+            .insert(name.clone(), ctor_params.clone());
 
         // Drain field-initialiser / super-arg closures lifted during member
         // parsing; they belong at the head of the installer body.
@@ -1073,19 +1088,27 @@ impl JsParser {
             "name": format!("__init_{}", name), "params": init_params, "body": init_body } }));
 
         // 3. The shared prototype, built once at class-definition time.
-        out.push(js_def(&format!("__proto_{}", name),
-            json!({ "type": "object", "data": { "value": Value::Object(proto_map) } })));
+        out.push(js_def(
+            &format!("__proto_{}", name),
+            json!({ "type": "object", "data": { "value": Value::Object(proto_map) } }),
+        ));
 
         // 4. The constructor: a fresh object linked to the prototype, initialised,
         //    and returned. `new C(...)` and a bare `C(...)` both run this.
         let mut this_obj = serde_json::Map::new();
-        this_obj.insert("__proto".to_string(), js_ident(&format!("__proto_{}", name)));
+        this_obj.insert(
+            "__proto".to_string(),
+            js_ident(&format!("__proto_{}", name)),
+        );
         let mut call_args: Vec<Value> = vec![js_ident("this")];
         for p in ctor_params.iter() {
             call_args.push(js_ident(p));
         }
         let ctor_body_out = vec![
-            js_def("this", json!({ "type": "object", "data": { "value": Value::Object(this_obj) } })),
+            js_def(
+                "this",
+                json!({ "type": "object", "data": { "value": Value::Object(this_obj) } }),
+            ),
             json!({ "type": "functionCall", "data": {
                 "callee": js_ident(&format!("__init_{}", name)), "args": call_args } }),
             json!({ "type": "returnOperation", "data": { "value": js_ident("this") } }),
@@ -1116,8 +1139,10 @@ impl JsParser {
             for (fname, val) in static_fields.into_iter() {
                 static_map.insert(fname, val);
             }
-            out.push(js_def(&format!("__static_{}", name),
-                json!({ "type": "object", "data": { "value": Value::Object(static_map) } })));
+            out.push(js_def(
+                &format!("__static_{}", name),
+                json!({ "type": "object", "data": { "value": Value::Object(static_map) } }),
+            ));
             self.class_statics.insert(name.clone());
         }
 
@@ -1168,9 +1193,11 @@ impl JsParser {
         self.anon_counter += 1;
         let first = format!("__do_first_{}", self.anon_counter);
         let guard = js_logical("||", js_ident(&first), cond);
-        let mut loop_body: Vec<Value> = vec![
-            js_assign(js_ident(&first), json!({ "type": "bool", "data": { "value": false } })).unwrap(),
-        ];
+        let mut loop_body: Vec<Value> = vec![js_assign(
+            js_ident(&first),
+            json!({ "type": "bool", "data": { "value": false } }),
+        )
+        .unwrap()];
         loop_body.append(&mut body);
         // Emit the `first` declaration then the loop, wrapped so the pair reads
         // as one statement via a bare block (inlined by the VM's flat scope).
@@ -1221,7 +1248,8 @@ impl JsParser {
                 self.anon_counter += 1;
                 let fe = format!("__fe_{}", self.anon_counter);
                 let mut catch_fin = fin.clone();
-                catch_fin.push(json!({ "type": "throwOperation", "data": { "value": js_ident(&fe) } }));
+                catch_fin
+                    .push(json!({ "type": "throwOperation", "data": { "value": js_ident(&fe) } }));
                 let mut out = vec![json!({ "type": "tryStmt", "data": {
                     "errName": fe, "body": inner, "catchBody": catch_fin } })];
                 out.extend(fin);
@@ -1264,7 +1292,9 @@ impl JsParser {
             // to the end of each iteration is both correct and cheap.
             let mut loop_body = body;
             loop_body.extend(update);
-            out.push(json!({ "type": "loopStmt", "data": { "condition": cond, "body": loop_body } }));
+            out.push(
+                json!({ "type": "loopStmt", "data": { "condition": cond, "body": loop_body } }),
+            );
             return out;
         }
 
@@ -1290,7 +1320,10 @@ impl JsParser {
             "body": [ json!({ "type": "breakStmt", "data": {} }) ]
         } }));
         loop_body.extend(body);
-        out.push(js_def(&started, json!({ "type": "bool", "data": { "value": false } })));
+        out.push(js_def(
+            &started,
+            json!({ "type": "bool", "data": { "value": false } }),
+        ));
         out.push(json!({ "type": "loopStmt", "data": {
             "condition": json!({ "type": "bool", "data": { "value": true } }),
             "body": loop_body
@@ -1383,10 +1416,17 @@ impl JsParser {
             "loopStmt" | "functionDefinition" => false,
             "ifStmt" => {
                 let d = &stmt["data"];
-                if d["body"].as_array().map(|b| Self::body_has_continue(b)).unwrap_or(false) {
+                if d["body"]
+                    .as_array()
+                    .map(|b| Self::body_has_continue(b))
+                    .unwrap_or(false)
+                {
                     return true;
                 }
-                if d.get("elseifStmt").map(Self::stmt_has_continue).unwrap_or(false) {
+                if d.get("elseifStmt")
+                    .map(Self::stmt_has_continue)
+                    .unwrap_or(false)
+                {
                     return true;
                 }
                 d.get("elseStmt")
@@ -1398,7 +1438,10 @@ impl JsParser {
                 .as_array()
                 .map(|cs| {
                     cs.iter().any(|c| {
-                        c["body"]["body"].as_array().map(|b| Self::body_has_continue(b)).unwrap_or(false)
+                        c["body"]["body"]
+                            .as_array()
+                            .map(|b| Self::body_has_continue(b))
+                            .unwrap_or(false)
                     })
                 })
                 .unwrap_or(false),
@@ -1475,7 +1518,11 @@ impl JsParser {
     /// Drop a single trailing `break` statement (which merely terminates a case)
     /// from a desugared case body.
     fn strip_trailing_break(mut body: Vec<Value>) -> Vec<Value> {
-        if body.last().map(|s| s["type"] == "breakStmt").unwrap_or(false) {
+        if body
+            .last()
+            .map(|s| s["type"] == "breakStmt")
+            .unwrap_or(false)
+        {
             body.pop();
         }
         body
@@ -1555,7 +1602,14 @@ impl JsParser {
             return js_assign(target, rhs).into_iter().collect();
         }
         // Arithmetic compound assignment (native arithmetic operators).
-        for (pp, op) in [("+=", "+"), ("-=", "-"), ("*=", "*"), ("/=", "/"), ("%=", "%"), ("**=", "^")] {
+        for (pp, op) in [
+            ("+=", "+"),
+            ("-=", "-"),
+            ("*=", "*"),
+            ("/=", "/"),
+            ("%=", "%"),
+            ("**=", "^"),
+        ] {
             if self.eat_punct(pp) {
                 let rhs = self.parse_expr();
                 return js_assign(target.clone(), js_arith(op, target, rhs))
@@ -1565,8 +1619,12 @@ impl JsParser {
         }
         // Bitwise / shift compound assignment (prelude-helper operators).
         for (pp, helper) in [
-            ("&=", "__band"), ("|=", "__bor"), ("^=", "__bxor"),
-            ("<<=", "__shl"), (">>=", "__shr"), (">>>=", "__ushr"),
+            ("&=", "__band"),
+            ("|=", "__bor"),
+            ("^=", "__bxor"),
+            ("<<=", "__shl"),
+            (">>=", "__shr"),
+            (">>>=", "__ushr"),
         ] {
             if self.eat_punct(pp) {
                 let rhs = self.parse_expr();
@@ -1844,7 +1902,9 @@ impl JsParser {
                 // intrinsics at compile time, unless a user class of that name
                 // owns statics (then it is an ordinary static read below).
                 if e["type"] == "identifier"
-                    && !self.class_statics.contains(e["data"]["name"].as_str().unwrap_or(""))
+                    && !self
+                        .class_statics
+                        .contains(e["data"]["name"].as_str().unwrap_or(""))
                 {
                     if let Some(ns) = e["data"]["name"].as_str() {
                         if is_js_namespace(ns) {
@@ -1873,7 +1933,10 @@ impl JsParser {
                 // `Class.staticMember` — read off the class's static holder rather
                 // than treating the constructor function as an object.
                 if e["type"] == "identifier"
-                    && e["data"]["name"].as_str().map(|n| self.class_statics.contains(n)).unwrap_or(false)
+                    && e["data"]["name"]
+                        .as_str()
+                        .map(|n| self.class_statics.contains(n))
+                        .unwrap_or(false)
                 {
                     let cname = e["data"]["name"].as_str().unwrap().to_string();
                     e = json!({ "type": "indexer", "data": {
@@ -1898,8 +1961,9 @@ impl JsParser {
                 // and `__asType(x, "T")` lower to the native VM type-test opcode
                 // (a `typeTest` AST node), not a guest call or a host round-trip.
                 // The type name is a string literal produced by the front-end.
-                e = Self::type_test_intrinsic(&e, &args)
-                    .unwrap_or_else(|| json!({ "type": "functionCall", "data": { "callee": e, "args": args } }));
+                e = Self::type_test_intrinsic(&e, &args).unwrap_or_else(
+                    || json!({ "type": "functionCall", "data": { "callee": e, "args": args } }),
+                );
             } else {
                 break;
             }
@@ -1918,8 +1982,10 @@ impl JsParser {
         // A member that is exactly a universal builtin of another name.
         let as_builtin = |b: &str| Some(js_ident(b));
         // A numeric constant read (`Math.PI`), realised as a builtin call.
-        let as_const = |b: &str| Some(json!({ "type": "functionCall", "data": {
-            "callee": js_ident(b), "args": [] } }));
+        let as_const = |b: &str| {
+            Some(json!({ "type": "functionCall", "data": {
+            "callee": js_ident(b), "args": [] } }))
+        };
         match ns {
             "Math" => match member {
                 "PI" => as_const("PI"),
@@ -1954,7 +2020,11 @@ impl JsParser {
                 // `console.log(a, b, …)` / warn / error / info → a host log call
                 // over the whole argument list.
                 if matches!(member, "log" | "warn" | "error" | "info" | "debug") {
-                    let args = if self.at_punct("(") { self.parse_args() } else { vec![] };
+                    let args = if self.at_punct("(") {
+                        self.parse_args()
+                    } else {
+                        vec![]
+                    };
                     return Some(json!({ "type": "functionCall", "data": {
                         "callee": js_ident("askHost"),
                         "args": [js_string("log"), json!({ "type": "array", "data": { "value": args } })] } }));
@@ -2396,7 +2466,11 @@ fn catch_subset_panic<T>(f: impl FnOnce() -> T) -> Result<T, String> {
         payload
             .downcast_ref::<String>()
             .cloned()
-            .or_else(|| payload.downcast_ref::<&'static str>().map(|s| s.to_string()))
+            .or_else(|| {
+                payload
+                    .downcast_ref::<&'static str>()
+                    .map(|s| s.to_string())
+            })
             .unwrap_or_else(|| "javascript parse error".to_string())
     })
 }

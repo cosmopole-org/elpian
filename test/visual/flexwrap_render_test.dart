@@ -65,8 +65,16 @@ void main() {
       'type': 'Row',
       'style': {'gap': 8},
       'children': [
-        {'type': 'Container', 'style': {'width': 40, 'height': 40}, 'children': const []},
-        {'type': 'Container', 'style': {'width': 40, 'height': 40}, 'children': const []},
+        {
+          'type': 'Container',
+          'style': {'width': 40, 'height': 40},
+          'children': const []
+        },
+        {
+          'type': 'Container',
+          'style': {'width': 40, 'height': 40},
+          'children': const []
+        },
       ],
     });
     await tester.pumpWidget(MaterialApp(home: Scaffold(body: widget)));

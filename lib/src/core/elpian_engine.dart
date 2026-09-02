@@ -96,7 +96,8 @@ class ElpianEngine {
     _registry.register('ClipRRect', ElpianClipRRect.build);
     _registry.register('ConstrainedBox', ElpianConstrainedBox.build);
     _registry.register('AspectRatio', ElpianAspectRatio.build);
-    _registry.register('FractionallySizedBox', ElpianFractionallySizedBox.build);
+    _registry.register(
+        'FractionallySizedBox', ElpianFractionallySizedBox.build);
     _registry.register('FittedBox', ElpianFittedBox.build);
     _registry.register('LimitedBox', ElpianLimitedBox.build);
     _registry.register('OverflowBox', ElpianOverflowBox.build);
@@ -104,8 +105,10 @@ class ElpianEngine {
     _registry.register('Spacer', ElpianSpacer.build);
     _registry.register('Divider', ElpianDivider.build);
     _registry.register('VerticalDivider', ElpianVerticalDivider.build);
-    _registry.register('CircularProgressIndicator', ElpianCircularProgressIndicator.build);
-    _registry.register('LinearProgressIndicator', ElpianLinearProgressIndicator.build);
+    _registry.register(
+        'CircularProgressIndicator', ElpianCircularProgressIndicator.build);
+    _registry.register(
+        'LinearProgressIndicator', ElpianLinearProgressIndicator.build);
     _registry.register('Tooltip', ElpianTooltip.build);
     _registry.register('Badge', ElpianBadge.build);
     _registry.register('Chip', ElpianChip.build);
@@ -131,7 +134,8 @@ class ElpianEngine {
     _registry.register('AnimatedRotation', ElpianAnimatedRotation.build);
     _registry.register('AnimatedSlide', ElpianAnimatedSlide.build);
     _registry.register('AnimatedSize', ElpianAnimatedSize.build);
-    _registry.register('AnimatedDefaultTextStyle', ElpianAnimatedDefaultTextStyle.build);
+    _registry.register(
+        'AnimatedDefaultTextStyle', ElpianAnimatedDefaultTextStyle.build);
 
     // Animation widgets - Explicit
     _registry.register('FadeTransition', ElpianFadeTransition.build);
@@ -141,7 +145,8 @@ class ElpianEngine {
     _registry.register('SizeTransition', ElpianSizeTransition.build);
 
     // Animation widgets - Custom
-    _registry.register('TweenAnimationBuilder', ElpianTweenAnimationBuilder.build);
+    _registry.register(
+        'TweenAnimationBuilder', ElpianTweenAnimationBuilder.build);
     _registry.register('StaggeredAnimation', ElpianStaggeredAnimation.build);
     _registry.register('Shimmer', ElpianShimmer.build);
     _registry.register('Pulse', ElpianPulse.build);
@@ -403,11 +408,14 @@ class ElpianEngine {
     return false;
   }
 
-  void registerWidget(String type, Widget Function(ElpianNode node, List<Widget> children) builder) {
+  void registerWidget(String type,
+      Widget Function(ElpianNode node, List<Widget> children) builder) {
     _registry.register(type, builder);
   }
 
-  void registerWidgets(Map<String, Widget Function(ElpianNode node, List<Widget> children)> builders) {
+  void registerWidgets(
+      Map<String, Widget Function(ElpianNode node, List<Widget> children)>
+          builders) {
     _registry.registerAll(builders);
   }
 }

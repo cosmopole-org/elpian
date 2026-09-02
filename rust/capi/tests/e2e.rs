@@ -38,25 +38,50 @@ impl MockGodot {
         self.ops_seen.push(op.clone());
         if let Some(cls) = op.get("new").and_then(|v| v.as_str()) {
             let id = op.get("def").and_then(|v| v.as_i64()).unwrap_or(0);
-            self.objects.insert(id, MockObj { class: cls.into(), props: HashMap::new() });
+            self.objects.insert(
+                id,
+                MockObj {
+                    class: cls.into(),
+                    props: HashMap::new(),
+                },
+            );
             return json!(id);
         }
         if let Some(name) = op.get("singleton").and_then(|v| v.as_str()) {
             let id = op.get("def").and_then(|v| v.as_i64()).unwrap_or(0);
-            self.objects.insert(id, MockObj { class: name.into(), props: HashMap::new() });
+            self.objects.insert(
+                id,
+                MockObj {
+                    class: name.into(),
+                    props: HashMap::new(),
+                },
+            );
             return json!(id);
         }
         if op.get("tree").is_some() || op.get("self").is_some() {
             // Mirror the C++ dispatcher: "self"/"tree" with an action key only
             // selects the target — the action below must still execute. A bare
             // bind op registers the handle and returns it.
-            let has_action = ["connect", "disconnect", "method", "get", "set", "geti", "seti"]
-                .iter()
-                .any(|k| op.get(*k).is_some());
+            let has_action = [
+                "connect",
+                "disconnect",
+                "method",
+                "get",
+                "set",
+                "geti",
+                "seti",
+            ]
+            .iter()
+            .any(|k| op.get(*k).is_some());
             if !has_action {
                 let id = op.get("def").and_then(|v| v.as_i64()).unwrap_or(0);
-                self.objects
-                    .insert(id, MockObj { class: "SceneTree".into(), props: HashMap::new() });
+                self.objects.insert(
+                    id,
+                    MockObj {
+                        class: "SceneTree".into(),
+                        props: HashMap::new(),
+                    },
+                );
                 return json!(id);
             }
             self.self_actions.push(op.clone());
@@ -64,7 +89,13 @@ impl MockGodot {
         if let Some(path) = op.get("load").and_then(|v| v.as_str()) {
             let id = op.get("def").and_then(|v| v.as_i64()).unwrap_or(0);
             self.loads.push(path.to_string());
-            self.objects.insert(id, MockObj { class: "Resource".into(), props: HashMap::new() });
+            self.objects.insert(
+                id,
+                MockObj {
+                    class: "Resource".into(),
+                    props: HashMap::new(),
+                },
+            );
             return json!(id);
         }
         if let Some(name) = op.get("const").and_then(|v| v.as_str()) {
@@ -127,7 +158,10 @@ fn boot(user_source: &str) -> (DartRuntime, Arc<Mutex<MockGodot>>) {
     let mock = Arc::new(Mutex::new(MockGodot::default()));
     let program = compose_godot_program(user_source);
     let mut rt = DartRuntime::from_dart(
-        format!("mock-godot-{}", NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)),
+        format!(
+            "mock-godot-{}",
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ),
         &program,
         DartCapabilitySet::full(),
         ResourceMeter::unbounded(),
@@ -144,7 +178,11 @@ fn boot(user_source: &str) -> (DartRuntime, Arc<Mutex<MockGodot>>) {
             }
             "godot.batch" => {
                 m.batch_calls += 1;
-                let ops = args.first().and_then(|v| v.as_array()).cloned().unwrap_or_default();
+                let ops = args
+                    .first()
+                    .and_then(|v| v.as_array())
+                    .cloned()
+                    .unwrap_or_default();
                 Some(Value::Array(ops.iter().map(|op| m.exec_op(op)).collect()))
             }
             _ => None,
@@ -174,8 +212,12 @@ void main() {
     let m = mock.lock().unwrap();
     assert_eq!(m.objects.get(&1).unwrap().class, "Node2D");
     let pos = m.objects.get(&1).unwrap().props.get("position").unwrap();
-    let xy: Vec<f64> =
-        pos["vec2"].as_array().unwrap().iter().map(|v| v.as_f64().unwrap()).collect();
+    let xy: Vec<f64> = pos["vec2"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_f64().unwrap())
+        .collect();
     assert_eq!(xy, vec![3.0, 4.0]);
 }
 
@@ -245,7 +287,10 @@ void main() {
     );
     rt.run().unwrap();
     let m = mock.lock().unwrap();
-    assert_eq!(m.op_calls, 0, "batched ops must not cross the seam individually");
+    assert_eq!(
+        m.op_calls, 0,
+        "batched ops must not cross the seam individually"
+    );
     assert_eq!(m.batch_calls, 1, "one batch = one host call");
     assert_eq!(m.objects.len(), 3);
     assert_eq!(rt.emitted(), &[json!(1)]); // first op's result: handle id 1
@@ -296,7 +341,10 @@ void main() {
             .find(|op| op.get("method").and_then(|v| v.as_str()) == Some("tween_callback"))
             .expect("method op recorded");
         let args = call_op.get("args").and_then(|v| v.as_array()).unwrap();
-        args[0].get("callable").and_then(|v| v.as_i64()).expect("closure became a callable tag")
+        args[0]
+            .get("callable")
+            .and_then(|v| v.as_i64())
+            .expect("closure became a callable tag")
     };
     rt.invoke_handler("__godotDispatch", json!([cb_id, []]));
     assert_eq!(rt.emitted(), &[json!("callable ran")]);
@@ -324,7 +372,11 @@ void main() {
     rt.invoke_handler("__godotEvent", json!(["_process", 0.017]));
     assert_eq!(
         rt.emitted(),
-        &[json!("ready"), json!("frame 1 dt 0.016"), json!("frame 2 dt 0.017")]
+        &[
+            json!("ready"),
+            json!("frame 1 dt 0.016"),
+            json!("frame 2 dt 0.017")
+        ]
     );
 }
 
@@ -467,7 +519,9 @@ void main() {
         let src = CString::new("void main( {").unwrap();
         let rt = elpian_godot_new(src.as_ptr(), 1, 0, 0);
         assert!(rt.is_null());
-        let err = unsafe { CStr::from_ptr(elpian_godot_last_error()) }.to_str().unwrap();
+        let err = unsafe { CStr::from_ptr(elpian_godot_last_error()) }
+            .to_str()
+            .unwrap();
         assert!(err.contains("compile"), "unexpected error: {err}");
     }
 }

@@ -41,7 +41,8 @@ class ElpianStreamCommand {
 
       final action = map['action']?.toString();
       if (action == null || action.isEmpty) {
-        throw const FormatException('Stream command must contain a non-empty "action".');
+        throw const FormatException(
+            'Stream command must contain a non-empty "action".');
       }
 
       return ElpianStreamCommand(
@@ -55,7 +56,8 @@ class ElpianStreamCommand {
       );
     }
 
-    throw FormatException('Unsupported stream payload type: ${data.runtimeType}.');
+    throw FormatException(
+        'Unsupported stream payload type: ${data.runtimeType}.');
   }
 
   static Map<String, dynamic>? _mapOrNull(dynamic value) {
@@ -177,7 +179,8 @@ class _ElpianStreamWidgetState extends State<ElpianStreamWidget> {
     final duration = command.animationDurationMs == null
         ? widget.defaultAnimationDuration
         : Duration(milliseconds: command.animationDurationMs!.clamp(0, 30000));
-    final curve = _curveFromName(command.animationCurve) ?? widget.defaultAnimationCurve;
+    final curve =
+        _curveFromName(command.animationCurve) ?? widget.defaultAnimationCurve;
 
     switch (command.action) {
       case 'setView':
@@ -212,7 +215,8 @@ class _ElpianStreamWidgetState extends State<ElpianStreamWidget> {
 
       case 'setStylesheet':
         if (command.stylesheet == null) {
-          throw const FormatException('setStylesheet requires "stylesheet" object.');
+          throw const FormatException(
+              'setStylesheet requires "stylesheet" object.');
         }
         _engine.loadStylesheet(command.stylesheet!);
         if (mounted) {

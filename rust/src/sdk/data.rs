@@ -194,11 +194,21 @@ impl Val {
     pub fn stringify_into(&self, out: &mut String) {
         use std::fmt::Write as _;
         match self.typ {
-            1 => { let _ = write!(out, "{}", self.as_i16()); }
-            2 => { let _ = write!(out, "{}", self.as_i32()); }
-            3 => { let _ = write!(out, "{}", self.as_i64()); }
-            4 => { let _ = write!(out, "{}", self.as_f32()); }
-            5 => { let _ = write!(out, "{}", self.as_f64()); }
+            1 => {
+                let _ = write!(out, "{}", self.as_i16());
+            }
+            2 => {
+                let _ = write!(out, "{}", self.as_i32());
+            }
+            3 => {
+                let _ = write!(out, "{}", self.as_i64());
+            }
+            4 => {
+                let _ = write!(out, "{}", self.as_f32());
+            }
+            5 => {
+                let _ = write!(out, "{}", self.as_f64());
+            }
             6 => out.push_str(if self.as_bool() { "true" } else { "false" }),
             7 => push_json_string(out, &self.as_string()),
             8 => self.as_object().borrow().data.stringify_into(out),
@@ -350,12 +360,7 @@ impl Val {
                 8 => {
                     let o = self.as_object();
                     let b = o.borrow();
-                    b.data
-                        .data
-                        .keys()
-                        .map(|k| k.len() as u64 + 16)
-                        .sum::<u64>()
-                        + 16
+                    b.data.data.keys().map(|k| k.len() as u64 + 16).sum::<u64>() + 16
                 }
                 9 => self.as_array().borrow().data.len() as u64 * 8 + 16,
                 10 => 48,

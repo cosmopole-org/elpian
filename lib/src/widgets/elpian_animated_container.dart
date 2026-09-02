@@ -4,9 +4,10 @@ import '../models/elpian_node.dart';
 class ElpianAnimatedContainer {
   static Widget build(ElpianNode node, List<Widget> children) {
     final child = children.isNotEmpty ? children.first : null;
-    
+
     return AnimatedContainer(
-      duration: node.style?.transitionDuration ?? const Duration(milliseconds: 200),
+      duration:
+          node.style?.transitionDuration ?? const Duration(milliseconds: 200),
       curve: node.style?.transitionCurve ?? Curves.linear,
       width: node.style?.width,
       height: node.style?.height,

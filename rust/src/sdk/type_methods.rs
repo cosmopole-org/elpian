@@ -176,22 +176,52 @@ mod tests {
 
     #[test]
     fn resolves_by_type_and_kind() {
-        assert_eq!(resolve(CoreType::List, "push").unwrap().dispatch, Dispatch::Method);
-        assert_eq!(resolve(CoreType::List, "first").unwrap().dispatch, Dispatch::Getter);
-        assert_eq!(resolve(CoreType::List, "map").unwrap().dispatch, Dispatch::Prelude);
-        assert_eq!(resolve(CoreType::String, "upper").unwrap().dispatch, Dispatch::Method);
+        assert_eq!(
+            resolve(CoreType::List, "push").unwrap().dispatch,
+            Dispatch::Method
+        );
+        assert_eq!(
+            resolve(CoreType::List, "first").unwrap().dispatch,
+            Dispatch::Getter
+        );
+        assert_eq!(
+            resolve(CoreType::List, "map").unwrap().dispatch,
+            Dispatch::Prelude
+        );
+        assert_eq!(
+            resolve(CoreType::String, "upper").unwrap().dispatch,
+            Dispatch::Method
+        );
         // Regression: charAt/repeat/ord are stdlib string builtins that were
         // missing from this catalog — a member read then produced a
         // non-callable and the call panicked the whole VM (web: abort()).
-        assert_eq!(resolve(CoreType::String, "charAt").unwrap().dispatch, Dispatch::Method);
-        assert_eq!(resolve(CoreType::String, "repeat").unwrap().dispatch, Dispatch::Method);
-        assert_eq!(resolve(CoreType::String, "ord").unwrap().dispatch, Dispatch::Method);
-        assert_eq!(resolve(CoreType::Num, "isNaN").unwrap().dispatch, Dispatch::Getter);
-        assert_eq!(resolve(CoreType::Map, "keys").unwrap().dispatch, Dispatch::Getter);
+        assert_eq!(
+            resolve(CoreType::String, "charAt").unwrap().dispatch,
+            Dispatch::Method
+        );
+        assert_eq!(
+            resolve(CoreType::String, "repeat").unwrap().dispatch,
+            Dispatch::Method
+        );
+        assert_eq!(
+            resolve(CoreType::String, "ord").unwrap().dispatch,
+            Dispatch::Method
+        );
+        assert_eq!(
+            resolve(CoreType::Num, "isNaN").unwrap().dispatch,
+            Dispatch::Getter
+        );
+        assert_eq!(
+            resolve(CoreType::Map, "keys").unwrap().dispatch,
+            Dispatch::Getter
+        );
         // The resolved name is the universal builtin name, used directly by
         // `stdlib::invoke` — no `Type.method` qualifier.
         assert_eq!(resolve(CoreType::List, "push").unwrap().name, "push");
-        assert_eq!(resolve(CoreType::List, "map").unwrap().prelude_fn, "__List_map");
+        assert_eq!(
+            resolve(CoreType::List, "map").unwrap().prelude_fn,
+            "__List_map"
+        );
     }
 
     #[test]

@@ -1,7 +1,7 @@
 //! The recursive-descent / precedence-climbing parser: tokens -> AST.
 
-use crate::token::Tok;
 use crate::ast::*;
+use crate::token::Tok;
 
 // ---------------------------------------------------------------------------
 // Parser
@@ -28,7 +28,12 @@ impl Parser {
                 }
             }
         }
-        Parser { toks, i: 0, class_names, for_seq: 0 }
+        Parser {
+            toks,
+            i: 0,
+            class_names,
+            for_seq: 0,
+        }
     }
 
     fn peek(&self) -> &Tok {
@@ -50,10 +55,6 @@ impl Parser {
             Err(format!("expected {t:?}, found {:?}", self.peek()))
         }
     }
-    fn is_type_kw(&self) -> bool {
-        matches!(self.peek(), Tok::Kw(k) if matches!(k.as_str(), "int"|"double"|"num"|"String"|"bool"|"void"|"dynamic"))
-    }
-
     pub(crate) fn parse_program(&mut self) -> Result<Vec<Item>, String> {
         let mut items = Vec::new();
         while *self.peek() != Tok::Eof {
@@ -86,7 +87,10 @@ impl Parser {
     fn skip_class_modifiers(&mut self) {
         let is_mod = |t: &Tok| match t {
             Tok::Ident(s) => {
-                matches!(s.as_str(), "abstract" | "base" | "interface" | "sealed" | "mixin" | "final")
+                matches!(
+                    s.as_str(),
+                    "abstract" | "base" | "interface" | "sealed" | "mixin" | "final"
+                )
             }
             _ => false,
         };
@@ -161,16 +165,22 @@ impl Parser {
         let mut methods = Vec::new();
         let mut ctor_params = ParamList::default();
         let mut ctor_body = Vec::new();
-        let mut has_ctor = false;
 
         while *self.peek() != Tok::RBrace && *self.peek() != Tok::Eof {
             // Member modifiers, in any order: static / const / final / late / var.
             let mut is_static = false;
             loop {
                 match self.peek() {
-                    Tok::Ident(s) if s == "static" => { is_static = true; self.bump(); }
-                    Tok::Ident(s) if s == "const" || s == "late" || s == "covariant" => { self.bump(); }
-                    Tok::Kw(s) if s == "final" || s == "var" => { self.bump(); }
+                    Tok::Ident(s) if s == "static" => {
+                        is_static = true;
+                        self.bump();
+                    }
+                    Tok::Ident(s) if s == "const" || s == "late" || s == "covariant" => {
+                        self.bump();
+                    }
+                    Tok::Kw(s) if s == "final" || s == "var" => {
+                        self.bump();
+                    }
                     _ => break,
                 }
             }
@@ -236,7 +246,6 @@ impl Parser {
             if *self.peek() == Tok::LParen {
                 if member_name == name {
                     // The unnamed constructor.
-                    has_ctor = true;
                     ctor_params = self.parse_param_list()?;
                     self.skip_initializers();
                     ctor_body = if *self.peek() == Tok::Semi {
@@ -282,7 +291,11 @@ impl Parser {
                     extra.push((n, e));
                 }
                 self.eat(&Tok::Semi)?;
-                let target = if is_static { &mut static_fields } else { &mut fields };
+                let target = if is_static {
+                    &mut static_fields
+                } else {
+                    &mut fields
+                };
                 target.push((names.remove(0), init));
                 for (n, e) in extra {
                     target.push((n, e));
@@ -298,7 +311,6 @@ impl Parser {
             static_fields,
             ctor_params,
             ctor_body,
-            has_ctor,
             calls_super,
             methods,
         })
@@ -514,11 +526,15 @@ impl Parser {
         } else {
             None
         };
-        Ok(Param { name, is_this, default })
+        Ok(Param {
+            name,
+            is_this,
+            default,
+        })
     }
 
     /// Parse a call argument list into (positional, named) argument groups.
-    fn parse_args(&mut self) -> Result<(Vec<Expr>, Vec<(String, Expr)>), String> {
+    fn parse_args(&mut self) -> Result<ArgList, String> {
         self.eat(&Tok::LParen)?;
         let mut pos = Vec::new();
         let mut named = Vec::new();
@@ -631,7 +647,9 @@ impl Parser {
             Tok::Kw(k) if k == "rethrow" => {
                 self.bump();
                 self.eat(&Tok::Semi)?;
-                Ok(Stmt::Expr(Expr::Throw(Box::new(Expr::Ident("__rethrow".into())))))
+                Ok(Stmt::Expr(Expr::Throw(Box::new(Expr::Ident(
+                    "__rethrow".into(),
+                )))))
             }
             Tok::Kw(k) if k == "return" => {
                 self.bump();
@@ -917,13 +935,20 @@ impl Parser {
         // __forI = __forI + 1;
         loop_body.push(Stmt::Expr(Expr::Assign(
             Box::new(idx_read()),
-            Box::new(Expr::Binary("+".into(), Box::new(idx_read()), Box::new(Expr::Int(1)))),
+            Box::new(Expr::Binary(
+                "+".into(),
+                Box::new(idx_read()),
+                Box::new(Expr::Int(1)),
+            )),
         )));
 
         let cond = Expr::Binary(
             "<".into(),
             Box::new(idx_read()),
-            Box::new(Expr::Member(Box::new(Expr::Ident(it.clone())), "length".into())),
+            Box::new(Expr::Member(
+                Box::new(Expr::Ident(it.clone())),
+                "length".into(),
+            )),
         );
         Ok(Stmt::Block(vec![
             Stmt::Var(it, Some(iter)),
@@ -1009,14 +1034,9 @@ impl Parser {
 
     fn parse_binary(&mut self, min_bp: u8) -> Result<Expr, String> {
         let mut lhs = self.parse_unary()?;
-        loop {
-            let (op, bp) = match self.peek() {
-                Tok::Op(o) => match binding_power(o) {
-                    Some(bp) => (o.clone(), bp),
-                    None => break,
-                },
-                _ => break,
-            };
+        while let Tok::Op(o) = self.peek() {
+            let Some(bp) = binding_power(o) else { break };
+            let op = o.clone();
             if bp < min_bp {
                 break;
             }
@@ -1279,4 +1299,3 @@ fn binding_power(op: &str) -> Option<u8> {
         _ => return None,
     })
 }
-

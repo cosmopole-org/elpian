@@ -3,7 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:elpian_ui/elpian_ui.dart';
 
 void main() {
-  testWidgets('Elpian Radio renders and reflects selected state', (tester) async {
+  testWidgets('Elpian Radio renders and reflects selected state',
+      (tester) async {
     final engine = ElpianEngine();
     // value == groupValue -> this radio is selected.
     final selected = engine.renderFromJson({

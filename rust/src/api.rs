@@ -610,10 +610,9 @@ use crate::sdk::hierarchy::{accumulate_usage, aggregate_exceeds, VmHierarchy};
 
 static HIERARCHY: Lazy<Mutex<VmHierarchy>> = Lazy::new(|| Mutex::new(VmHierarchy::new()));
 
-/// Lock a registry mutex even if a previous guest panic poisoned it — the
-/// registries hold plain data that stays coherent across an executor unwind,
-/// and cleanup paths (embedder `Drop`s tearing whole VM trees down) must not
-/// abort inside a destructor because of an earlier, already-reported panic.
+// The hierarchy mutex is taken through `lock_tolerant` for the same reason the
+// VM registry is: a guest panic that unwinds while it is held must not poison
+// it for the life of the process. See `lock_tolerant` above.
 
 /// Register `child` as a child of `parent` in the VM tree and push the
 /// resulting effective capability set into the child's executor. Fails on

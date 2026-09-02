@@ -147,7 +147,7 @@ void main() {
       };
 
   Future<File> shot(WidgetTester tester, String name, double width) async {
-    final bridge = NextjsBridge()..onNavigate = (_, {bool replace = false} ) {};
+    final bridge = NextjsBridge()..onNavigate = (_, {bool replace = false}) {};
     final key = GlobalKey();
     await tester.pumpWidget(
       MaterialApp(

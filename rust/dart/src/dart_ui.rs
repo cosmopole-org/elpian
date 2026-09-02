@@ -154,12 +154,11 @@ impl SceneRecorder {
             // ---- Transform / clip / layer stack ----
             "Canvas.save" => self.push_op(json!({ "op": "save" })),
             "Canvas.restore" => self.push_op(json!({ "op": "restore" })),
-            "Canvas.translate" => {
-                self.push_op(json!({ "op": "translate", "dx": as_f64(args, 0)?, "dy": as_f64(args, 1)? }))
-            }
-            "Canvas.scale" => {
-                self.push_op(json!({ "op": "scale", "sx": as_f64(args, 0)?, "sy": as_f64(args, 1)? }))
-            }
+            "Canvas.translate" => self.push_op(
+                json!({ "op": "translate", "dx": as_f64(args, 0)?, "dy": as_f64(args, 1)? }),
+            ),
+            "Canvas.scale" => self
+                .push_op(json!({ "op": "scale", "sx": as_f64(args, 0)?, "sy": as_f64(args, 1)? })),
             "Canvas.rotate" => self.push_op(json!({ "op": "rotate", "radians": as_f64(args, 0)? })),
             "Canvas.clipRect" => {
                 let r = rect(args)?;
@@ -185,7 +184,9 @@ impl SceneRecorder {
                 let paint_id = as_u32(args, 1)?;
                 let verbs = self.path(path_id)?.clone();
                 let paint = self.paint(paint_id)?.clone();
-                self.ops.push(PaintOp(json!({ "op": "drawPath", "path": verbs, "paint": paint })));
+                self.ops.push(PaintOp(
+                    json!({ "op": "drawPath", "path": verbs, "paint": paint }),
+                ));
                 Ok(Value::Null)
             }
 
@@ -200,7 +201,8 @@ impl SceneRecorder {
                 let dx = as_f64(args, 1)?;
                 let dy = as_f64(args, 2)?;
                 let sb = self.scene_mut(id)?;
-                sb.stack.push(json!({ "layer": "offset", "dx": dx, "dy": dy, "children": [] }));
+                sb.stack
+                    .push(json!({ "layer": "offset", "dx": dx, "dy": dy, "children": [] }));
                 Ok(Value::Null)
             }
             "SceneBuilder.addPicture" => {
@@ -254,24 +256,35 @@ impl SceneRecorder {
         let id = as_u32(args, 0)?;
         let x = as_f64(args, 1)?;
         let y = as_f64(args, 2)?;
-        self.path_mut(id)?.push(json!({ "verb": verb, "x": x, "y": y }));
+        self.path_mut(id)?
+            .push(json!({ "verb": verb, "x": x, "y": y }));
         Ok(Value::Null)
     }
 
     fn path(&self, id: u32) -> Result<&Vec<Value>, String> {
-        self.paths.get(&id).ok_or_else(|| format!("StateError: no Path for handle {id}"))
+        self.paths
+            .get(&id)
+            .ok_or_else(|| format!("StateError: no Path for handle {id}"))
     }
     fn path_mut(&mut self, id: u32) -> Result<&mut Vec<Value>, String> {
-        self.paths.get_mut(&id).ok_or_else(|| format!("StateError: no Path for handle {id}"))
+        self.paths
+            .get_mut(&id)
+            .ok_or_else(|| format!("StateError: no Path for handle {id}"))
     }
     fn paint(&self, id: u32) -> Result<&Value, String> {
-        self.paints.get(&id).ok_or_else(|| format!("StateError: no Paint for handle {id}"))
+        self.paints
+            .get(&id)
+            .ok_or_else(|| format!("StateError: no Paint for handle {id}"))
     }
     fn scene(&self, id: u32) -> Result<&SceneBuilderState, String> {
-        self.scenes.get(&id).ok_or_else(|| format!("StateError: no SceneBuilder for handle {id}"))
+        self.scenes
+            .get(&id)
+            .ok_or_else(|| format!("StateError: no SceneBuilder for handle {id}"))
     }
     fn scene_mut(&mut self, id: u32) -> Result<&mut SceneBuilderState, String> {
-        self.scenes.get_mut(&id).ok_or_else(|| format!("StateError: no SceneBuilder for handle {id}"))
+        self.scenes
+            .get_mut(&id)
+            .ok_or_else(|| format!("StateError: no SceneBuilder for handle {id}"))
     }
 
     /// Attach a finished child to the currently-open layer, or to the root if no
@@ -306,7 +319,7 @@ fn rect(args: &[Value]) -> Result<Value, String> {
     ]))
 }
 
-fn get<'a>(args: &'a [Value], i: usize) -> Result<&'a Value, String> {
+fn get(args: &[Value], i: usize) -> Result<&Value, String> {
     args.get(i).ok_or_else(|| format!("missing argument {i}"))
 }
 
@@ -343,7 +356,13 @@ mod tests {
         r.dispatch("PictureRecorder.beginRecording", &[]).unwrap();
         r.dispatch(
             "Canvas.drawRect",
-            &[json!(0.0), json!(0.0), json!(100.0), json!(50.0), json!(4294901760u64)],
+            &[
+                json!(0.0),
+                json!(0.0),
+                json!(100.0),
+                json!(50.0),
+                json!(4294901760u64),
+            ],
         )
         .unwrap();
         r.dispatch(
@@ -364,17 +383,27 @@ mod tests {
     fn path_and_paint_compose_a_drawpath_op() {
         let mut r = SceneRecorder::new();
         let paint = r
-            .dispatch("Paint.create", &[json!(4278190335u64), json!(2.0), json!(1)])
+            .dispatch(
+                "Paint.create",
+                &[json!(4278190335u64), json!(2.0), json!(1)],
+            )
             .unwrap()
             .as_u64()
             .unwrap() as i64;
         let path = r.dispatch("Path.create", &[]).unwrap().as_u64().unwrap() as i64;
-        r.dispatch("Path.moveTo", &[json!(path), json!(0.0), json!(0.0)]).unwrap();
-        r.dispatch("Path.lineTo", &[json!(path), json!(10.0), json!(10.0)]).unwrap();
+        r.dispatch("Path.moveTo", &[json!(path), json!(0.0), json!(0.0)])
+            .unwrap();
+        r.dispatch("Path.lineTo", &[json!(path), json!(10.0), json!(10.0)])
+            .unwrap();
         r.dispatch("Path.close", &[json!(path)]).unwrap();
         r.dispatch("PictureRecorder.beginRecording", &[]).unwrap();
-        r.dispatch("Canvas.drawPath", &[json!(path), json!(paint)]).unwrap();
-        let pic = r.dispatch("PictureRecorder.endRecording", &[]).unwrap().as_u64().unwrap() as i64;
+        r.dispatch("Canvas.drawPath", &[json!(path), json!(paint)])
+            .unwrap();
+        let pic = r
+            .dispatch("PictureRecorder.endRecording", &[])
+            .unwrap()
+            .as_u64()
+            .unwrap() as i64;
         let scene = r.dispatch("Picture.toScene", &[json!(pic)]).unwrap();
         let op = &scene["root"]["ops"][0];
         assert_eq!(op["op"], "drawPath");
@@ -387,12 +416,32 @@ mod tests {
         let mut r = SceneRecorder::new();
         // Record a picture first.
         r.dispatch("PictureRecorder.beginRecording", &[]).unwrap();
-        r.dispatch("Canvas.drawRect", &[json!(0.0), json!(0.0), json!(1.0), json!(1.0), json!(1)]).unwrap();
-        let pic = r.dispatch("PictureRecorder.endRecording", &[]).unwrap().as_u64().unwrap() as i64;
+        r.dispatch(
+            "Canvas.drawRect",
+            &[json!(0.0), json!(0.0), json!(1.0), json!(1.0), json!(1)],
+        )
+        .unwrap();
+        let pic = r
+            .dispatch("PictureRecorder.endRecording", &[])
+            .unwrap()
+            .as_u64()
+            .unwrap() as i64;
         // Build a scene with one offset layer containing the picture.
-        let sb = r.dispatch("SceneBuilder.create", &[]).unwrap().as_u64().unwrap() as i64;
-        r.dispatch("SceneBuilder.pushOffset", &[json!(sb), json!(5.0), json!(6.0)]).unwrap();
-        r.dispatch("SceneBuilder.addPicture", &[json!(sb), json!(0.0), json!(0.0), json!(pic)]).unwrap();
+        let sb = r
+            .dispatch("SceneBuilder.create", &[])
+            .unwrap()
+            .as_u64()
+            .unwrap() as i64;
+        r.dispatch(
+            "SceneBuilder.pushOffset",
+            &[json!(sb), json!(5.0), json!(6.0)],
+        )
+        .unwrap();
+        r.dispatch(
+            "SceneBuilder.addPicture",
+            &[json!(sb), json!(0.0), json!(0.0), json!(pic)],
+        )
+        .unwrap();
         r.dispatch("SceneBuilder.pop", &[json!(sb)]).unwrap();
         let scene = r.dispatch("SceneBuilder.build", &[json!(sb)]).unwrap();
         let root = &scene["root"];
@@ -404,7 +453,10 @@ mod tests {
     fn canvas_op_outside_recording_is_a_state_error() {
         let mut r = SceneRecorder::new();
         let err = r
-            .dispatch("Canvas.drawRect", &[json!(0.0), json!(0.0), json!(1.0), json!(1.0), json!(0)])
+            .dispatch(
+                "Canvas.drawRect",
+                &[json!(0.0), json!(0.0), json!(1.0), json!(1.0), json!(0)],
+            )
             .unwrap_err();
         assert!(err.contains("StateError"), "got: {err}");
     }

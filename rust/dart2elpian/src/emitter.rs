@@ -1,9 +1,9 @@
 //! The emitter: lowers the Dart AST to the JS subset the Elpian VM ingests.
 
-use crate::token::StrPart;
 use crate::ast::*;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
+use crate::token::StrPart;
 
 // ---------------------------------------------------------------------------
 // Emitter (Dart AST -> Elpian JS subset)
@@ -50,7 +50,6 @@ const PRELUDE: &str = concat!(
     "function __Future_value(v){ var f = new _Future(); __later(function(){ f.complete(v); }); return f; }\n",
     "function __await(x){ if (x != null && x.__isFuture) { return x; } return __Future_value(x); }\n",
 );
-
 
 /// Scope-aware emitter. Inside a class body it resolves bare field references to
 /// `this.field` and bare method calls to `this.method(...)`, so idiomatic Dart
@@ -150,8 +149,18 @@ fn universal_type_name(ty: &str) -> &str {
 /// must never be rewritten to a call even if a user class declares a like-named
 /// getter.
 const NATIVE_PROPS: &[&str] = &[
-    "length", "isEmpty", "isNotEmpty", "first", "last", "single", "keys", "values",
-    "reversed", "iterator", "runtimeType", "hashCode",
+    "length",
+    "isEmpty",
+    "isNotEmpty",
+    "first",
+    "last",
+    "single",
+    "keys",
+    "values",
+    "reversed",
+    "iterator",
+    "runtimeType",
+    "hashCode",
 ];
 
 impl Emitter {
@@ -182,7 +191,10 @@ impl Emitter {
         let mut all_fields = NameSet::new();
         for item in items {
             if let Item::Class(c) = item {
-                own_fields.insert(c.name.clone(), c.fields.iter().map(|(n, _)| n.clone()).collect());
+                own_fields.insert(
+                    c.name.clone(),
+                    c.fields.iter().map(|(n, _)| n.clone()).collect(),
+                );
                 // Only *instance*, non-getter methods participate in bare-name
                 // `this.method` resolution; statics are reached as `Class.m`.
                 own_methods.insert(
@@ -280,7 +292,12 @@ impl Emitter {
     /// Declare all parameter names (and the options object) as locals so bare
     /// references inside the body don't resolve to `this.field`.
     fn declare_params(&mut self, pl: &ParamList) {
-        for p in pl.positional.iter().chain(pl.optional_pos.iter()).chain(pl.named.iter()) {
+        for p in pl
+            .positional
+            .iter()
+            .chain(pl.optional_pos.iter())
+            .chain(pl.named.iter())
+        {
             let n = p.name.clone();
             self.declare(&n);
         }
@@ -296,7 +313,10 @@ impl Emitter {
             if let Some(d) = &p.default {
                 let dv = self.emit_expr(d);
                 self.indent(depth);
-                self.out.push_str(&format!("if ({} == null) {{ {} = {}; }}\n", p.name, p.name, dv));
+                self.out.push_str(&format!(
+                    "if ({} == null) {{ {} = {}; }}\n",
+                    p.name, p.name, dv
+                ));
             }
         }
         for p in &pl.named {
@@ -309,7 +329,10 @@ impl Emitter {
             if let Some(d) = &p.default {
                 let dv = self.emit_expr(d);
                 self.indent(depth);
-                self.out.push_str(&format!("if ({} == null) {{ {} = {}; }}\n", p.name, p.name, dv));
+                self.out.push_str(&format!(
+                    "if ({} == null) {{ {} = {}; }}\n",
+                    p.name, p.name, dv
+                ));
             }
         }
     }
@@ -339,7 +362,8 @@ impl Emitter {
                         has_main = true;
                     }
                     let sig = self.param_sig(params);
-                    self.out.push_str(&format!("function {}({}) {{\n", name, sig.join(", ")));
+                    self.out
+                        .push_str(&format!("function {}({}) {{\n", name, sig.join(", ")));
                     self.push_scope();
                     self.declare_params(params);
                     self.emit_param_prologue(params, 1);
@@ -377,14 +401,16 @@ impl Emitter {
         // name (used by the reified `is`/`as` checks host-side).
         {
             let sig = self.param_sig(&c.ctor_params);
-            self.out.push_str(&format!("  constructor({}) {{\n", sig.join(", ")));
+            self.out
+                .push_str(&format!("  constructor({}) {{\n", sig.join(", ")));
             self.push_scope();
             self.declare_params(&c.ctor_params);
             if c.calls_super {
                 self.out.push_str("    super();\n");
             }
             // Reified-type tag: most-derived ctor wins (runs last).
-            self.out.push_str(&format!("    this.__class = {};\n", json_string(&c.name)));
+            self.out
+                .push_str(&format!("    this.__class = {};\n", json_string(&c.name)));
             // Destructure named / fill optional-positional params first, so the
             // `this.x` assignments below can read their locals.
             self.emit_param_prologue(&c.ctor_params, 2);
@@ -396,8 +422,11 @@ impl Emitter {
                     self.out.push_str(&format!("    this.{fname} = {v};\n"));
                 }
             }
-            let this_params: Vec<String> =
-                c.ctor_params.all_this_params().map(|p| p.name.clone()).collect();
+            let this_params: Vec<String> = c
+                .ctor_params
+                .all_this_params()
+                .map(|p| p.name.clone())
+                .collect();
             for name in this_params {
                 self.out.push_str(&format!("    this.{name} = {name};\n"));
             }
@@ -408,21 +437,33 @@ impl Emitter {
 
         // Static fields belong to the class, reached as `Class.field`.
         for (fname, init) in &c.static_fields {
-            let v = init.as_ref().map(|e| self.emit_expr(e)).unwrap_or_else(|| "null".into());
+            let v = init
+                .as_ref()
+                .map(|e| self.emit_expr(e))
+                .unwrap_or_else(|| "null".into());
             self.out.push_str(&format!("  static {fname} = {v};\n"));
         }
 
         for m in &c.methods {
             let sig = self.param_sig(&m.params);
             let prefix = if m.is_static { "static " } else { "" };
-            self.out.push_str(&format!("  {}{}({}) {{\n", prefix, m.name, sig.join(", ")));
+            self.out
+                .push_str(&format!("  {}{}({}) {{\n", prefix, m.name, sig.join(", ")));
             self.push_scope();
             self.declare_params(&m.params);
             // Inside a static member `this`/instance-field resolution is invalid;
             // suppress it so bare names stay bare (they refer to locals / statics).
             let saved_in_class = self.in_class;
-            let saved_fields = if m.is_static { std::mem::take(&mut self.fields) } else { NameSet::new() };
-            let saved_methods = if m.is_static { std::mem::take(&mut self.methods) } else { NameSet::new() };
+            let saved_fields = if m.is_static {
+                std::mem::take(&mut self.fields)
+            } else {
+                NameSet::new()
+            };
+            let saved_methods = if m.is_static {
+                std::mem::take(&mut self.methods)
+            } else {
+                NameSet::new()
+            };
             if m.is_static {
                 self.in_class = false;
             }
@@ -455,7 +496,8 @@ impl Emitter {
             .iter()
             .map(|v| format!("{}: {}", v, json_string(v)))
             .collect();
-        self.out.push_str(&format!("var {} = {{{}}};\n", e.name, pairs.join(", ")));
+        self.out
+            .push_str(&format!("var {} = {{{}}};\n", e.name, pairs.join(", ")));
     }
 
     fn emit_stmts(&mut self, stmts: &[Stmt], depth: usize) {
@@ -477,7 +519,8 @@ impl Emitter {
                 Stmt::Var(name, Some(Expr::Await(e))) => {
                     let ev = self.emit_expr(e);
                     self.indent(depth);
-                    self.out.push_str(&format!("return __await({ev}).then(function({name}) {{\n"));
+                    self.out
+                        .push_str(&format!("return __await({ev}).then(function({name}) {{\n"));
                     self.push_scope();
                     self.declare(name);
                     self.emit_async_seq(&stmts[i + 1..], depth + 1);
@@ -489,7 +532,8 @@ impl Emitter {
                 Stmt::Expr(Expr::Await(e)) => {
                     let ev = self.emit_expr(e);
                     self.indent(depth);
-                    self.out.push_str(&format!("return __await({ev}).then(function(__u) {{\n"));
+                    self.out
+                        .push_str(&format!("return __await({ev}).then(function(__u) {{\n"));
                     self.push_scope();
                     self.emit_async_seq(&stmts[i + 1..], depth + 1);
                     self.pop_scope();
@@ -506,7 +550,8 @@ impl Emitter {
                 Stmt::Return(Some(e)) => {
                     let ev = self.emit_expr(e);
                     self.indent(depth);
-                    self.out.push_str(&format!("return __Future_value({ev});\n"));
+                    self.out
+                        .push_str(&format!("return __Future_value({ev});\n"));
                     return;
                 }
                 Stmt::Return(None) => {
@@ -718,7 +763,12 @@ impl Emitter {
                 }
             }
             Expr::Ternary(c, t, e) => {
-                format!("({} ? {} : {})", self.emit_expr(c), self.emit_expr(t), self.emit_expr(e))
+                format!(
+                    "({} ? {} : {})",
+                    self.emit_expr(c),
+                    self.emit_expr(t),
+                    self.emit_expr(e)
+                )
             }
             Expr::Assign(a, b) => format!("{} = {}", self.emit_expr(a), self.emit_expr(b)),
             Expr::AssignOp(op, a, b) => {
@@ -757,7 +807,10 @@ impl Emitter {
             // catch's bound error.
             Expr::Throw(inner) => {
                 if matches!(&**inner, Expr::Ident(n) if n == "__rethrow") {
-                    let v = self.rethrow_var.clone().unwrap_or_else(|| "__e".to_string());
+                    let v = self
+                        .rethrow_var
+                        .clone()
+                        .unwrap_or_else(|| "__e".to_string());
                     format!("throw {v}")
                 } else {
                     format!("throw {}", self.emit_expr(inner))
@@ -775,7 +828,8 @@ impl Emitter {
                         CascadeOp::Member(name, assign, call) => {
                             let resolved = self.resolve_member(name);
                             if let Some((pos, named)) = call {
-                                let mut a: Vec<String> = pos.iter().map(|x| self.emit_expr(x)).collect();
+                                let mut a: Vec<String> =
+                                    pos.iter().map(|x| self.emit_expr(x)).collect();
                                 if !named.is_empty() {
                                     a.push(self.emit_named_object(named));
                                 }
@@ -825,14 +879,18 @@ impl Emitter {
                 if is_set {
                     // Set literal -> list (iteration works; set uniqueness is not
                     // modelled).
-                    let items: Vec<String> = entries.iter().map(|(k, _)| self.emit_expr(k)).collect();
+                    let items: Vec<String> =
+                        entries.iter().map(|(k, _)| self.emit_expr(k)).collect();
                     format!("[{}]", items.join(", "))
                 } else {
                     // Map literal -> object literal with the given keys.
                     let pairs: Vec<String> = entries
                         .iter()
                         .map(|(k, v)| {
-                            let val = v.as_ref().map(|e| self.emit_expr(e)).unwrap_or_else(|| "null".into());
+                            let val = v
+                                .as_ref()
+                                .map(|e| self.emit_expr(e))
+                                .unwrap_or_else(|| "null".into());
                             format!("{}: {}", self.emit_expr(k), val)
                         })
                         .collect();
@@ -851,12 +909,20 @@ impl Emitter {
                 // Dart: everything but null is an Object.
                 "Object" => format!("({} != null)", self.emit_expr(x)),
                 "dynamic" => format!("__isType({}, \"any\")", self.emit_expr(x)),
-                _ => format!("__isType({}, {})", self.emit_expr(x), json_string(universal_type_name(ty))),
+                _ => format!(
+                    "__isType({}, {})",
+                    self.emit_expr(x),
+                    json_string(universal_type_name(ty))
+                ),
             },
             Expr::As(x, ty) => match ty.as_str() {
                 // Upcasts to the top types always succeed: emit the value itself.
                 "Object" | "dynamic" => self.emit_expr(x),
-                _ => format!("__asType({}, {})", self.emit_expr(x), json_string(universal_type_name(ty))),
+                _ => format!(
+                    "__asType({}, {})",
+                    self.emit_expr(x),
+                    json_string(universal_type_name(ty))
+                ),
             },
             Expr::Call(callee, pos, named) => {
                 if let Expr::Ident(name) = &**callee {
@@ -933,4 +999,3 @@ impl Emitter {
 fn json_string(s: &str) -> String {
     serde_json::Value::String(s.to_string()).to_string()
 }
-

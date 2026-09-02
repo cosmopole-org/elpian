@@ -6,7 +6,10 @@ use elpian_vm::api;
 
 /// Compile JS, run its top-level program, then call `f()` and return the result.
 fn run(id: &str, js: &str) -> String {
-    assert!(js2elpian::create_vm_from_js(id.to_string(), js.to_string()), "JS should compile");
+    assert!(
+        js2elpian::create_vm_from_js(id.to_string(), js.to_string()),
+        "JS should compile"
+    );
     let _ = api::execute_vm(id.to_string());
     api::execute_vm_func(id.to_string(), "f".to_string(), 1).result_value
 }
@@ -17,7 +20,13 @@ fn run(id: &str, js: &str) -> String {
 fn calling_with_fewer_args_binds_the_rest_to_undefined() {
     // Previously the call desynced when fewer args than declared params were
     // passed; the provided args failed to bind at all.
-    assert_eq!(run("arity-fewer", "function g(a, b) { return a; } function f() { return g(5); }"), "5");
+    assert_eq!(
+        run(
+            "arity-fewer",
+            "function g(a, b) { return a; } function f() { return g(5); }"
+        ),
+        "5"
+    );
 }
 
 #[test]
@@ -28,50 +37,140 @@ fn a_missing_argument_is_undefined_and_falsy() {
 
 #[test]
 fn extra_arguments_are_ignored() {
-    assert_eq!(run("arity-extra", "function g(a) { return a; } function f() { return g(5, 6, 7); }"), "5");
+    assert_eq!(
+        run(
+            "arity-extra",
+            "function g(a) { return a; } function f() { return g(5, 6, 7); }"
+        ),
+        "5"
+    );
 }
 
 // ---- Truthiness (JS coercion in conditions / `!`) --------------------------
 
 #[test]
 fn objects_and_nonzero_numbers_are_truthy() {
-    assert_eq!(run("truthy-obj", "function f() { let o = { x: 1 }; if (o) { return 1; } return 0; }"), "1");
-    assert_eq!(run("truthy-num", "function f() { if (7) { return 1; } return 0; }"), "1");
-    assert_eq!(run("truthy-str", "function f() { if (\"hi\") { return 1; } return 0; }"), "1");
+    assert_eq!(
+        run(
+            "truthy-obj",
+            "function f() { let o = { x: 1 }; if (o) { return 1; } return 0; }"
+        ),
+        "1"
+    );
+    assert_eq!(
+        run(
+            "truthy-num",
+            "function f() { if (7) { return 1; } return 0; }"
+        ),
+        "1"
+    );
+    assert_eq!(
+        run(
+            "truthy-str",
+            "function f() { if (\"hi\") { return 1; } return 0; }"
+        ),
+        "1"
+    );
 }
 
 #[test]
 fn zero_empty_string_and_null_are_falsy() {
-    assert_eq!(run("falsy-zero", "function f() { if (0) { return 1; } return 0; }"), "0");
-    assert_eq!(run("falsy-str", "function f() { if (\"\") { return 1; } return 0; }"), "0");
+    assert_eq!(
+        run(
+            "falsy-zero",
+            "function f() { if (0) { return 1; } return 0; }"
+        ),
+        "0"
+    );
+    assert_eq!(
+        run(
+            "falsy-str",
+            "function f() { if (\"\") { return 1; } return 0; }"
+        ),
+        "0"
+    );
 }
 
 #[test]
 fn not_operator_applies_to_any_value() {
     // `!x` used to panic on non-booleans; it now negates JS truthiness.
-    assert_eq!(run("not-zero", "function f() { if (!0) { return 1; } return 0; }"), "1");
-    assert_eq!(run("not-obj", "function f() { let o = { x: 1 }; if (!o) { return 1; } return 0; }"), "0");
-    assert_eq!(run("not-num", "function f() { if (!5) { return 1; } return 0; }"), "0");
+    assert_eq!(
+        run(
+            "not-zero",
+            "function f() { if (!0) { return 1; } return 0; }"
+        ),
+        "1"
+    );
+    assert_eq!(
+        run(
+            "not-obj",
+            "function f() { let o = { x: 1 }; if (!o) { return 1; } return 0; }"
+        ),
+        "0"
+    );
+    assert_eq!(
+        run(
+            "not-num",
+            "function f() { if (!5) { return 1; } return 0; }"
+        ),
+        "0"
+    );
 }
 
 // ---- Nested / computed assignment targets ----------------------------------
 
 #[test]
 fn nested_member_assignment() {
-    assert_eq!(run("asg-nested", "function f() { let o = { a: { b: 1 } }; o.a.b = 5; return o.a.b; }"), "5");
+    assert_eq!(
+        run(
+            "asg-nested",
+            "function f() { let o = { a: { b: 1 } }; o.a.b = 5; return o.a.b; }"
+        ),
+        "5"
+    );
 }
 
 #[test]
 fn computed_assignment_targets() {
-    assert_eq!(run("asg-idxmem", "function f() { let a = [{ x: 1 }]; a[0].x = 7; return a[0].x; }"), "7");
-    assert_eq!(run("asg-memidx", "function f() { let o = { a: [1, 2] }; o.a[1] = 9; return o.a[1]; }"), "9");
-    assert_eq!(run("asg-deep", "function f() { let o = { a: { b: { c: 1 } } }; o.a.b.c = 42; return o.a.b.c; }"), "42");
+    assert_eq!(
+        run(
+            "asg-idxmem",
+            "function f() { let a = [{ x: 1 }]; a[0].x = 7; return a[0].x; }"
+        ),
+        "7"
+    );
+    assert_eq!(
+        run(
+            "asg-memidx",
+            "function f() { let o = { a: [1, 2] }; o.a[1] = 9; return o.a[1]; }"
+        ),
+        "9"
+    );
+    assert_eq!(
+        run(
+            "asg-deep",
+            "function f() { let o = { a: { b: { c: 1 } } }; o.a.b.c = 42; return o.a.b.c; }"
+        ),
+        "42"
+    );
 }
 
 #[test]
 fn single_level_assignment_still_works() {
-    assert_eq!(run("asg-mem", "function f() { let o = { a: 1 }; o.a = 3; return o.a; }"), "3");
-    assert_eq!(run("asg-idx", "function f() { let a = [1, 2]; a[0] = 8; return a[0]; }"), "8");
+    assert_eq!(
+        run(
+            "asg-mem",
+            "function f() { let o = { a: 1 }; o.a = 3; return o.a; }"
+        ),
+        "3"
+    );
+    assert_eq!(
+        run(
+            "asg-idx",
+            "function f() { let a = [1, 2]; a[0] = 8; return a[0]; }"
+        ),
+        "8"
+    );
 }
 
 // ---- String escape decoding (\uXXXX / \u{…} / \xNN) -------------------------
@@ -106,19 +205,43 @@ fn string_concat_with_null_and_undefined_is_total() {
     // process (the CaspiGames client died mid-flow on a status string). Both
     // spellings conflate to the VM's null and stringify via the total display
     // coercion.
-    assert_eq!(run("null-cat-r", "function f() { let u; return \"x\" + u; }"), "\"xnull\"");
-    assert_eq!(run("null-cat-l", "function f() { return null + \"x\"; }"), "\"nullx\"");
-    assert_eq!(run("null-cat-m", "function f() { let o = {}; return \"v=\" + o.nope + \"!\"; }"), "\"v=null!\"");
+    assert_eq!(
+        run("null-cat-r", "function f() { let u; return \"x\" + u; }"),
+        "\"xnull\""
+    );
+    assert_eq!(
+        run("null-cat-l", "function f() { return null + \"x\"; }"),
+        "\"nullx\""
+    );
+    assert_eq!(
+        run(
+            "null-cat-m",
+            "function f() { let o = {}; return \"v=\" + o.nope + \"!\"; }"
+        ),
+        "\"v=null!\""
+    );
 }
 
 #[test]
 fn numeric_sum_with_null_is_the_identity() {
     // Pre-null front-ends compiled null/undefined to integer 0, so guest code
     // relies on `n + null == n` (JS agrees for null: `5 + null === 5`).
-    assert_eq!(run("null-sum-int", "function f() { return 5 + null; }"), "5");
-    assert_eq!(run("null-sum-int-l", "function f() { let u; return u + 5; }"), "5");
-    assert_eq!(run("null-sum-float", "function f() { return 1.5 + null; }"), "1.5");
-    assert_eq!(run("null-sum-null", "function f() { return null + null; }"), "0");
+    assert_eq!(
+        run("null-sum-int", "function f() { return 5 + null; }"),
+        "5"
+    );
+    assert_eq!(
+        run("null-sum-int-l", "function f() { let u; return u + 5; }"),
+        "5"
+    );
+    assert_eq!(
+        run("null-sum-float", "function f() { return 1.5 + null; }"),
+        "1.5"
+    );
+    assert_eq!(
+        run("null-sum-null", "function f() { return null + null; }"),
+        "0"
+    );
 }
 
 // ---- __isType type-name spellings -------------------------------------------
@@ -129,11 +252,41 @@ fn is_type_accepts_pre_neutral_spellings() {
     // tags `List` / `Map` / `num` / `Array` (the CaspiGames client gates its
     // whole discovery flow on `__isType(r.games, "List")`). The front-end
     // resolves them to the neutral names at compile time.
-    assert_eq!(run("ist-list", "function f() { if (__isType([1], \"List\")) { return 1; } return 0; }"), "1");
-    assert_eq!(run("ist-arr", "function f() { if (__isType([1], \"Array\")) { return 1; } return 0; }"), "1");
-    assert_eq!(run("ist-map", "function f() { if (__isType({ a: 1 }, \"Map\")) { return 1; } return 0; }"), "1");
-    assert_eq!(run("ist-num", "function f() { if (__isType(3, \"num\")) { return 1; } return 0; }"), "1");
-    assert_eq!(run("ist-not", "function f() { if (__isType(3, \"List\")) { return 1; } return 0; }"), "0");
+    assert_eq!(
+        run(
+            "ist-list",
+            "function f() { if (__isType([1], \"List\")) { return 1; } return 0; }"
+        ),
+        "1"
+    );
+    assert_eq!(
+        run(
+            "ist-arr",
+            "function f() { if (__isType([1], \"Array\")) { return 1; } return 0; }"
+        ),
+        "1"
+    );
+    assert_eq!(
+        run(
+            "ist-map",
+            "function f() { if (__isType({ a: 1 }, \"Map\")) { return 1; } return 0; }"
+        ),
+        "1"
+    );
+    assert_eq!(
+        run(
+            "ist-num",
+            "function f() { if (__isType(3, \"num\")) { return 1; } return 0; }"
+        ),
+        "1"
+    );
+    assert_eq!(
+        run(
+            "ist-not",
+            "function f() { if (__isType(3, \"List\")) { return 1; } return 0; }"
+        ),
+        "0"
+    );
 }
 
 /// A minifying codegen (oxc, which the Elpian CLI runs ahead of this front-end)
@@ -164,10 +317,7 @@ fn leading_dot_does_not_break_member_access_or_spread() {
         "let s = 'x'; let n = s.length;",
         "let a = [1]; a.push(2);",
     ] {
-        assert!(
-            js2elpian::try_parse_js(src).is_ok(),
-            "regressed: {src}"
-        );
+        assert!(js2elpian::try_parse_js(src).is_ok(), "regressed: {src}");
     }
 }
 
@@ -187,7 +337,10 @@ fn nested_arrow_captures_outer_arrow_param() {
         "cap_nested",
         "let mk = (it) => () => it; let g = mk('a'); function f() { return g(); }",
     );
-    assert!(out.contains('a'), "inner arrow lost the outer arrow's param: {out}");
+    assert!(
+        out.contains('a'),
+        "inner arrow lost the outer arrow's param: {out}"
+    );
 }
 
 #[test]
@@ -220,8 +373,16 @@ fn nested_arrow_mutation_propagates_by_reference() {
 /// The forms that already worked must keep working.
 #[test]
 fn other_closure_capture_forms_still_work() {
-    assert!(run("cap_named", "function mk(it) { return () => it; } let g = mk('n'); function f() { return g(); }").contains('n'));
+    assert!(run(
+        "cap_named",
+        "function mk(it) { return () => it; } let g = mk('n'); function f() { return g(); }"
+    )
+    .contains('n'));
     assert!(run("cap_loop", "let fs = []; for (let i = 0; i < 1; i++) { let it = 'L'; fs.push(() => it); } function f() { return fs[0](); }").contains('L'));
     assert!(run("cap_fnexpr", "let g = (function (it) { return function () { return it; }; })('E'); function f() { return g(); }").contains('E'));
-    assert!(run("cap_own", "let m = [1].map((it) => it + 1); function f() { return m[0]; }").contains('2'));
+    assert!(run(
+        "cap_own",
+        "let m = [1].map((it) => it + 1); function f() { return m[0]; }"
+    )
+    .contains('2'));
 }

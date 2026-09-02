@@ -62,7 +62,10 @@ impl VmHierarchy {
             cursor = self.parent.get(&id).cloned();
         }
         self.parent.insert(child.to_string(), parent.to_string());
-        self.children.entry(parent.to_string()).or_default().push(child.to_string());
+        self.children
+            .entry(parent.to_string())
+            .or_default()
+            .push(child.to_string());
         true
     }
 
@@ -132,7 +135,10 @@ impl VmHierarchy {
 
     /// The locally-granted set of one VM (allow-all when never restricted).
     pub fn local_caps(&self, id: &str) -> CapabilitySet {
-        self.local_caps.get(id).cloned().unwrap_or_else(CapabilitySet::allow_all)
+        self.local_caps
+            .get(id)
+            .cloned()
+            .unwrap_or_else(CapabilitySet::allow_all)
     }
 
     /// The **effective** capability set of one VM: the intersection (logical
@@ -173,8 +179,9 @@ impl VmHierarchy {
 /// add, depth-like gauges take the max.
 pub fn accumulate_usage(total: &mut ResourceUsage, u: &ResourceUsage) {
     total.instructions = total.instructions.saturating_add(u.instructions);
-    total.instructions_this_turn =
-        total.instructions_this_turn.saturating_add(u.instructions_this_turn);
+    total.instructions_this_turn = total
+        .instructions_this_turn
+        .saturating_add(u.instructions_this_turn);
     total.memory_bytes = total.memory_bytes.saturating_add(u.memory_bytes);
     total.peak_memory_bytes = total.peak_memory_bytes.saturating_add(u.peak_memory_bytes);
     total.storage_bytes = total.storage_bytes.saturating_add(u.storage_bytes);
@@ -186,7 +193,10 @@ pub fn accumulate_usage(total: &mut ResourceUsage, u: &ResourceUsage) {
 /// Only the *cumulative* budgets participate (instructions, memory, storage);
 /// per-turn and call-depth caps are inherently per-instance and stay enforced
 /// by each instance's own governor.
-pub fn aggregate_exceeds(limits: &ResourceLimits, aggregate: &ResourceUsage) -> Option<&'static str> {
+pub fn aggregate_exceeds(
+    limits: &ResourceLimits,
+    aggregate: &ResourceUsage,
+) -> Option<&'static str> {
     if let Some(max) = limits.max_instructions {
         if aggregate.instructions > max {
             return Some("instructions");
@@ -243,25 +253,37 @@ mod tests {
         h.adopt("child", "grandchild");
 
         // Everyone starts allow-all.
-        assert!(h.effective_caps("grandchild").is_allowed(Capability::Network));
+        assert!(h
+            .effective_caps("grandchild")
+            .is_allowed(Capability::Network));
 
         // Revoking on the middle VM shadows the whole branch below it…
         h.set_local_capability("child", Capability::Network, false);
         assert!(!h.effective_caps("child").is_allowed(Capability::Network));
-        assert!(!h.effective_caps("grandchild").is_allowed(Capability::Network));
+        assert!(!h
+            .effective_caps("grandchild")
+            .is_allowed(Capability::Network));
         // …even if the grandchild is locally granted.
         h.set_local_capability("grandchild", Capability::Network, true);
-        assert!(!h.effective_caps("grandchild").is_allowed(Capability::Network));
+        assert!(!h
+            .effective_caps("grandchild")
+            .is_allowed(Capability::Network));
 
         // Re-granting on the middle VM restores the grandchild.
         h.set_local_capability("child", Capability::Network, true);
-        assert!(h.effective_caps("grandchild").is_allowed(Capability::Network));
+        assert!(h
+            .effective_caps("grandchild")
+            .is_allowed(Capability::Network));
 
         // A root revocation dominates everything.
         h.set_local_capability("root", Capability::Network, false);
-        assert!(!h.effective_caps("grandchild").is_allowed(Capability::Network));
+        assert!(!h
+            .effective_caps("grandchild")
+            .is_allowed(Capability::Network));
         // Unrelated capabilities stay untouched.
-        assert!(h.effective_caps("grandchild").is_allowed(Capability::Storage));
+        assert!(h
+            .effective_caps("grandchild")
+            .is_allowed(Capability::Storage));
     }
 
     #[test]
@@ -269,11 +291,21 @@ mod tests {
         let mut total = ResourceUsage::default();
         accumulate_usage(
             &mut total,
-            &ResourceUsage { instructions: 10, memory_bytes: 100, call_depth: 3, ..Default::default() },
+            &ResourceUsage {
+                instructions: 10,
+                memory_bytes: 100,
+                call_depth: 3,
+                ..Default::default()
+            },
         );
         accumulate_usage(
             &mut total,
-            &ResourceUsage { instructions: 5, memory_bytes: 50, call_depth: 7, ..Default::default() },
+            &ResourceUsage {
+                instructions: 5,
+                memory_bytes: 50,
+                call_depth: 7,
+                ..Default::default()
+            },
         );
         assert_eq!(total.instructions, 15);
         assert_eq!(total.memory_bytes, 150);
@@ -287,12 +319,23 @@ mod tests {
             max_memory_bytes: Some(1000),
             ..ResourceLimits::unlimited()
         };
-        let ok = ResourceUsage { instructions: 100, memory_bytes: 1000, ..Default::default() };
+        let ok = ResourceUsage {
+            instructions: 100,
+            memory_bytes: 1000,
+            ..Default::default()
+        };
         assert_eq!(aggregate_exceeds(&limits, &ok), None);
-        let too_much =
-            ResourceUsage { instructions: 101, memory_bytes: 10, ..Default::default() };
+        let too_much = ResourceUsage {
+            instructions: 101,
+            memory_bytes: 10,
+            ..Default::default()
+        };
         assert_eq!(aggregate_exceeds(&limits, &too_much), Some("instructions"));
-        let fat = ResourceUsage { instructions: 1, memory_bytes: 2000, ..Default::default() };
+        let fat = ResourceUsage {
+            instructions: 1,
+            memory_bytes: 2000,
+            ..Default::default()
+        };
         assert_eq!(aggregate_exceeds(&limits, &fat), Some("memory"));
     }
 }

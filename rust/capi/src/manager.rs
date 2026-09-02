@@ -256,7 +256,11 @@ impl Shared {
         if self.effective_scene(vm) {
             0
         } else {
-            self.meta.borrow().get(&vm).map(|m| m.node_handle).unwrap_or(0)
+            self.meta
+                .borrow()
+                .get(&vm)
+                .map(|m| m.node_handle)
+                .unwrap_or(0)
         }
     }
 
@@ -574,15 +578,21 @@ impl HookEnv {
             }),
             "vm.usage" => self.with_target(args, true, |env, target| {
                 let machine = env.shared.machine_of(target).unwrap_or_default();
-                vm_api::usage(&machine).map(|u| usage_json(&u)).unwrap_or(Value::Null)
+                vm_api::usage(&machine)
+                    .map(|u| usage_json(&u))
+                    .unwrap_or(Value::Null)
             }),
             "vm.usageTree" => self.with_target(args, true, |env, target| {
                 let machine = env.shared.machine_of(target).unwrap_or_default();
-                vm_api::subtree_usage(&machine).map(|u| usage_json(&u)).unwrap_or(Value::Null)
+                vm_api::subtree_usage(&machine)
+                    .map(|u| usage_json(&u))
+                    .unwrap_or(Value::Null)
             }),
             "vm.limits" => self.with_target(args, true, |env, target| {
                 let machine = env.shared.machine_of(target).unwrap_or_default();
-                vm_api::limits(&machine).map(|l| limits_json(&l)).unwrap_or(Value::Null)
+                vm_api::limits(&machine)
+                    .map(|l| limits_json(&l))
+                    .unwrap_or(Value::Null)
             }),
             "vm.setLimits" => self.with_target(args, false, |env, target| {
                 let Some(limits) = args.get(1).and_then(parse_limits) else {
@@ -642,14 +652,22 @@ impl HookEnv {
             }
             "vm.send" => self.with_target_allow_parent(args, |env, target| {
                 let msg = args.get(1).cloned().unwrap_or(Value::Null);
-                let paused = env.shared.meta.borrow().get(&target).map(|m| m.paused || m.dead);
+                let paused = env
+                    .shared
+                    .meta
+                    .borrow()
+                    .get(&target)
+                    .map(|m| m.paused || m.dead);
                 if paused != Some(false) {
                     return vm_error(&format!("vm.send: vm {target} cannot receive"));
                 }
                 env.shared
                     .commands
                     .borrow_mut()
-                    .push_back(Command::Message { target, payload: json!([env.vm, msg]) });
+                    .push_back(Command::Message {
+                        target,
+                        payload: json!([env.vm, msg]),
+                    });
                 Value::Bool(true)
             }),
             "vm.grant" => self.with_target(args, false, |env, target| {
@@ -665,7 +683,9 @@ impl HookEnv {
                 if caller_sbx != 0 {
                     op["__sbx"] = json!(caller_sbx);
                 }
-                env.shared.forward("godot.op", &[op]).unwrap_or(Value::Bool(false))
+                env.shared
+                    .forward("godot.op", &[op])
+                    .unwrap_or(Value::Bool(false))
             }),
             "vm.info" => {
                 let meta = self.shared.meta.borrow();
@@ -775,11 +795,7 @@ impl HookEnv {
         match self.shared.forward("godot.op", &[chk]) {
             Some(Value::Bool(true)) => {}
             Some(other) if other.as_bool() == Some(true) => {}
-            _ => {
-                return vm_error(
-                    "vm.spawn: assigned node is not inside the parent's sandbox",
-                )
-            }
+            _ => return vm_error("vm.spawn: assigned node is not inside the parent's sandbox"),
         }
 
         let label = get("label").as_str().unwrap_or("child").to_string();
@@ -809,7 +825,10 @@ impl HookEnv {
             Ok(rt) => rt,
             Err(e) => return vm_error(&format!("vm.spawn: child failed to compile: {e}")),
         };
-        let child_env = HookEnv { shared: self.shared.clone(), vm: vm_id };
+        let child_env = HookEnv {
+            shared: self.shared.clone(),
+            vm: vm_id,
+        };
         rt.set_host_hook(Box::new(move |name, args| child_env.handle(name, args)));
 
         // Hierarchy: adopt (pushes the inherited effective capability set),
@@ -855,7 +874,8 @@ impl HookEnv {
         self.shared.by_machine.borrow_mut().insert(machine, vm_id);
         self.shared.order.borrow_mut().push(vm_id);
         self.shared.pending_boot.borrow_mut().push((vm_id, rt));
-        self.shared.log(format!("vm {} spawned vm {} ('{}')", self.vm, vm_id, label));
+        self.shared
+            .log(format!("vm {} spawned vm {} ('{}')", self.vm, vm_id, label));
         json!(vm_id)
     }
 }
@@ -942,7 +962,10 @@ impl VmManager {
             },
         );
         shared.by_machine.borrow_mut().insert(base_machine, ROOT_VM);
-        let env = HookEnv { shared: shared.clone(), vm: ROOT_VM };
+        let env = HookEnv {
+            shared: shared.clone(),
+            vm: ROOT_VM,
+        };
         rt.set_host_hook(Box::new(move |name, args| env.handle(name, args)));
 
         let mut rts = HashMap::new();
@@ -1059,10 +1082,13 @@ impl VmManager {
                     }
                     Err(e) => {
                         self.shared.log(format!("vm {vm} boot failed: {e:?}"));
-                        self.shared.commands.borrow_mut().push_back(Command::Remove {
-                            vm,
-                            reason: format!("boot failed: {e:?}"),
-                        });
+                        self.shared
+                            .commands
+                            .borrow_mut()
+                            .push_back(Command::Remove {
+                                vm,
+                                reason: format!("boot failed: {e:?}"),
+                            });
                     }
                 }
             }
@@ -1086,9 +1112,7 @@ impl VmManager {
                 let meta = self.shared.meta.borrow();
                 meta.iter()
                     .filter(|(_, m)| !m.dead && !m.trap_notified)
-                    .filter_map(|(vm, m)| {
-                        vm_api::trap_reason(&m.machine_id).map(|r| (*vm, r))
-                    })
+                    .filter_map(|(vm, m)| vm_api::trap_reason(&m.machine_id).map(|r| (*vm, r)))
                     .collect()
             };
             for (vm, reason) in trapped {
@@ -1103,10 +1127,13 @@ impl VmManager {
                 };
                 self.shared.log(format!("vm {vm} trapped: {reason}"));
                 if let Some(parent) = parent {
-                    self.shared.commands.borrow_mut().push_back(Command::Notify {
-                        target: parent,
-                        payload: json!(["trapped", vm, reason]),
-                    });
+                    self.shared
+                        .commands
+                        .borrow_mut()
+                        .push_back(Command::Notify {
+                            target: parent,
+                            payload: json!(["trapped", vm, reason]),
+                        });
                 }
             }
 
@@ -1134,7 +1161,9 @@ impl VmManager {
                     }
                     Command::ResumeDrive { vm } => {
                         if self.deliverable(vm) {
-                            let Some(machine) = self.shared.machine_of(vm) else { continue };
+                            let Some(machine) = self.shared.machine_of(vm) else {
+                                continue;
+                            };
                             match vm_api::run_state(&machine) {
                                 // Parked mid-turn: drive the continuation on.
                                 Some(vm_api::RunState::Paused) => {
@@ -1181,12 +1210,18 @@ impl VmManager {
             }
             meta.get(&vm).and_then(|m| m.parent)
         };
-        self.shared.log(format!("vm {vm} removed ({reason}; {} vm(s) total)", subtree.len()));
+        self.shared.log(format!(
+            "vm {vm} removed ({reason}; {} vm(s) total)",
+            subtree.len()
+        ));
         if let Some(parent) = parent {
-            self.shared.commands.borrow_mut().push_back(Command::Notify {
-                target: parent,
-                payload: json!(["terminated", vm, reason]),
-            });
+            self.shared
+                .commands
+                .borrow_mut()
+                .push_back(Command::Notify {
+                    target: parent,
+                    payload: json!(["terminated", vm, reason]),
+                });
         }
     }
 
@@ -1271,7 +1306,13 @@ impl VmManager {
     /// Whether a VM is currently alive (booted, not removed).
     pub fn vm_alive(&self, vm: u64) -> bool {
         self.rts.contains_key(&vm)
-            && self.shared.meta.borrow().get(&vm).map(|m| !m.dead).unwrap_or(false)
+            && self
+                .shared
+                .meta
+                .borrow()
+                .get(&vm)
+                .map(|m| !m.dead)
+                .unwrap_or(false)
     }
 
     /// The registry machine id of a VM.
@@ -1292,7 +1333,7 @@ impl Drop for VmManager {
             vm_api::destroy_vm_tree(&machine);
         }
         // Belt and braces for VMs that never made it into the tree.
-        for (_, m) in self.shared.meta.borrow().iter() {
+        for m in self.shared.meta.borrow().values() {
             vm_api::destroy_vm(m.machine_id.clone());
         }
     }

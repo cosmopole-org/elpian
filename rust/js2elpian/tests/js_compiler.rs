@@ -7,7 +7,10 @@ use elpian_vm::api;
 /// Register a VM from JS, run its top-level program, then call `func` and return
 /// the stringified result value.
 fn run_js_and_call(id: &str, js: &str, func: &str) -> String {
-    assert!(js2elpian::create_vm_from_js(id.to_string(), js.to_string()), "JS should compile");
+    assert!(
+        js2elpian::create_vm_from_js(id.to_string(), js.to_string()),
+        "JS should compile"
+    );
     let _ = api::execute_vm(id.to_string());
     api::execute_vm_func(id.to_string(), func.to_string(), 1).result_value
 }
@@ -142,7 +145,10 @@ fn top_level_state_and_function() {
     let id = "js-toplevel";
     assert!(js2elpian::create_vm_from_js(id.to_string(), js.to_string()));
     let _ = api::execute_vm(id.to_string());
-    assert_eq!(api::execute_vm_func(id.to_string(), "getx".into(), 1).result_value, "5");
+    assert_eq!(
+        api::execute_vm_func(id.to_string(), "getx".into(), 1).result_value,
+        "5"
+    );
 }
 
 #[test]
@@ -195,22 +201,32 @@ fn function_without_return_does_not_leak_previous_result() {
     let id = "js-noleak";
     assert!(js2elpian::create_vm_from_js(id.to_string(), js.to_string()));
     let _ = api::execute_vm(id.to_string());
-    assert_eq!(api::execute_vm_func(id.to_string(), "getfive".into(), 1).result_value, "5");
+    assert_eq!(
+        api::execute_vm_func(id.to_string(), "getfive".into(), 1).result_value,
+        "5"
+    );
     let noret = api::execute_vm_func(id.to_string(), "noret".into(), 2).result_value;
     assert_ne!(noret, "5", "no-return function leaked the previous result");
 }
 
 #[test]
 fn validate_js_accepts_and_rejects() {
-    assert!(js2elpian::validate_js("function f() { return 1 + 2; }".to_string()));
+    assert!(js2elpian::validate_js(
+        "function f() { return 1 + 2; }".to_string()
+    ));
     // Unterminated block is outside the supported subset → rejected, no panic.
-    assert!(!js2elpian::validate_js("function f() { return ".to_string()));
+    assert!(!js2elpian::validate_js(
+        "function f() { return ".to_string()
+    ));
 }
 
 #[test]
 fn invalid_js_fails_to_create_vm() {
     // A stray operator with no operand cannot be lowered; creation returns false.
-    assert!(!js2elpian::create_vm_from_js("js-bad".to_string(), "let x = = ;".to_string()));
+    assert!(!js2elpian::create_vm_from_js(
+        "js-bad".to_string(),
+        "let x = = ;".to_string()
+    ));
 }
 
 #[test]
@@ -337,7 +353,10 @@ fn statement_after_control_block_does_not_unbalance_in_called_fn() {
         }";
     assert!(js2elpian::create_vm_from_js(id.to_string(), js.to_string()));
     let _ = api::execute_vm(id.to_string());
-    assert_eq!(api::execute_vm_func(id.to_string(), "f".into(), 1).result_value, "409");
+    assert_eq!(
+        api::execute_vm_func(id.to_string(), "f".into(), 1).result_value,
+        "409"
+    );
 
     // The same shape with a `for` loop body and an in-loop conditional value.
     let id2 = "js-ctrl-balance-loop";
@@ -352,9 +371,15 @@ fn statement_after_control_block_does_not_unbalance_in_called_fn() {
             return a;
         }
         function f() { let a = build(); return concat(a[2].tag, str(len(a))); }";
-    assert!(js2elpian::create_vm_from_js(id2.to_string(), js2.to_string()));
+    assert!(js2elpian::create_vm_from_js(
+        id2.to_string(),
+        js2.to_string()
+    ));
     let _ = api::execute_vm(id2.to_string());
-    assert_eq!(api::execute_vm_func(id2.to_string(), "f".into(), 1).result_value, "\"hi3\"");
+    assert_eq!(
+        api::execute_vm_func(id2.to_string(), "f".into(), 1).result_value,
+        "\"hi3\""
+    );
 }
 
 #[test]
@@ -484,12 +509,22 @@ fn truncating_integer_division() {
     // zero, always an int) — the primitive a front-end lowers an operator like
     // Dart's `~/` to. The `~/` spelling itself is not JavaScript and is not
     // accepted by this front-end.
-    assert_eq!(run_js_and_call("js-tdiv-1", "function f() { return intDiv(7, 2); }", "f"), "3");
-    assert_eq!(run_js_and_call("js-tdiv-2", "function f() { return intDiv(-7, 2); }", "f"), "-3");
+    assert_eq!(
+        run_js_and_call("js-tdiv-1", "function f() { return intDiv(7, 2); }", "f"),
+        "3"
+    );
+    assert_eq!(
+        run_js_and_call("js-tdiv-2", "function f() { return intDiv(-7, 2); }", "f"),
+        "-3"
+    );
     // (0xFF00FF ~/ 0x10000) % 256 in Dart — the colour-channel idiom from
     // flutter.dart, via the builtin.
     assert_eq!(
-        run_js_and_call("js-tdiv-3", "function f() { var v = 16711935; return intDiv(v, 65536) % 256; }", "f"),
+        run_js_and_call(
+            "js-tdiv-3",
+            "function f() { var v = 16711935; return intDiv(v, 65536) % 256; }",
+            "f"
+        ),
         "255",
     );
 }
@@ -499,10 +534,26 @@ fn null_coalescing_operator() {
     // `??` is a native short-circuiting VM opcode over the first-class null:
     // null yields the right operand; any present value — including 0 and "" —
     // yields itself (exact JS/Dart `??` semantics).
-    assert_eq!(run_js_and_call("js-nc-1", "function f() { var a = null; return a ?? 5; }", "f"), "5");
-    assert_eq!(run_js_and_call("js-nc-2", "function f() { var a = 9; return a ?? 5; }", "f"), "9");
-    assert_eq!(run_js_and_call("js-nc-0", "function f() { var a = 0; return a ?? 5; }", "f"), "0");
-    assert_eq!(run_js_and_call("js-nc-u", "function f() { var a; return a ?? 5; }", "f"), "5");
+    assert_eq!(
+        run_js_and_call(
+            "js-nc-1",
+            "function f() { var a = null; return a ?? 5; }",
+            "f"
+        ),
+        "5"
+    );
+    assert_eq!(
+        run_js_and_call("js-nc-2", "function f() { var a = 9; return a ?? 5; }", "f"),
+        "9"
+    );
+    assert_eq!(
+        run_js_and_call("js-nc-0", "function f() { var a = 0; return a ?? 5; }", "f"),
+        "0"
+    );
+    assert_eq!(
+        run_js_and_call("js-nc-u", "function f() { var a; return a ?? 5; }", "f"),
+        "5"
+    );
     // Short-circuit: the right operand is NOT evaluated when the left is present,
     // so the side effect on `hit` never runs.
     let js = "
@@ -520,13 +571,55 @@ fn reified_is_on_primitives() {
     // `float`, `number`, `string`, `list`, `map`, `function`, `bool`, `null`,
     // `any`); a front-end maps its language's spellings onto them at compile
     // time. The intrinsic passes the neutral name straight through.
-    assert_eq!(run_js_and_call("js-is-int", "function f() { return __isType(5, \"int\"); }", "f"), "true");
-    assert_eq!(run_js_and_call("js-is-str", "function f() { return __isType(5, \"string\"); }", "f"), "false");
-    assert_eq!(run_js_and_call("js-is-list", "function f() { return __isType([1], \"list\"); }", "f"), "true");
-    assert_eq!(run_js_and_call("js-is-null", "function f() { return __isType(null, \"null\"); }", "f"), "true");
-    assert_eq!(run_js_and_call("js-is-any", "function f() { return __isType(null, \"any\"); }", "f"), "true");
+    assert_eq!(
+        run_js_and_call(
+            "js-is-int",
+            "function f() { return __isType(5, \"int\"); }",
+            "f"
+        ),
+        "true"
+    );
+    assert_eq!(
+        run_js_and_call(
+            "js-is-str",
+            "function f() { return __isType(5, \"string\"); }",
+            "f"
+        ),
+        "false"
+    );
+    assert_eq!(
+        run_js_and_call(
+            "js-is-list",
+            "function f() { return __isType([1], \"list\"); }",
+            "f"
+        ),
+        "true"
+    );
+    assert_eq!(
+        run_js_and_call(
+            "js-is-null",
+            "function f() { return __isType(null, \"null\"); }",
+            "f"
+        ),
+        "true"
+    );
+    assert_eq!(
+        run_js_and_call(
+            "js-is-any",
+            "function f() { return __isType(null, \"any\"); }",
+            "f"
+        ),
+        "true"
+    );
     // `as` yields the value on a successful check.
-    assert_eq!(run_js_and_call("js-as-num", "function f() { return __asType(42, \"number\"); }", "f"), "42");
+    assert_eq!(
+        run_js_and_call(
+            "js-as-num",
+            "function f() { return __asType(42, \"number\"); }",
+            "f"
+        ),
+        "42"
+    );
 }
 
 #[test]
@@ -550,17 +643,48 @@ fn reified_is_walks_class_hierarchy() {
 #[test]
 fn bitwise_and_shift_operators() {
     // 32-bit semantics via the universal builtins.
-    assert_eq!(run_js_and_call("js-bit-and", "function f() { return 6 & 3; }", "f"), "2");
-    assert_eq!(run_js_and_call("js-bit-or", "function f() { return 6 | 1; }", "f"), "7");
-    assert_eq!(run_js_and_call("js-bit-xor", "function f() { return 6 ^ 3; }", "f"), "5");
-    assert_eq!(run_js_and_call("js-bit-not", "function f() { return ~5; }", "f"), "-6");
-    assert_eq!(run_js_and_call("js-shl", "function f() { return 1 << 4; }", "f"), "16");
-    assert_eq!(run_js_and_call("js-shr", "function f() { return -8 >> 1; }", "f"), "-4");
-    assert_eq!(run_js_and_call("js-ushr", "function f() { return -1 >>> 28; }", "f"), "15");
+    assert_eq!(
+        run_js_and_call("js-bit-and", "function f() { return 6 & 3; }", "f"),
+        "2"
+    );
+    assert_eq!(
+        run_js_and_call("js-bit-or", "function f() { return 6 | 1; }", "f"),
+        "7"
+    );
+    assert_eq!(
+        run_js_and_call("js-bit-xor", "function f() { return 6 ^ 3; }", "f"),
+        "5"
+    );
+    assert_eq!(
+        run_js_and_call("js-bit-not", "function f() { return ~5; }", "f"),
+        "-6"
+    );
+    assert_eq!(
+        run_js_and_call("js-shl", "function f() { return 1 << 4; }", "f"),
+        "16"
+    );
+    assert_eq!(
+        run_js_and_call("js-shr", "function f() { return -8 >> 1; }", "f"),
+        "-4"
+    );
+    assert_eq!(
+        run_js_and_call("js-ushr", "function f() { return -1 >>> 28; }", "f"),
+        "15"
+    );
     // Precedence: `&` binds looser than `==`, `|` loosest of the three.
-    assert_eq!(run_js_and_call("js-bit-prec", "function f() { return 1 | 2 & 2; }", "f"), "3");
+    assert_eq!(
+        run_js_and_call("js-bit-prec", "function f() { return 1 | 2 & 2; }", "f"),
+        "3"
+    );
     // Hex / binary / octal literals.
-    assert_eq!(run_js_and_call("js-hex", "function f() { return 0xFF + 0b1010 + 0o17; }", "f"), "280");
+    assert_eq!(
+        run_js_and_call(
+            "js-hex",
+            "function f() { return 0xFF + 0b1010 + 0o17; }",
+            "f"
+        ),
+        "280"
+    );
 }
 
 #[test]
@@ -576,11 +700,26 @@ fn compound_assignment_forms() {
 
 #[test]
 fn typeof_operator() {
-    assert_eq!(run_js_and_call("js-tof-n", "function f() { return typeof 5; }", "f"), "\"number\"");
-    assert_eq!(run_js_and_call("js-tof-s", "function f() { return typeof \"x\"; }", "f"), "\"string\"");
-    assert_eq!(run_js_and_call("js-tof-b", "function f() { return typeof true; }", "f"), "\"boolean\"");
-    assert_eq!(run_js_and_call("js-tof-o", "function f() { return typeof [1]; }", "f"), "\"object\"");
-    assert_eq!(run_js_and_call("js-tof-f", "function f() { return typeof f; }", "f"), "\"function\"");
+    assert_eq!(
+        run_js_and_call("js-tof-n", "function f() { return typeof 5; }", "f"),
+        "\"number\""
+    );
+    assert_eq!(
+        run_js_and_call("js-tof-s", "function f() { return typeof \"x\"; }", "f"),
+        "\"string\""
+    );
+    assert_eq!(
+        run_js_and_call("js-tof-b", "function f() { return typeof true; }", "f"),
+        "\"boolean\""
+    );
+    assert_eq!(
+        run_js_and_call("js-tof-o", "function f() { return typeof [1]; }", "f"),
+        "\"object\""
+    );
+    assert_eq!(
+        run_js_and_call("js-tof-f", "function f() { return typeof f; }", "f"),
+        "\"function\""
+    );
 }
 
 #[test]
@@ -625,7 +764,10 @@ fn try_catch_throw_finally() {
     assert_eq!(run_js_and_call("js-try1", js, "f"), "\"boom\"");
     // A native error (out-of-range) is catchable and carries a message.
     let js2 = "function f() { try { var a = [1]; return removeAt(a, 9); } catch (e) { return e.message; } }";
-    assert!(run_js_and_call("js-try2", js2, "f").contains("range"), "should carry a message");
+    assert!(
+        run_js_and_call("js-try2", js2, "f").contains("range"),
+        "should carry a message"
+    );
     // finally runs on the normal path.
     let js3 = "function f() { var log = []; try { log.push(1); } finally { log.push(2); } return log.length; }";
     assert_eq!(run_js_and_call("js-try3", js3, "f"), "2");
@@ -638,7 +780,8 @@ fn try_catch_throw_finally() {
 fn array_higher_order_methods() {
     let js = "function f() { return [1,2,3,4].map(function(x){ return x*x; }).reduce(function(a,b){ return a+b; }, 0); }";
     assert_eq!(run_js_and_call("js-map-red", js, "f"), "30");
-    let js2 = "function f() { return [1,2,3,4,5].filter(function(x){ return x % 2 == 1; }).length; }";
+    let js2 =
+        "function f() { return [1,2,3,4,5].filter(function(x){ return x % 2 == 1; }).length; }";
     assert_eq!(run_js_and_call("js-filter", js2, "f"), "3");
     let js3 = "function f() { return [5,1,4,2,3].sort(function(a,b){ return a-b; })[0]; }";
     assert_eq!(run_js_and_call("js-sort", js3, "f"), "1");
@@ -671,33 +814,108 @@ fn array_mutation_and_slicing_methods() {
 #[test]
 fn string_methods_js_faithful() {
     // JS replace replaces the first only; replaceAll replaces every occurrence.
-    assert_eq!(run_js_and_call("js-rep", "function f() { return \"a-a-a\".replace(\"a\", \"b\"); }", "f"), "\"b-a-a\"");
-    assert_eq!(run_js_and_call("js-repall", "function f() { return \"a-a-a\".replaceAll(\"a\", \"b\"); }", "f"), "\"b-b-b\"");
-    assert_eq!(run_js_and_call("js-inc", "function f() { return \"hello\".includes(\"ell\"); }", "f"), "true");
-    assert_eq!(run_js_and_call("js-up", "function f() { return \"abc\".toUpperCase(); }", "f"), "\"ABC\"");
-    assert_eq!(run_js_and_call("js-pad", "function f() { return \"5\".padStart(3, \"0\"); }", "f"), "\"005\"");
-    assert_eq!(run_js_and_call("js-split", "function f() { return \"a,b,c\".split(\",\").length; }", "f"), "3");
+    assert_eq!(
+        run_js_and_call(
+            "js-rep",
+            "function f() { return \"a-a-a\".replace(\"a\", \"b\"); }",
+            "f"
+        ),
+        "\"b-a-a\""
+    );
+    assert_eq!(
+        run_js_and_call(
+            "js-repall",
+            "function f() { return \"a-a-a\".replaceAll(\"a\", \"b\"); }",
+            "f"
+        ),
+        "\"b-b-b\""
+    );
+    assert_eq!(
+        run_js_and_call(
+            "js-inc",
+            "function f() { return \"hello\".includes(\"ell\"); }",
+            "f"
+        ),
+        "true"
+    );
+    assert_eq!(
+        run_js_and_call(
+            "js-up",
+            "function f() { return \"abc\".toUpperCase(); }",
+            "f"
+        ),
+        "\"ABC\""
+    );
+    assert_eq!(
+        run_js_and_call(
+            "js-pad",
+            "function f() { return \"5\".padStart(3, \"0\"); }",
+            "f"
+        ),
+        "\"005\""
+    );
+    assert_eq!(
+        run_js_and_call(
+            "js-split",
+            "function f() { return \"a,b,c\".split(\",\").length; }",
+            "f"
+        ),
+        "3"
+    );
 }
 
 #[test]
 fn static_namespaces() {
-    assert_eq!(run_js_and_call("js-mfloor", "function f() { return Math.floor(3.7); }", "f"), "3");
-    assert_eq!(run_js_and_call("js-mmax", "function f() { return Math.max(3, 9, 5); }", "f"), "9");
-    assert_eq!(run_js_and_call("js-mabs", "function f() { return Math.abs(-4); }", "f"), "4");
-    assert_eq!(run_js_and_call("js-json", "function f() { return JSON.stringify([1, 2]); }", "f"), "\"[1,2]\"");
+    assert_eq!(
+        run_js_and_call("js-mfloor", "function f() { return Math.floor(3.7); }", "f"),
+        "3"
+    );
+    assert_eq!(
+        run_js_and_call("js-mmax", "function f() { return Math.max(3, 9, 5); }", "f"),
+        "9"
+    );
+    assert_eq!(
+        run_js_and_call("js-mabs", "function f() { return Math.abs(-4); }", "f"),
+        "4"
+    );
+    assert_eq!(
+        run_js_and_call(
+            "js-json",
+            "function f() { return JSON.stringify([1, 2]); }",
+            "f"
+        ),
+        "\"[1,2]\""
+    );
     let js = "function f() { var o = JSON.parse(\"{\\\"a\\\": 5}\"); return o.a; }";
     assert_eq!(run_js_and_call("js-jsonp", js, "f"), "5");
-    assert_eq!(run_js_and_call("js-okeys", "function f() { return Object.keys({a:1, b:2}).length; }", "f"), "2");
-    assert_eq!(run_js_and_call("js-arr", "function f() { return Array.isArray([1]); }", "f"), "true");
-    assert_eq!(run_js_and_call("js-arr2", "function f() { return Array.isArray(5); }", "f"), "false");
-    assert_eq!(run_js_and_call("js-pint", "function f() { return parseInt(\"42\"); }", "f"), "42");
+    assert_eq!(
+        run_js_and_call(
+            "js-okeys",
+            "function f() { return Object.keys({a:1, b:2}).length; }",
+            "f"
+        ),
+        "2"
+    );
+    assert_eq!(
+        run_js_and_call("js-arr", "function f() { return Array.isArray([1]); }", "f"),
+        "true"
+    );
+    assert_eq!(
+        run_js_and_call("js-arr2", "function f() { return Array.isArray(5); }", "f"),
+        "false"
+    );
+    assert_eq!(
+        run_js_and_call("js-pint", "function f() { return parseInt(\"42\"); }", "f"),
+        "42"
+    );
 }
 
 #[test]
 fn map_object_methods() {
     let js = "function f() { var m = {a: 1, b: 2}; var s = 0; m.forEach(function(v, k){ s = s + v; }); return s; }";
     assert_eq!(run_js_and_call("js-mfe", js, "f"), "3");
-    let js2 = "function f() { var m = {a: 1}; return m.containsKey(\"a\") && !m.containsKey(\"z\"); }";
+    let js2 =
+        "function f() { var m = {a: 1}; return m.containsKey(\"a\") && !m.containsKey(\"z\"); }";
     assert_eq!(run_js_and_call("js-mck", js2, "f"), "true");
 }
 
@@ -716,7 +934,8 @@ fn switch_with_default_clause() {
     assert!(js2elpian::create_vm_from_js(id.to_string(), js.to_string()));
     let _ = api::execute_vm(id.to_string());
     let call = |n: i64| {
-        api::execute_vm_func_with_input(id.to_string(), "classify".into(), n.to_string(), 1).result_value
+        api::execute_vm_func_with_input(id.to_string(), "classify".into(), n.to_string(), 1)
+            .result_value
     };
     assert_eq!(call(2), "20");
     assert_eq!(call(7), "99");

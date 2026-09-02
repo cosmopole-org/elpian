@@ -7,7 +7,9 @@ fn usage() -> ! {
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    if args.len() != 4 { usage(); }
+    if args.len() != 4 {
+        usage();
+    }
     let source = fs::read_to_string(&args[2]).unwrap_or_else(|e| {
         eprintln!("cannot read {}: {e}", args[2]);
         process::exit(1);

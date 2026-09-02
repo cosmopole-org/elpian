@@ -133,14 +133,22 @@ impl VM {
     /// further pause, completion, or a trap), routed through
     /// [`VM::handle_executor_request`]. No value is injected.
     pub fn resume(&mut self) -> Val {
-        self.single_thread_executor.as_ref().unwrap().borrow_mut().resume_control();
+        self.single_thread_executor
+            .as_ref()
+            .unwrap()
+            .borrow_mut()
+            .resume_control();
         // 0x04 = resume-after-pause; the typ-254 payload means "no value".
         let r = self
             .single_thread_executor
             .as_ref()
             .unwrap()
             .borrow_mut()
-            .single_thread_operation(0x04, self.pending_host_call_id, Val::new(254, Payload::Null));
+            .single_thread_operation(
+                0x04,
+                self.pending_host_call_id,
+                Val::new(254, Payload::Null),
+            );
         self.handle_executor_request(r.0, r.1, r.2)
     }
     pub fn is_exec_processing(&self) -> bool {
@@ -173,12 +181,10 @@ impl VM {
             };
             Val::new(
                 9,
-                Payload::from(Rc::new(RefCell::new(Array::new(
-                    vec![
-                        Val::new(7, Payload::from(func_name.to_string())),
-                        input_val,
-                    ],
-                )))),
+                Payload::from(Rc::new(RefCell::new(Array::new(vec![
+                    Val::new(7, Payload::from(func_name.to_string())),
+                    input_val,
+                ])))),
             )
         };
         let r = self
@@ -272,12 +278,7 @@ impl VM {
                             .iter()
                             .map(|item| self.convert_json_value_to_val(item.clone()))
                             .collect();
-                        return Val::new(
-                            9,
-                            Payload::from(Rc::new(RefCell::new(Array::new(
-                                vals,
-                            )))),
-                        );
+                        return Val::new(9, Payload::from(Rc::new(RefCell::new(Array::new(vals)))));
                     }
                 }
                 _ => {}
@@ -291,10 +292,7 @@ impl VM {
                 if let Some(i) = n.as_i64() {
                     Val::new(3, Payload::from(i))
                 } else {
-                    Val::new(
-                        5,
-                        Payload::from(n.as_f64().unwrap_or(0.0)),
-                    )
+                    Val::new(5, Payload::from(n.as_f64().unwrap_or(0.0)))
                 }
             }
             Value::String(s) => Val::new(7, Payload::from(s)),
@@ -303,12 +301,7 @@ impl VM {
                     .into_iter()
                     .map(|item| self.convert_json_value_to_val(item))
                     .collect();
-                Val::new(
-                    9,
-                    Payload::from(Rc::new(RefCell::new(Array::new(
-                        vals,
-                    )))),
-                )
+                Val::new(9, Payload::from(Rc::new(RefCell::new(Array::new(vals)))))
             }
             Value::Object(map) => {
                 let mut obj_map = ValMap::default();
@@ -351,9 +344,8 @@ impl VM {
                 // payload is typically the dominant size (a per-frame instance
                 // buffer of thousands of numbers), so cutting the intermediate
                 // copy halves the allocation traffic of `gpu.submit`.
-                let mut envelope = String::with_capacity(
-                    self.machine_id.len() + api_name.len() + 1024,
-                );
+                let mut envelope =
+                    String::with_capacity(self.machine_id.len() + api_name.len() + 1024);
                 envelope.push_str("{\"machineId\":");
                 push_json_string(&mut envelope, &self.machine_id);
                 envelope.push_str(",\"apiName\":");

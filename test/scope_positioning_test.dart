@@ -27,7 +27,12 @@ void main() {
       'rules': [
         {
           'selector': '.game-window',
-          'styles': {'position': 'absolute', 'top': 96, 'left': 24, 'width': 460},
+          'styles': {
+            'position': 'absolute',
+            'top': 96,
+            'left': 24,
+            'width': 460
+          },
         },
       ],
     });
@@ -41,7 +46,13 @@ void main() {
         {
           'type': 'div',
           'props': {
-            'style': {'position': 'absolute', 'top': 0, 'left': 0, 'right': 0, 'bottom': 0},
+            'style': {
+              'position': 'absolute',
+              'top': 0,
+              'left': 0,
+              'right': 0,
+              'bottom': 0
+            },
           },
           'children': [
             {
@@ -53,7 +64,10 @@ void main() {
                   'type': 'div',
                   'props': {'className': 'game-window'},
                   'children': [
-                    {'type': 'span', 'props': {'text': 'WINDOW BODY'}},
+                    {
+                      'type': 'span',
+                      'props': {'text': 'WINDOW BODY'}
+                    },
                   ],
                 },
               ],

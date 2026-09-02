@@ -54,22 +54,27 @@ class NextjsRenderEnvelope {
 
     final stylesheetRaw = json['stylesheet'];
     if (stylesheetRaw != null && stylesheetRaw is! Map<String, dynamic>) {
-      throw const FormatException('"stylesheet" must be a JSON object when provided.');
+      throw const FormatException(
+          '"stylesheet" must be a JSON object when provided.');
     }
 
     final metaRaw = json['meta'];
     if (metaRaw != null && metaRaw is! Map<String, dynamic>) {
-      throw const FormatException('"meta" must be a JSON object when provided.');
+      throw const FormatException(
+          '"meta" must be a JSON object when provided.');
     }
 
     final navigationRaw = json['navigation'];
     if (navigationRaw != null && navigationRaw is! Map<String, dynamic>) {
-      throw const FormatException('"navigation" must be a JSON object when provided.');
+      throw const FormatException(
+          '"navigation" must be a JSON object when provided.');
     }
 
     final clientComponentsRaw = json['clientComponents'];
-    if (clientComponentsRaw != null && clientComponentsRaw is! Map<String, dynamic>) {
-      throw const FormatException('"clientComponents" must be a JSON object when provided.');
+    if (clientComponentsRaw != null &&
+        clientComponentsRaw is! Map<String, dynamic>) {
+      throw const FormatException(
+          '"clientComponents" must be a JSON object when provided.');
     }
 
     final jsCodeRaw = json['jsCode'];
@@ -79,12 +84,14 @@ class NextjsRenderEnvelope {
 
     final vmAstRaw = json['vmAstJson'];
     if (vmAstRaw != null && vmAstRaw is! String) {
-      throw const FormatException('"vmAstJson" must be a string when provided.');
+      throw const FormatException(
+          '"vmAstJson" must be a string when provided.');
     }
 
     final jsEntryRaw = json['jsEntryFunction'];
     if (jsEntryRaw != null && jsEntryRaw is! String) {
-      throw const FormatException('"jsEntryFunction" must be a string when provided.');
+      throw const FormatException(
+          '"jsEntryFunction" must be a string when provided.');
     }
 
     return NextjsRenderEnvelope(
@@ -221,12 +228,14 @@ class NextjsBridge {
     } else {
       content = Text(
         label,
-        textAlign: style?.textAlign ?? (isButtonLike ? TextAlign.center : TextAlign.start),
+        textAlign: style?.textAlign ??
+            (isButtonLike ? TextAlign.center : TextAlign.start),
         style: TextStyle(
           // Default to a gold accent so an unstyled link still reads as a link.
           color: style?.color ?? const Color(0xFFD6B36A),
           fontSize: style?.fontSize,
-          fontWeight: style?.fontWeight ?? (isButtonLike ? FontWeight.w700 : null),
+          fontWeight:
+              style?.fontWeight ?? (isButtonLike ? FontWeight.w700 : null),
           letterSpacing: style?.letterSpacing,
         ),
       );
@@ -245,7 +254,8 @@ class NextjsBridge {
       behavior: HitTestBehavior.opaque,
       // `href == null` (not the `enabled` alias) so Dart promotes `href` to a
       // non-null `String` inside the navigate closure.
-      onTap: href == null ? null : () => _onNavigate?.call(href, replace: replace),
+      onTap:
+          href == null ? null : () => _onNavigate?.call(href, replace: replace),
       child: styled,
     );
 
@@ -336,8 +346,7 @@ class NextjsBridge {
       gap,
       isColumn ? Axis.vertical : Axis.horizontal,
     );
-    final mainAlign =
-        CSSProperties.getMainAxisAlignment(style?.justifyContent);
+    final mainAlign = CSSProperties.getMainAxisAlignment(style?.justifyContent);
     // Default the cross axis to CENTER — the [Row] default these buttons were
     // built against (and the sensible default for a button's content box) —
     // honouring an explicit `alignItems` when one is set.
@@ -469,7 +478,10 @@ class _NextjsFormWidgetState extends State<_NextjsFormWidget> {
 
   /// Whether the field is collected through a [TextEditingController].
   static bool _isTextLike(String type) =>
-      type != 'hidden' && type != 'select' && type != 'checkbox' && type != 'range';
+      type != 'hidden' &&
+      type != 'select' &&
+      type != 'checkbox' &&
+      type != 'range';
 
   /// Parse a select field's options: a list of strings or `{value,label}`
   /// maps. Falls back to splitting a comma-separated `placeholder` so legacy
@@ -528,9 +540,8 @@ class _NextjsFormWidgetState extends State<_NextjsFormWidget> {
       } else if (type == 'range') {
         final min = _numProp(f, 'min', 0);
         final max = _numProp(f, 'max', 100);
-        final initial = max > min
-            ? (double.tryParse(value) ?? min).clamp(min, max)
-            : min;
+        final initial =
+            max > min ? (double.tryParse(value) ?? min).clamp(min, max) : min;
         _values[name] = _fmtRange(initial.toDouble());
       } else {
         // hidden — submit the server-provided value untouched.
@@ -730,8 +741,8 @@ class _NextjsFormWidgetState extends State<_NextjsFormWidget> {
                           divisions: divisions,
                           onChanged: _busy
                               ? null
-                              : (v) => setState(
-                                  () => _values[name] = _fmtRange(v)),
+                              : (v) =>
+                                  setState(() => _values[name] = _fmtRange(v)),
                         ),
                       )
                     : Padding(
@@ -790,7 +801,8 @@ class _NextjsFormWidgetState extends State<_NextjsFormWidget> {
     if (_error != null) {
       children.add(Padding(
         padding: const EdgeInsets.only(bottom: 8),
-        child: Text(_error!, style: const TextStyle(color: Color(0xFFC0492F), fontSize: 13)),
+        child: Text(_error!,
+            style: const TextStyle(color: Color(0xFFC0492F), fontSize: 13)),
       ));
     }
     children.add(SizedBox(
@@ -802,8 +814,10 @@ class _NextjsFormWidgetState extends State<_NextjsFormWidget> {
           foregroundColor: const Color(0xFF06122A),
           disabledBackgroundColor: gold.withValues(alpha: 0.5),
           padding: const EdgeInsets.symmetric(vertical: 14),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          textStyle: const TextStyle(fontWeight: FontWeight.w700, letterSpacing: 0.3),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          textStyle:
+              const TextStyle(fontWeight: FontWeight.w700, letterSpacing: 0.3),
         ),
         child: _busy
             ? const SizedBox(
