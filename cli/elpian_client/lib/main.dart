@@ -20,7 +20,15 @@ class ElpianClientApp extends StatelessWidget {
         title: 'Elpian',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(useMaterial3: true, brightness: Brightness.dark),
-        home: const DynamicElpianClient(),
+        // The VM renders an arbitrary widget tree, not a Scaffold of its own.
+        // Establish a transparent Material boundary so its Text widgets inherit
+        // the theme's body style instead of MaterialApp's intentionally loud
+        // fallback (yellow double underlines for content with no Material
+        // ancestor). Transparency lets the guest keep control of its canvas.
+        home: const Material(
+          type: MaterialType.transparency,
+          child: DynamicElpianClient(),
+        ),
       );
 }
 
