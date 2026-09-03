@@ -54,7 +54,8 @@ android {
 //     rustup target add aarch64-linux-android armv7-linux-androideabi \
 //                       x86_64-linux-android i686-linux-android
 ext {
-    rustManifest = file("${projectDir}/../../rust/crates/elpian-ffi/Cargo.toml")
+    rustCrateDir = file("${projectDir}/../../rust/crates/elpian-ffi")
+    rustManifest = new File(rustCrateDir, "Cargo.toml")
     // Matches Flutter's own default ABI set.
     androidAbis = ["arm64-v8a", "armeabi-v7a", "x86_64"]
 }
@@ -71,19 +72,31 @@ tasks.register("buildElpianVm", Exec) {
 
     doFirst { outDir.mkdirs() }
 
+    // cargo-ndk runs `cargo metadata` in the process working directory before
+    // it reads any of its own arguments, and it takes the shared target
+    // directory from that. Gradle would otherwise run it here, in `android/`,
+    // which has no Cargo.toml anywhere above it — so the build died with
+    // "Failed to load Cargo.toml in current directory" even though the
+    // manifest was named explicitly. Run from the crate instead.
+    workingDir = rustCrateDir
+
+    // No --manifest-path: from a working directory inside the workspace,
+    // cargo-ndk derives the manifest itself and forwards its own
+    // --manifest-path to cargo, and cargo rejects the flag twice.
     def args = ["cargo", "ndk", "-o", outDir.absolutePath]
     androidAbis.each { args += ["-t", it] }
-    args += ["build", "--release", "--manifest-path", rustManifest.absolutePath]
+    args += ["build", "--release"]
     commandLine args
 
     // A missing toolchain should say what to install rather than dumping a
-    // gradle stack trace.
+    // gradle stack trace. cargo's own error is above this message, and is the
+    // one to read first — this hint only covers the most common cause.
     ignoreExitValue = true
     doLast {
         if (executionResult.get().exitValue != 0) {
             throw new GradleException(
                 "Could not build the Elpian VM for Android.\n" +
-                "Install the toolchain:\n" +
+                "See the cargo output above. If the toolchain is missing:\n" +
                 "  cargo install cargo-ndk\n" +
                 "  rustup target add aarch64-linux-android " +
                 "armv7-linux-androideabi x86_64-linux-android\n" +
