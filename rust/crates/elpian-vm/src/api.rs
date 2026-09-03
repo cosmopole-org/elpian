@@ -28,12 +28,6 @@ use crate::sdk::vm::VM;
 
 pub mod catalog;
 pub mod govern;
-// The browser API, built on wasm-bindgen, and meaningful only for the
-// wasm-pack target. `target_arch = "wasm32"` alone also matches
-// wasm32-unknown-emscripten, which is how the Godot web GDExtension is built:
-// that dragged wasm-bindgen into a link that can never use it.
-#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-pub mod wasm;
 
 /// Thread-safe registry of live VMs keyed by `machineId`.
 static VMS: Lazy<Mutex<HashMap<String, VM>>> = Lazy::new(|| Mutex::new(HashMap::new()));

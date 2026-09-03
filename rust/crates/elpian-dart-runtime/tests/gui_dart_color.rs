@@ -24,9 +24,9 @@ fn texts(frame: &Value) -> Vec<String> {
 }
 
 /// Render one app and return the text it painted.
-fn render(app: &str) -> Vec<String> {
+fn render(machine_id: &str, app: &str) -> Vec<String> {
     let mut rt = DartRuntime::from_flutter_app(
-        "color",
+        machine_id,
         app,
         DartCapabilitySet::full(),
         ResourceMeter::unbounded(),
@@ -39,6 +39,7 @@ fn render(app: &str) -> Vec<String> {
 #[test]
 fn both_color_spellings_build_the_same_color() {
     let out = render(
+        "color_spellings",
         r#"
 import 'gui.dart';
 
@@ -85,6 +86,7 @@ fn a_colour_survives_the_round_trip_through_channels() {
     // rounding has to be right in both directions or a colour drifts every time
     // it is copied. `withOpacity` is the copy an app actually makes.
     let out = render(
+        "color_round_trip",
         r#"
 import 'gui.dart';
 

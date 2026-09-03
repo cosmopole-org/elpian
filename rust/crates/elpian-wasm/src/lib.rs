@@ -1,14 +1,17 @@
 //! wasm-bindgen API used by the Flutter web loader.
+//!
+//! The executor remains an rlib in `elpian-vm`; this adapter alone owns the
+//! browser cdylib so its output cannot collide with `elpian-ffi`'s native
+//! `libelpian_vm` artifact.
 
-use serde_json::json;
-use wasm_bindgen::prelude::*;
-
-use super::govern;
-use super::{
+use elpian_vm::api::govern;
+use elpian_vm::api::{
     continue_execution, create_vm_from_ast, create_vm_from_bytecode, create_vm_from_code,
     deliver_host_message, destroy_vm, execute_vm, execute_vm_func, execute_vm_func_with_input,
     init_vm_system, validate_ast, vm_exists, VmExecResult,
 };
+use serde_json::json;
+use wasm_bindgen::prelude::*;
 
 fn result_json(result: VmExecResult) -> String {
     json!({
@@ -93,13 +96,8 @@ pub fn elpian_wasm_vm_exists(machine_id: String) -> bool {
     vm_exists(machine_id)
 }
 
-// ---- The governance control plane ------------------------------------------
-//
 // The twin of the C ABI's governance surface, so a mini app running on the web
-// is governed exactly as it is natively. Everything crosses as a JSON string;
-// the shapes are documented on `crate::api::govern`. Failures are reported in
-// band as `{"error": "..."}`.
-
+// is governed exactly as it is natively. Everything crosses as JSON strings.
 macro_rules! wasm_govern {
     ($name:ident, $call:path) => {
         #[wasm_bindgen]

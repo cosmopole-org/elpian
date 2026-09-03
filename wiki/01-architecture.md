@@ -39,8 +39,8 @@ system:
 │      limits/capabilities/hierarchy/lifecycle — governance             │
 ├───────────────────────────────────────────────────────────────────────┤
 │  L2  Embedding surface                                                │
-│      api/ffi.rs    native (Android, iOS, macOS, Linux, Windows)       │
-│      api/wasm.rs   web (wasm-bindgen)                                 │
+│      elpian-ffi    native (Android, iOS, macOS, Linux, Windows)       │
+│      elpian-wasm   web (wasm-bindgen)                                 │
 │      bin/elpian-server.rs  HTTP server that runs server-side VMs      │
 ├───────────────────────────────────────────────────────────────────────┤
 │  L1  Flutter host — elpian_ui (lib/)                                  │

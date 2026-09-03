@@ -13,7 +13,8 @@ member crates and read as though the VM contained them.
 
 | Crate | What it is |
 |---|---|
-| `elpian-vm` | The bytecode VM: executor, compiler, standard library, and the governance model (capabilities, limits, hierarchy, lifecycle). Also the embedding surfaces — the C ABI (`api::ffi`), the wasm-bindgen API (`api::wasm`) and the HTTP server binary. |
+| `elpian-vm` | The bytecode VM: executor, compiler, standard library, governance model (capabilities, limits, hierarchy, lifecycle), and HTTP server binary. |
+| `elpian-wasm` | The wasm-bindgen browser adapter. Produces the WebAssembly cdylib while keeping its artifact separate from the native C ABI. |
 | `js2elpian` | JavaScript → Elpian AST / bytecode. |
 | `dart2elpian` | Dart → the JS subset `js2elpian` compiles. |
 | `elpian-dart-runtime` | The `dart:*` host surface and the Flutter widget layer, plus a Dart-level capability/resource governor. Was named `dart`, which read as a language, a directory and a dependency at once. |
@@ -35,7 +36,7 @@ cargo build --release -p elpian-ffi    # what Flutter links: libelpian_vm
 cargo run --bin gen-host-api-catalog -- ../lib/src/vm/host_api_catalog.dart
 
 # The browser VM. wasm-pack needs a package, not the virtual root:
-cd crates/elpian-vm && wasm-pack build --release --target web
+cd crates/elpian-wasm && wasm-pack build --release --target web
 ```
 
 ## The guest preludes are not here

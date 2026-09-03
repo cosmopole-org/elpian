@@ -188,7 +188,7 @@ jobs:
       # the VM from this commit rather than whatever was last committed.
       - name: Build the Elpian VM for WebAssembly
         # wasm-pack needs the package, not the (virtual) workspace root.
-        working-directory: elpian/rust/crates/elpian-vm
+        working-directory: elpian/rust/crates/elpian-wasm
         run: |
           wasm-pack build --release --target web --out-name elpian_vm \
             --out-dir "$GITHUB_WORKSPACE/elpian/assets/web_runtime/wasm/elpian_vm"
@@ -365,6 +365,13 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      # rustup provides the targets, but GitHub's runner image does not include
+      # the Cargo subcommand that connects those targets to the Android NDK.
+      # rust_builder/android/build.gradle invokes `cargo ndk` when Gradle merges
+      # native libraries, so install the pinned tool before the APK build.
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --version 4.1.2 --locked
 
       # The three Godot binaries come from build_godot_artifacts.yml, which runs
       # on its own cadence (a Godot bump or an interpreter change) rather than on
