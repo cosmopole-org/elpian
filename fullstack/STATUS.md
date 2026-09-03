@@ -4,7 +4,8 @@ Update this file as you go. It is the first thing the next session reads.
 
 **Working branch:** `claude/refactor-architecture`
 **Plan written:** 2026-09-03 (findings verified against the tree that day)
-**Current phase:** **P0 complete.** P1 in progress.
+**Current phase:** All eight workstreams have landed their core. What remains
+is listed per phase below and summarised in "What is still missing" at the end.
 
 **Environment as found:** Rust toolchain present, crates.io reachable, full
 workspace builds and tests. Flutter 3.47.2 / Dart 3.13.2 present — Dart changes
@@ -78,12 +79,14 @@ workspace builds and tests. Flutter 3.47.2 / Dart 3.13.2 present — Dart change
 - [x] HTTP gateway: manifest, client bytecode, action and component routes
 - [x] `elpiand` binary loading an on-disk registry
 - [x] Tests: 33 in `elpian-host` + benchmark baseline
-- [ ] `server.call` serviced in Dart `HostHandler` — **not started** (needs the
-      client half; belongs with S2's client work)
-- [ ] CLI: per-function server modules + function table — **not started**
-      (the format is settled and `elpiand` reads it; the CLI does not write it yet)
+- [x] `server.call` / `server.render` serviced from Dart, via
+      `ElpianServerClient.hostHandlers` on `ElpianVm.registerHostHandlers`
+- [x] Per-function server modules + function table — `elpian-pkg` writes them,
+      `elpiand` reads them, the E2E script drives both
 - [ ] `elpian-server` shimmed onto the host so `run dev` keeps working —
-      **not started**
+      **not started**; the old dev server still exists untouched
+- [ ] The `elpian` CLI itself does not yet call `elpian-pkg`; packaging is its
+      own binary
 
 ### Benchmark baseline (2-core box, debug build, cold instance per call)
 
@@ -125,22 +128,32 @@ currently *every* call.
 - [x] `server.render` route; render cache; `cache.revalidate` host API
 - [x] Islands listed by name from `clientComponents`
 - [x] Tests (13)
-- [ ] `ServerComponent` widget (pending / ready / error / revalidating) — **not
-      started**, Dart side
-- [ ] Unknown-island degradation on the device — **not started**, Dart side
+- [x] `ServerComponent` widget — pending / ready / error, a generation guard so
+      a slow earlier response cannot overwrite a newer one, and a failed
+      revalidation that keeps working content on screen
+- [x] `ElpianServerClient` + `ElpianNetPolicy` (advisory, whole-label matching)
+- [ ] Island resolution on the device — the payload's `clientComponents` are
+      surfaced and walked, but `IslandBuilder`s are not yet spliced into the
+      rendered tree
 - [ ] Streaming over WS into `ElpianStreamWidget`; frame budgets — **not
-      started**; this is the one piece the std-only runtime decision makes more
-      work, and the piece most likely to reverse it
+      started**; the one piece the std-only runtime decision makes more work,
+      and the piece most likely to reverse it
 
-## P3 — Registry + hosting (S5)
+## P3 — Registry + hosting (S5) — **done, with gaps**
 
-- [ ] `RegistryStore` + content-addressed blobs + atomic index
-- [ ] `policy.rs` — port of `MiniAppPolicy.resolve`; conformance corpus green in both languages
-- [ ] Versions, deploy, drain, rollback, downgrade refusal
-- [ ] Admin API + operator auth + audit
-- [ ] `AuthProvider`; `ctx.user`; per-app/per-function access rules
-- [ ] Flutter shell: app-scoped manifest, artifact hash verification, net policy
-- [ ] Tests
+- [x] `RegistryStore` + content-addressed blobs + atomic index
+- [x] `policy.rs` — port of `MiniAppPolicy.resolve`; 16-case corpus green in
+      **both** languages from one file
+- [x] Versions, install/deploy split, rollback, downgrade refusal (numeric
+      comparison — `1.10.0` > `1.9.0`)
+- [x] Admin API + operator auth (closed by default) + audit (records refusals)
+- [x] `AuthProvider`; `ctx.user`; nested calls carry the caller
+- [ ] `elpiand` does not yet use `RegistryStore` — it reads the plain directory
+      layout. The store is built and tested; wiring it in is the remaining step,
+      and it is what versions/rollback need to be reachable at runtime
+- [ ] Per-app/per-function access rules beyond `ctx.user` — an app decides for
+      itself; the host does not yet express "only role X may call function Y"
+- [ ] Flutter shell: artifact hash verification against the manifest
 
 ## P4 — Serverless + meters (S4) — **core done, brought forward**
 
@@ -157,15 +170,15 @@ Brought forward because "load on demand, unload when not needed" is requirement
 - [x] Cost meters: invocations, cold starts, instructions, compute ms, peak
       memory, storage — **finding F5 said this did not exist anywhere**
 - [x] Tests (7) + benchmark
+- [x] Quota ladder: throttle → strangle → drain → suspend, applied **before**
+      an invocation runs; `strangle` refuses writes while still serving reads
 - [ ] Supervisor node adoption into the VM tree — **not started**; the pool
-      tracks instances itself and does not yet hang them under a per-app node,
-      so `subtree_usage` and `destroy_vm_tree` are not yet doing this work
-- [ ] Hibernate/wake — **not started**
-- [ ] Three deadline layers — **not started** (S0's supervisor has the
-      per-turn one; per-invocation and per-app are not wired)
-- [ ] Quota ladder: throttle → strangle → drain → suspend — **not started**;
-      meters are collected, nothing acts on them
-- [ ] Meter persistence across restart — **not started**
+      tracks instances itself and does not hang them under a per-app node, so
+      `subtree_usage` and `destroy_vm_tree` are not doing this work
+- [ ] Hibernate/wake — **not started**; an idle instance is unloaded, not parked
+- [ ] Three deadline layers — S0's supervisor has the per-turn one;
+      per-invocation and per-app are not wired into the host
+- [ ] Meter persistence across restart — **not started**; counters are in memory
 
 ### Benchmark, cold-per-call vs warm pool (2-core, debug)
 
@@ -197,32 +210,53 @@ and it was cheap to finish once S1 existed.
       the gate at all
 - [x] Closed-cycle suite **with a canary listener** + SSRF corpus green
 - [x] Deny reasons are indistinguishable to the guest, detailed to the operator
-- [ ] `POST /apps/<app>/proxy` and the actual outbound HTTP client — **not
-      started**; the decision function is complete and tested, nothing calls it
-      to make a real request yet
-- [ ] Audit records persisted — **not started** (the reasons carry their detail;
-      nothing writes it down)
-- [ ] `ElpianNetPolicy` in Dart; `netPolicy` on `MiniAppGrant` — **not started**
+- [x] `POST /apps/<app>/proxy` and the outbound HTTP client, with redirect
+      re-decision and separate head/body caps
+- [x] `ElpianNetPolicy` in Dart, matching the server's whole-label rule
+- [x] Audit records for every attempt, allowed and denied
+- [ ] Audit records **persisted** — they go to the operator's log; nothing
+      writes them durably
+- [ ] TLS — `https` is refused with a message saying so, never downgraded. A
+      TLS crate is a dependency decision for the maintainer
+- [ ] `netPolicy` on `MiniAppGrant` — the policy type exists; it is not yet part
+      of the grant model
+- [ ] Per-app egress **byte** budgets — bytes are recorded per request, not
+      totalled or capped
 - [ ] `security-review` run over the diff — **not started**
 
-## P6 — Packaging (S6)
+## P6 — Packaging (S6) — **done, with gaps**
 
-- [ ] `elpian-pkg` crate: EPKG1 container, deterministic index, signing (shared with `bundle.rs`)
-- [ ] `package` / `verify` / `inspect` / `publish` / `install` / `serve` / `apps`
-- [ ] `elpian.app.json`; manifest derived from the tree; disagreement is an error
-- [ ] `main.rs` split into modules
-- [ ] Templates incl. `closed-fullstack`; `run dev` as a registry case
-- [ ] Delete `elpian-server.rs`
-- [ ] Determinism + tamper + round-trip tests
+- [x] `elpian-pkg` crate: EPKG1 container, deterministic index, HMAC signing
+      shared with `bundle.rs` via the new `elpian-crypto`
+- [x] `package` / `verify` / `inspect` / `install`
+- [x] `elpian.app.json`; manifest and tree must agree — an undeclared module is
+      an error, and so is a declared function with no module
+- [x] Determinism + tamper + truncation + round-trip tests, and the E2E script
+- [x] `samples/closed-fullstack` — the reference sample
+- [ ] `publish` (to a remote registry) — **not started**
+- [ ] ed25519 — HMAC only; a shared secret cannot support third-party publishers
+- [ ] `cli/rust/main.rs` split into modules — **not started**
+- [ ] `elpian create --template closed-fullstack` — the sample exists, the
+      template does not
+- [ ] Delete `elpian-server.rs` — **not done**; still present and unused by the
+      new path
 
-## P7 — SDKs and docs (S7, rolling)
+## P7 — SDKs and docs (S7) — **done, with gaps**
 
-- [ ] `@elpian/sdk`: `callServer`, `serverRender`, `serverComponent`, `action`
-- [ ] `@elpian/server`: `ui`, `ctx`
-- [ ] Wiki `18`–`22`; updates to `03`, `05`, `12`, `14`, `17`
-- [ ] `fullstack-sample` upgraded; brokered-mode sample added
-- [ ] Doc snippets compile through `js2elpian`
-- [ ] E2E script in CI
+- [x] `guest-sdk/js/server.js`: `callServer`, `action`, `serverRender`,
+      `serverComponent`, `registerIsland`
+- [x] `guest-sdk/js/elpian-server.js`: `ui`, `kv*`, `revalidate`, `secret`,
+      `ctxUser`, `ctxHasRole` — compiles *and runs* against the real host
+- [x] Wiki `18`–`22`; updates to `03` (the stale "no metering" claim), `12`, `14`
+- [x] `samples/closed-fullstack`
+- [x] `scripts/check-doc-snippets.py` compiles the server-side snippets
+- [x] `scripts/e2e-fullstack.sh`
+- [ ] Updates to `05-cli.md` and `17-nextjs-integration.md` — **not done**
+- [ ] A brokered-mode sample — **not done**
+- [ ] Client-side doc snippets are skipped by the checker (they need the GUI
+      SDK, which is not standalone-compilable); the script says so rather than
+      pretending
+- [ ] Neither script is wired into CI — `.github/workflows/` untouched
 
 ---
 
@@ -258,3 +292,45 @@ and it was cheap to finish once S1 existed.
 - Nothing is implemented yet. The plan is `fullstack/`; the tree is unchanged.
 - `00-current-state.md` cites exact `file:line` anchors; they were correct on
   2026-09-03 and are worth re-checking if the tree has moved.
+
+
+---
+
+## What is still missing
+
+Ordered by how likely it is to matter.
+
+1. **`elpiand` does not use `RegistryStore`.** It reads the plain directory
+   layout. Versions, deploy/rollback and downgrade refusal are built and tested
+   but unreachable at runtime. This is the largest gap between what exists and
+   what is wired.
+2. **Streaming server components.** Nothing emits frames. This is also the
+   decision most likely to reverse the std-only runtime choice.
+3. **Island splicing on the device.** Payload islands are surfaced and walked;
+   `IslandBuilder`s are not yet substituted into the rendered tree.
+4. **No TLS.** `https` from a server function is refused, not downgraded. Needs
+   a maintainer decision on a crate.
+5. **Nothing is in CI.** Both scripts run clean locally; `.github/workflows/`
+   is untouched.
+6. **`security-review` has not been run** over the diff, and S8 asks for it.
+7. **Meters and audit do not survive a restart.**
+8. **`elpian-server.rs` still exists**, unused by the new path, and the `elpian`
+   CLI does not call `elpian-pkg`.
+9. **Hibernation, supervisor tree adoption, per-invocation and per-app
+   deadlines** — S4's remaining half.
+10. **ed25519**, gated on whether third-party publishing is in scope.
+
+## Verification as of the last commit
+
+| | |
+|---|---|
+| `cargo test --workspace` | 576 passed, 0 failed |
+| `flutter test` | 307 passed |
+| `flutter analyze lib/` | clean |
+| `scripts/e2e-fullstack.sh` | all checks pass |
+| `scripts/check-doc-snippets.py` | 2 compiled, 1 skipped, 0 failed |
+
+One unexplained flake: `elpian-godot-capi::multi_vm` failed twice in
+full-workspace runs early on and has not reproduced since — 9/9 alone including
+under three-way parallel load, and repeatedly clean in workspace runs. It is not
+in code this program touched. Recorded, not explained.

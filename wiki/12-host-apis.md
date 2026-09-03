@@ -240,3 +240,30 @@ worked examples of the host side:
   `NEXTJS_INTEGRATION.md`.
 - **`client_comp_routing.dart`** — client component routing, and a second
   place where `node['events']` is read.
+
+---
+
+## Server-side families
+
+These are serviced by `elpian-host`, not by a client embedder. A client VM may
+call `server.*`; the rest are reachable only from a server function.
+
+| API | Capability | What it does |
+|---|---|---|
+| `server.call` | `server_call` | invoke an action of **this** app |
+| `server.render` | `server_call` | invoke a component of this app |
+| `kv.get` / `kv.set` / `kv.delete` / `kv.list` | `state` | durable per-app state |
+| `secret.get` | `state` | a manifest-declared secret |
+| `cache.revalidate` | `state` | invalidate this app's cached renders by tag |
+| `ctx.user` | `state` | the host-verified caller, or null |
+
+Three properties hold across all of them and are the reason they are safe:
+
+* **The app is never a parameter.** The host resolves within the app it already
+  routed the request to, so there is no cross-app check to bypass — there is no
+  argument to forge.
+* **`ctx.user` has no setter.** It comes from a credential the host verified.
+* **A refusal is a typed null**, the same shape a denied capability produces, so
+  guest code has one thing to handle rather than two.
+
+See [19 — Server functions](19-server-functions.md).

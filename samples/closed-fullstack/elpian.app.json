@@ -1,0 +1,16 @@
+{
+  "id": "notes",
+  "version": "1.0.0",
+  "capabilities": ["state", "logging", "clock", "randomness"],
+  "network": "closed",
+  "limits": {
+    "instructions": 50000000,
+    "memoryBytes": 33554432,
+    "storageBytes": 1048576
+  },
+  "functions": [
+    { "name": "createNote", "kind": "action" },
+    { "name": "deleteNote", "kind": "action" },
+    { "name": "NoteList", "kind": "component" }
+  ]
+}

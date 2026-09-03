@@ -308,9 +308,18 @@ for (root, axis, killed) in enforce_tree_budgets() {
 
 ## What is *not* here
 
-There is no separate billing/pricing module. "Cost management" in Elpian means
-exactly the governor: instruction, memory, storage and depth budgets, metered
-per-instance and aggregated per-subtree, with usage counters (`instructions`,
-`peak_memory_bytes`, …) the host can read at any time and turn into whatever
-accounting or pricing model it wants. If you need per-tenant billing, read
-`usage`/`subtree_usage` on a timer and aggregate outside the VM.
+There is no billing or pricing module **in the VM**, and there should not be:
+the VM's job is budgets and counters — instruction, memory, storage and depth,
+metered per instance and aggregated per subtree — which a host reads and turns
+into whatever accounting model it wants.
+
+What used to be missing was any host that did so. That gap is closed on the
+server side: `elpian-host` accumulates per-app meters (invocations, cold starts,
+instructions, compute ms, peak memory, storage) and acts on them through a
+`throttle → strangle → drain → suspend` ladder applied *before* an invocation
+runs. See [21 — Running a host](21-hosting.md) §5.
+
+On a **client** super app the position is unchanged: read `usage` /
+`subtree_usage` on a timer and aggregate outside the VM. There is still no
+per-tenant billing, and no monetary anything anywhere — the meters count
+resources, and turning resources into money is the operator's business.

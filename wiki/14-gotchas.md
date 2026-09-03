@@ -341,3 +341,66 @@ untrusted code.
 | Style property ignored on a button | #13 |
 | Screen will not scroll | #15 — 3D scene in the subtree |
 | Server function returns `"[undefined]"` | #23 — wrong function name |
+
+---
+
+## Fullstack gotchas
+
+### A warm server instance keeps module state
+
+An instance stays loaded between invocations with its module-level variables
+intact. That is the point of a warm pool — and it means anything a function
+stashes at module scope **outlives the caller it belongs to**.
+
+```js
+// Fine: derived from arguments, rebuilt when it matters.
+var memo = {};
+
+// A bug: this outlives the caller, and the next one reads it.
+var lastUser = null;
+function handle(args) { lastUser = ctxUser(); … }
+```
+
+Mark such a function `stateless` in the manifest and it gets a fresh instance
+every call. See [19](19-server-functions.md) §5.
+
+### `x == null` is true for `0`, so `if (res.result)` is wrong
+
+Already true everywhere in the subset, and it bites hardest on server results,
+where `0` is a perfectly ordinary answer. Always test the error:
+
+```js
+if (res.error != null) { … }     // right
+if (!res.result) { … }           // wrong when the result is 0, "" or false
+```
+
+### There is no `try`/`catch`, so errors are values
+
+Every SDK call returns `{ ok, result, error }` and never throws. A guest that
+could not catch a throw would simply trap, taking the whole invocation with it.
+
+### Islands are referenced by name, not shipped as source
+
+A server component names an island in `clientComponents`; the device resolves
+that name out of the client bundle it already fetched and verified. A name the
+bundle does not have renders as its static form — a deployment mistake shows up
+as a non-interactive panel, not a blank screen.
+
+### Client-side network policy is advisory
+
+`ElpianNetPolicy` saves a round trip. It is not the boundary, and writing code
+that relies on it as one will work in development and fail the moment somebody
+edits the device's copy. The server enforces the same rules independently.
+
+### A component must return, not render
+
+`render` is denied to server functions. A component that rendered as a side
+effect could not be cached, could not be tested without a host, and could
+half-render.
+
+### Caching is opt-in
+
+A component that names neither a tag nor a TTL is never cached. That is
+deliberate — caching one that reads changing state would serve a stale page with
+no way for it to say otherwise — but it does mean a component you *expected* to
+be cached is not, unless you said so with `ui(tree, ["tag"])`.
