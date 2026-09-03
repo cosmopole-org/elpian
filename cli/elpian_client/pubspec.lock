@@ -480,7 +480,7 @@ packages:
     source: hosted
     version: "2.2.1"
   puppeteer:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: puppeteer
       sha256: "272fae28aa8491b76830fba82737007938c7f8a56d6d0aa314aee0298eb2a39f"

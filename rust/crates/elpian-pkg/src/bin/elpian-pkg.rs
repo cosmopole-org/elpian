@@ -5,7 +5,7 @@
 //! used by a build system that has nothing else.
 //!
 //! ```text
-//! elpian-pkg package <project-dir> <out.elpianpkg> [--key K]
+//! elpian-pkg package <project-dir> <out.elpianpkg> [--key K] [--build-dir DIR]
 //! elpian-pkg inspect <package>                       # no key needed
 //! elpian-pkg verify  <package> --key K
 //! elpian-pkg install <package> --registry DIR --key K [--deploy] [--force]
@@ -19,7 +19,7 @@
 //! build/fn/<name>.bc
 //! ```
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use elpian_host::registry::{now_millis, RegistryStore, VersionRecord};
@@ -56,7 +56,7 @@ fn main() -> ExitCode {
 
 fn usage() -> String {
     "usage:\n  \
-     elpian-pkg package <project-dir> <out.elpianpkg> [--key K]\n  \
+     elpian-pkg package <project-dir> <out.elpianpkg> [--key K] [--build-dir DIR]\n  \
      elpian-pkg inspect <package>\n  \
      elpian-pkg verify  <package> --key K\n  \
      elpian-pkg install <package> --registry DIR --key K [--deploy] [--force]\n\n\
@@ -173,6 +173,16 @@ impl Flags {
 
 // ---- package ---------------------------------------------------------------
 
+/// Resolve `path` against `base` unless it is already absolute.
+fn absolute_to(base: &Path, path: &str) -> PathBuf {
+    let candidate = PathBuf::from(path);
+    if candidate.is_absolute() {
+        candidate
+    } else {
+        base.join(candidate)
+    }
+}
+
 fn cmd_package(args: &[String]) -> Result<(), String> {
     let flags = Flags::parse(args);
     let (Some(project), Some(out)) = (flags.positional.first(), flags.positional.get(1)) else {
@@ -208,7 +218,15 @@ fn cmd_package(args: &[String]) -> Result<(), String> {
         .as_array()
         .ok_or("elpian.app.json has no \"functions\" array")?;
 
-    let build = project.join("build");
+    // The build directory is a *parameter*, not an assumption. A project's
+    // `outDir` is its own choice (`dist` in the default config), and hardcoding
+    // `build` here meant the CLI and the packager disagreed about where the
+    // output was — which fails as "no such file" pointing at a path nobody
+    // configured.
+    let build = flags
+        .get("build-dir")
+        .map(|dir| absolute_to(project, &dir))
+        .unwrap_or_else(|| project.join("build"));
     let mut entries = Vec::new();
 
     let client = build.join("client.bc");

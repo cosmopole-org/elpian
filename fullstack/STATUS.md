@@ -320,10 +320,8 @@ Ordered by how likely it is to matter.
    `IslandBuilder`s are not yet substituted into the rendered tree.
 3. **No TLS.** `https` from a server function is refused, not downgraded. Needs
    a maintainer decision on a crate.
-2. **`elpian create --template closed-fullstack`** — the sample exists, the
-   template does not.
-3. **`cli/rust/main.rs` is still one file** (~1,400 lines now).
-4. **ed25519**, gated on whether third-party publishing is in scope. Hand-rolling
+2. **`cli/rust/main.rs` is still one file** (~1,600 lines now).
+3. **ed25519**, gated on whether third-party publishing is in scope. Hand-rolling
    it would be irresponsible and taking a crate is a maintainer decision, so
    this is genuinely blocked rather than merely undone.
 
