@@ -1,23 +1,38 @@
 //! `elpiand` — the Elpian mini-app host.
 //!
 //! Serves registered mini apps: their client bytecode to devices, and their
-//! server functions to those clients. Apps are loaded from a directory laid out
-//! as
+//! server functions to those clients.
+//!
+//! # Two ways a registry can be laid out
+//!
+//! **A content-addressed store**, written by `elpian-pkg install`:
 //!
 //! ```text
-//! <registry>/<app-id>/app.json      the definition (functions, grants, network)
-//! <registry>/<app-id>/client.bc     the client half
-//! <registry>/<app-id>/fn/<name>.bc  one module per server function
+//! <registry>/index.json    apps, versions, which one is active
+//! <registry>/blobs/<xx>/…  bytecode, addressed by its own hash
 //! ```
 //!
-//! The signed-package path (`elpian install`) writes exactly this layout, so a
-//! hand-assembled directory and an installed package are the same thing to the
-//! server.
+//! This is the one that supports versions, staged deploys and rollback, and
+//! whose blobs are verified against their own addresses on read.
+//!
+//! **A plain directory**, which anyone can assemble by hand:
+//!
+//! ```text
+//! <registry>/<app-id>/app.json
+//! <registry>/<app-id>/client.bc
+//! <registry>/<app-id>/fn/<name>.bc
+//! ```
+//!
+//! Both are supported, and the store takes precedence when both are present.
+//! The plain layout is kept because a host you cannot start without a packaging
+//! tool is a host that is hard to debug — being able to drop three files in a
+//! directory and see it serve is worth the second code path.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use elpian_host::app::{AppDefinition, FunctionKind, NetworkMode};
+use elpian_host::registry::RegistryStore;
 use elpian_host::runtime::AppRuntime;
 use elpian_vm::api::{Capability, ResourceLimits};
 
@@ -51,7 +66,10 @@ fn main() {
             "elpiand: warning: no apps found in {}",
             config.registry.display()
         ),
-        Ok(count) => println!("[elpian] loaded {count} app(s) from {}", config.registry.display()),
+        Ok(count) => println!(
+            "[elpian] loaded {count} app(s) from {}",
+            config.registry.display()
+        ),
         Err(message) => {
             eprintln!("elpiand: {message}");
             std::process::exit(1);
@@ -136,6 +154,42 @@ fn parse_args() -> Result<Config, String> {
 }
 
 fn load_registry(root: &Path, runtime: &Arc<AppRuntime>) -> Result<usize, String> {
+    // A content-addressed store, if there is one.
+    if root.join("index.json").is_file() {
+        return load_store(root, runtime);
+    }
+    load_plain_directory(root, runtime)
+}
+
+/// Load the *deployed* version of every app in a content-addressed store.
+///
+/// An app with versions installed but none deployed is skipped with a
+/// diagnostic rather than having one picked for it — "install" and "deploy" are
+/// separate verbs precisely so an operator can stage a version and cut over
+/// deliberately, and guessing here would take that back.
+fn load_store(root: &Path, runtime: &Arc<AppRuntime>) -> Result<usize, String> {
+    let store = RegistryStore::open(root).map_err(|e| e.message())?;
+    let mut loaded = 0;
+    for id in store.app_ids() {
+        let Some(active) = store.active_version(&id) else {
+            eprintln!("elpiand: {id} has no deployed version; skipping");
+            continue;
+        };
+        match elpian_host::registry::definition_from(&store, &id, &active) {
+            Ok(app) => {
+                println!("[elpian]   {id} {} (from the store)", active.version);
+                runtime.register(app);
+                loaded += 1;
+            }
+            // One app whose blob is missing or corrupt must not stop the host
+            // serving the rest.
+            Err(error) => eprintln!("elpiand: skipping {id}: {}", error.message()),
+        }
+    }
+    Ok(loaded)
+}
+
+fn load_plain_directory(root: &Path, runtime: &Arc<AppRuntime>) -> Result<usize, String> {
     let mut loaded = 0;
     let entries = std::fs::read_dir(root).map_err(|e| format!("{}: {e}", root.display()))?;
     for entry in entries.flatten() {

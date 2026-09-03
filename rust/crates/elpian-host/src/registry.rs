@@ -415,6 +415,92 @@ pub fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
     std::cmp::Ordering::Equal
 }
 
+/// Turn an installed version into a runnable [`AppDefinition`].
+///
+/// Kept here rather than on `AppDefinition` so the app model stays free of the
+/// registry's storage concerns — a definition assembled in a test or by an
+/// embedder should not have to know what a content address is.
+pub fn definition_from(
+    store: &RegistryStore,
+    app_id: &str,
+    record: &VersionRecord,
+) -> Result<crate::app::AppDefinition, RegistryError> {
+    use crate::app::{AppDefinition, FunctionKind, NetworkMode};
+    use elpian_vm::api::{Capability, ResourceLimits};
+
+    let mut app = AppDefinition::new(app_id);
+
+    // Unknown capability names are dropped rather than rejected, matching the
+    // manifest reader and the Dart side: an app installed against a newer host
+    // must still load on an older one, and dropping can only narrow.
+    app = app.with_capabilities(
+        record
+            .capabilities
+            .iter()
+            .filter_map(|name| Capability::from_str(name))
+            .collect::<Vec<Capability>>(),
+    );
+    app = app.with_secrets(record.secrets.clone());
+    app = app.with_network(network_from(&record.network));
+    app = app.with_limits(limits_from(&record.limits));
+
+    if let Some(address) = &record.client {
+        // Reading through the store verifies the blob against its own address,
+        // so a registry that lost a page serves nothing rather than serving
+        // bytecode that is not what was installed.
+        app = app.with_client(store.get_blob(address)?);
+    }
+
+    for (name, (kind, address)) in &record.functions {
+        let kind = match kind.as_str() {
+            "component" => FunctionKind::Component,
+            _ => FunctionKind::Action,
+        };
+        app = app.with_function(name, kind, store.get_blob(address)?);
+    }
+
+    let _ = NetworkMode::Closed;
+    let _: Option<ResourceLimits> = None;
+    Ok(app)
+}
+
+fn network_from(value: &Value) -> crate::app::NetworkMode {
+    use crate::app::NetworkMode;
+    match value {
+        Value::String(s) if s == "open" => NetworkMode::Open,
+        Value::Object(map) => NetworkMode::Brokered {
+            allowlist: map
+                .get("allow")
+                .and_then(Value::as_array)
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_string)
+                        .collect()
+                })
+                .unwrap_or_default(),
+        },
+        // Anything unrecognised, including absent, is closed. The default has
+        // to be the safe one.
+        _ => NetworkMode::Closed,
+    }
+}
+
+fn limits_from(value: &Value) -> elpian_vm::api::ResourceLimits {
+    use elpian_vm::api::ResourceLimits;
+    let mut limits = ResourceLimits::unlimited();
+    let Some(map) = value.as_object() else {
+        return limits;
+    };
+    limits.max_instructions = map.get("instructions").and_then(Value::as_u64);
+    limits.max_instructions_per_turn = map.get("instructionsPerTurn").and_then(Value::as_u64);
+    limits.max_memory_bytes = map.get("memoryBytes").and_then(Value::as_u64);
+    limits.max_storage_bytes = map.get("storageBytes").and_then(Value::as_u64);
+    limits.max_call_depth = map.get("callDepth").and_then(Value::as_u64);
+    limits
+}
+
 /// Milliseconds since the epoch.
 pub fn now_millis() -> u64 {
     std::time::SystemTime::now()

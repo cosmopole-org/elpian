@@ -108,13 +108,43 @@ if "$BIN/elpian-pkg" verify "$WORK/tampered.elpianpkg" >/dev/null 2>&1; then
 fi
 ok "a flipped byte is caught"
 
-step "install"
+step "install (staged, not deployed)"
 "$BIN/elpian-pkg" install "$WORK/a.elpianpkg" --registry "$WORK/registry" >/dev/null
-[[ -f "$WORK/registry/notes/app.json" ]]        || fail "no app.json was written"
-[[ -f "$WORK/registry/notes/client.bc" ]]       || fail "no client bytecode"
-[[ -f "$WORK/registry/notes/fn/save.bc" ]]      || fail "no save module"
-[[ -f "$WORK/registry/notes/fn/NoteList.bc" ]]  || fail "no NoteList module"
-ok "the registry layout the server reads"
+[[ -f "$WORK/registry/index.json" ]] || fail "no index was written"
+[[ -d "$WORK/registry/blobs" ]]      || fail "no blob store"
+ok "content-addressed store written"
+
+# Install and deploy are separate verbs so an operator can stage a version and
+# cut over deliberately. A host must not pick one for them.
+"$BIN/elpiand" --registry "$WORK/registry" --port "$((PORT + 1))" > "$WORK/staged.log" 2>&1 &
+STAGED_PID=$!
+sleep 1
+grep -q 'no deployed version' "$WORK/staged.log" \
+  || fail "an undeployed app should be skipped, not guessed at"
+kill "$STAGED_PID" 2>/dev/null || true
+ok "an installed-but-undeployed app is not served"
+
+step "deploy"
+"$BIN/elpian-pkg" install "$WORK/a.elpianpkg" --registry "$WORK/registry" --deploy >/dev/null
+ok "1.2.0 deployed"
+
+step "a second version, and deduplication"
+BLOBS_BEFORE=$(find "$WORK/registry/blobs" -type f | wc -l)
+sed -i 's/"version": "1.2.0"/"version": "1.3.0"/' "$WORK/proj/elpian.app.json"
+"$BIN/elpian-pkg" package "$WORK/proj" "$WORK/v2.elpianpkg" >/dev/null
+"$BIN/elpian-pkg" install "$WORK/v2.elpianpkg" --registry "$WORK/registry" --deploy >/dev/null
+BLOBS_AFTER=$(find "$WORK/registry/blobs" -type f | wc -l)
+[[ "$BLOBS_BEFORE" -eq "$BLOBS_AFTER" ]] \
+  || fail "identical bytecode was stored twice ($BLOBS_BEFORE -> $BLOBS_AFTER)"
+ok "a version with identical modules costs no new blobs"
+
+step "downgrade and rollback"
+if "$BIN/elpian-pkg" install "$WORK/a.elpianpkg" --registry "$WORK/registry" --deploy >/dev/null 2>&1; then
+  fail "deploying an older version should be refused"
+fi
+ok "downgrade refused"
+"$BIN/elpian-pkg" install "$WORK/a.elpianpkg" --registry "$WORK/registry" --deploy --force >/dev/null
+ok "rollback with --force"
 
 step "serve"
 "$BIN/elpiand" --registry "$WORK/registry" --port "$PORT" > "$WORK/daemon.log" 2>&1 &
@@ -166,5 +196,22 @@ step "wrong doors"
 [[ "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/admin/apps")" == "401" ]] \
   || fail "the admin surface should be closed by default"
 ok "kind mismatch 400, unknown app 404, admin 401"
+
+step "a corrupt blob is refused, not served"
+# Content addressing is only worth having if it is checked. Serving bytecode
+# that is not what was installed is the worst failure the registry has.
+kill "$DAEMON_PID" 2>/dev/null || true
+DAEMON_PID=""
+CORRUPT=$(find "$WORK/registry/blobs" -type f | head -1)
+cp "$CORRUPT" "$WORK/blob.bak"
+printf 'tampered' > "$CORRUPT"
+"$BIN/elpiand" --registry "$WORK/registry" --port "$((PORT + 2))" > "$WORK/corrupt.log" 2>&1 &
+CORRUPT_PID=$!
+sleep 1
+grep -q 'does not match its content address' "$WORK/corrupt.log" \
+  || fail "a corrupt blob was not detected"
+kill "$CORRUPT_PID" 2>/dev/null || true
+cp "$WORK/blob.bak" "$CORRUPT"
+ok "the app is refused rather than served with wrong bytecode"
 
 printf '\n\033[32mall end-to-end checks passed\033[0m\n'

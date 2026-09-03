@@ -148,9 +148,9 @@ currently *every* call.
       comparison — `1.10.0` > `1.9.0`)
 - [x] Admin API + operator auth (closed by default) + audit (records refusals)
 - [x] `AuthProvider`; `ctx.user`; nested calls carry the caller
-- [ ] `elpiand` does not yet use `RegistryStore` — it reads the plain directory
-      layout. The store is built and tested; wiring it in is the remaining step,
-      and it is what versions/rollback need to be reachable at runtime
+- [x] `elpiand` reads the content-addressed store when there is one, falling
+      back to the plain directory layout. Versions, staged deploys, rollback and
+      blob verification are reachable at runtime, and covered by the E2E script
 - [ ] Per-app/per-function access rules beyond `ctx.user` — an app decides for
       itself; the host does not yet express "only role X may call function Y"
 - [ ] Flutter shell: artifact hash verification against the manifest
@@ -300,25 +300,21 @@ and it was cheap to finish once S1 existed.
 
 Ordered by how likely it is to matter.
 
-1. **`elpiand` does not use `RegistryStore`.** It reads the plain directory
-   layout. Versions, deploy/rollback and downgrade refusal are built and tested
-   but unreachable at runtime. This is the largest gap between what exists and
-   what is wired.
-2. **Streaming server components.** Nothing emits frames. This is also the
+1. **Streaming server components.** Nothing emits frames. This is also the
    decision most likely to reverse the std-only runtime choice.
 3. **Island splicing on the device.** Payload islands are surfaced and walked;
    `IslandBuilder`s are not yet substituted into the rendered tree.
-4. **No TLS.** `https` from a server function is refused, not downgraded. Needs
+3. **No TLS.** `https` from a server function is refused, not downgraded. Needs
    a maintainer decision on a crate.
-5. **Nothing is in CI.** Both scripts run clean locally; `.github/workflows/`
+4. **Nothing is in CI.** Both scripts run clean locally; `.github/workflows/`
    is untouched.
-6. **`security-review` has not been run** over the diff, and S8 asks for it.
-7. **Meters and audit do not survive a restart.**
-8. **`elpian-server.rs` still exists**, unused by the new path, and the `elpian`
+5. **`security-review` has not been run** over the diff, and S8 asks for it.
+6. **Meters and audit do not survive a restart.**
+7. **`elpian-server.rs` still exists**, unused by the new path, and the `elpian`
    CLI does not call `elpian-pkg`.
-9. **Hibernation, supervisor tree adoption, per-invocation and per-app
+8. **Hibernation, supervisor tree adoption, per-invocation and per-app
    deadlines** — S4's remaining half.
-10. **ed25519**, gated on whether third-party publishing is in scope.
+9. **ed25519**, gated on whether third-party publishing is in scope.
 
 ## Verification as of the last commit
 

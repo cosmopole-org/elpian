@@ -11,4 +11,5 @@ path = "src/bin/elpian-pkg.rs"
 
 [dependencies]
 elpian-crypto = { path = "../elpian-crypto" }
+elpian-host = { path = "../elpian-host" }
 serde_json = "1.0"

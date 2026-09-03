@@ -8,7 +8,7 @@
 //! elpian-pkg package <project-dir> <out.elpianpkg> [--key K]
 //! elpian-pkg inspect <package>                       # no key needed
 //! elpian-pkg verify  <package> --key K
-//! elpian-pkg install <package> --registry DIR --key K [--deploy]
+//! elpian-pkg install <package> --registry DIR --key K [--deploy] [--force]
 //! ```
 //!
 //! A project directory is the layout `elpian build` produces:
@@ -19,11 +19,12 @@
 //! build/fn/<name>.bc
 //! ```
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::ExitCode;
 
+use elpian_host::registry::{now_millis, RegistryStore, VersionRecord};
 use elpian_pkg::{Entry, Package};
-use serde_json::{json, Value};
+use serde_json::Value;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -58,7 +59,7 @@ fn usage() -> String {
      elpian-pkg package <project-dir> <out.elpianpkg> [--key K]\n  \
      elpian-pkg inspect <package>\n  \
      elpian-pkg verify  <package> --key K\n  \
-     elpian-pkg install <package> --registry DIR --key K [--deploy]\n\n\
+     elpian-pkg install <package> --registry DIR --key K [--deploy] [--force]\n\n\
      --key may also be given as ELPIAN_SIGNING_KEY in the environment."
         .into()
 }
@@ -267,35 +268,86 @@ fn cmd_install(args: &[String]) -> Result<(), String> {
         .to_string();
     let version = package.manifest["version"].as_str().unwrap_or("0.0.0").to_string();
 
-    let root = PathBuf::from(&registry).join(&id);
-    std::fs::create_dir_all(root.join("fn")).map_err(|e| format!("{}: {e}", root.display()))?;
+    // Into the content-addressed store. Blobs are shared between versions, so
+    // installing a version that changed one function costs one function.
+    let store = RegistryStore::open(&registry).map_err(|e| e.message())?;
+
+    let mut client = None;
+    let mut functions = std::collections::BTreeMap::new();
+    let declared_kinds: std::collections::BTreeMap<String, String> = package.manifest["functions"]
+        .as_array()
+        .map(|entries| {
+            entries
+                .iter()
+                .filter_map(|entry| {
+                    let name = entry["name"].as_str()?.to_string();
+                    let kind = entry["kind"].as_str().unwrap_or("action").to_string();
+                    Some((name, kind))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
 
     for entry in &package.entries {
-        let target = match entry.name.strip_prefix("fn/") {
-            Some(name) => root.join("fn").join(format!("{name}.bc")),
-            None if entry.name == "client" => root.join("client.bc"),
-            None => continue,
-        };
-        std::fs::write(&target, &entry.data).map_err(|e| format!("{}: {e}", target.display()))?;
+        let address = store.put_blob(&entry.data).map_err(|e| e.message())?;
+        match entry.name.strip_prefix("fn/") {
+            Some(name) => {
+                let kind = declared_kinds
+                    .get(name)
+                    .cloned()
+                    .unwrap_or_else(|| "action".to_string());
+                functions.insert(name.to_string(), (kind, address));
+            }
+            None if entry.name == "client" => client = Some(address),
+            None => {}
+        }
     }
 
-    // `app.json` is the manifest as packaged. Writing it verbatim rather than
-    // rebuilding it means the file the server reads is the file that was signed.
-    let app_json = root.join("app.json");
-    std::fs::write(
-        &app_json,
-        serde_json::to_string_pretty(&package.manifest).unwrap_or_default(),
-    )
-    .map_err(|e| format!("{}: {e}", app_json.display()))?;
+    let record = VersionRecord {
+        version: version.clone(),
+        client,
+        functions,
+        capabilities: string_list(&package.manifest["capabilities"]),
+        secrets: string_list(&package.manifest["secrets"]),
+        network: package.manifest["network"].clone(),
+        limits: package.manifest["limits"].clone(),
+        installed_at: now_millis(),
+    };
+    store.install(&id, record).map_err(|e| e.message())?;
 
     println!(
-        "installed {id} {version} into {}\n  {} entries",
-        root.display(),
+        "installed {id} {version} into {registry}\n  {} entries, content-addressed",
         package.entries.len()
     );
+
+    // Installing is not deploying. An operator can stage a version and cut over
+    // separately — which is the whole reason the two are different verbs.
     if flags.has("deploy") {
-        println!("  (elpiand serves whatever is in the registry directory; restart or reload it)");
+        let force = flags.has("force");
+        store
+            .deploy(&id, &version, force)
+            .map_err(|e| e.message())?;
+        println!("  deployed: {id} is now serving {version}");
+    } else {
+        let serving = store
+            .active_version(&id)
+            .map(|v| v.version)
+            .unwrap_or_else(|| "nothing".into());
+        println!("  not deployed — {id} is still serving {serving}");
+        println!("  deploy it with: elpian-pkg install ... --deploy");
     }
-    let _ = json!({});
     Ok(())
+}
+
+fn string_list(value: &Value) -> Vec<String> {
+    value
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
 }

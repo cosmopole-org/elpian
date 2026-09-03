@@ -75,6 +75,7 @@ name = "elpian-pkg"
 version = "0.1.0"
 dependencies = [
  "elpian-crypto",
+ "elpian-host",
  "serde_json",
 ]
 
