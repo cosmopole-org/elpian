@@ -44,17 +44,58 @@ impl RunState {
     }
 }
 
-/// Shared, host-flippable execution control. Cheap to clone (it is meant to be
-/// held behind an `Rc<RefCell<…>>`); the methods encode the legal transitions.
-#[derive(Clone, Copy, Debug)]
+/// Shared, host-flippable execution control.
+///
+/// # Why this is atomic and shared rather than a plain field
+///
+/// The whole point of the flag is that a host can set it **while the executor
+/// is inside a turn** — that is what makes a runaway guest stoppable at all.
+/// This used to be a `Copy` field living inside the `Executor`, which meant
+/// reaching it required the executor's `RefCell` (held for the duration of the
+/// turn) and, above that, the instance's registry lock. So a host asking a
+/// spinning guest to stop blocked until the guest stopped on its own — the
+/// request could only ever land *between* turns, precisely when it was not
+/// needed. The module documentation claimed the flag was shared; now it is.
+///
+/// Cloning shares the flag. The executor holds one clone and observes it at
+/// every step boundary; the `VM` handle holds another and the host flips it
+/// from any thread, with no lock in the path.
+#[derive(Clone)]
 pub struct ExecControl {
-    state: RunState,
+    state: std::sync::Arc<std::sync::atomic::AtomicU8>,
+}
+
+impl std::fmt::Debug for ExecControl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("ExecControl").field(&self.state()).finish()
+    }
+}
+
+impl RunState {
+    fn as_u8(self) -> u8 {
+        match self {
+            RunState::Running => 0,
+            RunState::PauseRequested => 1,
+            RunState::Paused => 2,
+            RunState::TerminateRequested => 3,
+            RunState::Terminated => 4,
+        }
+    }
+    fn from_u8(v: u8) -> RunState {
+        match v {
+            1 => RunState::PauseRequested,
+            2 => RunState::Paused,
+            3 => RunState::TerminateRequested,
+            4 => RunState::Terminated,
+            _ => RunState::Running,
+        }
+    }
 }
 
 impl Default for ExecControl {
     fn default() -> Self {
         ExecControl {
-            state: RunState::Running,
+            state: std::sync::Arc::new(std::sync::atomic::AtomicU8::new(RunState::Running.as_u8())),
         }
     }
 }
@@ -65,69 +106,87 @@ impl ExecControl {
     }
 
     pub fn state(&self) -> RunState {
-        self.state
+        RunState::from_u8(self.state.load(std::sync::atomic::Ordering::Acquire))
+    }
+
+    /// Apply `f` to the current state until it lands, so a concurrent host
+    /// request and executor acknowledgement cannot lose one another. `f`
+    /// returning `None` means "no transition from here" and leaves the flag be.
+    fn transition(&self, f: impl Fn(RunState) -> Option<RunState>) {
+        use std::sync::atomic::Ordering;
+        let mut current = self.state.load(Ordering::Acquire);
+        loop {
+            let Some(next) = f(RunState::from_u8(current)) else {
+                return;
+            };
+            match self.state.compare_exchange_weak(
+                current,
+                next.as_u8(),
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            ) {
+                Ok(_) => return,
+                Err(observed) => current = observed,
+            }
+        }
     }
 
     /// Host: request a pause. No-op once terminated.
-    pub fn request_pause(&mut self) {
-        if matches!(self.state, RunState::Running) {
-            self.state = RunState::PauseRequested;
-        }
+    pub fn request_pause(&self) {
+        self.transition(|s| matches!(s, RunState::Running).then_some(RunState::PauseRequested));
     }
 
     /// Host: resume a paused (or pause-requested) instance.
-    pub fn resume(&mut self) {
-        if matches!(self.state, RunState::Paused | RunState::PauseRequested) {
-            self.state = RunState::Running;
-        }
+    pub fn resume(&self) {
+        self.transition(|s| {
+            matches!(s, RunState::Paused | RunState::PauseRequested).then_some(RunState::Running)
+        });
     }
 
     /// Host: request termination. Always honoured unless already terminated.
-    pub fn request_terminate(&mut self) {
-        if !matches!(self.state, RunState::Terminated) {
-            self.state = RunState::TerminateRequested;
-        }
+    pub fn request_terminate(&self) {
+        self.transition(|s| {
+            (!matches!(s, RunState::Terminated)).then_some(RunState::TerminateRequested)
+        });
     }
 
     /// Executor: has the host asked us to stop stepping (pause or terminate)?
     pub fn should_suspend(&self) -> bool {
         matches!(
-            self.state,
+            self.state(),
             RunState::PauseRequested | RunState::TerminateRequested
         )
     }
 
     pub fn is_terminating(&self) -> bool {
         matches!(
-            self.state,
+            self.state(),
             RunState::TerminateRequested | RunState::Terminated
         )
     }
 
     pub fn is_paused(&self) -> bool {
-        matches!(self.state, RunState::Paused)
+        matches!(self.state(), RunState::Paused)
     }
 
     pub fn is_terminated(&self) -> bool {
-        matches!(self.state, RunState::Terminated)
+        matches!(self.state(), RunState::Terminated)
     }
 
     /// Executor: acknowledge a pause request by parking the instance.
-    pub fn confirm_paused(&mut self) {
-        if matches!(self.state, RunState::PauseRequested) {
-            self.state = RunState::Paused;
-        }
+    pub fn confirm_paused(&self) {
+        self.transition(|s| matches!(s, RunState::PauseRequested).then_some(RunState::Paused));
     }
 
     /// Executor: acknowledge termination.
-    pub fn confirm_terminated(&mut self) {
-        self.state = RunState::Terminated;
+    pub fn confirm_terminated(&self) {
+        self.transition(|s| (!matches!(s, RunState::Terminated)).then_some(RunState::Terminated));
     }
 
     /// Executor: mark forward progress (clears a stale paused flag when the host
     /// has already resumed). Returns whether execution may proceed.
     pub fn may_run(&self) -> bool {
-        matches!(self.state, RunState::Running)
+        matches!(self.state(), RunState::Running)
     }
 }
 
@@ -137,7 +196,7 @@ mod tests {
 
     #[test]
     fn pause_then_resume_round_trips() {
-        let mut c = ExecControl::new();
+        let c = ExecControl::new();
         assert!(c.may_run());
         c.request_pause();
         assert!(c.should_suspend());
@@ -150,7 +209,7 @@ mod tests {
 
     #[test]
     fn terminate_is_sticky() {
-        let mut c = ExecControl::new();
+        let c = ExecControl::new();
         c.request_terminate();
         assert!(c.should_suspend());
         assert!(c.is_terminating());
@@ -164,7 +223,7 @@ mod tests {
 
     #[test]
     fn pause_request_before_confirm_can_be_resumed() {
-        let mut c = ExecControl::new();
+        let c = ExecControl::new();
         c.request_pause();
         c.resume();
         assert!(c.may_run());

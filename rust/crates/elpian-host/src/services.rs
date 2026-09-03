@@ -1,0 +1,515 @@
+//! The real [`HostServices`]: what actually answers a server function's
+//! `askHost` calls.
+//!
+//! Two rules run through all of it.
+//!
+//! **The guest never supplies its own identity.** App scoping for state, files
+//! and secrets comes from the [`ServerContext`] the host built when it routed
+//! the request. A guest cannot name another app because it never names an app
+//! at all.
+//!
+//! **A refusal is a null, not an error.** The VM already substitutes a typed
+//! null when a capability is denied, so guest code must handle null from any
+//! host call regardless. Answering a *failed* call the same way means there is
+//! one path to get right in guest code instead of two — and it means a
+//! failure cannot be distinguished from a denial by probing, which is the
+//! answer we want for anything the guest is not allowed to learn.
+
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use elpian_vm::api;
+use serde_json::{json, Value};
+
+use crate::app::FunctionKind;
+use crate::app::NetworkMode;
+use crate::appfs::AppFs;
+use crate::component::RenderCache;
+use crate::fetch::{fetch, EgressRecord, FetchLimits};
+use crate::hostcall::{HostCall, HostServices};
+use crate::identity::Identity;
+use crate::state::{SecretStore, StateStore};
+
+/// How a running server function reaches another function of the same app.
+///
+/// A trait so the services layer does not depend on the runtime that owns it —
+/// which would be a cycle — and so a test can supply a stub.
+pub trait FunctionInvoker: Send {
+    fn invoke(&self, function: &str, args: &Value, kind: FunctionKind) -> Value;
+}
+
+/// Everything one invocation runs against.
+#[derive(Clone)]
+pub struct ServerContext {
+    /// Which app this is. The host's, from the routed request — never the
+    /// guest's.
+    pub app: String,
+    /// The instance being driven, for storage accounting.
+    pub machine_id: String,
+    /// Which function is running, for logs.
+    pub function: String,
+    /// Secret names this app's manifest declared. A name absent here reads as
+    /// absent entirely.
+    pub declared_secrets: Vec<String>,
+    /// The app's private directory, if it was given one.
+    pub fs: Option<AppFs>,
+    /// The caller, if the host verified one. `None` is anonymous.
+    ///
+    /// Constructed by the gateway from a credential it checked, never from
+    /// anything in the request body — a server function that reads this is
+    /// making an authorisation decision, and an identity the caller could set
+    /// would make every such decision forgeable by the person it protects
+    /// against.
+    pub user: Option<Identity>,
+    /// The app's egress posture. Present even for a closed app, so the broker
+    /// is asked and an attempt is *recorded* rather than the call vanishing —
+    /// "this app tried to reach out" is worth knowing.
+    pub network: NetworkMode,
+}
+
+/// Diagnostics a host collects from an invocation.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct InvocationLog {
+    /// Lines the guest wrote with `log`.
+    pub guest: Vec<String>,
+    /// Lines the host wrote about the guest.
+    pub host: Vec<String>,
+    /// Every egress decision this invocation caused, allowed or denied.
+    pub egress: Vec<EgressRecord>,
+}
+
+/// The host side of one invocation.
+pub struct ServerServices<'a> {
+    ctx: ServerContext,
+    state: StateStore,
+    secrets: SecretStore,
+    cache: Option<RenderCache>,
+    /// This invocation's own randomness stream. Per-instance rather than
+    /// process-global — see [`GuestRandom`].
+    random: GuestRandom,
+    /// Set when this invocation is allowed to call sibling functions. Absent
+    /// means `server.*` answers null — which is what a bare `invoke` in a test
+    /// gets, and is the safe direction.
+    invoker: Option<Box<dyn FunctionInvoker>>,
+    /// Where a streaming component's frames go. Absent for an ordinary
+    /// invocation, so `stream.emit` from a non-streaming function answers
+    /// false rather than silently doing nothing — a component written for the
+    /// streaming door and invoked through the plain one should be able to tell.
+    ///
+    /// A borrow rather than a boxed `'static` closure, because the sink writes
+    /// to a socket the caller owns and the invocation never outlives it. The
+    /// lifetime says exactly that; a `Box<dyn FnMut + 'static>` would have
+    /// needed a raw pointer to express the same thing less safely.
+    stream: Option<&'a mut dyn FnMut(&Value) -> bool>,
+    /// Collected rather than printed, so the caller decides where diagnostics
+    /// go — a test asserts on them, a server writes them to its log, and
+    /// neither has to intercept stdout.
+    pub log: InvocationLog,
+}
+
+impl<'a> ServerServices<'a> {
+    pub fn new(ctx: ServerContext, state: StateStore, secrets: SecretStore) -> Self {
+        ServerServices {
+            ctx,
+            state,
+            secrets,
+            cache: None,
+            random: GuestRandom::new(),
+            invoker: None,
+            stream: None,
+            log: InvocationLog::default(),
+        }
+    }
+
+    /// Allow this invocation to call sibling functions of the same app.
+    pub fn set_invoker(&mut self, invoker: Box<dyn FunctionInvoker>) {
+        self.invoker = Some(invoker);
+    }
+
+    /// Let this invocation invalidate cached renders of its own app.
+    pub fn set_cache(&mut self, cache: RenderCache) {
+        self.cache = Some(cache);
+    }
+
+    /// Make this a streaming invocation: `stream.emit` writes frames to `sink`.
+    ///
+    /// The sink returns `false` when the reader is gone, which `stream.emit`
+    /// passes straight back to the guest. A component computing frames for a
+    /// device that closed the tab should be able to stop.
+    pub fn set_stream(&mut self, sink: &'a mut dyn FnMut(&Value) -> bool) {
+        self.stream = Some(sink);
+    }
+
+    /// Outbound HTTP, through the broker.
+    ///
+    /// A guest reaching here already holds `Capability::Network`, which a
+    /// closed app never does — so this is the *brokered* and *open* path. The
+    /// broker is still asked, because holding the capability is not the same
+    /// as being allowed to reach a particular address.
+    fn service_fetch(&mut self, call: &HostCall) -> Value {
+        let Some(url) = call.str_arg(0) else {
+            return Value::Null;
+        };
+        let app = self.ctx.app.clone();
+        let function = self.ctx.function.clone();
+        let mut records = Vec::new();
+
+        let result = fetch(
+            &self.ctx.network,
+            url,
+            &FetchLimits::default(),
+            |record| records.push(record),
+            &app,
+            &function,
+        );
+        self.log.egress.extend(records);
+
+        match result {
+            Ok(response) => json!({
+                "status": response.status,
+                "body": response.body,
+            }),
+            Err(error) => {
+                self.log
+                    .host
+                    .push(format!("net.fetch refused: {}", error.audit_detail()));
+                // An error is a null with a message rather than a thrown value:
+                // the guest subset has no try/catch, so an error has to be a
+                // value the guest can test.
+                json!({ "error": error.guest_message() })
+            }
+        }
+    }
+
+    fn service_kv(&mut self, call: &HostCall) -> Value {
+        let Some(key) = call.str_arg(0) else {
+            return Value::Null;
+        };
+        match call.api.as_str() {
+            "kv.get" => self.state.get(&self.ctx.app, key).unwrap_or(Value::Null),
+            "kv.set" => {
+                let value = call.arg(1).clone();
+                match self.state.set(&self.ctx.app, key, value) {
+                    Ok(()) => Value::Bool(true),
+                    Err(error) => {
+                        // The operator sees why; the guest sees a plain false,
+                        // because "which quota did I hit" is host capacity
+                        // information, not the app's.
+                        self.log.host.push(format!(
+                            "kv.set refused for {}: {}",
+                            self.ctx.app,
+                            error.as_str()
+                        ));
+                        Value::Bool(false)
+                    }
+                }
+            }
+            "kv.delete" => Value::Bool(self.state.delete(&self.ctx.app, key)),
+            "kv.list" => json!(self.state.list(&self.ctx.app, key)),
+            _ => Value::Null,
+        }
+    }
+
+    fn service_fs(&mut self, call: &HostCall) -> Value {
+        let (Some(fs), Some(path)) = (self.ctx.fs.clone(), call.str_arg(0)) else {
+            return Value::Null;
+        };
+        let Some(resolved) = fs.resolve(path) else {
+            self.log
+                .host
+                .push(format!("fs: refused path outside the app root: {path}"));
+            return Value::Null;
+        };
+
+        match call.api.as_str() {
+            "fs.read" => std::fs::read_to_string(&resolved)
+                .map(Value::String)
+                .unwrap_or(Value::Null),
+            "fs.write" | "fs.append" => {
+                let Some(contents) = call.str_arg(1) else {
+                    return Value::Null;
+                };
+                let previous = std::fs::metadata(&resolved).map(|m| m.len()).unwrap_or(0);
+                let result = if call.api == "fs.append" {
+                    use std::io::Write;
+                    std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(&resolved)
+                        .and_then(|mut f| f.write_all(contents.as_bytes()))
+                } else {
+                    if let Some(parent) = resolved.parent() {
+                        let _ = std::fs::create_dir_all(parent);
+                    }
+                    std::fs::write(&resolved, contents)
+                };
+                if result.is_err() {
+                    return Value::Bool(false);
+                }
+                // Charge the delta against the instance's storage budget, so a
+                // server function's files count the same as a client's.
+                let now = std::fs::metadata(&resolved).map(|m| m.len()).unwrap_or(0);
+                let delta = now as i64 - previous as i64;
+                if let Err(reason) = api::charge_storage(&self.ctx.machine_id, delta) {
+                    self.log
+                        .host
+                        .push(format!("fs: storage charge refused: {reason}"));
+                }
+                Value::Bool(true)
+            }
+            "fs.delete" => {
+                let size = std::fs::metadata(&resolved).map(|m| m.len()).unwrap_or(0);
+                match std::fs::remove_file(&resolved) {
+                    Ok(()) => {
+                        let _ = api::charge_storage(&self.ctx.machine_id, -(size as i64));
+                        Value::Bool(true)
+                    }
+                    Err(_) => Value::Bool(false),
+                }
+            }
+            "fs.exists" => Value::Bool(resolved.exists()),
+            "fs.mkdir" => Value::Bool(std::fs::create_dir_all(&resolved).is_ok()),
+            "fs.list" => match std::fs::read_dir(&resolved) {
+                Ok(entries) => {
+                    let mut names: Vec<String> = entries
+                        .flatten()
+                        .map(|e| e.file_name().to_string_lossy().into_owned())
+                        .collect();
+                    // Sorted for the same reason `kv.list` is: a directory's
+                    // iteration order is not stable, and a server component
+                    // that renders it would not be cacheable.
+                    names.sort();
+                    json!(names)
+                }
+                Err(_) => Value::Null,
+            },
+            "fs.stat" => match std::fs::metadata(&resolved) {
+                Ok(meta) => json!({
+                    "size": meta.len(),
+                    "isFile": meta.is_file(),
+                    "isDir": meta.is_dir(),
+                }),
+                Err(_) => Value::Null,
+            },
+            _ => Value::Null,
+        }
+    }
+}
+
+impl HostServices for ServerServices<'_> {
+    fn service(&mut self, call: &HostCall) -> Value {
+        match call.api.as_str() {
+            "log" | "println" => {
+                let line = match call.arg(0) {
+                    Value::String(s) => s.clone(),
+                    other => other.to_string(),
+                };
+                self.log.guest.push(line);
+                Value::Null
+            }
+
+            "time.now" => {
+                let millis = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0);
+                json!(millis)
+            }
+            "time.monotonic" => json!(monotonic_millis()),
+
+            "random.next" => json!(self.random.next_f64()),
+            "random.bytes" => {
+                let count = call.arg(0).as_u64().unwrap_or(0).min(4096) as usize;
+                // Straight from the OS. A guest asking for *bytes* is usually
+                // about to use them for something a scrambled float from a
+                // non-cryptographic generator is not good enough for.
+                let mut bytes = vec![0u8; count];
+                fill_os_random(&mut bytes);
+                json!(bytes)
+            }
+
+            // A server function calling a sibling. The app is *not* a
+            // parameter: the invoker was built around the app whose function is
+            // running, so a guest cannot name another app's function because it
+            // never names an app at all.
+            "server.call" | "server.render" => {
+                let Some(name) = call.str_arg(0) else {
+                    return Value::Null;
+                };
+                let args = call.arg(1).clone();
+                let kind = if call.api == "server.render" {
+                    FunctionKind::Component
+                } else {
+                    FunctionKind::Action
+                };
+                match &self.invoker {
+                    Some(invoker) => invoker.invoke(name, &args, kind),
+                    None => {
+                        self.log.host.push(format!(
+                            "{}: {} with no invoker configured",
+                            self.ctx.app, call.api
+                        ));
+                        Value::Null
+                    }
+                }
+            }
+
+            // An action saying "renders tagged this are out of date". The app
+            // is not a parameter, so an app can only ever invalidate its own.
+            // One frame of a streaming component.
+            //
+            // Returns whether the frame reached anyone: `false` means the
+            // reader is gone, and a component looping over a large result
+            // should stop rather than compute the rest for nobody.
+            "stream.emit" => {
+                let frame = call.arg(0).clone();
+                match &mut self.stream {
+                    Some(sink) => Value::Bool(sink(&frame)),
+                    None => {
+                        self.log.host.push(format!(
+                            "{}/{}: stream.emit outside a streaming invocation",
+                            self.ctx.app, self.ctx.function
+                        ));
+                        Value::Bool(false)
+                    }
+                }
+            }
+
+            // The verified caller. Read-only by construction: there is no host
+            // API that sets it, and the value came from a credential this host
+            // checked before any guest code ran.
+            "ctx.user" => match &self.ctx.user {
+                Some(identity) => identity.to_json(),
+                None => Value::Null,
+            },
+
+            "cache.revalidate" => {
+                let Some(tag) = call.str_arg(0) else {
+                    return Value::Null;
+                };
+                match &self.cache {
+                    Some(cache) => json!(cache.revalidate(&self.ctx.app, tag)),
+                    None => json!(0),
+                }
+            }
+
+            "net.fetch" => self.service_fetch(call),
+
+            api if api.starts_with("kv.") => self.service_kv(call),
+            api if api.starts_with("fs.") => self.service_fs(call),
+
+            "secret.get" => match call.str_arg(0) {
+                Some(name) => self
+                    .secrets
+                    .get(&self.ctx.app, name, &self.ctx.declared_secrets)
+                    .map(Value::String)
+                    .unwrap_or(Value::Null),
+                None => Value::Null,
+            },
+
+            // Anything else reaching here is a call the capability posture let
+            // through but this host does not implement. Answering null keeps
+            // the guest deterministic; the log line is how the gap gets found.
+            other => {
+                self.log.host.push(format!(
+                    "{}/{}: unimplemented host API {other}",
+                    self.ctx.app, self.ctx.function
+                ));
+                Value::Null
+            }
+        }
+    }
+
+    fn log(&mut self, message: &str) {
+        self.log.host.push(message.to_string());
+    }
+}
+
+fn monotonic_millis() -> u64 {
+    use std::sync::OnceLock;
+    use std::time::Instant;
+    static START: OnceLock<Instant> = OnceLock::new();
+    START.get_or_init(Instant::now).elapsed().as_millis() as u64
+}
+
+/// Host-side randomness for `random.*`.
+///
+/// Deliberately *not* the VM's deterministic `random` builtin: that one is
+/// seeded and reproducible, which is right for a guest's own arithmetic and
+/// wrong for anything a guest would use to make an id.
+///
+/// # Why this is per-instance and OS-seeded
+///
+/// It was one process-global xorshift state shared by every app on the host.
+/// That is worse than it sounds: the output is the top 53 bits of an invertible
+/// multiply of the full state, so two draws recover the state and every
+/// subsequent value the *whole host* produces becomes predictable — including
+/// another tenant's. An app minting an invite id, a share link or a reset token
+/// from `random.next` would be handing a co-tenant the next one, with no
+/// cross-app API involved: the shared generator *is* the channel.
+///
+/// So each `ServerServices` — one per invocation — gets its own stream, seeded
+/// from OS entropy. One app's draws are no longer on the same sequence as
+/// another's.
+///
+/// `random.bytes` draws bytes from the OS directly rather than from this, since
+/// a name that says "bytes" will be used for things a scrambled float is not
+/// good enough for.
+struct GuestRandom {
+    state: u64,
+}
+
+impl GuestRandom {
+    fn new() -> GuestRandom {
+        let mut seed = [0u8; 8];
+        fill_os_random(&mut seed);
+        let state = u64::from_le_bytes(seed);
+        GuestRandom {
+            // xorshift64* is undefined at zero, and a failed entropy read must
+            // not silently produce a fixed stream.
+            state: if state == 0 {
+                0x9E37_79B9_7F4A_7C15
+            } else {
+                state
+            },
+        }
+    }
+
+    fn next_f64(&mut self) -> f64 {
+        let mut x = self.state;
+        x ^= x >> 12;
+        x ^= x << 25;
+        x ^= x >> 27;
+        self.state = x;
+        let scrambled = x.wrapping_mul(0x2545_F491_4F6C_DD1D);
+        (scrambled >> 11) as f64 / (1u64 << 53) as f64
+    }
+}
+
+/// Fill `out` with operating-system entropy.
+///
+/// Reading `/dev/urandom` rather than taking a dependency, matching the way the
+/// rest of this tree hand-rolls its primitives. If the read fails — no `/dev`
+/// in a container, an exhausted descriptor table — the buffer is filled from a
+/// clock- and address-derived mix instead. That fallback is **not** good
+/// randomness and is documented as such at every call site: it exists so a
+/// guest gets *something* non-repeating rather than a fixed sequence, not
+/// because it is fit for a secret.
+fn fill_os_random(out: &mut [u8]) {
+    use std::io::Read;
+    if let Ok(mut file) = std::fs::File::open("/dev/urandom") {
+        if file.read_exact(out).is_ok() {
+            return;
+        }
+    }
+    let mut mix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0x9E37_79B9_7F4A_7C15)
+        ^ (out.as_ptr() as u64);
+    for byte in out.iter_mut() {
+        mix ^= mix >> 12;
+        mix ^= mix << 25;
+        mix ^= mix >> 27;
+        *byte = (mix.wrapping_mul(0x2545_F491_4F6C_DD1D) >> 56) as u8;
+    }
+}

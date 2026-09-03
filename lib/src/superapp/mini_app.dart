@@ -169,11 +169,18 @@ class MiniAppGrant {
 
   /// The posture for code the super app does not trust: nothing but the ability
   /// to draw itself.
+  ///
+  /// [ElpianCapability.surface] belongs here alongside the other drawing gates:
+  /// on a Flutter host a mini app submits its UI through the `flutter.*` op
+  /// seam, so without it "nothing but the ability to draw itself" would not
+  /// include drawing itself. It was absent only because the enum was missing
+  /// the member entirely.
   static const untrusted = MiniAppGrant(
     capabilities: {
       ElpianCapability.render,
       ElpianCapability.dom,
       ElpianCapability.canvas,
+      ElpianCapability.surface,
       ElpianCapability.logging,
     },
     limits: ElpianLimits.sandboxed,

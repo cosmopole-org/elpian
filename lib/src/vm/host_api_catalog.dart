@@ -208,6 +208,27 @@ class VmHostApiCatalog {
     'flutter.batch',
   };
 
+  /// A mini app calling its own server functions. Separate from the
+  /// network: an app in a closed posture holds no network at all and
+  /// still reaches its own backend through these.
+  static const serverApiNames = <String>{
+    'server.call',
+    'server.render',
+    'stream.emit',
+  };
+
+  /// Durable per-app key/value state, and the secrets a server
+  /// function may read.
+  static const stateApiNames = <String>{
+    'kv.get',
+    'kv.set',
+    'kv.delete',
+    'kv.list',
+    'secret.get',
+    'cache.revalidate',
+    'ctx.user',
+  };
+
   /// Module import and management of other VM instances.
   static const vmApiNames = <String>{
     'vm.import',
@@ -242,6 +263,8 @@ class VmHostApiCatalog {
     ...taskApiNames,
     ...hostMessagingApiNames,
     ...surfaceApiNames,
+    ...serverApiNames,
+    ...stateApiNames,
     ...vmApiNames,
   };
 
@@ -249,6 +272,7 @@ class VmHostApiCatalog {
   /// `Capability::for_api` in rust/src/sdk/capabilities.rs, so the Dart
   /// host can refuse a call for the same reason the VM would.
   static const capabilityOf = <String, String>{
+    'cache.revalidate': 'state',
     'canvas.addColorStop': 'canvas',
     'canvas.addCommand': 'canvas',
     'canvas.addCommands': 'canvas',
@@ -319,6 +343,7 @@ class VmHostApiCatalog {
     'canvas.translate': 'canvas',
     'clearInterval': 'timers',
     'clearTimeout': 'timers',
+    'ctx.user': 'state',
     'dom.addClass': 'dom',
     'dom.addEventListener': 'dom',
     'dom.appendChild': 'dom',
@@ -371,6 +396,10 @@ class VmHostApiCatalog {
     'gpu.writeTexture': 'gpu',
     'host.request': 'host_messaging',
     'host.send': 'host_messaging',
+    'kv.delete': 'state',
+    'kv.get': 'state',
+    'kv.list': 'state',
+    'kv.set': 'state',
     'log': 'logging',
     'net.close': 'network',
     'net.fetch': 'network',
@@ -381,8 +410,12 @@ class VmHostApiCatalog {
     'random.bytes': 'randomness',
     'random.next': 'randomness',
     'render': 'render',
+    'secret.get': 'state',
+    'server.call': 'server_call',
+    'server.render': 'server_call',
     'setInterval': 'timers',
     'setTimeout': 'timers',
+    'stream.emit': 'server_call',
     'stringify': 'other',
     'task.init': 'tasks',
     'task.join': 'tasks',

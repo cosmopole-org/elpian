@@ -37,6 +37,61 @@ enum CommandName {
         #[command(subcommand)]
         task: RunTask,
     },
+    /// Build this project into a signed `.elpianpkg`.
+    Package(PackageArgs),
+    /// Install a `.elpianpkg` into a host's registry.
+    Install(InstallArgs),
+    /// Serve a registry of installed mini apps.
+    Serve(ServeArgs),
+}
+
+#[derive(Args)]
+struct PackageArgs {
+    /// Where to write the package. Defaults to `<id>-<version>.elpianpkg`.
+    #[arg(short, long)]
+    out: Option<PathBuf>,
+    /// Signing key. Falls back to ELPIAN_SIGNING_KEY, then a development key.
+    #[arg(short, long)]
+    key: Option<String>,
+    /// Package what is already in `build/` rather than building first.
+    ///
+    /// A flag rather than `--build=false`: a boolean flag that defaults to true
+    /// cannot be turned off on the command line, which is a small trap the
+    /// negative name avoids.
+    #[arg(long)]
+    no_build: bool,
+}
+
+#[derive(Args)]
+struct InstallArgs {
+    /// The package to install.
+    package: PathBuf,
+    /// The host's registry directory.
+    #[arg(short, long)]
+    registry: PathBuf,
+    /// Signing key to verify against. There is no default for verification.
+    #[arg(short, long)]
+    key: Option<String>,
+    /// Serve this version immediately, rather than only staging it.
+    #[arg(long)]
+    deploy: bool,
+    /// Deploy even if it is older than what is being served.
+    #[arg(long)]
+    force: bool,
+}
+
+#[derive(Args)]
+struct ServeArgs {
+    /// The registry directory to serve.
+    #[arg(short, long)]
+    registry: PathBuf,
+    #[arg(short = 'H', long, default_value = "127.0.0.1")]
+    host: String,
+    #[arg(short, long, default_value_t = 4180)]
+    port: u16,
+    /// Where apps' private filesystems and meters live.
+    #[arg(long)]
+    data_root: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -51,6 +106,11 @@ enum Template {
     Client,
     Server,
     Fullstack,
+    /// A mini app with both halves and a **closed** network posture: its client
+    /// can reach its own server functions and nothing else, and its server
+    /// functions can reach nothing at all. The posture you want unless you have
+    /// a reason not to.
+    ClosedFullstack,
     Showcase,
 }
 
@@ -195,7 +255,123 @@ fn real_main() -> Result<()> {
                 }
             }
         }
+        CommandName::Package(args) => package_project(&env::current_dir()?, args),
+        CommandName::Install(args) => install_package(args),
+        CommandName::Serve(args) => serve_registry(args),
     }
+}
+
+/// Run one of the workspace binaries, inheriting stdio.
+///
+/// The same shape `dev` already uses to run the host: the CLI drives the
+/// workspace's tools rather than linking them, which keeps it buildable on its
+/// own and means a tool and the CLI cannot drift into two versions of the same
+/// logic.
+fn run_workspace_bin(bin: &str, args: &[&str]) -> Result<()> {
+    let manifest = workspace().join("rust/Cargo.toml");
+    let status = Command::new("cargo")
+        .args(["run", "--quiet", "--manifest-path"])
+        .arg(manifest)
+        .args(["--bin", bin, "--"])
+        .args(args)
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()?;
+    if !status.success() {
+        bail!("{bin} exited {status}");
+    }
+    Ok(())
+}
+
+fn package_project(root: &Path, args: PackageArgs) -> Result<()> {
+    if !args.no_build {
+        let config = load_config(root)?;
+        build_project(root, &config, false)?;
+    }
+
+    // The package manifest is the project's own `elpian.app.json`, so the file
+    // that describes the app to the host is the file the author edits — not one
+    // the CLI invents at package time and nobody ever sees.
+    let manifest_path = root.join("elpian.app.json");
+    if !manifest_path.is_file() {
+        bail!(
+            "{} is missing. It declares the app's id, version, capabilities, \
+             network posture and functions — see wiki/22-packaging.md",
+            manifest_path.display()
+        );
+    }
+    let manifest: serde_json::Value = read_json(&manifest_path)?;
+    let id = manifest["id"].as_str().unwrap_or("app");
+    let version = manifest["version"].as_str().unwrap_or("0.0.0");
+
+    let out = args
+        .out
+        .unwrap_or_else(|| root.join(format!("{id}-{version}.elpianpkg")));
+
+    // Where the build actually wrote. The packager must not assume: a project's
+    // `outDir` is its own choice.
+    let build_dir = load_config(root)
+        .map(|config| absolute(root, &config.out_dir))
+        .unwrap_or_else(|_| root.join("build"));
+
+    let mut argv: Vec<String> = vec![
+        "package".into(),
+        root.display().to_string(),
+        out.display().to_string(),
+        "--build-dir".into(),
+        build_dir.display().to_string(),
+    ];
+    if let Some(key) = &args.key {
+        argv.push("--key".into());
+        argv.push(key.clone());
+    }
+    run_workspace_bin(
+        "elpian-pkg",
+        &argv.iter().map(String::as_str).collect::<Vec<_>>(),
+    )
+}
+
+fn install_package(args: InstallArgs) -> Result<()> {
+    let mut argv: Vec<String> = vec![
+        "install".into(),
+        args.package.display().to_string(),
+        "--registry".into(),
+        args.registry.display().to_string(),
+    ];
+    if let Some(key) = &args.key {
+        argv.push("--key".into());
+        argv.push(key.clone());
+    }
+    if args.deploy {
+        argv.push("--deploy".into());
+    }
+    if args.force {
+        argv.push("--force".into());
+    }
+    run_workspace_bin(
+        "elpian-pkg",
+        &argv.iter().map(String::as_str).collect::<Vec<_>>(),
+    )
+}
+
+fn serve_registry(args: ServeArgs) -> Result<()> {
+    let mut argv: Vec<String> = vec![
+        "--registry".into(),
+        args.registry.display().to_string(),
+        "--host".into(),
+        args.host.clone(),
+        "--port".into(),
+        args.port.to_string(),
+    ];
+    if let Some(data_root) = &args.data_root {
+        argv.push("--data-root".into());
+        argv.push(data_root.display().to_string());
+    }
+    run_workspace_bin(
+        "elpiand",
+        &argv.iter().map(String::as_str).collect::<Vec<_>>(),
+    )
 }
 
 fn load_config(root: &Path) -> Result<Config> {
@@ -322,10 +498,102 @@ fn build_project(root: &Path, config: &Config, package_web: bool) -> Result<Vec<
         "server": config.server.as_ref().map(|_| json!({ "endpoint": "__elpian/api" }))
     });
     write_json(&out.join("elpian.manifest.json"), &manifest)?;
+
+    // A mini app's server functions: one bytecode module each.
+    build_server_functions(root, config, &out)?;
+
     if package_web && client.is_some() {
         package_web_export(root, config, &artifacts, &out)?;
     }
     Ok(artifacts)
+}
+
+/// Compile `src/server/{actions,components}/*` into `build/fn/<name>.bc`.
+///
+/// **One module per function, not one bundle.** That is what lets the host load
+/// and unload them independently, which is the entire serverless requirement —
+/// a single bundle would have to be resident whenever any one function was
+/// called.
+///
+/// The *directory* says which kind a function is, and the manifest must agree.
+/// A directory convention rather than a decorator because the language subset
+/// has none, and because it can be read statically: the alternative is
+/// evaluating guest code at build time to find a registration table, which is
+/// worse in every way.
+fn build_server_functions(root: &Path, config: &Config, out: &Path) -> Result<()> {
+    let manifest_path = root.join("elpian.app.json");
+    if !manifest_path.is_file() {
+        return Ok(()); // not a mini app
+    }
+    let manifest: serde_json::Value = read_json(&manifest_path)?;
+    let declared: Vec<(String, String)> = manifest["functions"]
+        .as_array()
+        .map(|entries| {
+            entries
+                .iter()
+                .filter_map(|e| {
+                    Some((
+                        e["name"].as_str()?.to_string(),
+                        e["kind"].as_str().unwrap_or("action").to_string(),
+                    ))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    if declared.is_empty() {
+        return Ok(());
+    }
+
+    let fn_dir = out.join("fn");
+    fs::create_dir_all(&fn_dir)?;
+
+    // The server SDK is prepended to every function module. Each is compiled
+    // alone, so each needs its own copy of the vocabulary — that is the cost of
+    // independent load and unload, and it is paid in bytes rather than in
+    // coupling.
+    let sdk =
+        fs::read_to_string(workspace().join("guest-sdk/js/elpian-server.js")).unwrap_or_default();
+
+    for (name, kind) in &declared {
+        let dir = match kind.as_str() {
+            "component" => "components",
+            _ => "actions",
+        };
+        let source_path = ["ts", "js"]
+            .iter()
+            .map(|ext| root.join(format!("src/server/{dir}/{name}.{ext}")))
+            .find(|p| p.is_file())
+            .ok_or_else(|| {
+                anyhow!(
+                    "{name} is declared as a {kind} in elpian.app.json but \
+                     src/server/{dir}/{name}.ts does not exist"
+                )
+            })?;
+
+        let mut seen = HashSet::new();
+        let mut modules = Vec::new();
+        bundle_module(root, &source_path, &mut seen, &mut modules)?;
+        let source = format!("{sdk}\n{}", modules.join("\n"));
+
+        let bytes = js2elpian::compile_js_to_bytecode(&source)
+            .ok_or_else(|| anyhow!("{name}: JavaScript is outside the Elpian subset"))?;
+        fs::write(fn_dir.join(format!("{name}.bc")), bytes)?;
+    }
+
+    // The client half is what a device fetches, under the name the host serves
+    // it as.
+    if config.client.is_some() {
+        let built = out.join("client.elpian.bc");
+        if built.is_file() {
+            fs::copy(&built, out.join("client.bc"))?;
+        }
+    }
+
+    // `elpian.app.json` is copied beside the modules so the build output *is*
+    // the layout `elpian package` and the host both read.
+    fs::copy(&manifest_path, out.join("elpian.app.json"))?;
+    println!("Built {} server function(s)", declared.len());
+    Ok(())
 }
 
 fn bundle_module(
@@ -568,9 +836,13 @@ fn dev(root: &Path, config: Config, host: &str, port: u16, force_engine: bool) -
         .current_dir(root)
         .args(["run", "--quiet", "--manifest-path"])
         .arg(manifest)
+        // `elpiand` replaced the old `elpian-server`. The dev server is now a
+        // case of the real host rather than a second implementation of it: the
+        // thing you develop against is the thing that ships, so a difference
+        // between them cannot hide until deployment.
         .args([
             "--bin",
-            "elpian-server",
+            "elpiand",
             "--",
             "--host",
             host,
@@ -581,9 +853,12 @@ fn dev(root: &Path, config: Config, host: &str, port: u16, force_engine: bool) -
         .arg(&engine)
         .arg("--artifact-root")
         .arg(&out);
-    let server_bytecode = out.join("server.elpian.bc");
-    if server_bytecode.is_file() {
-        command.arg("--server-bytecode").arg(server_bytecode);
+    // The build output doubles as the registry: `elpian.app.json` plus
+    // `fn/<name>.bc` under it is exactly the layout the host reads, so a
+    // project that declares server functions is served without a separate
+    // install step.
+    if out.join("elpian.app.json").is_file() || out.join("index.json").is_file() {
+        command.arg("--registry").arg(&out);
     }
     command
         .stdin(Stdio::inherit())
@@ -602,8 +877,12 @@ fn create_project(root: &Path, template: Template) -> Result<()> {
     }
     fs::create_dir_all(root.join("src"))?;
     let client = !matches!(template, Template::Server);
-    let server = matches!(template, Template::Server | Template::Fullstack);
+    let server = matches!(
+        template,
+        Template::Server | Template::Fullstack | Template::ClosedFullstack
+    );
     let showcase = matches!(template, Template::Showcase);
+    let mini_app = matches!(template, Template::ClosedFullstack);
     let name = root.file_name().unwrap().to_string_lossy();
     let dependencies = if client {
         json!({ "@elpian/sdk": { "path": "./packages/elpian-sdk" } })
@@ -619,7 +898,11 @@ fn create_project(root: &Path, template: Template) -> Result<()> {
         &json!({
             "outDir": "dist", "mode": "both", "basePath": "/",
             "client": client.then(|| json!({ "entry": "src/client.ts" })),
-            "server": server.then(|| json!({ "entry": "src/server.ts" }))
+            // A mini app has no monolithic server entry: its server *is* the
+            // per-function modules under `src/server/`, which `build_server_
+            // functions` compiles one at a time. Declaring an entry here would
+            // ask the build for a file the template deliberately does not have.
+            "server": (server && !mini_app).then(|| json!({ "entry": "src/server.ts" }))
         }),
     )?;
     fs::write(
@@ -650,11 +933,100 @@ fn create_project(root: &Path, template: Template) -> Result<()> {
         )?;
         fs::write(sdk.join("index.ts"), SDK_TEMPLATE)?;
     }
-    if server {
+    if server && !mini_app {
         fs::write(root.join("src/server.ts"), SERVER_TEMPLATE)?;
     }
+    if mini_app {
+        scaffold_mini_app(root, &name)?;
+    }
     println!("Created {}", root.display());
+    if mini_app {
+        println!(
+            "  elpian run build && elpian package && \\\n    elpian install <pkg> --registry ./registry --deploy && \\\n    elpian serve --registry ./registry"
+        );
+    }
     Ok(())
+}
+
+/// The extra files a mini app needs beyond a plain project: a manifest, and one
+/// module per server function.
+///
+/// One module per function is not a style choice — it is what lets the host load
+/// and unload them independently, which is the whole serverless requirement. A
+/// single bundle would have to be resident whenever any one function was called.
+fn scaffold_mini_app(root: &Path, name: &str) -> Result<()> {
+    fs::create_dir_all(root.join("src/server/actions"))?;
+    fs::create_dir_all(root.join("src/server/components"))?;
+
+    write_json(
+        &root.join("elpian.app.json"),
+        &json!({
+            "id": name.to_lowercase().replace('_', "-"),
+            "version": "0.1.0",
+            // Only what the sample below actually uses. A manifest that asks for
+            // more than the code needs is how an app ends up over-privileged
+            // without anybody deciding to.
+            // `clock` is here because the sample action below calls `now()`.
+            // A manifest that omits a capability the code uses does not fail
+            // loudly — the call returns null and the bug shows up as a wrong
+            // value much later, which is exactly how the reference sample was
+            // first written.
+            "capabilities": ["state", "logging", "clock"],
+            // Anything unrecognised is closed, but saying it explicitly is the
+            // point of this template.
+            "network": "closed",
+            "limits": { "instructions": 50_000_000u64, "memoryBytes": 33_554_432u64 },
+            "functions": [
+                { "name": "createNote", "kind": "action" },
+                { "name": "NoteList", "kind": "component" }
+            ]
+        }),
+    )?;
+
+    fs::write(
+        root.join("src/server/actions/createNote.ts"),
+        MINI_APP_ACTION,
+    )?;
+    fs::write(
+        root.join("src/server/components/NoteList.ts"),
+        MINI_APP_COMPONENT,
+    )?;
+    fs::write(root.join("README.md"), mini_app_readme(name))?;
+    Ok(())
+}
+
+fn mini_app_readme(name: &str) -> String {
+    format!(
+        "# {name}\n\n\
+         A mini app with both halves and a **closed** network posture: the client\n\
+         can reach its own server functions and nothing else, and the server\n\
+         functions can reach nothing at all.\n\n\
+         ```text\n\
+         elpian.app.json                     id, grants, posture, functions\n\
+         src/client.ts                       the client half\n\
+         src/server/actions/createNote.ts    returns JSON, writes state\n\
+         src/server/components/NoteList.ts   returns a UI payload\n\
+         ```\n\n\
+         ## Build, package, serve\n\n\
+         ```bash\n\
+         elpian run install\n\
+         elpian run build\n\
+         export ELPIAN_SIGNING_KEY=dev-key\n\
+         elpian package\n\
+         elpian install {name}-0.1.0.elpianpkg --registry ./registry --deploy\n\
+         elpian serve --registry ./registry\n\
+         ```\n\n\
+         ## Things worth knowing\n\n\
+         * A component **returns** its payload; it never calls `render`. That is\n\
+           what makes it cacheable and testable without a host.\n\
+         * Caching is opt-in: `ui(tree, [\"notes\"], 60)`. A component naming\n\
+           neither a tag nor a TTL is never cached.\n\
+         * Errors are **values**, not throws — the language subset has no\n\
+           `try`/`catch`, so anything you must handle has to be returnable.\n\
+         * `x == null` is true for `0`, so test `res.error != null` rather than\n\
+           truthiness.\n\n\
+         See `wiki/18-fullstack.md`.\n"
+    )
 }
 
 fn changed(event: &notify::Result<notify::Event>) -> bool {
@@ -1299,3 +1671,57 @@ elpian run dev
 Without it `Scene3D` renders a placeholder and every 2D control still works —
 which is exactly what the web build shows.
 "##;
+
+/// A server action for the `closed-fullstack` template.
+const MINI_APP_ACTION: &str = r#"// An action: returns JSON, may write.
+//
+// Note the failure path. The language subset has no `throw` and no `try`/`catch`
+// to catch one with, so an error is a *value* the caller tests.
+
+function createNote(args) {
+  if (args == null || args.text == null || args.text == "") {
+    return { error: { code: "invalid", message: "a note needs text" } };
+  }
+
+  // The key is namespaced by the host under this app. There is no key a guest
+  // can construct that reaches another app's state, because the guest never
+  // sends an app id.
+  var id = "note:" + now();
+  kvSet(id, { id: id, text: args.text, at: now() });
+
+  // Tell the host that renders tagged "notes" are stale. An app can only ever
+  // invalidate its own.
+  revalidate("notes");
+  log("created " + id);
+  return { id: id };
+}
+"#;
+
+/// A server component for the `closed-fullstack` template.
+const MINI_APP_COMPONENT: &str = r#"// A component: RETURNS a UI payload. It never calls `render` — the server
+// posture denies that capability, because a component that rendered as a side
+// effect could not be cached, could not be tested without a host, and could
+// half-render.
+
+function NoteList(args) {
+  var keys = kvList("note:");
+  var children = [];
+  var i = 0;
+  while (i < keys.length) {
+    var note = kvGet(keys[i]);
+    if (note != null) {
+      children.push({ type: "Text", props: { text: note.text } });
+    }
+    i = i + 1;
+  }
+
+  if (children.length == 0) {
+    children.push({ type: "Text", props: { text: "No notes yet." } });
+  }
+
+  // Caching is opt-in. Tagged so the action above invalidates it, and capped at
+  // 60 seconds so a missed revalidation self-corrects rather than serving a
+  // stale page forever.
+  return ui({ type: "Column", props: {}, children: children }, ["notes"], 60);
+}
+"#;

@@ -45,6 +45,8 @@ fn dart_set_for(cap: Capability) -> &'static str {
         Capability::Tasks => "taskApiNames",
         Capability::HostMessaging => "hostMessagingApiNames",
         Capability::Surface => "surfaceApiNames",
+        Capability::ServerCall => "serverApiNames",
+        Capability::State => "stateApiNames",
         Capability::VmManage | Capability::ModuleImport => "vmApiNames",
     }
 }
@@ -74,6 +76,14 @@ const SET_ORDER: &[(&str, &str)] = &[
     (
         "surfaceApiNames",
         "The host's drawing surface — the op seams a guest submits UI\n  /// through, whichever host is underneath.",
+    ),
+    (
+        "serverApiNames",
+        "A mini app calling its own server functions. Separate from the\n  /// network: an app in a closed posture holds no network at all and\n  /// still reaches its own backend through these.",
+    ),
+    (
+        "stateApiNames",
+        "Durable per-app key/value state, and the secrets a server\n  /// function may read.",
     ),
     (
         "vmApiNames",

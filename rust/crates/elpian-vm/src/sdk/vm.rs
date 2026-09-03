@@ -16,20 +16,51 @@ pub struct VM {
     single_thread_executor: Option<Rc<RefCell<Executor>>>,
     pending_host_call_id: i64,
     pub sending_host_call_data: Option<String>,
+    /// A clone of the executor's control flag.
+    ///
+    /// Held separately so pause / terminate / state can be reached without
+    /// borrowing the executor — which is impossible while a turn is running,
+    /// and a turn is exactly when a host needs to stop a guest. See
+    /// [`crate::sdk::lifecycle::ExecControl`].
+    control: crate::sdk::lifecycle::ExecControl,
 }
 
+// SAFETY: `VM` owns its `Rc<RefCell<Executor>>` outright and never hands out a
+// clone of that `Rc`. The audit that backs this claim (S0.1):
+//
+//   * `single_thread_executor` is private, is only ever constructed here in
+//     `compile_and_create_of_bytecode`, and every method reaches it through
+//     `&self` — no method returns the `Rc`, a clone of it, or a `Val` that
+//     borrows from it.
+//   * Everything crossing a VM boundary is an owned, `Send` type: the host-call
+//     envelope is a `String` (`handle_executor_request`), results come back as a
+//     `String` (`continue_run`), and inter-VM messages are `serde_json::Value`
+//     (`elpian-runtime`'s `Command::{Message, Notify}`), re-materialised into
+//     fresh `Rc`s inside the *target* VM by `convert_json_value_to_val`.
+//   * `Val`s reachable from the executor's heap therefore form a graph whose
+//     `Rc`s are confined to one `VM`, so moving the whole `VM` to another thread
+//     moves every strong reference with it and no refcount is ever touched from
+//     two threads at once.
+//
+// `Sync` is deliberately *not* implemented. It was never required — a
+// `static Mutex<HashMap<String, VM>>` needs only `VM: Send` — and asserting it
+// would have claimed `&VM` is shareable, which is false: `&self` methods like
+// `set_limits` take a `RefCell` borrow, so two threads holding `&VM` could
+// panic the `RefCell` or race its non-atomic counter. Only ever hand out an
+// owned `VM` or a `&mut VM` obtained through a lock.
 unsafe impl Send for VM {}
-unsafe impl Sync for VM {}
 
 impl VM {
     pub fn compile_and_create_of_bytecode(machine_id: String, program: Vec<u8>) -> Self {
         let executor = Executor::create_in_single_thread(program.clone(), 0);
+        let control = executor.control_handle();
         VM {
             machine_id,
             program,
             single_thread_executor: Some(Rc::new(RefCell::new(executor))),
             pending_host_call_id: 0,
             sending_host_call_data: None,
+            control,
         }
     }
     pub fn compile_and_create_of_ast(
@@ -88,22 +119,60 @@ impl VM {
         self.exec().capabilities_mut().set(cap, allowed);
     }
     /// Host: request a pause at the next interpreter step boundary.
+    ///
+    /// Goes through the shared control flag, not the executor, so it lands even
+    /// while a turn is in flight.
     pub fn request_pause(&self) {
-        self.exec().request_pause();
+        self.control.request_pause();
     }
     /// Host: request termination at the next interpreter step boundary.
+    ///
+    /// An instance that is *idle* — nobody inside the executor — has no run
+    /// loop coming along to acknowledge the flag, so the termination is
+    /// confirmed here and its registers dropped. An instance that is mid-turn
+    /// gets only the flag, and its own step loop confirms it.
+    ///
+    /// The two cases are told apart by whether the executor's borrow is
+    /// available, which is exactly the question being asked: a turn in flight
+    /// is holding it. That also means this never blocks or panics on a running
+    /// guest — the one a host most needs to be able to stop.
     pub fn request_terminate(&self) {
-        self.exec().request_terminate();
+        self.control.request_terminate();
+        if let Ok(mut exec) = self
+            .single_thread_executor
+            .as_ref()
+            .expect("executor present")
+            .try_borrow_mut()
+        {
+            exec.confirm_terminate_if_idle();
+        }
     }
     /// Host: clear a pause flag (requested or confirmed) without driving.
     /// For an instance that was idle when paused — nothing to resume, but the
     /// stale flag would otherwise suspend its next turn immediately.
     pub fn clear_pause(&self) {
-        self.exec().resume_control();
+        self.control.resume();
     }
     /// Current run state (running / paused / terminated / …).
     pub fn run_state(&self) -> crate::sdk::lifecycle::RunState {
-        self.exec().run_state()
+        self.control.state()
+    }
+    /// Acknowledge a pending terminate if the instance is between turns.
+    /// See [`crate::sdk::executor::Executor::confirm_terminate_if_idle`].
+    pub fn confirm_terminate_if_idle(&self) {
+        if let Ok(mut exec) = self
+            .single_thread_executor
+            .as_ref()
+            .expect("executor present")
+            .try_borrow_mut()
+        {
+            exec.confirm_terminate_if_idle();
+        }
+    }
+    /// A clone of this instance's control flag, for a host that wants to steer
+    /// the instance without holding its lock.
+    pub fn control_handle(&self) -> crate::sdk::lifecycle::ExecControl {
+        self.control.clone()
     }
     /// Whether the most recent turn ended because the host paused the instance.
     pub fn is_paused(&self) -> bool {

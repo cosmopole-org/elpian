@@ -17,6 +17,7 @@ default = ["dart"]
 dart = []
 
 [dependencies]
+elpian-crypto = { path = "../elpian-crypto" }
 js2elpian = { path = "../js2elpian" }
 dart2elpian = { path = "../dart2elpian" }
 elpian-vm = { path = "../elpian-vm" }

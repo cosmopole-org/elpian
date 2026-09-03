@@ -86,6 +86,37 @@ jobs:
         run: cargo test
 
   # ---------------------------------------------------------------------------
+  fullstack:
+    name: Fullstack — end-to-end and doc snippets
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: cargo-fullstack-${{ runner.os }}-${{ hashFiles('rust/**/Cargo.toml') }}
+          restore-keys: cargo-fullstack-${{ runner.os }}-
+
+      # Drives the real binaries rather than the libraries: source → bytecode →
+      # signed package → verify → install → serve → invoke. This is what catches
+      # a CLI that builds a package the server cannot read, where both sides
+      # pass their own tests while disagreeing with each other.
+      - name: End-to-end
+        run: scripts/e2e-fullstack.sh
+
+      # Documentation examples rot silently — nobody runs them, and the
+      # JavaScript subset is strict enough that an untested snippet is usually
+      # wrong in some small way a reader will then copy.
+      - name: Wiki snippets compile
+        run: scripts/check-doc-snippets.py
+
+  # ---------------------------------------------------------------------------
   dart:
     name: Dart — analyze + test
     runs-on: ubuntu-latest

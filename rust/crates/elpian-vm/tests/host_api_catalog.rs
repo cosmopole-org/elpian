@@ -90,3 +90,68 @@ fn the_catalog_names_every_advertised_api() {
         );
     }
 }
+
+/// The Dart `ElpianCapability` enum must name exactly the capabilities the VM
+/// has — no more, no fewer.
+///
+/// This is the gate that was missing. The VM gained `Surface` (splitting the op
+/// seams out of the catch-all) and the generated catalog duly mapped `godot.op`
+/// and `flutter.op` to `'surface'`, but the Dart enum was never given the
+/// member. `ElpianCapability.fromWireName('surface')` therefore returned null
+/// and every caller fell back to `other` — failing safe, but re-coupling the
+/// drawing surface to the very gate the split existed to separate it from. A
+/// host could not deny a mini app the ability to draw without also denying it
+/// every unrecognised API.
+///
+/// The enum cannot be generated the way the catalog is: it carries per-member
+/// documentation that is Dart-side guidance, not a mirror of the Rust docs. So
+/// it is checked instead.
+#[test]
+fn the_dart_capability_enum_matches_the_vms() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../lib/src/vm/governance/models.dart");
+    let dart = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+
+    // The enum body runs from its declaration to the first `;`, which ends the
+    // member list. Scoping to that avoids matching a wire name that merely
+    // appears in a doc comment or a helper below.
+    let body = dart
+        .split_once("enum ElpianCapability {")
+        .and_then(|(_, rest)| rest.split_once(';'))
+        .map(|(body, _)| body)
+        .expect("ElpianCapability enum should be present with a terminated member list");
+
+    // Only the member lines carry a wire name. Doc comments are stripped first
+    // because they are full of apostrophes ("the app's reach"), which would
+    // otherwise be read as quote delimiters.
+    let declared: std::collections::BTreeSet<String> = body
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.starts_with("//"))
+        .filter_map(|line| {
+            // A member reads `name('wire_name'),` — take what is between the
+            // first pair of quotes on the line.
+            let (_, rest) = line.split_once('\'')?;
+            let (wire, _) = rest.split_once('\'')?;
+            Some(wire.to_string())
+        })
+        .collect();
+
+    let expected: std::collections::BTreeSet<String> = Capability::all()
+        .iter()
+        .map(|c| c.as_str().to_string())
+        .collect();
+
+    let missing: Vec<_> = expected.difference(&declared).collect();
+    let extra: Vec<_> = declared.difference(&expected).collect();
+
+    assert!(
+        missing.is_empty() && extra.is_empty(),
+        "ElpianCapability has drifted from the VM's Capability enum.\n\
+         missing from Dart: {missing:?}\n\
+         present only in Dart: {extra:?}\n\n\
+         Add the member to `lib/src/vm/governance/models.dart` with its wire \
+         name, and consider whether `MiniAppGrant.untrusted` should include it."
+    );
+}

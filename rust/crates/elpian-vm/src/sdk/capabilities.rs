@@ -15,7 +15,11 @@
 use std::collections::HashMap;
 
 /// A class of side effect a guest may be permitted to perform.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+// `Ord` is derived so capability sets can live in a `BTreeSet` and iterate
+// deterministically. For a fieldless enum the ordering is declaration order,
+// which is stable across runs — that matters because these sets are written
+// into manifests and package indexes that must rebuild byte-identically.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Capability {
     /// Diagnostic logging (`log`).
     Logging,
@@ -58,6 +62,21 @@ pub enum Capability {
     /// op vocabulary and a mini app that may draw at all may draw on whichever
     /// surface its host provides.
     Surface,
+    /// Calling this mini app's *own* server functions (`server.*`).
+    ///
+    /// Its own gate, separate from [`Capability::Network`], because the two
+    /// answer different questions. A mini app in a closed network posture holds
+    /// no `Network` at all and still needs to reach its own backend: that pair
+    /// — may talk to my server, may not talk to anything else — is the whole
+    /// point of the closed cycle, and it is not expressible with one gate.
+    ServerCall,
+    /// Durable per-app key/value state (`kv.*`) and the declared secrets a
+    /// server function may read (`secret.get`).
+    ///
+    /// Separate from [`Capability::Storage`], which is the fabricated
+    /// filesystem: a server function is routinely given state without being
+    /// given a filesystem.
+    State,
     /// Any host API not mapped to a more specific capability.
     Other,
 }
@@ -96,6 +115,8 @@ impl Capability {
                 Some("canvas") => Capability::Canvas,
                 Some("task") => Capability::Tasks,
                 Some("host") => Capability::HostMessaging,
+                Some("server") | Some("stream") => Capability::ServerCall,
+                Some("kv") | Some("secret") | Some("cache") | Some("ctx") => Capability::State,
                 // `stringify` and anything the host adds without a family.
                 _ => Capability::Other,
             },
@@ -121,6 +142,8 @@ impl Capability {
             Capability::Tasks => "tasks",
             Capability::HostMessaging => "host_messaging",
             Capability::Surface => "surface",
+            Capability::ServerCall => "server_call",
+            Capability::State => "state",
             Capability::Other => "other",
         }
     }
@@ -149,13 +172,15 @@ impl Capability {
             "tasks" => Capability::Tasks,
             "host_messaging" => Capability::HostMessaging,
             "surface" => Capability::Surface,
+            "server_call" => Capability::ServerCall,
+            "state" => Capability::State,
             "other" => Capability::Other,
             _ => return None,
         })
     }
 
     /// Every capability, for enumeration / bulk toggling.
-    pub fn all() -> [Capability; 17] {
+    pub fn all() -> [Capability; 19] {
         [
             Capability::Logging,
             Capability::Gpu,
@@ -173,6 +198,8 @@ impl Capability {
             Capability::Tasks,
             Capability::HostMessaging,
             Capability::Surface,
+            Capability::ServerCall,
+            Capability::State,
             Capability::Other,
         ]
     }

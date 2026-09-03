@@ -1,0 +1,8 @@
+[package]
+name = "elpian-crypto"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "SHA-256 and HMAC-SHA256 for Elpian: dependency-free, wasm-clean, and shared by the bundle verifier, the package format and the registry's content addressing."
+
+[dependencies]

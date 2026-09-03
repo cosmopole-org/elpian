@@ -1,0 +1,571 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:elpian_ui/elpian_ui.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+/// The client half of the fullstack seam, driven against a stand-in host.
+///
+/// The Rust side has its own end-to-end tests against the real `elpiand`; these
+/// pin the *Dart* behaviour — that a failure is a value rather than a throw,
+/// that a stale response cannot overwrite a newer one, that a failed
+/// revalidation keeps working content on screen, and that the advisory network
+/// policy matches the rule the server applies.
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  // The test binding installs an HttpOverrides that answers every request with
+  // 400 and never opens a socket. These tests drive a real loopback server on
+  // purpose — the point is to exercise the connector's actual transport, not a
+  // mock of it — so the override is removed for this suite.
+  setUpAll(() => HttpOverrides.global = null);
+
+  late HttpServer server;
+  late String baseUrl;
+  // Set by each test to control what the stand-in host answers.
+  late Future<Map<String, dynamic>> Function(String path, int callNumber) reply;
+  var callCount = 0;
+
+  setUp(() async {
+    callCount = 0;
+    reply = (path, n) async => {'ok': true, 'result': null};
+    server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    baseUrl = 'http://127.0.0.1:${server.port}';
+    server.listen((request) async {
+      final n = ++callCount;
+      await utf8.decoder.bind(request).join();
+      final body = await reply(request.uri.path, n);
+      final status = body.remove('_status') as int? ?? 200;
+      request.response.statusCode = status;
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(jsonEncode(body));
+      await request.response.close();
+    });
+  });
+
+  tearDown(() async => server.close(force: true));
+
+  ElpianServerClient clientFor({String app = 'notes'}) =>
+      ElpianServerClient(baseUrl: baseUrl, appId: app);
+
+  // ---- the connector ------------------------------------------------------
+
+  test('an action returns its result', () async {
+    reply = (path, n) async => {
+          'ok': true,
+          'result': {'id': 7}
+        };
+    final result = await clientFor().callAction('createNote', {'title': 'x'});
+    expect(result.ok, isTrue);
+    expect(result.result, {'id': 7});
+  });
+
+  test('a failure is a value, never a throw', () async {
+    // The guest subset has no try/catch, and UI code has to render something
+    // either way — so every failure comes back as a result.
+    reply = (path, n) async => {'_status': 500, 'error': 'the function failed'};
+    final result = await clientFor().callAction('boom', const {});
+    expect(result.ok, isFalse);
+    expect(result.error, 'the function failed');
+  });
+
+  test('an unreachable host is a value too', () async {
+    final unreachable =
+        ElpianServerClient(baseUrl: 'http://127.0.0.1:1', appId: 'notes');
+    final result = await unreachable.callAction('anything', const {});
+    expect(result.ok, isFalse);
+    expect(result.error, isNotNull);
+    unreachable.close();
+  });
+
+  test('the app id comes from the connector, never from guest arguments',
+      () async {
+    // A guest passes a function name and arguments. There is no argument that
+    // could name another app, which is the whole of the isolation story on this
+    // side — and the server enforces it again from the path it routed.
+    String? seenPath;
+    reply = (path, n) async {
+      seenPath = path;
+      return {'ok': true, 'result': null};
+    };
+    await clientFor(app: 'mine').callAction('victim/secret', const {});
+    expect(seenPath, '/apps/mine/fn/victim%2Fsecret');
+    expect(seenPath, isNot(contains('/apps/victim/')));
+  });
+
+  // ---- the advisory policy ------------------------------------------------
+
+  group('ElpianNetPolicy', () {
+    test('closed allows nothing', () {
+      expect(ElpianNetPolicy.closed.allows('https://example.com/'), isFalse);
+      expect(ElpianNetPolicy.closed.allows('http://127.0.0.1/'), isFalse);
+    });
+
+    test('an allowlist matches whole labels only', () {
+      final policy =
+          ElpianNetPolicy.brokered(['example.com', '*.api.example.com']);
+      expect(policy.allows('https://example.com/x'), isTrue);
+      expect(policy.allows('https://v1.api.example.com/x'), isTrue);
+
+      // The same rules the Rust broker applies. A mismatch between the two
+      // would mean a device silently allowing what the server refuses, which
+      // reads to an author as an intermittent failure.
+      expect(policy.allows('https://notexample.com/'), isFalse);
+      expect(policy.allows('https://example.com.evil.net/'), isFalse);
+      expect(policy.allows('https://evil-api.example.com/'), isFalse);
+      expect(policy.allows('https://api.example.com/'), isFalse,
+          reason: 'the bare suffix is not a subdomain of itself');
+    });
+
+    test('an unrecognised manifest stanza is closed, not open', () {
+      // The default has to be the safe one: a mistyped network stanza must not
+      // silently grant egress.
+      expect(ElpianNetPolicy.fromManifest(null).mode, 'closed');
+      expect(ElpianNetPolicy.fromManifest('nonsense').mode, 'closed');
+      expect(ElpianNetPolicy.fromManifest('closed').mode, 'closed');
+      expect(ElpianNetPolicy.fromManifest('open').mode, 'open');
+      expect(
+        ElpianNetPolicy.fromManifest({
+          'allow': ['api.example.com']
+        }).mode,
+        'brokered',
+      );
+    });
+  });
+
+  // ---- the widget ---------------------------------------------------------
+  //
+  // These exercise the widget's own logic — the pending state, the error path,
+  // the generation guard, and what happens to on-screen content when a
+  // revalidation fails. The transport is covered by the connector tests above;
+  // driving real sockets from inside `testWidgets`' fake-async zone would test
+  // the zone more than the widget.
+
+  testWidgets('a server component renders the payload it was given',
+      (tester) async {
+    final client = _StubClient()
+      ..next = (n) async => const ServerRenderResult(payload: {
+            'component': {
+              'type': 'Text',
+              'props': {'text': 'from the server'}
+            }
+          });
+
+    await tester.pumpWidget(MaterialApp(
+      home: ServerComponent(client: client, name: 'NoteList'),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('from the server'), findsOneWidget);
+  });
+
+  testWidgets('the pending widget shows only until the first payload arrives',
+      (tester) async {
+    final gate = Completer<void>();
+    final client = _StubClient()
+      ..next = (n) async {
+        await gate.future;
+        return const ServerRenderResult(payload: {
+          'component': {
+            'type': 'Text',
+            'props': {'text': 'arrived'}
+          }
+        });
+      };
+
+    await tester.pumpWidget(MaterialApp(
+      home: ServerComponent(
+        client: client,
+        name: 'NoteList',
+        pending: const Text('loading'),
+      ),
+    ));
+    await tester.pump();
+    expect(find.text('loading'), findsOneWidget);
+
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('arrived'), findsOneWidget);
+    expect(find.text('loading'), findsNothing);
+  });
+
+  testWidgets('a failed first render shows the error builder', (tester) async {
+    final client = _StubClient()
+      ..next =
+          (n) async => const ServerRenderResult(error: 'the function failed');
+
+    await tester.pumpWidget(MaterialApp(
+      home: ServerComponent(
+        client: client,
+        name: 'NoteList',
+        errorBuilder: (context, message) => Text('failed: $message'),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('failed: the function failed'), findsOneWidget);
+  });
+
+  testWidgets('a failed revalidation keeps the content already on screen',
+      (tester) async {
+    // Losing working content because a refresh failed is worse than showing
+    // content that is a second old.
+    final client = _StubClient()
+      ..next = (n) async => n == 1
+          ? const ServerRenderResult(payload: {
+              'component': {
+                'type': 'Text',
+                'props': {'text': 'still good'}
+              }
+            })
+          : const ServerRenderResult(error: 'the function failed');
+
+    await tester.pumpWidget(MaterialApp(
+      home: ServerComponent(
+        client: client,
+        name: 'NoteList',
+        revalidate: const Duration(milliseconds: 50),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('still good'), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 60));
+    await tester.pumpAndSettle();
+    expect(client.calls, greaterThan(1), reason: 'a revalidation fired');
+    expect(find.text('still good'), findsOneWidget,
+        reason: 'a failed refresh must not blank working content');
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('a slow earlier response cannot overwrite a newer one',
+      (tester) async {
+    // Two fetches can be in flight when arguments change, and they can finish
+    // out of order. Without a generation guard the slower — older — answer wins
+    // and the component shows stale content nothing will correct.
+    final slow = Completer<void>();
+    final client = _StubClient()
+      ..next = (n) async {
+        if (n == 1) {
+          await slow.future;
+          return const ServerRenderResult(payload: {
+            'component': {
+              'type': 'Text',
+              'props': {'text': 'stale'}
+            }
+          });
+        }
+        return const ServerRenderResult(payload: {
+          'component': {
+            'type': 'Text',
+            'props': {'text': 'fresh'}
+          }
+        });
+      };
+
+    await tester.pumpWidget(MaterialApp(
+      home: ServerComponent(
+          client: client, name: 'Panel', args: const {'page': 1}),
+    ));
+    await tester.pump();
+
+    // Change the arguments, starting a second fetch that finishes first.
+    await tester.pumpWidget(MaterialApp(
+      home: ServerComponent(
+          client: client, name: 'Panel', args: const {'page': 2}),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('fresh'), findsOneWidget);
+
+    // Now let the first, older fetch land.
+    slow.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('fresh'), findsOneWidget,
+        reason: 'the older response must not win by arriving later');
+    expect(find.text('stale'), findsNothing);
+  });
+
+  _islandTests();
+  group('streaming', _streamingTests);
+}
+
+/// A connector whose answers the test chooses.
+///
+/// Subclassing the real client rather than introducing an interface keeps the
+/// production type as the one thing callers see, and keeps this stub honest
+/// about what it is standing in for.
+class _StubClient extends ElpianServerClient {
+  _StubClient() : super(baseUrl: 'http://127.0.0.1:1', appId: 'stub');
+
+  late Future<ServerRenderResult> Function(int callNumber) next;
+  int calls = 0;
+
+  @override
+  Future<ServerRenderResult> renderComponent(
+    String name,
+    Map<String, dynamic> args,
+  ) {
+    calls += 1;
+    return next(calls);
+  }
+}
+
+// ---- Islands ---------------------------------------------------------------
+//
+// A server component may name interactive pieces in `clientComponents`. Each is
+// resolved against builders the *client bundle* already carries — source is
+// never shipped for the device to compile, which would be a second compile path
+// on the device and a far wider trust surface than a signed bundle.
+
+void _islandTests() {
+  testWidgets('an island the bundle carries is spliced into the tree',
+      (tester) async {
+    final client = _StubClient()
+      ..next = (n) async => ServerRenderResult(payload: _payload('''
+            { "component": { "type": "Column", "props": {}, "children": [
+                { "type": "Text",    "props": { "text": "server-rendered" } },
+                { "type": "Counter", "props": { "start": 7 } }
+              ] },
+              "clientComponents": { "Counter": {} } }'''));
+
+    await tester.pumpWidget(MaterialApp(
+      home: ServerComponent(
+        client: client,
+        name: 'Panel',
+        islandBuilders: {
+          'Counter': (context, props) => Text('counter:${props['start']}'),
+        },
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('server-rendered'), findsOneWidget,
+        reason: 'the static part still renders');
+    expect(find.text('counter:7'), findsOneWidget,
+        reason: 'the island was built by the client bundle, with its props');
+  });
+
+  testWidgets('an island is interactive, not a snapshot', (tester) async {
+    // The point of an island is that it holds state on the device. If it were
+    // rendered once from the payload it would be indistinguishable from the
+    // static form.
+    final client = _StubClient()
+      ..next = (n) async => ServerRenderResult(payload: _payload('''
+            { "component": { "type": "Column", "props": {}, "children": [
+                { "type": "Tally", "props": {} }
+              ] },
+              "clientComponents": { "Tally": {} } }'''));
+
+    await tester.pumpWidget(MaterialApp(
+      home: ServerComponent(
+        client: client,
+        name: 'Panel',
+        islandBuilders: {'Tally': (context, props) => const _Tally()},
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('0'), findsOneWidget);
+    await tester.tap(find.byType(_Tally));
+    await tester.pumpAndSettle();
+    expect(find.text('1'), findsOneWidget, reason: 'the island kept its state');
+  });
+
+  testWidgets('an island the bundle lacks degrades to the payload it came with',
+      (tester) async {
+    // A deployment mistake — a component naming an island its client half does
+    // not have — must not blank the screen. Everything around it still renders.
+    final client = _StubClient()
+      ..next = (n) async => ServerRenderResult(payload: _payload('''
+            { "component": { "type": "Column", "props": {}, "children": [
+                { "type": "Text", "props": { "text": "still here" } },
+                { "type": "Text", "props": { "text": "the static form of the island" } }
+              ] },
+              "clientComponents": { "MissingIsland": {} } }'''));
+
+    await tester.pumpWidget(MaterialApp(
+      home: ServerComponent(
+        client: client,
+        name: 'Panel',
+        islandBuilders: const {}, // this bundle carries none
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('still here'), findsOneWidget);
+    expect(find.text('the static form of the island'), findsOneWidget);
+  });
+
+  testWidgets('an island can wrap the children the server put inside it',
+      (tester) async {
+    final client = _StubClient()
+      ..next = (n) async => ServerRenderResult(payload: _payload('''
+            { "component": { "type": "Expander", "props": { "label": "Details" },
+                "children": [
+                  { "type": "Text", "props": { "text": "rendered on the server" } }
+                ] },
+              "clientComponents": { "Expander": {} } }'''));
+
+    await tester.pumpWidget(MaterialApp(
+      home: ServerComponent(
+        client: client,
+        name: 'Panel',
+        islandBuilders: {
+          'Expander': (context, props) {
+            final children = (props['#children'] as List?)?.cast<Widget>() ??
+                const <Widget>[];
+            return Column(children: [Text('[${props['label']}]'), ...children]);
+          },
+        },
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('[Details]'), findsOneWidget);
+    expect(find.text('rendered on the server'), findsOneWidget,
+        reason: 'server-rendered children reached the island builder');
+  });
+}
+
+/// A payload in the shape the connector actually produces.
+///
+/// Real payloads come from `jsonDecode`, which always yields
+/// `Map<String, dynamic>`. Dart's `const` map literals do not, so building them
+/// by hand in a test exercises a shape the widget never sees in production.
+Map<String, dynamic> _payload(String json) =>
+    jsonDecode(json) as Map<String, dynamic>;
+
+/// A minimal stateful island, for the interactivity test.
+class _Tally extends StatefulWidget {
+  const _Tally();
+
+  @override
+  State<_Tally> createState() => _TallyState();
+}
+
+class _TallyState extends State<_Tally> {
+  int _count = 0;
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: () => setState(() => _count += 1),
+        child: Text('$_count'),
+      );
+}
+
+// ---- Streaming -------------------------------------------------------------
+//
+// The transport is newline-delimited JSON over a long-lived response. These
+// pin the decoding, because the ways it breaks — a chunk boundary falling
+// mid-line, an in-band error read as a frame — are exactly the ones that never
+// show up in a hand-run test and always show up under load.
+
+void _streamingTests() {
+  late HttpServer server;
+  late String baseUrl;
+  late List<String> chunks;
+
+  setUp(() async {
+    chunks = [];
+    server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    baseUrl = 'http://127.0.0.1:${server.port}';
+    server.listen((request) async {
+      await utf8.decoder.bind(request).join();
+      request.response.statusCode = 200;
+      request.response.headers.contentType =
+          ContentType('application', 'x-ndjson');
+      for (final chunk in chunks) {
+        request.response.write(chunk);
+        await request.response.flush();
+      }
+      await request.response.close();
+    });
+  });
+
+  tearDown(() async => server.close(force: true));
+
+  ElpianServerClient client() =>
+      ElpianServerClient(baseUrl: baseUrl, appId: 'live');
+
+  test('each line becomes one frame', () async {
+    chunks = [
+      '{"action":"setView","view":{"type":"Text"}}\n'
+          '{"action":"patchView","patch":{"a":1}}\n',
+    ];
+    final frames =
+        await client().streamComponent('Progressive', const {}).toList();
+    expect(frames.length, 2);
+    expect((frames[0] as Map)['action'], 'setView');
+    expect((frames[1] as Map)['action'], 'patchView');
+  });
+
+  test('a line split across chunk boundaries is reassembled', () async {
+    // The classic way an NDJSON reader breaks: assuming a chunk is a line.
+    chunks = [
+      '{"action":"set',
+      'View","view":{"ty',
+      'pe":"Text"}}\n{"action":"patchView"}\n',
+    ];
+    final frames =
+        await client().streamComponent('Progressive', const {}).toList();
+    expect(frames.length, 2);
+    expect((frames[0] as Map)['view']['type'], 'Text');
+    expect((frames[1] as Map)['action'], 'patchView');
+  });
+
+  test('a final line with no trailing newline is still a frame', () async {
+    chunks = ['{"action":"setView"}\n{"action":"patchView"}'];
+    final frames =
+        await client().streamComponent('Progressive', const {}).toList();
+    expect(frames.length, 2);
+  });
+
+  test('an in-band error frame becomes a stream error, not a frame', () async {
+    // The status line went out with the first byte, so a failure arrives as a
+    // frame. It must not read as content.
+    chunks = [
+      '{"action":"setView","view":{"type":"Text"}}\n'
+          '{"action":"error","message":"no such function: Ghost"}\n',
+    ];
+    final frames = <dynamic>[];
+    Object? error;
+    try {
+      await for (final frame in client().streamComponent('Ghost', const {})) {
+        frames.add(frame);
+      }
+    } catch (e) {
+      error = e;
+    }
+
+    expect(frames.length, 1, reason: 'the good frame still arrived');
+    expect(error, 'no such function: Ghost');
+  });
+
+  test('one unparseable line does not kill a good stream', () async {
+    chunks = [
+      '{"action":"setView"}\n'
+          'this is not json\n'
+          '{"action":"patchView"}\n',
+    ];
+    final frames =
+        await client().streamComponent('Progressive', const {}).toList();
+    expect(frames.length, 2, reason: 'the bad line was skipped, not fatal');
+  });
+
+  test('an unreachable host errors rather than hanging', () async {
+    final unreachable =
+        ElpianServerClient(baseUrl: 'http://127.0.0.1:1', appId: 'live');
+    Object? error;
+    try {
+      await for (final _
+          in unreachable.streamComponent('Anything', const {})) {}
+    } catch (e) {
+      error = e;
+    }
+    expect(error, isNotNull);
+    unreachable.close();
+  });
+}

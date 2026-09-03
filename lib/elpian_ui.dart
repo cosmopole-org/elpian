@@ -28,6 +28,10 @@ export 'src/scope/scope_patch.dart';
 export 'src/scope/scope_contract.dart';
 export 'src/stream/elpian_stream_widget.dart';
 
+// ── The fullstack seam: a mini app's client half reaching its server half ──
+export 'src/fullstack/server_client.dart';
+export 'src/fullstack/server_component.dart';
+
 // ── The rendering engine ───────────────────────────────────────────
 export 'src/core/elpian_engine.dart';
 export 'src/core/widget_registry.dart';

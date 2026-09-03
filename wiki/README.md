@@ -59,6 +59,11 @@ are enforced.
 | [`15-ast-reference.md`](15-ast-reference.md) | Look up an AST node, an operator, or the VM's Dart/FFI surface. |
 | [`16-widget-reference.md`](16-widget-reference.md) | Look up a widget prop, an HTML element, or a CSS property. |
 | [`17-nextjs-integration.md`](17-nextjs-integration.md) | Render Next.js server payloads — request modes, navigation, `clientComp`. |
+| [`18-fullstack.md`](18-fullstack.md) | One app, two VMs: what runs where, and the request lifecycle end to end. |
+| [`19-server-functions.md`](19-server-functions.md) | Write a server action or component — the layout, `ctx`, warm state, the bounds. |
+| [`20-proxy-and-egress.md`](20-proxy-and-egress.md) | The three network modes, what `closed` guarantees, and why client policy is advisory. |
+| [`21-hosting.md`](21-hosting.md) | Run `elpiand`: the registry, policy, the pool, meters, quotas, the admin surface. |
+| [`22-packaging.md`](22-packaging.md) | `.elpianpkg`: determinism, verification, signing and its limit. |
 
 ## How an agent should use this skill
 

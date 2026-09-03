@@ -70,6 +70,13 @@ pub struct Executor {
     /// to the innermost frame's catch body (unwinding scopes and registers back
     /// to the depths recorded at `try` entry); with no frame the throw is a trap.
     try_stack: Vec<TryFrame>,
+    /// This instance's `random` stream state (xorshift64*).
+    ///
+    /// Held here rather than in the thread-local the builtin reads, so the
+    /// stream belongs to the instance and not to whichever thread ran it. Every
+    /// turn swaps it onto the thread on entry and back off on exit — see
+    /// [`Executor::with_rng_installed`].
+    rng_state: u64,
 }
 
 impl Executor {
@@ -106,7 +113,46 @@ impl Executor {
             paused_out: false,
             trap: None,
             try_stack: Vec::new(),
+            rng_state: crate::sdk::stdlib::RNG_DEFAULT_SEED,
         }
+    }
+
+    /// A clone of this instance's execution-control flag.
+    ///
+    /// The point of handing it out is that the holder can flip it *without*
+    /// going through this executor — no `RefCell` borrow, no registry lock — so
+    /// a host can stop a guest that is currently spinning inside a turn.
+    pub fn control_handle(&self) -> crate::sdk::lifecycle::ExecControl {
+        self.control.clone()
+    }
+
+    /// Run `body` with this instance's RNG stream installed on the current
+    /// thread, restoring the previous occupant afterwards.
+    ///
+    /// `stdlib::invoke` reaches the `random` builtin from call sites that hold
+    /// no executor, so the stream cannot simply be read out of `self` at the
+    /// point of use. Swapping it on for the duration of a turn gets the same
+    /// result: `random` sees this instance's state and nothing else's, whichever
+    /// thread the turn runs on, and a `seedRandom` performed during the turn is
+    /// carried back into `self` on the way out.
+    ///
+    /// The restore also runs on unwind, so a guest that traps mid-turn cannot
+    /// strand its state on the thread for the next instance to inherit.
+    fn with_rng_installed<R>(&mut self, body: impl FnOnce(&mut Self) -> R) -> R {
+        /// Puts the previous occupant back if the turn unwinds.
+        struct Restore(u64);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                crate::sdk::stdlib::swap_rng_state(self.0);
+            }
+        }
+        let guard = Restore(crate::sdk::stdlib::swap_rng_state(self.rng_state));
+        let out = body(self);
+        // Normal exit: take our advanced state back and restore the previous
+        // occupant in the same swap, then defuse the guard.
+        self.rng_state = crate::sdk::stdlib::swap_rng_state(guard.0);
+        std::mem::forget(guard);
+        out
     }
 
     /// After `run_from` returns, surface a host-driven stop (trap / terminate /
@@ -128,7 +174,21 @@ impl Executor {
         }
         None
     }
+    /// Drive one turn of this instance. Every entry into guest code goes
+    /// through here, which is what makes it the right place to install the
+    /// instance's RNG stream (see [`Executor::with_rng_installed`]).
     pub fn single_thread_operation(
+        &mut self,
+        op_code: u8,
+        cb_id: i64,
+        payload: Val,
+    ) -> (u8, i64, Val) {
+        self.with_rng_installed(move |this| {
+            this.single_thread_operation_inner(op_code, cb_id, payload)
+        })
+    }
+
+    fn single_thread_operation_inner(
         &mut self,
         op_code: u8,
         cb_id: i64,

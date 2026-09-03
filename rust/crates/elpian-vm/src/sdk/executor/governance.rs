@@ -54,7 +54,18 @@ impl Executor {
     /// boundary by the run loop.
     pub fn request_terminate(&mut self) {
         self.control.request_terminate();
-        if !self.processing {
+        self.confirm_terminate_if_idle();
+    }
+    /// Acknowledge a pending terminate when the instance is between turns.
+    ///
+    /// A mid-turn instance is left alone: its own step loop observes the flag
+    /// and confirms it, and clearing the registers under a running turn would
+    /// pull the continuation out from beneath it. Split out from
+    /// [`Executor::request_terminate`] so the `VM` handle — which sets the flag
+    /// without going through the executor, so that it can reach a *running*
+    /// guest — can still finish the job for an idle one.
+    pub fn confirm_terminate_if_idle(&mut self) {
+        if self.control.is_terminating() && !self.processing {
             self.control.confirm_terminated();
             self.registers.clear();
         }

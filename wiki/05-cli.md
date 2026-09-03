@@ -169,7 +169,9 @@ the marker is missing, if its `basePath=` line does not match, or if
 3. Starts a filesystem watcher on `src/`, `packages/`, `elpian.json` and
    `elpian.config.json`; every change triggers a rebuild and prints
    `[elpian] rebuilt`.
-4. Runs the Rust server (`cargo run --bin elpian-server` from `elpian/rust`)
+4. Runs the host (`cargo run --bin elpiand` from `elpian/rust`) — the same
+   binary that serves in production, so a difference between the dev server and
+   the real one cannot hide until deployment
    with the engine as `--web-root`, `dist` as `--artifact-root`, and
    `dist/server.elpian.bc` as `--server-bytecode` when it exists.
 
