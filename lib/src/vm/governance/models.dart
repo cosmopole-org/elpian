@@ -229,6 +229,20 @@ enum ElpianCapability {
   tasks('tasks'),
   hostMessaging('host_messaging'),
 
+  /// The host's drawing surface: the op seams a guest submits UI through
+  /// (`godot.*`, `flutter.*`). One gate for both because they speak the same op
+  /// vocabulary, and a mini app that may draw at all may draw on whichever
+  /// surface its host provides.
+  ///
+  /// This was missing while the VM had it, so `godot.op` and `flutter.op` —
+  /// which the generated catalog maps to `surface` — resolved to [other] here
+  /// instead. That failed safe, but it re-coupled the drawing surface to the
+  /// catch-all gate the `surface` split existed to get it out of: a host could
+  /// not deny a mini app the drawing surface without denying every unrecognised
+  /// API too. The Rust test `host_api_catalog::the_dart_capability_enum_matches_the_vms`
+  /// now fails if the two enums drift again.
+  surface('surface'),
+
   /// The fail-safe gate for anything the VM does not recognise. Never grant it
   /// to widen a mini app's reach — narrow the API into a real family instead.
   other('other');
