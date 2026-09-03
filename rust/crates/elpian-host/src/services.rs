@@ -22,6 +22,7 @@ use serde_json::{json, Value};
 
 use crate::app::FunctionKind;
 use crate::appfs::AppFs;
+use crate::component::RenderCache;
 use crate::hostcall::{HostCall, HostServices};
 use crate::state::{SecretStore, StateStore};
 
@@ -64,6 +65,7 @@ pub struct ServerServices {
     ctx: ServerContext,
     state: StateStore,
     secrets: SecretStore,
+    cache: Option<RenderCache>,
     /// Set when this invocation is allowed to call sibling functions. Absent
     /// means `server.*` answers null — which is what a bare `invoke` in a test
     /// gets, and is the safe direction.
@@ -80,6 +82,7 @@ impl ServerServices {
             ctx,
             state,
             secrets,
+            cache: None,
             invoker: None,
             log: InvocationLog::default(),
         }
@@ -88,6 +91,11 @@ impl ServerServices {
     /// Allow this invocation to call sibling functions of the same app.
     pub fn set_invoker(&mut self, invoker: Box<dyn FunctionInvoker>) {
         self.invoker = Some(invoker);
+    }
+
+    /// Let this invocation invalidate cached renders of its own app.
+    pub fn set_cache(&mut self, cache: RenderCache) {
+        self.cache = Some(cache);
     }
 
     fn service_kv(&mut self, call: &HostCall) -> Value {
@@ -260,6 +268,18 @@ impl HostServices for ServerServices {
                         ));
                         Value::Null
                     }
+                }
+            }
+
+            // An action saying "renders tagged this are out of date". The app
+            // is not a parameter, so an app can only ever invalidate its own.
+            "cache.revalidate" => {
+                let Some(tag) = call.str_arg(0) else {
+                    return Value::Null;
+                };
+                match &self.cache {
+                    Some(cache) => json!(cache.revalidate(&self.ctx.app, tag)),
+                    None => json!(0),
                 }
             }
 

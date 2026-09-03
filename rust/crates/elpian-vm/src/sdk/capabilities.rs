@@ -112,7 +112,7 @@ impl Capability {
                 Some("task") => Capability::Tasks,
                 Some("host") => Capability::HostMessaging,
                 Some("server") => Capability::ServerCall,
-                Some("kv") | Some("secret") => Capability::State,
+                Some("kv") | Some("secret") | Some("cache") => Capability::State,
                 // `stringify` and anything the host adds without a family.
                 _ => Capability::Other,
             },

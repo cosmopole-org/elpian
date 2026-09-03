@@ -17,6 +17,7 @@ use serde_json::{json, Value};
 
 use crate::app::{AppDefinition, FunctionKind};
 use crate::appfs::AppFs;
+use crate::component::{ComponentPayload, RenderCache};
 use crate::invoke::{invoke, InvokeLimits, Outcome};
 use crate::posture::server_capabilities;
 use crate::services::{InvocationLog, ServerContext, ServerServices};
@@ -29,6 +30,10 @@ use crate::state::{SecretStore, StateStore};
 /// stack frame. The bound is small on purpose: a legitimate chain is a handful
 /// deep, and anything more is a bug that would otherwise cost a thread.
 const MAX_CALL_DEPTH: u32 = 8;
+
+/// How many rendered components the host keeps. A bound, not a tuning target:
+/// what matters is that one app cannot grow it without limit.
+const DEFAULT_RENDER_CACHE_ENTRIES: usize = 1024;
 
 /// Why an invocation could not be attempted.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -71,6 +76,9 @@ pub struct Invocation {
     /// reusing a warm instance). Always true until the pool arrives; recorded
     /// from the start so the meter has something to report.
     pub cold_start: bool,
+    /// Whether a server component's payload came from the render cache. No
+    /// guest code ran when this is true.
+    pub cache_hit: bool,
 }
 
 /// Registered apps and the stores they run against.
@@ -81,6 +89,7 @@ pub struct AppRuntime {
     /// Where each app's private directory lives, if apps get one.
     data_root: Option<PathBuf>,
     limits: InvokeLimits,
+    cache: RenderCache,
     /// Makes each instance's machine id unique. Ids must not be reused while a
     /// previous instance could still be finishing: the registry is keyed by id,
     /// and a reused one would address the wrong instance.
@@ -95,6 +104,7 @@ impl AppRuntime {
             secrets: SecretStore::new(),
             data_root: None,
             limits: InvokeLimits::default(),
+            cache: RenderCache::new(DEFAULT_RENDER_CACHE_ENTRIES),
             next_instance: AtomicU64::new(1),
         })
     }
@@ -107,8 +117,13 @@ impl AppRuntime {
             secrets: SecretStore::new(),
             data_root: Some(root),
             limits: InvokeLimits::default(),
+            cache: RenderCache::new(DEFAULT_RENDER_CACHE_ENTRIES),
             next_instance: AtomicU64::new(1),
         })
+    }
+
+    pub fn cache(&self) -> &RenderCache {
+        &self.cache
     }
 
     pub fn register(&self, app: AppDefinition) {
@@ -200,7 +215,20 @@ impl AppRuntime {
             });
         }
 
-        Ok(self.with_instance(&app, &def, |machine_id| {
+        // A cached render short-circuits before any instance is created — the
+        // point of the cache is to not run the guest, not to run it faster.
+        if expected == FunctionKind::Component {
+            if let Some(payload) = self.cache.get(&app.id, function, args) {
+                return Ok(Invocation {
+                    outcome: Outcome::Returned(payload),
+                    log: InvocationLog::default(),
+                    cold_start: false,
+                    cache_hit: true,
+                });
+            }
+        }
+
+        let invocation = self.with_instance(&app, &def, |machine_id| {
             let fs = self.data_root.as_ref().map(|root| {
                 let dir = root.join(&app.id);
                 let _ = std::fs::create_dir_all(&dir);
@@ -220,14 +248,34 @@ impl AppRuntime {
                 app: app.id.clone(),
                 depth: depth + 1,
             }));
+            services.set_cache(self.cache.clone());
 
             let outcome = invoke(machine_id, function, args, &mut services, &self.limits);
             Invocation {
                 outcome,
                 log: services.log,
                 cold_start: true,
+                cache_hit: false,
             }
-        }))
+        });
+
+        // Store only what validates. A component returning something that is
+        // not a payload is a bug in that app; caching it would serve the bug
+        // back for as long as the entry lived.
+        if expected == FunctionKind::Component {
+            if let Outcome::Returned(value) = &invocation.outcome {
+                match ComponentPayload::parse(value) {
+                    Ok(payload) => self.cache.put(&app.id, function, args, &payload),
+                    Err(error) => eprintln!(
+                        "[elpian] {}/{function}: {} — not cached",
+                        app.id,
+                        error.as_str()
+                    ),
+                }
+            }
+        }
+
+        Ok(invocation)
     }
 
     /// Create, govern, run and destroy one instance.

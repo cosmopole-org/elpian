@@ -24,9 +24,12 @@
 //! * [`runtime`] — registered apps, and running one of their functions.
 //! * [`httpcore`] — a small blocking HTTP/1.1 server with a bounded pool.
 //! * [`gateway`] — the four routes a device talks to.
+//! * [`component`] — the payload a server component returns, and the cache in
+//!   front of it.
 
 pub mod app;
 pub mod appfs;
+pub mod component;
 pub mod gateway;
 pub mod httpcore;
 pub mod hostcall;
@@ -38,6 +41,7 @@ pub mod state;
 
 pub use app::{AppDefinition, FunctionKind, NetworkMode};
 pub use hostcall::{HostCall, HostServices};
+pub use component::{ComponentPayload, PayloadError, RenderCache};
 pub use runtime::{AppRuntime, CallError, Invocation};
 pub use invoke::{invoke, InvokeLimits, Outcome};
 pub use posture::{server_capabilities, SERVER_DENIED, SERVER_GRANTABLE};

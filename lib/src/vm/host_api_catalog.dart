@@ -224,6 +224,7 @@ class VmHostApiCatalog {
     'kv.delete',
     'kv.list',
     'secret.get',
+    'cache.revalidate',
   };
 
   /// Module import and management of other VM instances.
@@ -269,6 +270,7 @@ class VmHostApiCatalog {
   /// `Capability::for_api` in rust/src/sdk/capabilities.rs, so the Dart
   /// host can refuse a call for the same reason the VM would.
   static const capabilityOf = <String, String>{
+    'cache.revalidate': 'state',
     'canvas.addColorStop': 'canvas',
     'canvas.addCommand': 'canvas',
     'canvas.addCommands': 'canvas',

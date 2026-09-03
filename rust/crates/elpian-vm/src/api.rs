@@ -363,6 +363,11 @@ pub fn all_host_apis() -> Vec<String> {
         // host; they are never packaged with the app and never returned to a
         // client.
         "secret.get",
+        // A server action telling the host that a tag's cached renders are out
+        // of date. Gated with `kv.*` because it is a statement *about* the
+        // app's state, and an app that may change its state is the one that may
+        // say the change happened.
+        "cache.revalidate",
         "net.fetch",
         "net.open",
         "net.send",
