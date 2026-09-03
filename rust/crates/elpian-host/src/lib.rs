@@ -19,14 +19,21 @@
 //! * [`state`] — durable per-app key/value state (`kv.*`) and declared secrets.
 //! * [`appfs`] — the app-rooted filesystem (`fs.*`), confined and charged.
 //! * [`services`] — the real [`HostServices`] implementation wiring those up.
+//! * [`app`] — what "one mini app" is: its functions, grants, limits, secrets
+//!   and network mode.
+//! * [`runtime`] — registered apps, and running one of their functions.
 
+pub mod app;
 pub mod appfs;
 pub mod hostcall;
 pub mod invoke;
 pub mod posture;
+pub mod runtime;
 pub mod services;
 pub mod state;
 
+pub use app::{AppDefinition, FunctionKind, NetworkMode};
 pub use hostcall::{HostCall, HostServices};
+pub use runtime::{AppRuntime, CallError, Invocation};
 pub use invoke::{invoke, InvokeLimits, Outcome};
 pub use posture::{server_capabilities, SERVER_DENIED, SERVER_GRANTABLE};

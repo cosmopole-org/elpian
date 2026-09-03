@@ -20,9 +20,18 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use elpian_vm::api;
 use serde_json::{json, Value};
 
+use crate::app::FunctionKind;
 use crate::appfs::AppFs;
 use crate::hostcall::{HostCall, HostServices};
 use crate::state::{SecretStore, StateStore};
+
+/// How a running server function reaches another function of the same app.
+///
+/// A trait so the services layer does not depend on the runtime that owns it —
+/// which would be a cycle — and so a test can supply a stub.
+pub trait FunctionInvoker: Send {
+    fn invoke(&self, function: &str, args: &Value, kind: FunctionKind) -> Value;
+}
 
 /// Everything one invocation runs against.
 #[derive(Clone)]
@@ -55,6 +64,10 @@ pub struct ServerServices {
     ctx: ServerContext,
     state: StateStore,
     secrets: SecretStore,
+    /// Set when this invocation is allowed to call sibling functions. Absent
+    /// means `server.*` answers null — which is what a bare `invoke` in a test
+    /// gets, and is the safe direction.
+    invoker: Option<Box<dyn FunctionInvoker>>,
     /// Collected rather than printed, so the caller decides where diagnostics
     /// go — a test asserts on them, a server writes them to its log, and
     /// neither has to intercept stdout.
@@ -67,8 +80,14 @@ impl ServerServices {
             ctx,
             state,
             secrets,
+            invoker: None,
             log: InvocationLog::default(),
         }
+    }
+
+    /// Allow this invocation to call sibling functions of the same app.
+    pub fn set_invoker(&mut self, invoker: Box<dyn FunctionInvoker>) {
+        self.invoker = Some(invoker);
     }
 
     fn service_kv(&mut self, call: &HostCall) -> Value {
@@ -216,6 +235,32 @@ impl HostServices for ServerServices {
                 json!((0..count)
                     .map(|_| (next_random() * 256.0) as u8)
                     .collect::<Vec<u8>>())
+            }
+
+            // A server function calling a sibling. The app is *not* a
+            // parameter: the invoker was built around the app whose function is
+            // running, so a guest cannot name another app's function because it
+            // never names an app at all.
+            "server.call" | "server.render" => {
+                let Some(name) = call.str_arg(0) else {
+                    return Value::Null;
+                };
+                let args = call.arg(1).clone();
+                let kind = if call.api == "server.render" {
+                    FunctionKind::Component
+                } else {
+                    FunctionKind::Action
+                };
+                match &self.invoker {
+                    Some(invoker) => invoker.invoke(name, &args, kind),
+                    None => {
+                        self.log.host.push(format!(
+                            "{}: {} with no invoker configured",
+                            self.ctx.app, call.api
+                        ));
+                        Value::Null
+                    }
+                }
             }
 
             api if api.starts_with("kv.") => self.service_kv(call),
