@@ -33,8 +33,7 @@ fn js_preludes() -> Vec<(&'static str, &'static str, &'static str)> {
     vec![
         // (name, the import line a guest would write, the source itself)
         ("godot.js", "", GODOT_PRELUDE_JS),
-        // gui.js composes *instead of* the base prelude, not after it, so its
-        // import line is enough on its own.
+        // gui.js sits on top of the other four; its import pulls the chain.
         ("gui.js", "import 'gui.js';", GODOT_GUI_JS),
         ("ui.js", "import 'ui.js';", GODOT_UI_KIT_JS),
         ("net.js", "import 'net.js';", GODOT_NET_JS),
@@ -147,6 +146,27 @@ fn a_prelude_that_imports_another_pulls_it_in() {
     assert!(
         js2elpian::try_parse_js(&composed).is_ok(),
         "react.js + its dependencies should compile together"
+    );
+
+    // gui.js sits two layers further up: it needs the reconciler it registers
+    // widgets for, the kit it themes through, the engine underneath both, and
+    // the Flutter surface it re-exports. Composing it alone would compile —
+    // the front-end resolves names late — and fail at the first render.
+    let gui = compose_godot_program_js("import 'gui.js';\nvar a = 1;");
+    for (name, marker) in [
+        ("godot.js", "class GD {"),
+        ("ui.js", "var VUI = {}"),
+        ("react.js", "function __vrDriverCreate("),
+        ("flutter.js", "function __flEl("),
+    ] {
+        assert!(
+            gui.contains(marker),
+            "importing gui.js should also compose {name} beneath it"
+        );
+    }
+    assert!(
+        js2elpian::try_parse_js(&gui).is_ok(),
+        "gui.js + its dependencies should compile together"
     );
 }
 
