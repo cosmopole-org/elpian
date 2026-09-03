@@ -37,6 +37,61 @@ enum CommandName {
         #[command(subcommand)]
         task: RunTask,
     },
+    /// Build this project into a signed `.elpianpkg`.
+    Package(PackageArgs),
+    /// Install a `.elpianpkg` into a host's registry.
+    Install(InstallArgs),
+    /// Serve a registry of installed mini apps.
+    Serve(ServeArgs),
+}
+
+#[derive(Args)]
+struct PackageArgs {
+    /// Where to write the package. Defaults to `<id>-<version>.elpianpkg`.
+    #[arg(short, long)]
+    out: Option<PathBuf>,
+    /// Signing key. Falls back to ELPIAN_SIGNING_KEY, then a development key.
+    #[arg(short, long)]
+    key: Option<String>,
+    /// Package what is already in `build/` rather than building first.
+    ///
+    /// A flag rather than `--build=false`: a boolean flag that defaults to true
+    /// cannot be turned off on the command line, which is a small trap the
+    /// negative name avoids.
+    #[arg(long)]
+    no_build: bool,
+}
+
+#[derive(Args)]
+struct InstallArgs {
+    /// The package to install.
+    package: PathBuf,
+    /// The host's registry directory.
+    #[arg(short, long)]
+    registry: PathBuf,
+    /// Signing key to verify against. There is no default for verification.
+    #[arg(short, long)]
+    key: Option<String>,
+    /// Serve this version immediately, rather than only staging it.
+    #[arg(long)]
+    deploy: bool,
+    /// Deploy even if it is older than what is being served.
+    #[arg(long)]
+    force: bool,
+}
+
+#[derive(Args)]
+struct ServeArgs {
+    /// The registry directory to serve.
+    #[arg(short, long)]
+    registry: PathBuf,
+    #[arg(short = 'H', long, default_value = "127.0.0.1")]
+    host: String,
+    #[arg(short, long, default_value_t = 4180)]
+    port: u16,
+    /// Where apps' private filesystems and meters live.
+    #[arg(long)]
+    data_root: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -195,7 +250,115 @@ fn real_main() -> Result<()> {
                 }
             }
         }
+        CommandName::Package(args) => package_project(&env::current_dir()?, args),
+        CommandName::Install(args) => install_package(args),
+        CommandName::Serve(args) => serve_registry(args),
     }
+}
+
+/// Run one of the workspace binaries, inheriting stdio.
+///
+/// The same shape `dev` already uses to run the host: the CLI drives the
+/// workspace's tools rather than linking them, which keeps it buildable on its
+/// own and means a tool and the CLI cannot drift into two versions of the same
+/// logic.
+fn run_workspace_bin(bin: &str, args: &[&str]) -> Result<()> {
+    let manifest = workspace().join("rust/Cargo.toml");
+    let status = Command::new("cargo")
+        .args(["run", "--quiet", "--manifest-path"])
+        .arg(manifest)
+        .args(["--bin", bin, "--"])
+        .args(args)
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()?;
+    if !status.success() {
+        bail!("{bin} exited {status}");
+    }
+    Ok(())
+}
+
+fn package_project(root: &Path, args: PackageArgs) -> Result<()> {
+    if !args.no_build {
+        let config = load_config(root)?;
+        build_project(root, &config, false)?;
+    }
+
+    // The package manifest is the project's own `elpian.app.json`, so the file
+    // that describes the app to the host is the file the author edits — not one
+    // the CLI invents at package time and nobody ever sees.
+    let manifest_path = root.join("elpian.app.json");
+    if !manifest_path.is_file() {
+        bail!(
+            "{} is missing. It declares the app's id, version, capabilities, \
+             network posture and functions — see wiki/22-packaging.md",
+            manifest_path.display()
+        );
+    }
+    let manifest: serde_json::Value = read_json(&manifest_path)?;
+    let id = manifest["id"].as_str().unwrap_or("app");
+    let version = manifest["version"].as_str().unwrap_or("0.0.0");
+
+    let out = args
+        .out
+        .unwrap_or_else(|| root.join(format!("{id}-{version}.elpianpkg")));
+
+    let mut argv: Vec<String> = vec![
+        "package".into(),
+        root.display().to_string(),
+        out.display().to_string(),
+    ];
+    if let Some(key) = &args.key {
+        argv.push("--key".into());
+        argv.push(key.clone());
+    }
+    run_workspace_bin(
+        "elpian-pkg",
+        &argv.iter().map(String::as_str).collect::<Vec<_>>(),
+    )
+}
+
+fn install_package(args: InstallArgs) -> Result<()> {
+    let mut argv: Vec<String> = vec![
+        "install".into(),
+        args.package.display().to_string(),
+        "--registry".into(),
+        args.registry.display().to_string(),
+    ];
+    if let Some(key) = &args.key {
+        argv.push("--key".into());
+        argv.push(key.clone());
+    }
+    if args.deploy {
+        argv.push("--deploy".into());
+    }
+    if args.force {
+        argv.push("--force".into());
+    }
+    run_workspace_bin(
+        "elpian-pkg",
+        &argv.iter().map(String::as_str).collect::<Vec<_>>(),
+    )
+}
+
+fn serve_registry(args: ServeArgs) -> Result<()> {
+    let mut argv: Vec<String> = vec![
+        "--registry".into(),
+        args.registry.display().to_string(),
+        "--host".into(),
+        args.host.clone(),
+        "--port".into(),
+        args.port.to_string(),
+    ];
+    if let Some(data_root) = &args.data_root {
+        argv.push("--data-root".into());
+        argv.push(data_root.display().to_string());
+    }
+    run_workspace_bin(
+        "elpiand",
+        &argv.iter().map(String::as_str).collect::<Vec<_>>(),
+    )
 }
 
 fn load_config(root: &Path) -> Result<Config> {

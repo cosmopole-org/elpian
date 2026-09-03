@@ -148,6 +148,11 @@ pub struct AdminEvent {
 pub struct AdminAudit {
     events: Arc<RwLock<Vec<AdminEvent>>>,
     capacity: usize,
+    /// Where the trail is appended, if anywhere.
+    ///
+    /// An audit trail that a restart erases answers "what happened since the
+    /// last restart", and the restart is often the thing you are asking about.
+    path: Option<Arc<std::path::PathBuf>>,
 }
 
 impl AdminAudit {
@@ -155,10 +160,37 @@ impl AdminAudit {
         AdminAudit {
             events: Arc::new(RwLock::new(Vec::new())),
             capacity,
+            path: None,
+        }
+    }
+
+    /// An audit that also appends each event to a file, as one JSON object per
+    /// line.
+    ///
+    /// Append-only and line-oriented on purpose: an appended line survives a
+    /// crash mid-write as a truncated last line rather than corrupting what
+    /// came before, which a rewritten whole-file format does not. It is also
+    /// what every log shipper already knows how to read.
+    ///
+    /// The in-memory ring stays bounded regardless — the file is the record,
+    /// the ring is what `/admin/audit` shows.
+    pub fn persisted(capacity: usize, path: impl Into<std::path::PathBuf>) -> AdminAudit {
+        AdminAudit {
+            events: Arc::new(RwLock::new(Vec::new())),
+            capacity,
+            path: Some(Arc::new(path.into())),
         }
     }
 
     pub fn record(&self, event: AdminEvent) {
+        if let Some(path) = &self.path {
+            if let Err(error) = append_line(path, &event) {
+                // A failure to write the trail must not take the admin surface
+                // down — but it must be visible, because an audit that silently
+                // stopped recording is worse than one that never started.
+                eprintln!("[elpian] could not append to the admin audit: {error}");
+            }
+        }
         let mut events = self.events.write().unwrap_or_else(|p| p.into_inner());
         events.push(event);
         // Bounded in memory. A durable trail is the operator's to arrange; what
@@ -181,6 +213,49 @@ impl AdminAudit {
             .unwrap_or_else(|p| p.into_inner())
             .clone()
     }
+}
+
+/// Append one event to the trail file.
+fn append_line(path: &std::path::Path, event: &AdminEvent) -> std::io::Result<()> {
+    use std::io::Write as _;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let line = serde_json::json!({
+        "at": event.at_ms,
+        "action": event.action,
+        "app": event.app,
+        "detail": event.detail,
+        "allowed": event.allowed,
+    });
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
+    writeln!(file, "{line}")
+}
+
+/// Read a persisted trail back, skipping anything unreadable.
+///
+/// A truncated last line — the shape a crash mid-append leaves — costs that one
+/// event and nothing else, which is the property the append-only format was
+/// chosen for.
+pub fn read_trail(path: &std::path::Path) -> Vec<AdminEvent> {
+    let Ok(raw) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    raw.lines()
+        .filter_map(|line| {
+            let value: serde_json::Value = serde_json::from_str(line).ok()?;
+            Some(AdminEvent {
+                at_ms: value["at"].as_u64()?,
+                action: value["action"].as_str()?.to_string(),
+                app: value["app"].as_str().unwrap_or_default().to_string(),
+                detail: value["detail"].as_str().unwrap_or_default().to_string(),
+                allowed: value["allowed"].as_bool().unwrap_or(false),
+            })
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -265,6 +340,54 @@ mod tests {
             "a run of refusals is the interesting case"
         );
         assert!(events[1].allowed);
+    }
+
+    #[test]
+    fn a_persisted_trail_survives_a_restart() {
+        // An audit a restart erases answers "what happened since the last
+        // restart", and the restart is often the thing being asked about.
+        let path = std::env::temp_dir().join(format!("elpian-audit-{}.ndjson", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+
+        let audit = AdminAudit::persisted(10, &path);
+        audit.record(AdminEvent {
+            at_ms: 1,
+            action: "deploy".into(),
+            app: "notes".into(),
+            detail: "1.0.0".into(),
+            allowed: false,
+        });
+        audit.record(AdminEvent {
+            at_ms: 2,
+            action: "deploy".into(),
+            app: "notes".into(),
+            detail: "1.0.0".into(),
+            allowed: true,
+        });
+
+        let recovered = read_trail(&path);
+        assert_eq!(recovered.len(), 2);
+        assert!(!recovered[0].allowed, "the refusal survived too");
+        assert_eq!(recovered[1].action, "deploy");
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn a_truncated_last_line_costs_only_that_event() {
+        // The shape a crash mid-append leaves. An append-only line format loses
+        // one event; a rewritten whole-file format could lose all of them.
+        let path =
+            std::env::temp_dir().join(format!("elpian-audit-cut-{}.ndjson", std::process::id()));
+        std::fs::write(
+            &path,
+            b"{\"at\":1,\"action\":\"a\",\"app\":\"x\",\"detail\":\"\",\"allowed\":true}\n              {\"at\":2,\"action\":\"b\",\"app\":\"x\",\"detail\":\"\",\"allowed\":true}\n              {\"at\":3,\"action\":\"c\",\"ap",
+        )
+        .unwrap();
+
+        let recovered = read_trail(&path);
+        assert_eq!(recovered.len(), 2, "the two complete events came back");
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]

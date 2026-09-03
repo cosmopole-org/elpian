@@ -114,6 +114,14 @@ fn main() {
     std::mem::forget(maintenance);
 
     let mut gateway = elpian_host::gateway::Gateway::new(Arc::clone(&runtime));
+    if let Some(data_root) = &config.data_root {
+        // The trail lives beside the data it describes, so moving one moves the
+        // other.
+        gateway.audit = elpian_host::identity::AdminAudit::persisted(
+            1000,
+            data_root.join("admin-audit.ndjson"),
+        );
+    }
     if let Some(web_root) = &config.web_root {
         println!(
             "[elpian] serving {} for unclaimed paths",

@@ -88,7 +88,8 @@ workspace builds and tests. Flutter 3.47.2 / Dart 3.13.2 present — Dart change
       difference between what you develop against and what ships cannot hide
       until deployment. `elpiand` gained `--web-root` and `--artifact-root`
       (both path-confined) to cover what the old server did.
-- [ ] The `elpian` CLI does not call `elpian-pkg`; packaging is its own binary
+- [x] The `elpian` CLI drives packaging: `elpian package`, `elpian install`,
+      `elpian serve` — requirement 4's stated flow, end to end through the CLI
 
 ### Benchmark baseline (2-core box, debug build, cold instance per call)
 
@@ -319,17 +320,18 @@ Ordered by how likely it is to matter.
    `IslandBuilder`s are not yet substituted into the rendered tree.
 3. **No TLS.** `https` from a server function is refused, not downgraded. Needs
    a maintainer decision on a crate.
-2. **The admin audit does not survive a restart.** Meters now do; the audit is
-   still in memory only.
-3. **The `elpian` CLI does not call `elpian-pkg`** — packaging is a separate
-   binary, and `elpian create --template closed-fullstack` does not exist.
-4. **ed25519**, gated on whether third-party publishing is in scope.
+2. **`elpian create --template closed-fullstack`** — the sample exists, the
+   template does not.
+3. **`cli/rust/main.rs` is still one file** (~1,400 lines now).
+4. **ed25519**, gated on whether third-party publishing is in scope. Hand-rolling
+   it would be irresponsible and taking a crate is a maintainer decision, so
+   this is genuinely blocked rather than merely undone.
 
 ## Verification as of the last commit
 
 | | |
 |---|---|
-| `cargo test --workspace` | 613 passed, 0 failed |
+| `cargo test --workspace` | 615 passed, 0 failed |
 | `flutter test` | 317 passed |
 | `flutter analyze lib/` | clean |
 | `scripts/e2e-fullstack.sh` | all checks pass |
