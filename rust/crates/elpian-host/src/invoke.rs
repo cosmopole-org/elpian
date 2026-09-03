@@ -10,6 +10,8 @@
 //! suspends on `askHost`, hands out an envelope, and resumes when given a
 //! reply. The only thing that differs is who services the envelope.
 
+use std::time::{Duration, Instant};
+
 use elpian_vm::api;
 use serde_json::{json, Value};
 
@@ -29,6 +31,8 @@ pub enum Outcome {
     Trapped(String),
     /// The guest exceeded [`InvokeLimits::max_host_calls`] in one invocation.
     TooManyHostCalls,
+    /// The invocation ran past [`InvokeLimits::deadline`].
+    DeadlineExceeded,
 }
 
 /// Bounds on a single invocation, independent of the VM's own instruction and
@@ -42,12 +46,30 @@ pub struct InvokeLimits {
     /// costs the host far more than it costs the guest's budget. This is the
     /// backstop for that asymmetry.
     pub max_host_calls: u32,
+
+    /// How long one whole invocation may take.
+    ///
+    /// The third deadline layer, and the one that catches what the other two
+    /// miss:
+    ///
+    /// * the **instruction** budget bounds computation, not time;
+    /// * the supervisor's **per-turn** deadline bounds one uninterrupted stretch
+    ///   of guest execution — but a guest that makes a host call starts a new
+    ///   turn, so a loop of quick calls resets it forever;
+    /// * this bounds the *invocation*, across every turn and every host call in
+    ///   it, which is the thing a caller is actually waiting on.
+    ///
+    /// Checked between turns rather than inside one, so it can only overshoot
+    /// by however long a single turn runs — which the per-turn deadline bounds.
+    /// The two layers need each other; neither is sufficient alone.
+    pub deadline: Option<Duration>,
 }
 
 impl Default for InvokeLimits {
     fn default() -> Self {
         InvokeLimits {
             max_host_calls: 10_000,
+            deadline: Some(Duration::from_secs(30)),
         }
     }
 }
@@ -67,6 +89,7 @@ pub fn invoke(
     cold_start: bool,
 ) -> Outcome {
     let mut host_calls = 0u32;
+    let started = Instant::now();
 
     // Module initialisation, on a cold instance only.
     //
@@ -80,7 +103,14 @@ pub fn invoke(
     // logs at load time is ordinary code, not an error.
     if cold_start {
         let mut result = api::execute_vm(machine_id.to_string());
-        match pump(machine_id, &mut result, services, limits, &mut host_calls) {
+        match pump(
+            machine_id,
+            &mut result,
+            services,
+            limits,
+            &mut host_calls,
+            started,
+        ) {
             Ok(()) => {}
             Err(outcome) => return outcome,
         }
@@ -95,7 +125,14 @@ pub fn invoke(
         args.to_string(),
         1,
     );
-    match pump(machine_id, &mut result, services, limits, &mut host_calls) {
+    match pump(
+        machine_id,
+        &mut result,
+        services,
+        limits,
+        &mut host_calls,
+        started,
+    ) {
         Ok(()) => {}
         Err(outcome) => return outcome,
     }
@@ -113,8 +150,20 @@ fn pump(
     services: &mut dyn HostServices,
     limits: &InvokeLimits,
     host_calls: &mut u32,
+    started: Instant,
 ) -> Result<(), Outcome> {
     while result.has_host_call {
+        // The deadline is checked here — between turns — because that is where
+        // the host has control. Terminating rather than merely refusing: a
+        // guest that has run out of time is not going to be helped by being
+        // told so, and leaving it running is what the deadline exists to stop.
+        if let Some(deadline) = limits.deadline {
+            if started.elapsed() >= deadline {
+                api::terminate_vm(machine_id);
+                return Err(Outcome::DeadlineExceeded);
+            }
+        }
+
         *host_calls += 1;
         if *host_calls > limits.max_host_calls {
             // Stop the guest rather than merely refusing the call: a guest that

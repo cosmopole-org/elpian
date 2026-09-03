@@ -174,12 +174,17 @@ Brought forward because "load on demand, unload when not needed" is requirement
 - [x] Tests (7) + benchmark
 - [x] Quota ladder: throttle → strangle → drain → suspend, applied **before**
       an invocation runs; `strangle` refuses writes while still serving reads
-- [ ] Supervisor node adoption into the VM tree — **not started**; the pool
-      tracks instances itself and does not hang them under a per-app node, so
-      `subtree_usage` and `destroy_vm_tree` are not doing this work
-- [ ] Hibernate/wake — **not started**; an idle instance is unloaded, not parked
-- [ ] Three deadline layers — S0's supervisor has the per-turn one;
-      per-invocation and per-app are not wired into the host
+- [x] Supervisor node adoption — every instance is adopted under `app::<id>`,
+      so `subtree_usage` gives an app's true total across functions,
+      `destroy_vm_tree` unloads it in one call, and permission intersection
+      means a function can never hold more than its app holds
+- [x] Hibernate/wake — an idle instance is parked with `pause_vm` (continuation
+      preserved, no CPU) before the longer TTL unloads it; waking skips module
+      initialisation exactly as a warm instance does
+- [x] Three deadline layers — instruction budget (computation), the supervisor's
+      per-turn deadline (one stretch of execution), and now a per-*invocation*
+      deadline. The middle one alone is not enough: a guest making host calls
+      starts a new turn each time, so a loop of quick calls resets it forever
 - [ ] Meter persistence across restart — **not started**; counters are in memory
 
 ### Benchmark, cold-per-call vs warm pool (2-core, debug)
@@ -311,16 +316,18 @@ Ordered by how likely it is to matter.
 2. **Meters and audit do not survive a restart.**
 3. **`elpian-server.rs` still exists**, unused by the new path, and the `elpian`
    CLI does not call `elpian-pkg`.
-4. **Hibernation, supervisor tree adoption, per-invocation and per-app
-   deadlines** — S4's remaining half.
-5. **Frame budgets for streaming** — a component can emit without bound.
+4. **Frame budgets for streaming** — a component can emit without bound. The
+   dead-reader signal lets a well-behaved one stop; a host-side cap does not
+   exist.
+5. **Nothing drives `hibernate_idle` or `evict_idle` on a timer.** Both are
+   implemented and tested; `elpiand` does not yet run a sweep.
 6. **ed25519**, gated on whether third-party publishing is in scope.
 
 ## Verification as of the last commit
 
 | | |
 |---|---|
-| `cargo test --workspace` | 595 passed, 0 failed |
+| `cargo test --workspace` | 602 passed, 0 failed |
 | `flutter test` | 317 passed |
 | `flutter analyze lib/` | clean |
 | `scripts/e2e-fullstack.sh` | all checks pass |

@@ -100,7 +100,7 @@ pub struct AppRuntime {
     secrets: SecretStore,
     /// Where each app's private directory lives, if apps get one.
     data_root: Option<PathBuf>,
-    limits: InvokeLimits,
+    limits: RwLock<InvokeLimits>,
     cache: RenderCache,
     pool: Arc<InstancePool>,
     quotas: QuotaEnforcer,
@@ -113,7 +113,7 @@ impl AppRuntime {
             state: StateStore::default(),
             secrets: SecretStore::new(),
             data_root: None,
-            limits: InvokeLimits::default(),
+            limits: RwLock::new(InvokeLimits::default()),
             cache: RenderCache::new(DEFAULT_RENDER_CACHE_ENTRIES),
             pool: InstancePool::new(PoolConfig::default()),
             quotas: QuotaEnforcer::new(),
@@ -127,11 +127,27 @@ impl AppRuntime {
             state: StateStore::default(),
             secrets: SecretStore::new(),
             data_root: Some(root),
-            limits: InvokeLimits::default(),
+            limits: RwLock::new(InvokeLimits::default()),
             cache: RenderCache::new(DEFAULT_RENDER_CACHE_ENTRIES),
             pool: InstancePool::new(PoolConfig::default()),
             quotas: QuotaEnforcer::new(),
         })
+    }
+
+    /// Replace the per-invocation bounds.
+    ///
+    /// Not on the constructor because the host may want to change them without
+    /// rebuilding the runtime — and because a test needs a short deadline
+    /// without waiting for the default one.
+    pub fn set_invoke_limits(&self, limits: InvokeLimits) {
+        *self.limits.write().unwrap_or_else(|p| p.into_inner()) = limits;
+    }
+
+    fn invoke_limits(&self) -> InvokeLimits {
+        self.limits
+            .read()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone()
     }
 
     pub fn quotas(&self) -> &QuotaEnforcer {
@@ -353,7 +369,7 @@ impl AppRuntime {
                 function,
                 args,
                 &mut services,
-                &self.limits,
+                &self.invoke_limits(),
                 cold,
             );
             Invocation {
@@ -389,7 +405,9 @@ impl AppRuntime {
                     function: function.to_string(),
                 })
             }
-            Outcome::TooManyHostCalls => Err(CallError::CallDepthExceeded),
+            Outcome::TooManyHostCalls | Outcome::DeadlineExceeded => {
+                Err(CallError::CallDepthExceeded)
+            }
         }
     }
 
@@ -514,7 +532,7 @@ impl AppRuntime {
                 function,
                 args,
                 &mut services,
-                &self.limits,
+                &self.invoke_limits(),
                 cold,
             );
             Invocation {

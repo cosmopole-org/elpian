@@ -188,6 +188,12 @@ fn invoke_route(
                 eprintln!("[elpian] {app}/{function} exceeded its host-call budget");
                 Response::error(500, "the function failed")
             }
+            // 504, not 500: the function did not fail, it ran out of time — and
+            // a caller may usefully retry, or ask for less.
+            Outcome::DeadlineExceeded => {
+                eprintln!("[elpian] {app}/{function} exceeded its deadline");
+                Response::error(504, "the function took too long")
+            }
         },
         Err(error @ CallError::UnknownApp(_)) | Err(error @ CallError::UnknownFunction { .. }) => {
             Response::error(404, &error.client_message())

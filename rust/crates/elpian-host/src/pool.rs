@@ -43,11 +43,38 @@ use elpian_vm::api;
 use crate::app::{AppDefinition, FunctionDef};
 use crate::posture::server_capabilities;
 
+/// The machine id of an app's supervisor node.
+///
+/// Every instance of an app is adopted under this node, which makes the VM
+/// tree's existing machinery apply to a *whole app* rather than to one
+/// instance: `subtree_usage` gives the app's real total across every function,
+/// `enforce_tree_budgets` can take down a runaway app as a unit, permission
+/// intersection means a function can never hold more than its app holds, and
+/// `destroy_vm_tree` unloads the app in one call.
+///
+/// None of that is new code. It is the client's governance machinery, pointed
+/// at a server — which is the whole reason the tree was worth having.
+fn supervisor_id(app: &str) -> String {
+    format!("app::{app}")
+}
+
 /// How the pool is bounded.
 #[derive(Debug, Clone)]
 pub struct PoolConfig {
     /// How long an instance may sit idle before it is unloaded.
     pub idle_ttl: Duration,
+    /// How long an instance may sit idle before it is *hibernated*.
+    ///
+    /// Shorter than [`PoolConfig::idle_ttl`], so an instance parks first and is
+    /// unloaded later if it stays quiet. `None` disables hibernation and every
+    /// idle instance simply waits to be evicted.
+    ///
+    /// Hibernating is `pause_vm`: the executor's whole continuation is
+    /// preserved and it consumes no CPU. Waking it costs nothing but clearing
+    /// the flag, so the next call skips module initialisation exactly as a warm
+    /// instance does — which is the point. An app that goes quiet between
+    /// bursts otherwise pays a cold start on every burst.
+    pub hibernate_after: Option<Duration>,
     /// The most instances the whole host will hold warm.
     pub max_instances: usize,
     /// The most warm instances any one function may hold, so a single hot
@@ -59,6 +86,7 @@ impl Default for PoolConfig {
     fn default() -> Self {
         PoolConfig {
             idle_ttl: Duration::from_secs(300),
+            hibernate_after: Some(Duration::from_secs(30)),
             max_instances: 256,
             max_per_function: 8,
         }
@@ -121,6 +149,9 @@ struct Instance {
     /// `None` while the instance is out on a call — which is how the sweep
     /// tells busy from idle without consulting the VM.
     idle_since: Option<Instant>,
+    /// Whether the instance is parked. A hibernated instance is still loaded
+    /// and still warm; it just holds no CPU.
+    hibernated: bool,
 }
 
 /// A leased instance. Returning it to the pool is [`Lease::release`]; dropping
@@ -197,6 +228,39 @@ impl InstancePool {
     /// again on reuse — an app's grant can change between calls, and a warm
     /// instance carrying the old one would be a way to keep a capability after
     /// it was revoked.
+    /// Ensure an app has a supervisor node, and return its id.
+    ///
+    /// The node runs no guest code — it is an empty program whose only purpose
+    /// is to be a parent. Its limits are the app's, so the aggregate budget the
+    /// tree enforces is the app's budget rather than a per-instance one.
+    fn ensure_supervisor(&self, app: &AppDefinition) -> String {
+        let id = supervisor_id(&app.id);
+        if !api::vm_exists(id.clone()) {
+            // An empty program: valid bytecode that does nothing.
+            let empty = elpian_vm::sdk::compiler::compile_ast(
+                serde_json::json!({ "type": "program", "body": [] }),
+                0,
+            );
+            api::create_vm_from_bytecode(id.clone(), empty);
+        }
+        // Applied every time, not only on creation: an app's grant and limits
+        // can change between calls, and a stale supervisor would enforce the
+        // old budget on the whole app.
+        api::set_capabilities(&id, server_capabilities(&app.effective_capabilities()));
+        api::set_limits(&id, app.limits);
+        id
+    }
+
+    /// Unload an app's supervisor node and, with it, every instance beneath.
+    fn destroy_supervisor(app: &str) -> Vec<String> {
+        api::destroy_vm_tree(&supervisor_id(app))
+    }
+
+    /// An app's usage across every instance it has, from the VM tree.
+    pub fn app_usage(&self, app: &str) -> Option<elpian_vm::api::ResourceUsage> {
+        api::subtree_usage(&supervisor_id(app))
+    }
+
     pub fn acquire(self: &Arc<Self>, app: &AppDefinition, def: &FunctionDef) -> Lease {
         let key = Self::key(&app.id, &def.name);
 
@@ -204,18 +268,33 @@ impl InstancePool {
             let warm = {
                 let mut instances = self.lock();
                 instances.get_mut(&key).and_then(|list| {
-                    list.iter_mut().find(|i| i.idle_since.is_some()).map(|i| {
-                        i.idle_since = None;
-                        i.machine_id.clone()
-                    })
+                    // Prefer an awake instance over a hibernated one: waking is
+                    // cheap but not free, and there is no reason to disturb a
+                    // parked instance while an awake one is available.
+                    let index = list
+                        .iter()
+                        .position(|i| i.idle_since.is_some() && !i.hibernated)
+                        .or_else(|| list.iter().position(|i| i.idle_since.is_some()))?;
+                    let instance = &mut list[index];
+                    instance.idle_since = None;
+                    let was_hibernated = instance.hibernated;
+                    instance.hibernated = false;
+                    Some((instance.machine_id.clone(), was_hibernated))
                 })
             };
-            if let Some(machine_id) = warm {
+            if let Some((machine_id, was_hibernated)) = warm {
                 // Still registered? A supervisor budget sweep can have taken it
                 // down between calls, and handing back an id the registry no
                 // longer knows would fail the call for no reason the caller
                 // could act on.
                 if api::vm_exists(machine_id.clone()) {
+                    if was_hibernated {
+                        // Waking is just clearing the pause flag. The
+                        // continuation was preserved, so the module does not
+                        // re-initialise — which is the whole reason to park an
+                        // instance rather than unload it.
+                        api::clear_pause(&machine_id);
+                    }
                     self.apply_governance(&machine_id, app);
                     return Lease {
                         machine_id,
@@ -238,12 +317,20 @@ impl InstancePool {
         api::create_vm_from_bytecode(machine_id.clone(), def.bytecode.clone());
         self.apply_governance(&machine_id, app);
 
+        // Adopt it under the app's supervisor. Adoption also recomputes the
+        // instance's *effective* capabilities as local ∧ ancestors, so a
+        // function can never hold more than its app does however its own grant
+        // was set.
+        let supervisor = self.ensure_supervisor(app);
+        api::adopt_vm(&supervisor, &machine_id);
+
         if !def.stateless {
             let mut instances = self.lock();
             let list = instances.entry(key.clone()).or_default();
             list.push(Instance {
                 machine_id: machine_id.clone(),
                 idle_since: None,
+                hibernated: false,
             });
         }
 
@@ -304,6 +391,46 @@ impl InstancePool {
             .flat_map(|l| l.iter())
             .filter(|i| i.idle_since.is_some())
             .count()
+    }
+
+    /// How many idle instances are parked.
+    pub fn hibernated(&self) -> usize {
+        self.lock()
+            .values()
+            .flat_map(|l| l.iter())
+            .filter(|i| i.hibernated)
+            .count()
+    }
+
+    /// Park instances that have been idle past `hibernate_after`.
+    ///
+    /// Returns the ids parked. A hibernated instance is still loaded and still
+    /// counts against the pool's caps — it has simply stopped costing CPU.
+    /// Eviction still applies to it, later, on the longer `idle_ttl`.
+    pub fn hibernate_idle(&self, config: &PoolConfig) -> Vec<String> {
+        let Some(after) = config.hibernate_after else {
+            return Vec::new();
+        };
+        let now = Instant::now();
+        let mut parked = Vec::new();
+        {
+            let mut instances = self.lock();
+            for list in instances.values_mut() {
+                for instance in list.iter_mut() {
+                    let Some(since) = instance.idle_since else {
+                        continue; // busy: not idle however long ago it last ran
+                    };
+                    if !instance.hibernated && now.duration_since(since) >= after {
+                        instance.hibernated = true;
+                        parked.push(instance.machine_id.clone());
+                    }
+                }
+            }
+        }
+        for machine_id in &parked {
+            api::pause_vm(machine_id);
+        }
+        parked
     }
 
     /// Unload what nothing needs: instances idle past the TTL, then the least
@@ -392,6 +519,11 @@ impl InstancePool {
                 }
             }
         }
+        // One call takes down the supervisor and everything under it, including
+        // any instance the pool has lost track of. Then the pool's own view is
+        // reconciled — belt and braces, because an instance the tree knows about
+        // and the pool does not is exactly the kind that leaks.
+        Self::destroy_supervisor(app_id);
         for machine_id in &unloaded {
             api::destroy_vm(machine_id.clone());
         }

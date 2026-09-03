@@ -339,7 +339,10 @@ fn an_invocation_that_will_not_stop_calling_the_host_is_cut_off() {
         "spin",
         &json!(null),
         &mut services,
-        &InvokeLimits { max_host_calls: 50 },
+        &InvokeLimits {
+            max_host_calls: 50,
+            ..InvokeLimits::default()
+        },
         true,
     );
 
