@@ -18,7 +18,7 @@
 //!    return value.
 
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use once_cell::sync::Lazy;
 use serde_json::{json, Value};
@@ -29,8 +29,145 @@ use crate::sdk::vm::VM;
 pub mod catalog;
 pub mod govern;
 
+/// A registered instance. The registry hands out clones of this handle, so a
+/// turn can run against one VM while every other VM stays reachable.
+type VmHandle = Arc<Mutex<VM>>;
+
+/// What the registry stores per instance.
+///
+/// The control flag is kept *beside* the VM rather than only inside it, because
+/// the calls that need it most — pause, terminate, read the run state — are the
+/// ones a host makes while a turn is running and the VM's own lock is therefore
+/// held. Reaching those through the lock would mean a runaway guest could not be
+/// stopped until it stopped by itself.
+#[derive(Clone)]
+struct Entry {
+    vm: VmHandle,
+    control: crate::sdk::lifecycle::ExecControl,
+}
+
+/// Number of independent registry shards. Sixteen is enough that the map lock
+/// is uncontended in practice while keeping the fixed cost of a full sweep
+/// (`enforce_tree_budgets`, `all_ids`) trivial.
+const SHARD_COUNT: usize = 16;
+
 /// Thread-safe registry of live VMs keyed by `machineId`.
-static VMS: Lazy<Mutex<HashMap<String, VM>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+///
+/// # Why this is not one map behind one lock
+///
+/// It used to be, and the lock was held for the *entire duration of a guest
+/// turn* — `execute_vm` took it, ran the program, and only released it when the
+/// guest hit a host call or finished. That made every guest turn in the process
+/// mutually exclusive: a server could accept connections on many threads and
+/// still execute exactly one instruction stream at a time, and one guest stuck
+/// in a loop blocked every unrelated instance, including the calls a host would
+/// use to terminate it.
+///
+/// # Lock discipline
+///
+/// Two locks are in play — a shard's map lock and an individual VM's lock — and
+/// the rules that keep them deadlock-free are:
+///
+/// 1. **Never acquire a VM lock while holding a shard lock.** Every accessor
+///    clones the `Arc` out of the shard and drops the shard guard *before*
+///    touching the VM. [`Registry::get`] is the only way to obtain a handle and
+///    it enforces this by construction.
+/// 2. **Never hold two VM locks at once.** The tree operations below all work
+///    from a list of ids collected up front, then lock one instance at a time.
+/// 3. **Never hold a VM lock while taking the hierarchy lock** (and the
+///    pre-existing converse: never hold the hierarchy lock across a registry
+///    call). Ids are always collected first, then applied.
+///
+/// With those, no thread ever holds two locks in conflicting order, and a long
+/// guest turn holds only its own instance's lock.
+struct Registry {
+    shards: Vec<Mutex<HashMap<String, Entry>>>,
+}
+
+impl Registry {
+    fn new() -> Self {
+        Registry {
+            shards: (0..SHARD_COUNT).map(|_| Mutex::new(HashMap::new())).collect(),
+        }
+    }
+
+    fn shard_of(&self, machine_id: &str) -> &Mutex<HashMap<String, Entry>> {
+        // FNV-1a: stable across runs and platforms, and cheap on the short ids
+        // machine names actually are. The registry only needs even spread, not
+        // hash quality, so this does not want a `DefaultHasher` (whose output is
+        // randomised per process and would scatter a debug session's ids
+        // differently on every run).
+        let mut hash: u64 = 0xcbf29ce484222325;
+        for byte in machine_id.as_bytes() {
+            hash ^= *byte as u64;
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+        &self.shards[(hash as usize) % SHARD_COUNT]
+    }
+
+    /// Clone out the handle for `machine_id`, releasing the shard lock before
+    /// returning. Rule 1 above holds by construction: the caller cannot be
+    /// holding a shard guard by the time it locks the VM.
+    fn get(&self, machine_id: &str) -> Option<VmHandle> {
+        self.entry(machine_id).map(|e| e.vm)
+    }
+
+    fn entry(&self, machine_id: &str) -> Option<Entry> {
+        lock_tolerant(self.shard_of(machine_id)).get(machine_id).cloned()
+    }
+
+    /// The instance's control flag, reachable with only the (briefly held)
+    /// shard lock — never the VM lock. This is what makes host control work on
+    /// an instance that is mid-turn.
+    fn control(&self, machine_id: &str) -> Option<crate::sdk::lifecycle::ExecControl> {
+        self.entry(machine_id).map(|e| e.control)
+    }
+
+    fn insert(&self, machine_id: String, vm: VM) {
+        let entry = Entry {
+            control: vm.control_handle(),
+            vm: Arc::new(Mutex::new(vm)),
+        };
+        lock_tolerant(self.shard_of(&machine_id)).insert(machine_id, entry);
+    }
+
+    /// Unregister an instance. A turn already running against it holds its own
+    /// `Arc` and finishes undisturbed; the VM is dropped when that last handle
+    /// goes away. This is why destroying a busy instance no longer has to wait
+    /// for it — and why it is safe not to.
+    fn remove(&self, machine_id: &str) -> Option<Entry> {
+        lock_tolerant(self.shard_of(machine_id)).remove(machine_id)
+    }
+
+    fn contains(&self, machine_id: &str) -> bool {
+        lock_tolerant(self.shard_of(machine_id)).contains_key(machine_id)
+    }
+}
+
+static VMS: Lazy<Registry> = Lazy::new(Registry::new);
+
+/// Run `body` against a registered instance, or return `None` if it is unknown.
+///
+/// This is the single chokepoint for "lock one VM and do something with it", so
+/// the discipline documented on [`Registry`] lives in one place instead of being
+/// restated at fifty call sites.
+fn with_vm<R>(machine_id: &str, body: impl FnOnce(&mut VM) -> R) -> Option<R> {
+    let handle = VMS.get(machine_id)?;
+    let mut vm = lock_tolerant(&handle);
+    Some(body(&mut vm))
+}
+
+/// Steer an instance through its control flag, taking **no** VM lock.
+///
+/// Every host control that must work on a running instance goes through here.
+/// Using [`with_vm`] for these would reintroduce exactly the bug this design
+/// exists to fix: the call would queue behind the turn it is trying to stop.
+fn with_control<R>(
+    machine_id: &str,
+    body: impl FnOnce(&crate::sdk::lifecycle::ExecControl) -> R,
+) -> Option<R> {
+    VMS.control(machine_id).map(|c| body(&c))
+}
 
 /// Take a lock, recovering the guard if a previous holder panicked.
 ///
@@ -322,7 +459,7 @@ fn check_host_call(vm: &mut VM, fallback_result: &str) -> VmExecResult {
 
 /// Initialize the VM subsystem. Call once at startup.
 pub fn init_vm_system() {
-    drop(lock_tolerant(&VMS));
+    Lazy::force(&VMS);
 }
 
 /// Create a VM from an Elpian AST JSON string. Returns `false` on parse error.
@@ -332,7 +469,7 @@ pub fn create_vm_from_ast(machine_id: String, ast_json: String) -> bool {
         Err(_) => return false,
     };
     let vm = VM::compile_and_create_of_ast(machine_id.clone(), ast_obj, 1);
-    lock_tolerant(&VMS).insert(machine_id, vm);
+    VMS.insert(machine_id, vm);
     true
 }
 
@@ -345,14 +482,14 @@ pub fn create_vm_from_ast(machine_id: String, ast_json: String) -> bool {
 /// build-time compile.
 pub fn create_vm_from_bytecode(machine_id: String, bytecode: Vec<u8>) -> bool {
     let vm = VM::compile_and_create_of_bytecode(machine_id.clone(), bytecode);
-    lock_tolerant(&VMS).insert(machine_id, vm);
+    VMS.insert(machine_id, vm);
     true
 }
 
 /// Create a VM directly from Elpian source code (uses the in-VM parser).
 pub fn create_vm_from_code(machine_id: String, code: String) -> bool {
     let vm = VM::compile_and_create_of_code(machine_id.clone(), code, 1);
-    lock_tolerant(&VMS).insert(machine_id, vm);
+    VMS.insert(machine_id, vm);
     true
 }
 
@@ -402,28 +539,30 @@ fn drive_turn(vm: &mut VM, turn: impl FnOnce(&mut VM) -> VmExecResult) -> VmExec
 
 /// Execute a VM's top-level program.
 pub fn execute_vm(machine_id: String) -> VmExecResult {
-    let mut vms = lock_tolerant(&VMS);
-    match vms.get_mut(&machine_id) {
-        Some(vm) if vm.is_exec_processing() => VmExecResult::done("\"vm_busy\""),
-        Some(vm) => drive_turn(vm, |vm| {
+    with_vm(&machine_id, |vm| {
+        if vm.is_exec_processing() {
+            return VmExecResult::done("\"vm_busy\"");
+        }
+        drive_turn(vm, |vm| {
             vm.run();
             check_host_call(vm, "\"done\"")
-        }),
-        None => VmExecResult::done("\"vm_not_found\""),
-    }
+        })
+    })
+    .unwrap_or_else(|| VmExecResult::done("\"vm_not_found\""))
 }
 
 /// Execute a named function (no input). `cb_id` correlates async continuations.
 pub fn execute_vm_func(machine_id: String, func_name: String, cb_id: i64) -> VmExecResult {
-    let mut vms = lock_tolerant(&VMS);
-    match vms.get_mut(&machine_id) {
-        Some(vm) if vm.is_exec_processing() => VmExecResult::done("\"vm_busy\""),
-        Some(vm) => drive_turn(vm, |vm| {
+    with_vm(&machine_id, |vm| {
+        if vm.is_exec_processing() {
+            return VmExecResult::done("\"vm_busy\"");
+        }
+        drive_turn(vm, |vm| {
             let res = vm.run_func_with_input(&func_name, None, cb_id);
             check_host_call(vm, &res.stringify())
-        }),
-        None => VmExecResult::done("\"vm_not_found\""),
-    }
+        })
+    })
+    .unwrap_or_else(|| VmExecResult::done("\"vm_not_found\""))
 }
 
 /// Execute a named function with a JSON input payload (e.g. an event object).
@@ -433,15 +572,16 @@ pub fn execute_vm_func_with_input(
     input_json: String,
     cb_id: i64,
 ) -> VmExecResult {
-    let mut vms = lock_tolerant(&VMS);
-    match vms.get_mut(&machine_id) {
-        Some(vm) if vm.is_exec_processing() => VmExecResult::done("\"vm_busy\""),
-        Some(vm) => drive_turn(vm, |vm| {
+    with_vm(&machine_id, |vm| {
+        if vm.is_exec_processing() {
+            return VmExecResult::done("\"vm_busy\"");
+        }
+        drive_turn(vm, |vm| {
             let res = vm.run_func_with_input(&func_name, Some(&input_json), cb_id);
             check_host_call(vm, &res.stringify())
-        }),
-        None => VmExecResult::done("\"vm_not_found\""),
-    }
+        })
+    })
+    .unwrap_or_else(|| VmExecResult::done("\"vm_not_found\""))
 }
 
 /// Name of the guest function the host invokes to deliver an inbound custom
@@ -474,24 +614,23 @@ pub fn deliver_host_message(machine_id: String, message_json: String, cb_id: i64
 /// Resume a VM after a host call, injecting the call's return value.
 /// `input_json` is a typed value like `{"type":"string","data":{"value":"ok"}}`.
 pub fn continue_execution(machine_id: String, input_json: String) -> VmExecResult {
-    let mut vms = lock_tolerant(&VMS);
-    match vms.get_mut(&machine_id) {
-        Some(vm) => drive_turn(vm, |vm| {
+    with_vm(&machine_id, |vm| {
+        drive_turn(vm, |vm| {
             vm.continue_run(input_json);
             check_host_call(vm, "\"done\"")
-        }),
-        None => VmExecResult::done("\"vm_not_found\""),
-    }
+        })
+    })
+    .unwrap_or_else(|| VmExecResult::done("\"vm_not_found\""))
 }
 
 /// Destroy a VM and free its resources.
 pub fn destroy_vm(machine_id: String) -> bool {
-    lock_tolerant(&VMS).remove(&machine_id).is_some()
+    VMS.remove(&machine_id).is_some()
 }
 
 /// Whether a VM with this id is registered.
 pub fn vm_exists(machine_id: String) -> bool {
-    lock_tolerant(&VMS).contains_key(&machine_id)
+    VMS.contains(&machine_id)
 }
 
 /// Whether the VM is currently mid-turn (its executor is on the call stack
@@ -501,10 +640,7 @@ pub fn vm_exists(machine_id: String) -> bool {
 /// a host call (e.g. a Godot notification fired synchronously by an engine op)
 /// checks this to defer its drain to the next regular pump instead.
 pub fn vm_is_processing(machine_id: &str) -> bool {
-    lock_tolerant(&VMS)
-        .get(machine_id)
-        .map(|vm| vm.is_exec_processing())
-        .unwrap_or(false)
+    with_vm(machine_id, |vm| vm.is_exec_processing()).unwrap_or(false)
 }
 
 /// Compile source to bytecode and report its length (debug aid).
@@ -528,19 +664,12 @@ pub use crate::sdk::limits::{ResourceLimits, ResourceUsage};
 
 /// Apply a resource-limit policy to a registered VM. Returns `false` if unknown.
 pub fn set_limits(machine_id: &str, limits: ResourceLimits) -> bool {
-    let vms = lock_tolerant(&VMS);
-    match vms.get(machine_id) {
-        Some(vm) => {
-            vm.set_limits(limits);
-            true
-        }
-        None => false,
-    }
+    with_vm(machine_id, |vm| vm.set_limits(limits)).is_some()
 }
 
 /// Read a VM's live resource usage, if it exists.
 pub fn usage(machine_id: &str) -> Option<ResourceUsage> {
-    lock_tolerant(&VMS).get(machine_id).map(|vm| vm.usage())
+    with_vm(machine_id, |vm| vm.usage())
 }
 
 /// Push an already-resolved *effective* capability set straight into a VM's
@@ -553,14 +682,7 @@ pub fn usage(machine_id: &str) -> Option<ResourceUsage> {
 /// affected VM may actually do; a caller reaching past them could hand a child
 /// a capability its parent does not hold.
 fn push_effective_caps(machine_id: &str, caps: CapabilitySet) -> bool {
-    let vms = lock_tolerant(&VMS);
-    match vms.get(machine_id) {
-        Some(vm) => {
-            vm.set_capabilities(caps);
-            true
-        }
-        None => false,
-    }
+    with_vm(machine_id, |vm| vm.set_capabilities(caps)).is_some()
 }
 
 /// Recompute the effective capability set for `machine_id` and every VM below
@@ -612,23 +734,13 @@ pub fn set_capabilities(machine_id: &str, caps: CapabilitySet) -> bool {
 
 /// Whether a VM currently permits the given host API.
 pub fn capability_allows(machine_id: &str, api_name: &str) -> bool {
-    lock_tolerant(&VMS)
-        .get(machine_id)
-        .map(|vm| vm.capabilities().allows_api(api_name))
-        .unwrap_or(false)
+    with_vm(machine_id, |vm| vm.capabilities().allows_api(api_name)).unwrap_or(false)
 }
 
 /// Request a pause: the VM suspends at its next interpreter step boundary, with
 /// its full continuation preserved for [`resume_execution`].
 pub fn pause_vm(machine_id: &str) -> bool {
-    let vms = lock_tolerant(&VMS);
-    match vms.get(machine_id) {
-        Some(vm) => {
-            vm.request_pause();
-            true
-        }
-        None => false,
-    }
+    with_control(machine_id, |c| c.request_pause()).is_some()
 }
 
 /// Clear a VM's pause flag (requested or confirmed) without driving it —
@@ -636,67 +748,47 @@ pub fn pause_vm(machine_id: &str) -> bool {
 /// parked mid-turn (state `Paused`) should instead be driven forward with
 /// [`resume_execution`].
 pub fn clear_pause(machine_id: &str) -> bool {
-    let vms = lock_tolerant(&VMS);
-    match vms.get(machine_id) {
-        Some(vm) => {
-            vm.clear_pause();
-            true
-        }
-        None => false,
-    }
+    with_control(machine_id, |c| c.resume()).is_some()
 }
 
 /// Resume a paused VM, continuing exactly where it suspended.
 pub fn resume_execution(machine_id: String) -> VmExecResult {
-    let mut vms = lock_tolerant(&VMS);
-    match vms.get_mut(&machine_id) {
-        Some(vm) => {
+    with_vm(&machine_id, |vm| {
+        drive_turn(vm, |vm| {
             let res = vm.resume();
             check_host_call(vm, &res.stringify())
-        }
-        None => VmExecResult::done("\"vm_not_found\""),
-    }
+        })
+    })
+    .unwrap_or_else(|| VmExecResult::done("\"vm_not_found\""))
 }
 
 /// Request termination: the VM unwinds at its next step boundary and becomes
 /// inert. Further drive calls are no-ops.
 pub fn terminate_vm(machine_id: &str) -> bool {
-    let vms = lock_tolerant(&VMS);
-    match vms.get(machine_id) {
-        Some(vm) => {
-            vm.request_terminate();
-            true
-        }
-        None => false,
-    }
+    with_control(machine_id, |c| c.request_terminate()).is_some()
 }
 
 /// Current run state of a VM (running / paused / terminated / …).
 pub fn run_state(machine_id: &str) -> Option<RunState> {
-    lock_tolerant(&VMS).get(machine_id).map(|vm| vm.run_state())
+    with_control(machine_id, |c| c.state())
 }
 
 /// The fatal trap reason if a VM was stopped by a limit overrun or runtime
 /// error, else `None`.
 pub fn trap_reason(machine_id: &str) -> Option<String> {
-    lock_tolerant(&VMS)
-        .get(machine_id)
-        .and_then(|vm| vm.trap_reason())
+    with_vm(machine_id, |vm| vm.trap_reason()).flatten()
 }
 
 /// Charge the storage governor on behalf of the host's fabricated filesystem.
 /// Returns the limit-error message if the storage cap would be exceeded.
 pub fn charge_storage(machine_id: &str, delta: i64) -> Result<(), String> {
-    let vms = lock_tolerant(&VMS);
-    match vms.get(machine_id) {
-        Some(vm) => vm.charge_storage(delta),
-        None => Err("vm_not_found".to_string()),
-    }
+    with_vm(machine_id, |vm| vm.charge_storage(delta))
+        .unwrap_or_else(|| Err("vm_not_found".to_string()))
 }
 
 /// Read a VM's current resource-limit policy, if it exists.
 pub fn limits(machine_id: &str) -> Option<ResourceLimits> {
-    lock_tolerant(&VMS).get(machine_id).map(|vm| vm.limits())
+    with_vm(machine_id, |vm| vm.limits())
 }
 
 // ----------------------------------------------------------------------------
@@ -784,13 +876,16 @@ pub fn effective_capabilities(machine_id: &str) -> CapabilitySet {
 /// the figure a parent is accountable for. Additive budgets add; depth-like
 /// gauges take the subtree max. `None` if the VM is unknown.
 pub fn subtree_usage(machine_id: &str) -> Option<ResourceUsage> {
-    let ids = vm_subtree(machine_id);
-    let vms = lock_tolerant(&VMS);
+    // Rule 2: one instance locked at a time. The figure is therefore a
+    // *sample* across the subtree rather than an instant of it — a sibling can
+    // advance while a later one is being read. That is the right trade here:
+    // the alternative is freezing every instance in the branch to read a
+    // counter, and the budget check this feeds tolerates being a hair stale.
     let mut total = ResourceUsage::default();
     let mut found = false;
-    for id in ids {
-        if let Some(vm) = vms.get(&id) {
-            accumulate_usage(&mut total, &vm.usage());
+    for id in vm_subtree(machine_id) {
+        if let Some(usage) = with_vm(&id, |vm| vm.usage()) {
+            accumulate_usage(&mut total, &usage);
             found = true;
         }
     }
@@ -804,11 +899,8 @@ pub fn subtree_usage(machine_id: &str) -> Option<ResourceUsage> {
 /// [`destroy_vm_tree`] so the embedder can still inspect the branch.
 pub fn terminate_vm_tree(machine_id: &str) -> Vec<String> {
     let ids = vm_subtree(machine_id);
-    let vms = lock_tolerant(&VMS);
     for id in &ids {
-        if let Some(vm) = vms.get(id) {
-            vm.request_terminate();
-        }
+        with_vm(id, |vm| vm.request_terminate());
     }
     ids
 }
@@ -817,11 +909,8 @@ pub fn terminate_vm_tree(machine_id: &str) -> Vec<String> {
 /// step boundary, continuation preserved). Returns the affected ids.
 pub fn pause_vm_tree(machine_id: &str) -> Vec<String> {
     let ids = vm_subtree(machine_id);
-    let vms = lock_tolerant(&VMS);
     for id in &ids {
-        if let Some(vm) = vms.get(id) {
-            vm.request_pause();
-        }
+        with_vm(id, |vm| vm.request_pause());
     }
     ids
 }
@@ -833,12 +922,15 @@ pub fn destroy_vm_tree(machine_id: &str) -> Vec<String> {
         let mut h = lock_tolerant(&HIERARCHY);
         h.remove_subtree(machine_id)
     };
-    let mut vms = lock_tolerant(&VMS);
     for id in &ids {
-        if let Some(vm) = vms.get(id) {
-            vm.request_terminate();
+        // Unregister first, so nothing new can start a turn against the
+        // instance, then flag the termination through the handle we just took
+        // out. An instance already mid-turn observes the flag at its next
+        // interpreter step and unwinds; it holds its own `Arc`, so it is not
+        // freed from under itself and this call does not block on it.
+        if let Some(entry) = VMS.remove(id) {
+            entry.control.request_terminate();
         }
-        vms.remove(id);
     }
     ids
 }

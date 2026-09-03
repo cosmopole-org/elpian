@@ -43,11 +43,28 @@ pub const INSTANCE_TYPE: i64 = -101;
 /// Object `typ` tag for a closure cell produced by `cell`.
 pub const CELL_TYPE: i64 = -102;
 
+/// The default xorshift64* seed, and the value `seedRandom(0)` falls back to.
+pub(crate) const RNG_DEFAULT_SEED: u64 = 0x9E3779B97F4A7C15;
+
 thread_local! {
-    /// State of the deterministic `random` builtin (xorshift64*). Per-thread —
-    /// the VM system is single-threaded per instance — and reseedable via
-    /// `seedRandom`.
-    static RNG_STATE: std::cell::Cell<u64> = const { std::cell::Cell::new(0x9E3779B97F4A7C15) };
+    /// Scratch cell for the deterministic `random` builtin (xorshift64*).
+    ///
+    /// This is *not* where an instance's RNG stream lives. `stdlib::invoke` is
+    /// reached from a dozen call sites that hold no executor, so the cell is a
+    /// per-thread scratch slot that the running executor swaps its own state
+    /// into for the duration of a turn (see `Executor::single_thread_operation`
+    /// and [`swap_rng_state`]). That keeps the stream a property of the
+    /// *instance* rather than of whichever thread happened to run it — which is
+    /// what makes `seedRandom` reproducible once instances are scheduled across
+    /// a pool of threads, and stops two instances sharing a thread from drawing
+    /// from each other's stream.
+    static RNG_STATE: std::cell::Cell<u64> = const { std::cell::Cell::new(RNG_DEFAULT_SEED) };
+}
+
+/// Install `state` as the current thread's RNG state, returning what was there.
+/// Paired calls around a turn move an instance's stream on and off the thread.
+pub(crate) fn swap_rng_state(state: u64) -> u64 {
+    RNG_STATE.with(|s| s.replace(state))
 }
 
 // ----------------------------------------------------------------------------
@@ -677,7 +694,7 @@ pub fn invoke(name: &str, args: &[Val]) -> Result<Val, String> {
         "seedRandom" => {
             arity(name, args, 1)?;
             let seed = as_int(&args[0])? as u64;
-            RNG_STATE.with(|s| s.set(if seed == 0 { 0x9E3779B97F4A7C15 } else { seed }));
+            RNG_STATE.with(|s| s.set(if seed == 0 { RNG_DEFAULT_SEED } else { seed }));
             Ok(vnull())
         }
         "gcd" => {
