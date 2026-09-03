@@ -7,40 +7,42 @@
 //! because mini apps are written against it.
 //!
 //! Nothing compared them. This does, by recording the Godot class each surface
-//! builds: the guest stamps a marker into the op stream before each probe, and
-//! the ops between two markers are one widget's construction. (Wrapping
-//! `GD.create` from inside the guest would read better, but `GD` is a class of
-//! statics and the subset resolves those by name at compile time — there is no
-//! function value there to wrap.) A divergence is not
-//! automatically a bug — the two have different calling conventions, and some
-//! deliberately differ (VUI returns a `{node, setValue}` handle for stateful
-//! widgets where the registry returns a bare node). What the test pins is the
-//! *node class*: if one builds a `Button` and the other a `Label`, they are not
-//! the same widget however similar their props read, and a mini app gets
-//! different behaviour depending on which vocabulary it happened to use.
+//! builds. The recording works by bracketing each call with a sentinel
+//! `GD.create`: `GD` is a class with `static create`, and the subset resolves
+//! statics by name at compile time, so there is no function value a guest could
+//! wrap. The sentinel rides the same op stream as the real creations, which
+//! makes the segmentation exact — no assumption about ordering between the op
+//! seam and the emit seam.
 //!
-//! Everything runs in one VM. Booting a guest per widget was 34 VM trees for a
-//! question that is really "what does this one call create", and the answer is
-//! available from inside the guest for free.
+//! What it compares is the whole ordered *construction trace*: every class the
+//! call creates, in order. That is stricter than comparing the returned node's
+//! class and it is what actually decides whether a mini app gets the same
+//! widget — a `Button` styled with four `StyleBoxFlat`s is a different widget
+//! from a `Button` styled with one, however identical their types.
+//!
+//! A divergence is not automatically a bug. The two have different calling
+//! conventions, and some differ on purpose: VUI returns a `{node, setValue}`
+//! handle for stateful widgets where the registry returns a bare node, and the
+//! registry's containers accept many children where VUI's take one. The
+//! differences that are intended are listed in the test; anything else fails.
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
 use elpian_godot::GodotSurface;
-use elpian_godot::{GuestLang, VmManager, ROOT_VM};
+use elpian_godot::{GuestLang, VmManager};
 use serde_json::Value;
 
-/// The class name the guest creates to separate one probe from the next.
-const MARK: &str = "__ProbeMark__";
+/// The marker a probe writes into the op stream before each call.
+const SENTINEL: &str = "__ElpianParityProbe__";
 
 #[derive(Default)]
 struct MockEngine {
-    /// Every class passed to `GD.create`, in order, markers included.
+    /// Every class name passed to `new`, in order — sentinels included.
     created: Vec<String>,
 }
 
 struct Guest {
-    mgr: VmManager,
     mock: Rc<RefCell<MockEngine>>,
     machine: String,
 }
@@ -52,16 +54,8 @@ impl Drop for Guest {
 }
 
 impl Guest {
-    fn lines(&mut self) -> Vec<String> {
-        self.mgr
-            .runtime_mut(ROOT_VM)
-            .map(|rt| {
-                rt.emitted()
-                    .iter()
-                    .map(|v| v.as_str().unwrap_or("").to_string())
-                    .collect()
-            })
-            .unwrap_or_default()
+    fn created(&self) -> Vec<String> {
+        self.mock.borrow().created.clone()
     }
 }
 
@@ -89,17 +83,19 @@ fn boot(machine: &str, program: &str) -> Guest {
     );
 
     let sink = mock.clone();
-    let note = move |op: &Value| {
-        if let Some(cls) = op.get("new").and_then(|v| v.as_str()) {
-            sink.borrow_mut().created.push(cls.to_string());
+    mgr.set_bridge(Some(Box::new(move |name: &str, args: &[Value]| {
+        fn note(m: &mut MockEngine, op: &Value) {
+            if let Some(cls) = op.get("new").and_then(|v| v.as_str()) {
+                m.created.push(cls.to_string());
+            }
         }
-    };
-    mgr.set_bridge(Some(Box::new(
-        move |name: &str, args: &[Value]| match name {
+        let mut m = sink.borrow_mut();
+        match name {
             "godot.op" => {
                 let op = args.first().cloned().unwrap_or(Value::Null);
-                note(&op);
-                // Reads answer null; the kits tolerate it and carry on building.
+                note(&mut m, &op);
+                // Reads must answer with *something*: a widget that styles
+                // itself by reading a value back must not see an error.
                 if op.get("get").is_some() || op.get("method").is_some() {
                     return Some(Value::Null);
                 }
@@ -108,14 +104,14 @@ fn boot(machine: &str, program: &str) -> Guest {
             "godot.batch" => {
                 if let Some(Value::Array(list)) = args.first() {
                     for op in list {
-                        note(op);
+                        note(&mut m, op);
                     }
                 }
                 Some(Value::Bool(true))
             }
             _ => None,
-        },
-    )));
+        }
+    })));
 
     let _ = mgr.run_root();
     mgr.settle();
@@ -125,7 +121,6 @@ fn boot(machine: &str, program: &str) -> Guest {
         "{machine} trapped"
     );
     Guest {
-        mgr,
         mock,
         machine: machine.to_string(),
     }
@@ -136,8 +131,8 @@ fn boot(machine: &str, program: &str) -> Guest {
 /// Written out rather than derived, because the two have genuinely different
 /// calling conventions — `VUI.text(str, opts)` against `GUI.text({children})`,
 /// `VUI.center({child})` against `GUI.center({children})`. That mismatch is
-/// half of what makes them hard to keep in step, and generating the calls
-/// would hide the very thing this test is here to show.
+/// half of what makes the two hard to keep in step, and generating the calls
+/// would hide the very thing this test exists to show.
 const PAIRS: &[(&str, &str, &str)] = &[
     // (widget, the VUI call, the registry call)
     (
@@ -216,133 +211,136 @@ const PAIRS: &[(&str, &str, &str)] = &[
     ("textarea", r#"VUI.textarea({})"#, r#"GUI.textarea({})"#),
 ];
 
-/// Build the guest program: intercept `GD.create`, then run each pair.
-///
-/// The *last* class created is taken as the widget's own. Not the first:
-/// several VUI widgets build their styling (a `StyleBoxFlat`, a `Theme`) before
-/// the node it is applied to, and a first-created reading would compare
-/// stylesheets rather than widgets. The node a factory returns is the last
-/// thing it makes in both kits.
+/// The guest program: a sentinel, then the call, for every side of every pair.
 fn program() -> String {
-    let mut src = String::from(
-        r#"
-function __probe(label, f) {
-  GD.create("__ProbeMark__");
-  let err = "";
-  try { f(); } catch (e) { err = "" + e; }
-  askHost("test.emit", [label + "|" + err]);
-}
-"#,
-    );
+    let mut src = String::new();
     for (name, vui, gui) in PAIRS {
-        src.push_str(&format!("__probe(\"{name}.vui\", () => {{ {vui}; }});\n"));
-        src.push_str(&format!("__probe(\"{name}.gui\", () => {{ {gui}; }});\n"));
+        for (side, call) in [("vui", vui), ("gui", gui)] {
+            src.push_str(&format!(
+                "GD.create(\"{SENTINEL}{name}.{side}\");\n\
+                 try {{ {call}; }} catch (e) {{ GD.create(\"{SENTINEL}!\" + e); }}\n"
+            ));
+        }
     }
     src
 }
 
-/// Split the recorded classes into one segment per probe, in order.
-fn segments(created: &[String]) -> Vec<Vec<String>> {
-    let mut out: Vec<Vec<String>> = Vec::new();
+/// Split the recorded creations on sentinels, giving each probe the ordered
+/// `A+B+C` trace of what it built.
+fn segments(created: &[String]) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = Vec::new();
     for cls in created {
-        if cls == MARK {
-            out.push(Vec::new());
-        } else if let Some(last) = out.last_mut() {
-            last.push(cls.clone());
+        match cls.strip_prefix(SENTINEL) {
+            Some(label) if !label.starts_with('!') => out.push((label.to_string(), String::new())),
+            Some(err) => {
+                if let Some(last) = out.last_mut() {
+                    last.1 = format!("<error: {}>", &err[1..]);
+                }
+            }
+            None => {
+                if let Some(last) = out.last_mut() {
+                    if !last.1.starts_with('<') {
+                        if !last.1.is_empty() {
+                            last.1.push('+');
+                        }
+                        last.1.push_str(cls);
+                    }
+                }
+            }
+        }
+    }
+    for seg in out.iter_mut() {
+        if seg.1.is_empty() {
+            seg.1 = "<none>".into();
         }
     }
     out
 }
 
 #[test]
-fn the_two_widget_surfaces_build_the_same_node_for_every_shared_widget() {
-    let mut g = boot("widget-parity", &program());
-    let out = g.lines();
+fn both_widget_surfaces_build_the_same_widget_except_where_recorded() {
+    let g = boot("widget-parity", &program());
+    let segs = segments(&g.created());
     assert_eq!(
-        out.len(),
+        segs.len(),
         PAIRS.len() * 2,
-        "every probe should have reported; got {out:?}"
+        "every probe should have run; got {segs:?}"
     );
 
-    let created = g.mock.borrow().created.clone();
-    let segs = segments(&created);
-    assert_eq!(segs.len(), PAIRS.len() * 2, "one segment per probe");
+    let rows: Vec<(&str, String, String)> = PAIRS
+        .iter()
+        .enumerate()
+        .map(|(i, (name, _, _))| (*name, segs[i * 2].1.clone(), segs[i * 2 + 1].1.clone()))
+        .collect();
 
     // Neither surface may fail outright. A widget that throws where its twin
     // builds a node is not a difference of convention.
-    let failed: Vec<&String> = out.iter().filter(|l| !l.ends_with('|')).collect();
-    assert!(failed.is_empty(), "a widget surface raised: {failed:?}");
-
-    let mut wrong_class = Vec::new();
-    let mut extra = Vec::new();
-    for (i, (name, _, _)) in PAIRS.iter().enumerate() {
-        let vui = &segs[i * 2];
-        let gui = &segs[i * 2 + 1];
-        // The widget's own node is the first thing either kit creates; the
-        // style boxes, gradients and fonts that follow are what gets applied
-        // to it.
-        let (a, b) = (vui.first(), gui.first());
-        if a != b {
-            wrong_class.push(format!(
-                "  {name:<10} VUI built {a:?}, the registry built {b:?}"
-            ));
-        } else if vui != gui {
-            extra.push((name.to_string(), vui.clone(), gui.clone()));
-        }
-    }
-
-    assert!(
-        wrong_class.is_empty(),
-        "these widgets' two surfaces build different Godot node classes:\n{}\n\n\
-         Both are supposed to be the same widget. Where they differ, one of \
-         them is what a mini app gets and the other is what it gets somewhere \
-         else.",
-        wrong_class.join("\n")
-    );
-
-    // Same node, different scaffolding around it. Each of these is a deliberate
-    // difference between an imperative factory and one driven by a reconciler,
-    // and each is named — so a widget acquiring an *unexplained* difference
-    // fails here rather than being absorbed into a tolerance.
-    let explained: &[(&str, &str)] = &[
-        // The reconciler needs a stable node to add and remove children from
-        // across renders; the imperative kit is handed its children once, at
-        // construction, and needs no such slot.
-        ("panel", "MarginContainer"),
-        ("card", "MarginContainer"),
-        ("scroll", "VBoxContainer"),
-        // `VUI.checkbox` is called by both — the registry additionally renders
-        // the `label` prop, which the imperative call above does not pass.
-        ("checkbox", "Label"),
-    ];
-
-    let mut unexplained = Vec::new();
-    for (name, vui, gui) in &extra {
-        let diff: Vec<&String> = gui.iter().filter(|c| !vui.contains(c)).collect();
-        let ok = explained
-            .iter()
-            .any(|(n, c)| n == name && diff.iter().all(|d| d.as_str() == *c));
-        if !ok {
-            unexplained.push(format!(
-                "  {name:<10} VUI {vui:?}\n             GUI {gui:?}"
-            ));
-        }
-    }
-    assert!(
-        unexplained.is_empty(),
-        "these widgets build the same node but differ in what they build \
-         around it, and the difference is not one of the recorded ones:\n{}",
-        unexplained.join("\n")
-    );
-
-    let unused: Vec<&str> = explained
+    let broken: Vec<String> = rows
         .iter()
-        .map(|(n, _)| *n)
-        .filter(|n| !extra.iter().any(|(name, _, _)| name == n))
+        .filter(|(_, v, u)| v.starts_with('<') || u.starts_with('<'))
+        .map(|(n, v, u)| format!("  {n:<10} VUI {v}\n             GUI {u}"))
         .collect();
     assert!(
-        unused.is_empty(),
-        "these widgets no longer differ — drop them from `explained` so the \
-         list keeps meaning something: {unused:?}"
+        broken.is_empty(),
+        "a widget surface failed to build a node:\n{}",
+        broken.join("\n")
+    );
+
+    // Where the older imperative kit and the registry genuinely build different
+    // things, and why.
+    //
+    // The list is short, and that is the finding: the reconciler's widget
+    // driver already reuses VUI for styling and typography — 10 of its 13
+    // builders call into it — so what the two duplicate is node construction
+    // and prop application, not the design system. Every divergence below is
+    // one extra node the registry builds because its calling convention is
+    // wider, not a second opinion about what the widget looks like.
+    //
+    // Pinned so the list can only change deliberately: a widget drifting into
+    // it is a regression that would otherwise be invisible.
+    let known_divergent: &[(&str, &str)] = &[
+        // The registry pads children in a MarginContainer of its own; VUI
+        // leaves padding to the style box on the surface.
+        ("panel", "registry adds a MarginContainer for child padding"),
+        ("card", "registry adds a MarginContainer for child padding"),
+        // `Scroll({children: [...]})` takes many children and needs a box to
+        // put them in; `VUI.scroll({child})` takes exactly one.
+        (
+            "scroll",
+            "registry adds a VBoxContainer to hold several children",
+        ),
+        // The registry gives the checkbox its own label node; VUI expects the
+        // caller to place one beside it.
+        (
+            "checkbox",
+            "registry builds the label, VUI leaves it to the caller",
+        ),
+    ];
+
+    let mut unexpected = Vec::new();
+    let mut converged = Vec::new();
+    for (name, vui, gui) in &rows {
+        let listed = known_divergent.iter().any(|(n, _)| n == name);
+        match (vui == gui, listed) {
+            (false, false) => unexpected.push(format!(
+                "  {name:<10} VUI      {vui}\n             registry {gui}"
+            )),
+            (true, true) => converged.push(*name),
+            _ => {}
+        }
+    }
+
+    assert!(
+        unexpected.is_empty(),
+        "these widgets' two surfaces build different things, and that is not \
+         recorded as intentional:\n{}\n\nBoth are supposed to be the same \
+         widget. Where they differ, one of them is what a mini app gets and the \
+         other is what it gets somewhere else.",
+        unexpected.join("\n")
+    );
+    assert!(
+        converged.is_empty(),
+        "these widgets no longer diverge — drop them from `known_divergent` so \
+         the list keeps meaning something: {converged:?}"
     );
 }

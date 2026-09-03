@@ -82,9 +82,15 @@ pub const GODOT_FLUTTER_JS: &str = include_str!("../../../../guest-sdk/js/flutte
 
 /// The unified GUI SDK (`gui.js`) — state, rendering, scoping, widgets,
 /// styling, 3D scenes and 2D canvases in one import. Composed ahead of a JS
-/// guest when its source imports it (`import 'gui.js';`). It carries its own
-/// copy of the engine, reactive and theme layers, so it is composed *instead
-/// of* the base prelude rather than on top of it.
+/// guest when its source imports it (`import 'gui.js';`). It sits on top of the
+/// four layers below rather than replacing them: importing it composes
+/// `godot.js`, `flutter.js`, `ui.js` and `react.js` beneath it, so a mini app
+/// writes one import line while each layer stays one file.
+///
+/// This is the entry point for anything with a user interface. The cheaper
+/// doors (`godot.js`, `net.js`, `caspar.js`, `flutter.js`) exist because a
+/// prelude is compiled and run inside the metered budget the governor holds
+/// the mini app to — see `tests/prelude_cost.rs`.
 pub const GODOT_GUI_JS: &str = include_str!("../../../../guest-sdk/js/gui.js");
 
 /// VReact (`react.js`) — a React-compatible runtime (element factory, the full
@@ -173,13 +179,23 @@ pub fn compose_godot_program(user_source: &str) -> String {
     format!("{}\n\n{}", strip(GODOT_PRELUDE), strip(user_source))
 }
 
-/// Compose the final **JavaScript** guest program: the `godot.js` prelude —
-/// plus the Elpian UI kit (`ui.js`) and the VReact runtime (`react.js`) when
-/// the user source imports them — then the user source, with `import …;`
-/// directives stripped from all parts (the front-end has no module system; the
-/// prelude *is* the import). VReact depends on VUI, so an `import 'react.js';`
-/// pulls in the UI kit as well, in the required order godot.js → ui.js →
-/// react.js → program.
+/// Compose the final **JavaScript** guest program: the `godot.js` prelude, then
+/// whichever layers the user source imports, then the user source — with
+/// `import …;` directives stripped from every part (the front-end has no module
+/// system; the prelude *is* the import).
+///
+/// Imports resolve transitively, so a guest names only what it uses:
+///
+/// ```text
+/// gui.js    → godot.js  flutter.js  ui.js  react.js  gui.js
+/// react.js  → godot.js  ui.js  react.js
+/// ui.js     → godot.js  ui.js
+/// flutter.js/net.js/caspar.js → godot.js  <that one>
+/// ```
+///
+/// Order matters and is fixed here: VReact's host config targets VUI, and the
+/// gui.js registry drives VReact, so each layer must land after the one it
+/// builds on.
 pub fn compose_godot_program_js(user_source: &str) -> String {
     let strip = |src: &str| -> String {
         src.lines()

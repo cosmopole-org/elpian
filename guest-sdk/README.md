@@ -19,11 +19,11 @@ js/     JavaScript preludes, compiled by js2elpian
   gui.js           the GUI SDK — state, rendering, scoping, widgets, styling,
                    Scene3D and Canvas in one import. Start here.
   godot.js         GD / GObj / G3 — the reflective Godot surface, plus VMs
-  ui.js            VUI, the imperative widget toolkit (superseded by gui.js)
-  react.js         the React-compatible runtime (superseded by gui.js)
   flutter.js       FL — drives an embedded Flutter engine over flutter.op
   net.js           HTTP, WebSocket and Socket.IO over Godot primitives
   caspar.js        the Caspar signed binary action protocol
+  ui.js            VUI: theme, typography, metrics, imperative widgets   ─┐ layers
+  react.js         VReact: elements, hooks, scheduler, reconciler        ─┘ under gui.js
 
 dart/   Dart preludes, compiled by dart2elpian
   flutter.dart     a Flutter-shaped widget library in the compiled subset
@@ -32,6 +32,37 @@ dart/   Dart preludes, compiled by dart2elpian
 
 docs/   Design notes for the larger preludes
 ```
+
+## Entry points
+
+An `import` line is a marker the composer resolves; there is no module system.
+Every import, and what it composes ahead of the program:
+
+| import | pulls | composed source |
+| --- | --- | --- |
+| `gui.js` | godot + flutter + ui + react + gui | 330 KB |
+| `react.js` | godot + ui + react | 252 KB |
+| `ui.js` | godot + ui | 169 KB |
+| `flutter.js` | godot + flutter | 81 KB |
+| `caspar.js` | godot + caspar | 69 KB |
+| `net.js` | godot + net | 64 KB |
+| `godot.js` | godot | 47 KB |
+
+**`gui.js` is the door for anything with a user interface.** `ui.js` and
+`react.js` are the layers underneath it, not alternatives to it: everything
+they offer, `gui.js` offers, with the registry and the component model on top.
+They stay importable so a program written before `gui.js` keeps compiling, and
+so each layer can be compiled on its own in the tests — but new code should not
+name them.
+
+The other doors are not redundant, and this is the reason there is more than
+one. A prelude is compiled into bytecode when the VM is created, and its
+top-level statements run before the guest's first line — inside the same
+instruction budget the governor meters the mini app against. `godot.js` alone
+is 69 KB of bytecode; the full `gui.js` stack is 387 KB. A guest that drives
+engine nodes, fetches over HTTP or signs Caspar actions and never draws a
+widget should not spend 5.6× its startup budget on a reconciler it never calls.
+`prelude_cost.rs` measures that and fails if the cheap door stops being cheap.
 
 ## These files are not host code
 
