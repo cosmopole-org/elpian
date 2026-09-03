@@ -22,9 +22,13 @@
 //! * [`app`] — what "one mini app" is: its functions, grants, limits, secrets
 //!   and network mode.
 //! * [`runtime`] — registered apps, and running one of their functions.
+//! * [`httpcore`] — a small blocking HTTP/1.1 server with a bounded pool.
+//! * [`gateway`] — the four routes a device talks to.
 
 pub mod app;
 pub mod appfs;
+pub mod gateway;
+pub mod httpcore;
 pub mod hostcall;
 pub mod invoke;
 pub mod posture;

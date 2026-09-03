@@ -119,6 +119,18 @@ impl AppRuntime {
         self.write_apps().remove(app_id).is_some()
     }
 
+    /// The manifest a device fetches for an app.
+    pub fn manifest(&self, app_id: &str) -> Option<Value> {
+        self.read_apps().get(app_id).map(|a| a.client_manifest())
+    }
+
+    /// An app's client-half bytecode.
+    pub fn client_bytecode(&self, app_id: &str) -> Option<Vec<u8>> {
+        self.read_apps()
+            .get(app_id)
+            .and_then(|a| a.client_bytecode.clone())
+    }
+
     pub fn app_ids(&self) -> Vec<String> {
         let mut ids: Vec<String> = self.read_apps().keys().cloned().collect();
         ids.sort();

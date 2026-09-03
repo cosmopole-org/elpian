@@ -65,17 +65,58 @@ workspace builds and tests. Flutter 3.47.2 / Dart 3.13.2 present — Dart change
   and jumped streams on migration. Moved into the executor, swapped onto the
   thread for the duration of a turn.
 
-## P1 — Server runtime + RPC (S1, S3 posture) — in progress
+## P1 — Server runtime + RPC (S1, S3 posture) — **mostly done**
 
-- [ ] `elpian-host` crate skeleton; dependency decision recorded (tokio/hyper vs `tiny_http`)
-- [ ] Host-call servicing loop (kills the HTTP 501 at `elpian-server.rs:212`)
-- [ ] Server capability posture: deny `network`, `module_import`, `vm_manage`, `dom`, `canvas`, `surface`, `gpu`, `tasks`, `timers`
-- [ ] New capabilities `ServerCall` + `State` — all four sites (enum + `all()` array size, `all_host_apis()`, regenerate catalog, Dart mirror)
-- [ ] `kv.*`, `secret.get`, scoped `fs.*` with `charge_storage`
-- [ ] `server.call` serviced in Dart `HostHandler`
-- [ ] CLI: per-function server modules + function table
-- [ ] `elpian-server` shimmed onto the host so `run dev` keeps working
-- [ ] Tests + parallel-invocation benchmark
+- [x] `elpian-host` crate; **dependency decision: std only, reversed from the plan**
+      (see Decisions below)
+- [x] Host-call servicing loop — the HTTP 501 is gone
+- [x] Server capability posture, written positively from deny-all
+- [x] `ServerCall` + `State` through all four sites; the S0.5 parity test caught
+      the Dart half being missing, which is what it is for
+- [x] `kv.*`, `secret.get`, app-rooted `fs.*` with `charge_storage`
+- [x] `AppDefinition` + `AppRuntime`; `server.call` between functions of one app
+- [x] HTTP gateway: manifest, client bytecode, action and component routes
+- [x] `elpiand` binary loading an on-disk registry
+- [x] Tests: 33 in `elpian-host` + benchmark baseline
+- [ ] `server.call` serviced in Dart `HostHandler` — **not started** (needs the
+      client half; belongs with S2's client work)
+- [ ] CLI: per-function server modules + function table — **not started**
+      (the format is settled and `elpiand` reads it; the CLI does not write it yet)
+- [ ] `elpian-server` shimmed onto the host so `run dev` keeps working —
+      **not started**
+
+### Benchmark baseline (2-core box, debug build, cold instance per call)
+
+| Metric | Value |
+|---|---|
+| Invoke latency | p50 0.64ms, p99 1.02ms |
+| Throughput @ concurrency 1 | 1373 req/s |
+| Throughput @ concurrency 8 | 2861 req/s |
+| Throughput @ concurrency 64 | 2812 req/s |
+
+2.08× from concurrency 1 → 8 on two cores is the parallelism S0 unlocked,
+measured. Re-run after S4 to see what the warm pool adds; cold-start cost is
+currently *every* call.
+
+### Found during P1
+
+* **`continue_execution` discarded the resumed turn's value**, returning a fixed
+  `"done"`. That lost the return value of every guest function that made a host
+  call before returning — including on the *client*, where
+  `ElpianVm.executeFunction` reads `resultValue` after exactly this loop. UI
+  handlers rarely return anything, which is why it went unnoticed.
+* **My own S0 change broke idle terminate.** Routing `VM::request_terminate`
+  past the executor lost the immediate confirm-and-clear for an idle instance.
+  Split into `confirm_terminate_if_idle`, reached through
+  `try_borrow_mut`/`try_lock` — which is the right idleness test anyway, since a
+  turn in flight is what holds them.
+* **The first queue depth (`workers * 4`) shed load under ordinary traffic.** On
+  a two-core box that is eight slots, and a 64-request burst got 503s. A page
+  opening does not arrive one request at a time. Now 64 per worker, configurable.
+* **Shedding was abrupt enough to lose its own response.** Writing 503 and
+  dropping the socket while the client was still sending reset the connection,
+  so the client saw a broken pipe instead of the refusal and could not tell
+  "retry" from "the host is broken". Now: write, half-close, drain.
 
 ## P2 — Server components (S2)
 
@@ -142,7 +183,7 @@ workspace builds and tests. Flutter 3.47.2 / Dart 3.13.2 present — Dart change
 | Decision | Chosen | Why |
 |---|---|---|
 | Server VM ownership | Owned handles + per-instance actors; sharded registry for embeddings | `Rc<RefCell<Executor>>` is not safely shareable; owning it outright makes `Send` true and `Sync` unnecessary |
-| Async runtime | tokio + hyper (pending confirmation) | WS, deadlines, backpressure and graceful shutdown are needed by S2–S5; async front / blocking VM behind keeps guests single-threaded |
+| Async runtime | **std only — reversed from the plan's tokio + hyper** | Built out, the case was weaker than it looked. Every request maps onto a blocking, single-threaded VM turn, so there is nothing for async to interleave; the sharded registry is what gives parallelism, and a bounded worker pool collects it. The repo's whole dependency set is serde/serde_json/once_cell, and tokio+hyper is 24 packages. What async would genuinely have bought is WebSocket streaming for S2 and cheap idle connections — both reachable from here, so this is reversible if S2 proves it wrong. **Flagged for the maintainer.** |
 | Server function granularity | One bytecode module per function | Independent load/unload is the whole serverless requirement |
 | Function declaration | Directory convention (`actions/`, `components/`) | Statically analysable by the CLI; the subset has no decorators |
 | Component rendering | Return a payload; `render`/`patch` only when streaming | Pure, cacheable, testable without a host |

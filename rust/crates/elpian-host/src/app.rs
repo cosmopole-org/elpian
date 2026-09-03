@@ -93,6 +93,12 @@ pub struct AppDefinition {
     /// Secret names a function of this app may read.
     pub declared_secrets: Vec<String>,
     pub network: NetworkMode,
+    /// The client half's bytecode, served to a device that fetches the app.
+    ///
+    /// Held here rather than as a separate registration so an app is one
+    /// object: a version whose client and server halves could be registered
+    /// independently could be served with the two out of step.
+    pub client_bytecode: Option<Vec<u8>>,
 }
 
 impl AppDefinition {
@@ -104,6 +110,7 @@ impl AppDefinition {
             limits: ResourceLimits::unlimited(),
             declared_secrets: Vec::new(),
             network: NetworkMode::Closed,
+            client_bytecode: None,
         }
     }
 
@@ -143,6 +150,32 @@ impl AppDefinition {
     pub fn with_network(mut self, mode: NetworkMode) -> Self {
         self.network = mode;
         self
+    }
+
+    pub fn with_client(mut self, bytecode: Vec<u8>) -> Self {
+        self.client_bytecode = Some(bytecode);
+        self
+    }
+
+    /// What a client is told about this app: where to fetch its bytecode, what
+    /// it may call, and the network posture it must apply locally.
+    ///
+    /// The posture is advertised so a well-behaved client can enforce it too —
+    /// as a courtesy, never as the boundary. The server does not trust a client
+    /// to apply it, which is why the same rule is enforced again on every call
+    /// that arrives.
+    pub fn client_manifest(&self) -> serde_json::Value {
+        let functions: Vec<serde_json::Value> = self
+            .functions
+            .values()
+            .map(|f| serde_json::json!({ "name": f.name, "kind": f.kind.as_str() }))
+            .collect();
+        serde_json::json!({
+            "app": self.id,
+            "client": format!("/apps/{}/client.bc", self.id),
+            "functions": functions,
+            "network": self.network.as_str(),
+        })
     }
 
     /// The capabilities an instance of this app actually receives.

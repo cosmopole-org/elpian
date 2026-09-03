@@ -1,0 +1,276 @@
+//! `elpiand` — the Elpian mini-app host.
+//!
+//! Serves registered mini apps: their client bytecode to devices, and their
+//! server functions to those clients. Apps are loaded from a directory laid out
+//! as
+//!
+//! ```text
+//! <registry>/<app-id>/app.json      the definition (functions, grants, network)
+//! <registry>/<app-id>/client.bc     the client half
+//! <registry>/<app-id>/fn/<name>.bc  one module per server function
+//! ```
+//!
+//! The signed-package path (`elpian install`) writes exactly this layout, so a
+//! hand-assembled directory and an installed package are the same thing to the
+//! server.
+
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use elpian_host::app::{AppDefinition, FunctionKind, NetworkMode};
+use elpian_host::runtime::AppRuntime;
+use elpian_vm::api::{Capability, ResourceLimits};
+
+struct Config {
+    host: String,
+    port: u16,
+    registry: PathBuf,
+    workers: usize,
+    queue: Option<usize>,
+    data_root: Option<PathBuf>,
+}
+
+fn main() {
+    let config = match parse_args() {
+        Ok(config) => config,
+        Err(message) => {
+            eprintln!("elpiand: {message}\n\n{}", usage());
+            std::process::exit(2);
+        }
+    };
+
+    elpian_vm::api::init_vm_system();
+
+    let runtime = match &config.data_root {
+        Some(root) => AppRuntime::with_data_root(root.clone()),
+        None => AppRuntime::new(),
+    };
+
+    match load_registry(&config.registry, &runtime) {
+        Ok(0) => eprintln!(
+            "elpiand: warning: no apps found in {}",
+            config.registry.display()
+        ),
+        Ok(count) => println!("[elpian] loaded {count} app(s) from {}", config.registry.display()),
+        Err(message) => {
+            eprintln!("elpiand: {message}");
+            std::process::exit(1);
+        }
+    }
+
+    let listener = match std::net::TcpListener::bind((config.host.as_str(), config.port)) {
+        Ok(listener) => listener,
+        Err(error) => {
+            eprintln!("elpiand: cannot bind {}:{}: {error}", config.host, config.port);
+            std::process::exit(1);
+        }
+    };
+    let addr = listener.local_addr().expect("bound");
+    println!("[elpian] host listening on http://{addr}");
+    for id in runtime.app_ids() {
+        println!("[elpian]   /apps/{id}/manifest.json");
+    }
+
+    let queue = config
+        .queue
+        .unwrap_or(elpian_host::httpcore::DEFAULT_QUEUE_PER_WORKER * config.workers.max(1));
+    println!("[elpian] {} workers, queue depth {queue}", config.workers);
+    let handle = elpian_host::httpcore::serve_with_queue(
+        listener,
+        config.workers,
+        queue,
+        elpian_host::gateway::handler(Arc::clone(&runtime)),
+    );
+
+    // The accept loop owns the process from here.
+    std::mem::forget(handle);
+    loop {
+        std::thread::park();
+    }
+}
+
+fn usage() -> String {
+    "usage: elpiand --registry <dir> [--host H] [--port P] [--workers N] [--queue N] [--data-root DIR]"
+        .into()
+}
+
+fn parse_args() -> Result<Config, String> {
+    let mut config = Config {
+        host: "127.0.0.1".into(),
+        port: 4180,
+        registry: PathBuf::new(),
+        workers: std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(4),
+        queue: None,
+        data_root: None,
+    };
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mut i = 0;
+    while i < args.len() {
+        let value = args
+            .get(i + 1)
+            .ok_or_else(|| format!("{} needs a value", args[i]))?;
+        match args[i].as_str() {
+            "--host" => config.host = value.clone(),
+            "--port" => config.port = value.parse().map_err(|_| "invalid port".to_string())?,
+            "--registry" => config.registry = PathBuf::from(value),
+            "--workers" => {
+                config.workers = value.parse().map_err(|_| "invalid worker count".to_string())?
+            }
+            "--queue" => {
+                config.queue = Some(value.parse().map_err(|_| "invalid queue depth".to_string())?)
+            }
+            "--data-root" => config.data_root = Some(PathBuf::from(value)),
+            flag => return Err(format!("unknown flag {flag}")),
+        }
+        i += 2;
+    }
+    if config.registry.as_os_str().is_empty() {
+        return Err("--registry is required".into());
+    }
+    if !config.registry.is_dir() {
+        return Err(format!("{} is not a directory", config.registry.display()));
+    }
+    Ok(config)
+}
+
+fn load_registry(root: &Path, runtime: &Arc<AppRuntime>) -> Result<usize, String> {
+    let mut loaded = 0;
+    let entries = std::fs::read_dir(root).map_err(|e| format!("{}: {e}", root.display()))?;
+    for entry in entries.flatten() {
+        let dir = entry.path();
+        if !dir.is_dir() {
+            continue;
+        }
+        match load_app(&dir) {
+            Ok(app) => {
+                runtime.register(app);
+                loaded += 1;
+            }
+            // One malformed app must not stop the host from serving the rest:
+            // a registry is a shared surface and a bad entry is an operational
+            // problem for that app, not for every other tenant.
+            Err(message) => eprintln!("elpiand: skipping {}: {message}", dir.display()),
+        }
+    }
+    Ok(loaded)
+}
+
+fn load_app(dir: &Path) -> Result<AppDefinition, String> {
+    let manifest_path = dir.join("app.json");
+    let raw = std::fs::read_to_string(&manifest_path)
+        .map_err(|e| format!("{}: {e}", manifest_path.display()))?;
+    let manifest: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|e| format!("app.json is not valid JSON: {e}"))?;
+
+    let id = manifest
+        .get("id")
+        .and_then(|v| v.as_str())
+        .ok_or("app.json has no \"id\"")?
+        .to_string();
+
+    let mut app = AppDefinition::new(id);
+
+    if let Some(caps) = manifest.get("capabilities").and_then(|v| v.as_array()) {
+        // An unknown capability name is dropped rather than rejected: a
+        // manifest written against a newer host must still load on an older
+        // one, and dropping fails closed.
+        let parsed: Vec<Capability> = caps
+            .iter()
+            .filter_map(|v| v.as_str())
+            .filter_map(Capability::from_str)
+            .collect();
+        app = app.with_capabilities(parsed);
+    }
+
+    if let Some(secrets) = manifest.get("secrets").and_then(|v| v.as_array()) {
+        app = app.with_secrets(
+            secrets
+                .iter()
+                .filter_map(|v| v.as_str())
+                .map(str::to_string)
+                .collect(),
+        );
+    }
+
+    app = app.with_network(parse_network(manifest.get("network")));
+    app = app.with_limits(parse_limits(manifest.get("limits")));
+
+    let client = dir.join("client.bc");
+    if client.is_file() {
+        app = app.with_client(std::fs::read(&client).map_err(|e| format!("client.bc: {e}"))?);
+    }
+
+    // The function table is derived from the manifest, and each entry must have
+    // a module on disk. A manifest naming a function with no bytecode is an
+    // error rather than a silently missing route.
+    let declared = manifest
+        .get("functions")
+        .and_then(|v| v.as_array())
+        .ok_or("app.json has no \"functions\" array")?;
+    for entry in declared {
+        let name = entry
+            .get("name")
+            .and_then(|v| v.as_str())
+            .ok_or("a function entry has no \"name\"")?;
+        let kind = match entry.get("kind").and_then(|v| v.as_str()) {
+            Some("component") => FunctionKind::Component,
+            Some("action") | None => FunctionKind::Action,
+            Some(other) => return Err(format!("{name}: unknown kind {other}")),
+        };
+        let module = dir.join("fn").join(format!("{name}.bc"));
+        let bytecode =
+            std::fs::read(&module).map_err(|e| format!("{}: {e}", module.display()))?;
+        app = app.with_function(name, kind, bytecode);
+    }
+
+    Ok(app)
+}
+
+fn parse_network(value: Option<&serde_json::Value>) -> NetworkMode {
+    match value {
+        Some(serde_json::Value::String(s)) if s == "open" => NetworkMode::Open,
+        Some(serde_json::Value::Object(map)) => {
+            let allowlist = map
+                .get("allow")
+                .and_then(|v| v.as_array())
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(|v| v.as_str())
+                        .map(str::to_string)
+                        .collect()
+                })
+                .unwrap_or_default();
+            NetworkMode::Brokered { allowlist }
+        }
+        // Anything unrecognised, including absent, is closed. The default has
+        // to be the safe one: an app whose network stanza was mistyped must not
+        // silently get egress.
+        _ => NetworkMode::Closed,
+    }
+}
+
+fn parse_limits(value: Option<&serde_json::Value>) -> ResourceLimits {
+    let mut limits = ResourceLimits::unlimited();
+    let Some(map) = value.and_then(|v| v.as_object()) else {
+        return limits;
+    };
+    if let Some(v) = map.get("instructions").and_then(|v| v.as_u64()) {
+        limits.max_instructions = Some(v);
+    }
+    if let Some(v) = map.get("instructionsPerTurn").and_then(|v| v.as_u64()) {
+        limits.max_instructions_per_turn = Some(v);
+    }
+    if let Some(v) = map.get("memoryBytes").and_then(|v| v.as_u64()) {
+        limits.max_memory_bytes = Some(v);
+    }
+    if let Some(v) = map.get("storageBytes").and_then(|v| v.as_u64()) {
+        limits.max_storage_bytes = Some(v);
+    }
+    if let Some(v) = map.get("callDepth").and_then(|v| v.as_u64()) {
+        limits.max_call_depth = Some(v);
+    }
+    limits
+}
