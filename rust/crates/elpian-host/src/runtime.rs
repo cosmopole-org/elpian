@@ -19,6 +19,7 @@ use crate::appfs::AppFs;
 use crate::component::{ComponentPayload, RenderCache};
 use crate::identity::Identity;
 use crate::pool::{InstancePool, Meters, PoolConfig};
+use crate::quota::{Admission, Quota, QuotaEnforcer};
 use crate::invoke::{invoke, InvokeLimits, Outcome};
 use crate::services::{InvocationLog, ServerContext, ServerServices};
 use crate::state::{SecretStore, StateStore};
@@ -39,6 +40,10 @@ const DEFAULT_RENDER_CACHE_ENTRIES: usize = 1024;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CallError {
     UnknownApp(String),
+    /// The app is over budget. `stage` says how far up the ladder it is and
+    /// `axis` which budget it blew — both for the operator; the caller is told
+    /// only that the app is over its quota.
+    OverQuota { stage: String, axis: String },
     UnknownFunction { app: String, function: String },
     /// The function exists but is the other kind — an action asked to render,
     /// or a component invoked as an action.
@@ -63,6 +68,7 @@ impl CallError {
                 function, expected, ..
             } => format!("{function} is not {expected}"),
             CallError::CallDepthExceeded => "call depth exceeded".to_string(),
+            CallError::OverQuota { .. } => "this app is over its quota".to_string(),
         }
     }
 }
@@ -91,6 +97,7 @@ pub struct AppRuntime {
     limits: InvokeLimits,
     cache: RenderCache,
     pool: Arc<InstancePool>,
+    quotas: QuotaEnforcer,
 }
 
 impl AppRuntime {
@@ -103,6 +110,7 @@ impl AppRuntime {
             limits: InvokeLimits::default(),
             cache: RenderCache::new(DEFAULT_RENDER_CACHE_ENTRIES),
             pool: InstancePool::new(PoolConfig::default()),
+            quotas: QuotaEnforcer::new(),
         })
     }
 
@@ -116,7 +124,17 @@ impl AppRuntime {
             limits: InvokeLimits::default(),
             cache: RenderCache::new(DEFAULT_RENDER_CACHE_ENTRIES),
             pool: InstancePool::new(PoolConfig::default()),
+            quotas: QuotaEnforcer::new(),
         })
+    }
+
+    pub fn quotas(&self) -> &QuotaEnforcer {
+        &self.quotas
+    }
+
+    /// Set an app's budget.
+    pub fn set_quota(&self, app_id: &str, quota: Quota) {
+        self.quotas.set_quota(app_id, quota);
     }
 
     pub fn pool(&self) -> &Arc<InstancePool> {
@@ -162,6 +180,11 @@ impl AppRuntime {
         self.read_apps()
             .get(app_id)
             .and_then(|a| a.client_bytecode.clone())
+    }
+
+    /// A registered app's definition.
+    pub fn app_definition(&self, app_id: &str) -> Option<AppDefinition> {
+        self.read_apps().get(app_id).cloned()
     }
 
     pub fn app_ids(&self) -> Vec<String> {
@@ -254,6 +277,28 @@ impl AppRuntime {
                 expected: expected.as_str(),
                 actual: def.kind.as_str(),
             });
+        }
+
+        // Quota, before anything else runs.
+        //
+        // An over-budget app refused *after* its instructions are spent has
+        // already cost what the quota exists to bound. This is a map lookup and
+        // a few comparisons, so it is affordable in front of every call.
+        //
+        // Nested calls are exempt: the outer call was already admitted, and
+        // refusing halfway through would leave the app's state half-written
+        // with no way for the guest to recover — the subset has no try/catch.
+        if depth == 0 {
+            let meters = self.meters(app_id);
+            let is_write = expected == FunctionKind::Action;
+            if let Admission::Refuse { stage, axis } =
+                self.quotas.admit(app_id, &meters, is_write)
+            {
+                return Err(CallError::OverQuota {
+                    stage: stage.as_str().to_string(),
+                    axis: axis.to_string(),
+                });
+            }
         }
 
         // A cached render short-circuits before any instance is created — the

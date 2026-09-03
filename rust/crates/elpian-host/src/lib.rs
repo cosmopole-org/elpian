@@ -35,6 +35,7 @@
 //! * [`registry`] — what apps exist, at what versions, and where their bytecode
 //!   lives.
 //! * [`identity`] — who is calling, who may operate the host, and the audit.
+//! * [`quota`] — acting on the meters: the throttle → strangle → drain ladder.
 
 pub mod app;
 pub mod appfs;
@@ -48,6 +49,7 @@ pub mod identity;
 pub mod invoke;
 pub mod policy;
 pub mod pool;
+pub mod quota;
 pub mod registry;
 pub mod posture;
 pub mod runtime;
@@ -64,6 +66,7 @@ pub use gateway::Gateway;
 pub use identity::{AdminAudit, AdminEvent, AuthProvider, Identity, OperatorAuth};
 pub use registry::{AppRecord, RegistryError, RegistryStore, VersionRecord};
 pub use pool::{InstancePool, Meters, PoolConfig};
+pub use quota::{Admission, Quota, QuotaEnforcer, Stage};
 pub use runtime::{AppRuntime, CallError, Invocation};
 pub use invoke::{invoke, InvokeLimits, Outcome};
 pub use posture::{server_capabilities, SERVER_DENIED, SERVER_GRANTABLE};

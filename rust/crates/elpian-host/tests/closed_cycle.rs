@@ -307,3 +307,66 @@ fn a_redirect_does_not_escape_the_allowlist() {
         }
     }
 }
+
+// ---- the client's outbound path -------------------------------------------
+
+/// A closed app's *client* half cannot reach out through the host's proxy
+/// either.
+///
+/// This is the half that is easy to forget. The server function's egress is
+/// obviously the host's to police; the client's is the one a device could be
+/// tempted to make on its own. Routing it through the host means the app's
+/// posture is enforced by the side that cannot be edited by the user.
+#[test]
+fn a_closed_apps_client_half_cannot_reach_out_through_the_proxy() {
+    use std::io::Write;
+
+    let canary = Canary::start();
+    let runtime = AppRuntime::new();
+    runtime.register(
+        AppDefinition::new("sealed")
+            .with_capabilities(vec![Capability::Network])
+            .with_network(NetworkMode::Closed)
+            .with_function(
+                "noop",
+                FunctionKind::Action,
+                module(vec![func_def("noop", vec![], vec![ret(strv("ok"))])]),
+            ),
+    );
+
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let server = elpian_host::httpcore::serve(
+        listener,
+        2,
+        elpian_host::gateway::handler(std::sync::Arc::clone(&runtime)),
+    );
+
+    // The device asks the host to fetch the canary on its behalf.
+    let body = format!(r#"{{"url":"{}"}}"#, canary.url());
+    let mut stream = std::net::TcpStream::connect(server.addr).unwrap();
+    let head = format!(
+        "POST /apps/sealed/proxy HTTP/1.1\r\nHost: localhost\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    stream.write_all(head.as_bytes()).unwrap();
+    stream.write_all(body.as_bytes()).unwrap();
+    stream.flush().unwrap();
+
+    let mut raw = Vec::new();
+    stream.read_to_end(&mut raw).unwrap();
+    let text = String::from_utf8_lossy(&raw);
+    assert!(text.contains("403"), "the proxy should refuse: {text}");
+    assert!(
+        text.contains("not permitted"),
+        "and say so uniformly: {text}"
+    );
+
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    assert_eq!(
+        canary.connections(),
+        0,
+        "the host must not have made the request on the app's behalf"
+    );
+
+    server.stop();
+}

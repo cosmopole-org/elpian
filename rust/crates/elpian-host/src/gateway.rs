@@ -109,6 +109,17 @@ fn route(gateway: &Arc<Gateway>, request: &Request) -> Response {
             invoke_route(gateway, app, function, request, true)
         }
 
+        // A client VM's outbound request, brokered by the host.
+        //
+        // The device could open its own socket — but then the app's posture
+        // would be enforced only by the device, which the user controls, and
+        // the host would have no record of what the app reached. Routing it
+        // here means one policy governs both halves and one audit trail sees
+        // both.
+        ["apps", app, "proxy"] if request.method == "POST" => {
+            proxy_route(gateway, app, request)
+        }
+
         // A known path with the wrong method deserves a 405 rather than a 404:
         // "you asked the right thing the wrong way" is actionable, "it does not
         // exist" is not.
@@ -173,6 +184,68 @@ fn invoke_route(
         Err(error @ CallError::CallDepthExceeded) => {
             Response::error(500, &error.client_message())
         }
+        // 429, because it is the app that is over budget and a caller may
+        // usefully retry later — a 500 would say "broken", which it is not.
+        Err(CallError::OverQuota { stage, axis }) => {
+            eprintln!("[elpian] {app}/{function} refused: {stage} on {axis}");
+            Response::error(429, "this app is over its quota")
+        }
+    }
+}
+
+/// A client-side `net.fetch`, decided and performed by the host.
+fn proxy_route(gateway: &Arc<Gateway>, app_id: &str, request: &Request) -> Response {
+    let Some(app) = gateway.runtime.app_definition(app_id) else {
+        return Response::error(404, "no such app");
+    };
+
+    let body: Value = match serde_json::from_slice(&request.body) {
+        Ok(value) => value,
+        Err(_) => return Response::error(400, "body is not valid JSON"),
+    };
+    let Some(url) = body.get("url").and_then(Value::as_str) else {
+        return Response::error(400, "no url");
+    };
+
+    let mut records = Vec::new();
+    let result = crate::fetch::fetch(
+        &app.network,
+        url,
+        &crate::fetch::FetchLimits::default(),
+        |record| records.push(record),
+        app_id,
+        "client",
+    );
+    for record in &records {
+        // The operator's record. Allowed and denied alike — an audit trail with
+        // only denials answers "what was blocked" and not "what did this app
+        // reach", and the second is the question asked after an incident.
+        eprintln!(
+            "[elpian] egress {} {} {} -> {}",
+            record.app,
+            if record.allowed { "allow" } else { "deny" },
+            record.url,
+            record.detail
+        );
+    }
+
+    match result {
+        Ok(response) => Response::json(
+            200,
+            &json!({
+                "ok": true,
+                "result": { "status": response.status, "body": response.body }
+            }),
+        ),
+        Err(error) => {
+            // The guest-facing message, not the operator's. A caller that could
+            // distinguish "not allowlisted" from "connection refused" would
+            // have a port scanner built out of the error string.
+            Response::json(
+                403,
+                &json!({ "ok": false, "error": error.guest_message() }),
+            )
+        }
     }
 }
 
@@ -234,6 +307,8 @@ fn admin_route(gateway: &Arc<Gateway>, request: &Request, rest: &[&str]) -> Resp
                 200,
                 &json!({
                     "app": app,
+                    "stage": runtime.quotas().stage(app, &meters).as_str(),
+                    "suspended": runtime.quotas().is_suspended(app),
                     "invocations": meters.invocations,
                     "coldStarts": meters.cold_starts,
                     "instructions": meters.instructions,
@@ -259,6 +334,20 @@ fn admin_route(gateway: &Arc<Gateway>, request: &Request, rest: &[&str]) -> Resp
                 "idle": runtime.pool().idle(),
             }),
         ),
+
+        ["apps", app, "suspend"] if request.method == "POST" => {
+            gateway.runtime.quotas().suspend(app);
+            let unloaded = gateway.runtime.pool().drain_app(app);
+            Response::json(
+                200,
+                &json!({ "app": app, "suspended": true, "unloaded": unloaded.len() }),
+            )
+        }
+
+        ["apps", app, "resume"] if request.method == "POST" => {
+            gateway.runtime.quotas().resume(app);
+            Response::json(200, &json!({ "app": app, "suspended": false }))
+        }
 
         ["apps", app, "cache"] if request.method == "DELETE" => {
             let cleared = runtime.clear_cache(app);
