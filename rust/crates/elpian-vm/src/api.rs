@@ -28,6 +28,7 @@ use crate::sdk::vm::VM;
 
 pub mod catalog;
 pub mod govern;
+pub mod supervisor;
 
 /// A registered instance. The registry hands out clones of this handle, so a
 /// turn can run against one VM while every other VM stays reachable.
@@ -44,6 +45,18 @@ type VmHandle = Arc<Mutex<VM>>;
 struct Entry {
     vm: VmHandle,
     control: crate::sdk::lifecycle::ExecControl,
+    /// When the instance's current turn began, as milliseconds since
+    /// [`PROCESS_START`]; `0` when it is between turns.
+    ///
+    /// Kept beside the VM, and atomic, for the same reason the control flag is:
+    /// the supervisor needs to read it *while* a turn is running, which is
+    /// precisely when the VM's own lock is held. A supervisor that could only
+    /// observe idle instances could never catch the one overrunning.
+    busy_since_ms: Arc<std::sync::atomic::AtomicU64>,
+    /// When the instance's last turn ended, in the same units; `0` if it has
+    /// never run one. The supervisor uses it to spot instances nothing has
+    /// called for a while.
+    last_turn_end_ms: Arc<std::sync::atomic::AtomicU64>,
 }
 
 /// Number of independent registry shards. Sixteen is enough that the map lock
@@ -127,8 +140,23 @@ impl Registry {
         let entry = Entry {
             control: vm.control_handle(),
             vm: Arc::new(Mutex::new(vm)),
+            busy_since_ms: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            last_turn_end_ms: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         };
         lock_tolerant(self.shard_of(&machine_id)).insert(machine_id, entry);
+    }
+
+    /// Every registered id, with its entry. Used by the supervisor sweep; the
+    /// shard locks are taken one at a time and released before anything is done
+    /// with the results, so a sweep never blocks a running turn.
+    fn snapshot(&self) -> Vec<(String, Entry)> {
+        let mut out = Vec::new();
+        for shard in &self.shards {
+            for (id, entry) in lock_tolerant(shard).iter() {
+                out.push((id.clone(), entry.clone()));
+            }
+        }
+        out
     }
 
     /// Unregister an instance. A turn already running against it holds its own
@@ -146,6 +174,15 @@ impl Registry {
 
 static VMS: Lazy<Registry> = Lazy::new(Registry::new);
 
+/// Monotonic base for the millisecond timestamps the supervisor compares.
+/// `Instant` is not representable in an atomic, so turn starts are stored as a
+/// millisecond offset from this.
+static PROCESS_START: Lazy<std::time::Instant> = Lazy::new(std::time::Instant::now);
+
+fn now_ms() -> u64 {
+    PROCESS_START.elapsed().as_millis() as u64
+}
+
 /// Run `body` against a registered instance, or return `None` if it is unknown.
 ///
 /// This is the single chokepoint for "lock one VM and do something with it", so
@@ -154,6 +191,39 @@ static VMS: Lazy<Registry> = Lazy::new(Registry::new);
 fn with_vm<R>(machine_id: &str, body: impl FnOnce(&mut VM) -> R) -> Option<R> {
     let handle = VMS.get(machine_id)?;
     let mut vm = lock_tolerant(&handle);
+    Some(body(&mut vm))
+}
+
+/// Like [`with_vm`], but marks the instance busy for the duration so the
+/// supervisor can see how long the turn has been running and enforce a wall-
+/// clock deadline against it.
+///
+/// Every entry into guest code goes through here. The marker is cleared on the
+/// way out including on unwind, so a guest that traps does not leave itself
+/// looking permanently overrunning.
+fn with_vm_turn<R>(machine_id: &str, body: impl FnOnce(&mut VM) -> R) -> Option<R> {
+    use std::sync::atomic::Ordering;
+    let entry = VMS.entry(machine_id)?;
+    let mut vm = lock_tolerant(&entry.vm);
+
+    struct ClearOnExit {
+        busy: Arc<std::sync::atomic::AtomicU64>,
+        ended: Arc<std::sync::atomic::AtomicU64>,
+    }
+    impl Drop for ClearOnExit {
+        fn drop(&mut self) {
+            self.ended.store(now_ms().max(1), Ordering::Release);
+            self.busy.store(0, Ordering::Release);
+        }
+    }
+    // `max(1)` so a turn that begins in the first millisecond of the process is
+    // still distinguishable from the `0` that means idle.
+    entry.busy_since_ms.store(now_ms().max(1), Ordering::Release);
+    let _clear = ClearOnExit {
+        busy: entry.busy_since_ms.clone(),
+        ended: entry.last_turn_end_ms.clone(),
+    };
+
     Some(body(&mut vm))
 }
 
@@ -539,7 +609,7 @@ fn drive_turn(vm: &mut VM, turn: impl FnOnce(&mut VM) -> VmExecResult) -> VmExec
 
 /// Execute a VM's top-level program.
 pub fn execute_vm(machine_id: String) -> VmExecResult {
-    with_vm(&machine_id, |vm| {
+    with_vm_turn(&machine_id, |vm| {
         if vm.is_exec_processing() {
             return VmExecResult::done("\"vm_busy\"");
         }
@@ -553,7 +623,7 @@ pub fn execute_vm(machine_id: String) -> VmExecResult {
 
 /// Execute a named function (no input). `cb_id` correlates async continuations.
 pub fn execute_vm_func(machine_id: String, func_name: String, cb_id: i64) -> VmExecResult {
-    with_vm(&machine_id, |vm| {
+    with_vm_turn(&machine_id, |vm| {
         if vm.is_exec_processing() {
             return VmExecResult::done("\"vm_busy\"");
         }
@@ -572,7 +642,7 @@ pub fn execute_vm_func_with_input(
     input_json: String,
     cb_id: i64,
 ) -> VmExecResult {
-    with_vm(&machine_id, |vm| {
+    with_vm_turn(&machine_id, |vm| {
         if vm.is_exec_processing() {
             return VmExecResult::done("\"vm_busy\"");
         }
@@ -614,7 +684,7 @@ pub fn deliver_host_message(machine_id: String, message_json: String, cb_id: i64
 /// Resume a VM after a host call, injecting the call's return value.
 /// `input_json` is a typed value like `{"type":"string","data":{"value":"ok"}}`.
 pub fn continue_execution(machine_id: String, input_json: String) -> VmExecResult {
-    with_vm(&machine_id, |vm| {
+    with_vm_turn(&machine_id, |vm| {
         drive_turn(vm, |vm| {
             vm.continue_run(input_json);
             check_host_call(vm, "\"done\"")
@@ -753,7 +823,7 @@ pub fn clear_pause(machine_id: &str) -> bool {
 
 /// Resume a paused VM, continuing exactly where it suspended.
 pub fn resume_execution(machine_id: String) -> VmExecResult {
-    with_vm(&machine_id, |vm| {
+    with_vm_turn(&machine_id, |vm| {
         drive_turn(vm, |vm| {
             let res = vm.resume();
             check_host_call(vm, &res.stringify())
