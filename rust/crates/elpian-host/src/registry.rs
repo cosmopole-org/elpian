@@ -62,11 +62,20 @@ pub struct AppRecord {
 pub enum RegistryError {
     Io(String),
     /// A blob's bytes did not hash to the address it was stored under.
-    Corrupt { address: String },
+    Corrupt {
+        address: String,
+    },
     UnknownApp(String),
-    UnknownVersion { app: String, version: String },
+    UnknownVersion {
+        app: String,
+        version: String,
+    },
     /// Deploying a version older than the one already active.
-    Downgrade { app: String, from: String, to: String },
+    Downgrade {
+        app: String,
+        from: String,
+        to: String,
+    },
     /// The index on disk is not something this host can read.
     MalformedIndex(String),
 }
@@ -147,8 +156,8 @@ impl RegistryStore {
     /// that lost a page. Serving bytecode that is not what was installed is the
     /// worst failure this component has.
     pub fn get_blob(&self, address: &str) -> Result<Vec<u8>, RegistryError> {
-        let data = std::fs::read(self.blob_path(address))
-            .map_err(|e| RegistryError::Io(e.to_string()))?;
+        let data =
+            std::fs::read(self.blob_path(address)).map_err(|e| RegistryError::Io(e.to_string()))?;
         if elpian_crypto::content_address(&data) != address {
             return Err(RegistryError::Corrupt {
                 address: address.to_string(),
@@ -278,7 +287,8 @@ fn write_atomically(path: &Path, data: &[u8]) -> Result<(), RegistryError> {
         // Flush to the device, not just out of the process buffer: a rename
         // that lands before the data does leaves a valid name over empty
         // content, which is the failure this whole dance exists to avoid.
-        file.sync_all().map_err(|e| RegistryError::Io(e.to_string()))?;
+        file.sync_all()
+            .map_err(|e| RegistryError::Io(e.to_string()))?;
     }
     std::fs::rename(&temp, path).map_err(|e| RegistryError::Io(e.to_string()))
 }
@@ -406,7 +416,10 @@ pub fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
     };
     let (a, b) = (parse(a), parse(b));
     for i in 0..a.len().max(b.len()) {
-        let (x, y) = (a.get(i).copied().unwrap_or(0), b.get(i).copied().unwrap_or(0));
+        let (x, y) = (
+            a.get(i).copied().unwrap_or(0),
+            b.get(i).copied().unwrap_or(0),
+        );
         match x.cmp(&y) {
             std::cmp::Ordering::Equal => continue,
             other => return other,

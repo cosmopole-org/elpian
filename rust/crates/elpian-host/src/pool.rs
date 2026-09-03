@@ -204,12 +204,10 @@ impl InstancePool {
             let warm = {
                 let mut instances = self.lock();
                 instances.get_mut(&key).and_then(|list| {
-                    list.iter_mut()
-                        .find(|i| i.idle_since.is_some())
-                        .map(|i| {
-                            i.idle_since = None;
-                            i.machine_id.clone()
-                        })
+                    list.iter_mut().find(|i| i.idle_since.is_some()).map(|i| {
+                        i.idle_since = None;
+                        i.machine_id.clone()
+                    })
                 })
             };
             if let Some(machine_id) = warm {
@@ -263,7 +261,7 @@ impl InstancePool {
             machine_id,
             server_capabilities(&app.effective_capabilities()),
         );
-        api::set_limits(machine_id, app.limits.clone());
+        api::set_limits(machine_id, app.limits);
     }
 
     fn give_back(&self, key: &str, machine_id: &str) {
@@ -343,7 +341,9 @@ impl InstancePool {
             // 2. Over a function's share.
             for list in instances.values_mut() {
                 while list.len() > config.max_per_function {
-                    let Some(index) = oldest_idle(list) else { break };
+                    let Some(index) = oldest_idle(list) else {
+                        break;
+                    };
                     unloaded.push(list.remove(index).machine_id);
                 }
             }

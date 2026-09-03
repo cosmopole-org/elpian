@@ -100,7 +100,9 @@ struct Registry {
 impl Registry {
     fn new() -> Self {
         Registry {
-            shards: (0..SHARD_COUNT).map(|_| Mutex::new(HashMap::new())).collect(),
+            shards: (0..SHARD_COUNT)
+                .map(|_| Mutex::new(HashMap::new()))
+                .collect(),
         }
     }
 
@@ -126,7 +128,9 @@ impl Registry {
     }
 
     fn entry(&self, machine_id: &str) -> Option<Entry> {
-        lock_tolerant(self.shard_of(machine_id)).get(machine_id).cloned()
+        lock_tolerant(self.shard_of(machine_id))
+            .get(machine_id)
+            .cloned()
     }
 
     /// The instance's control flag, reachable with only the (briefly held)
@@ -218,7 +222,9 @@ fn with_vm_turn<R>(machine_id: &str, body: impl FnOnce(&mut VM) -> R) -> Option<
     }
     // `max(1)` so a turn that begins in the first millisecond of the process is
     // still distinguishable from the `0` that means idle.
-    entry.busy_since_ms.store(now_ms().max(1), Ordering::Release);
+    entry
+        .busy_since_ms
+        .store(now_ms().max(1), Ordering::Release);
     let _clear = ClearOnExit {
         busy: entry.busy_since_ms.clone(),
         ended: entry.last_turn_end_ms.clone(),

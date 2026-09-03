@@ -95,9 +95,7 @@ impl RunState {
 impl Default for ExecControl {
     fn default() -> Self {
         ExecControl {
-            state: std::sync::Arc::new(std::sync::atomic::AtomicU8::new(
-                RunState::Running.as_u8(),
-            )),
+            state: std::sync::Arc::new(std::sync::atomic::AtomicU8::new(RunState::Running.as_u8())),
         }
     }
 }

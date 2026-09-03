@@ -168,9 +168,7 @@ fn a_closed_app_does_not_even_hold_the_gate() {
     let app = AppDefinition::new("sealed")
         .with_capabilities(vec![Capability::Network])
         .with_network(NetworkMode::Closed);
-    assert!(!app
-        .effective_capabilities()
-        .contains(&Capability::Network));
+    assert!(!app.effective_capabilities().contains(&Capability::Network));
 
     assert_eq!(
         decide(&NetworkMode::Closed, "http://example.com/"),
@@ -206,13 +204,18 @@ fn a_closed_apps_two_halves_can_still_reach_each_other() {
                 module(vec![func_def(
                     "inner",
                     vec!["x"],
-                    vec![ret(json!({ "type": "identifier", "data": { "name": "x" } }))],
+                    vec![ret(
+                        json!({ "type": "identifier", "data": { "name": "x" } }),
+                    )],
                 )]),
             ),
     );
 
     assert_eq!(
-        runtime.call("sealed", "outer", &json!(null)).unwrap().outcome,
+        runtime
+            .call("sealed", "outer", &json!(null))
+            .unwrap()
+            .outcome,
         Outcome::Returned(json!("still connected"))
     );
 }
@@ -241,7 +244,11 @@ fn a_brokered_app_reaches_only_what_it_was_allowlisted() {
         EgressDecision::Deny(DenyReason::NotAllowlisted("other.example.com".into()))
     );
 
-    assert_eq!(canary.connections(), 0, "nothing connected during the checks");
+    assert_eq!(
+        canary.connections(),
+        0,
+        "nothing connected during the checks"
+    );
 }
 
 /// The SSRF corpus. Table-driven, and not to be allowed to rot: each row is a
@@ -265,7 +272,10 @@ fn the_ssrf_corpus() {
         ("file:///etc/passwd", "a non-http scheme"),
         ("gopher://127.0.0.1:6379/_SET%20x%20y", "protocol smuggling"),
         ("http://user@127.0.0.1/", "userinfo before a private host"),
-        ("http://127.0.0.1@example.com/", "userinfo that looks private"),
+        (
+            "http://127.0.0.1@example.com/",
+            "userinfo that looks private",
+        ),
         ("not-a-url", "unparseable"),
         ("http:///nohost", "empty authority"),
     ];

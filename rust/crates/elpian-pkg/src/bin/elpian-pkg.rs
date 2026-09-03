@@ -140,7 +140,10 @@ impl Flags {
 fn cmd_package(args: &[String]) -> Result<(), String> {
     let flags = Flags::parse(args);
     let (Some(project), Some(out)) = (flags.positional.first(), flags.positional.get(1)) else {
-        return Err(format!("package needs a project dir and an output path\n\n{}", usage()));
+        return Err(format!(
+            "package needs a project dir and an output path\n\n{}",
+            usage()
+        ));
     };
     let project = Path::new(project);
 
@@ -184,7 +187,10 @@ fn cmd_package(args: &[String]) -> Result<(), String> {
 
     let fn_dir = build.join("fn");
     if fn_dir.is_dir() {
-        for file in std::fs::read_dir(&fn_dir).map_err(|e| e.to_string())?.flatten() {
+        for file in std::fs::read_dir(&fn_dir)
+            .map_err(|e| e.to_string())?
+            .flatten()
+        {
             let path = file.path();
             let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
                 continue;
@@ -201,10 +207,7 @@ fn cmd_package(args: &[String]) -> Result<(), String> {
         }
     }
 
-    let package = Package {
-        manifest,
-        entries,
-    };
+    let package = Package { manifest, entries };
     let bytes = package.write(&signing_key(&flags));
     std::fs::write(out, &bytes).map_err(|e| format!("{out}: {e}"))?;
 
@@ -222,11 +225,17 @@ fn cmd_package(args: &[String]) -> Result<(), String> {
 
 fn cmd_inspect(args: &[String]) -> Result<(), String> {
     let flags = Flags::parse(args);
-    let path = flags.positional.first().ok_or("inspect needs a package path")?;
+    let path = flags
+        .positional
+        .first()
+        .ok_or("inspect needs a package path")?;
     let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
 
     let index = Package::inspect_unverified(&bytes).map_err(|e| e.message())?;
-    println!("{}", serde_json::to_string_pretty(&index).unwrap_or_default());
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&index).unwrap_or_default()
+    );
     // Said plainly, because the whole point of this command is that it runs on
     // a package you have not decided to trust yet.
     eprintln!("\nnote: this index was NOT verified. Run `verify --key K` before installing.");
@@ -235,7 +244,10 @@ fn cmd_inspect(args: &[String]) -> Result<(), String> {
 
 fn cmd_verify(args: &[String]) -> Result<(), String> {
     let flags = Flags::parse(args);
-    let path = flags.positional.first().ok_or("verify needs a package path")?;
+    let path = flags
+        .positional
+        .first()
+        .ok_or("verify needs a package path")?;
     let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
 
     let package = Package::read(&bytes, &signing_key(&flags)).map_err(|e| e.message())?;
@@ -252,7 +264,10 @@ fn cmd_verify(args: &[String]) -> Result<(), String> {
 
 fn cmd_install(args: &[String]) -> Result<(), String> {
     let flags = Flags::parse(args);
-    let path = flags.positional.first().ok_or("install needs a package path")?;
+    let path = flags
+        .positional
+        .first()
+        .ok_or("install needs a package path")?;
     let registry = flags
         .get("registry")
         .ok_or("install needs --registry <dir>")?;
@@ -266,7 +281,10 @@ fn cmd_install(args: &[String]) -> Result<(), String> {
         .as_str()
         .ok_or("the manifest has no id")?
         .to_string();
-    let version = package.manifest["version"].as_str().unwrap_or("0.0.0").to_string();
+    let version = package.manifest["version"]
+        .as_str()
+        .unwrap_or("0.0.0")
+        .to_string();
 
     // Into the content-addressed store. Blobs are shared between versions, so
     // installing a version that changed one function costs one function.

@@ -35,26 +35,17 @@ use std::sync::{Arc, RwLock};
 use crate::pool::Meters;
 
 /// What an app is allowed to spend before the ladder starts.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Every axis defaults to `None`, meaning unbounded. A host that has not been
+/// told an app's budget must not invent one — silently throttling an app nobody
+/// metered is a worse failure than not enforcing a quota nobody set. Note that
+/// `Some(0)` is a *different* answer: "this app may spend nothing".
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Quota {
     pub max_invocations: Option<u64>,
     pub max_instructions: Option<u64>,
     pub max_compute_ms: Option<u64>,
     pub max_storage_bytes: Option<u64>,
-}
-
-impl Default for Quota {
-    fn default() -> Self {
-        // Unbounded by default. A host that has not been told an app's budget
-        // must not invent one — silently throttling an app nobody metered is a
-        // worse failure than not enforcing a quota nobody set.
-        Quota {
-            max_invocations: None,
-            max_instructions: None,
-            max_compute_ms: None,
-            max_storage_bytes: None,
-        }
-    }
 }
 
 /// How far up the ladder an app is.
@@ -84,7 +75,10 @@ impl Stage {
 pub enum Admission {
     Allow,
     /// Refused. The message is the caller's; the axis is the operator's.
-    Refuse { stage: Stage, axis: &'static str },
+    Refuse {
+        stage: Stage,
+        axis: &'static str,
+    },
 }
 
 /// Quotas, and where each app currently sits.
@@ -193,9 +187,7 @@ impl QuotaEnforcer {
             Stage::Throttle => {
                 // Refuse one call in four. Enough to shed load and slow a
                 // runaway; not so much that a legitimate app looks broken.
-                let n = self
-                    .tick
-                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let n = self.tick.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 if n % 4 == 3 {
                     Admission::Refuse { stage, axis }
                 } else {
@@ -235,7 +227,11 @@ impl QuotaEnforcer {
         consider("invocations", meters.invocations, quota.max_invocations);
         consider("instructions", meters.instructions, quota.max_instructions);
         consider("computeMs", meters.compute_ms, quota.max_compute_ms);
-        consider("storageBytes", meters.storage_bytes, quota.max_storage_bytes);
+        consider(
+            "storageBytes",
+            meters.storage_bytes,
+            quota.max_storage_bytes,
+        );
         worst.0
     }
 }
@@ -315,10 +311,7 @@ mod tests {
 
         let mut refused = 0;
         for _ in 0..100 {
-            if matches!(
-                enforcer.admit("app", &near, true),
-                Admission::Refuse { .. }
-            ) {
+            if matches!(enforcer.admit("app", &near, true), Admission::Refuse { .. }) {
                 refused += 1;
             }
         }

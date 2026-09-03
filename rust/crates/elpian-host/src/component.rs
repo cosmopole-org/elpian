@@ -42,9 +42,7 @@ impl PayloadError {
     pub fn as_str(&self) -> &'static str {
         match self {
             PayloadError::NotAnObject => "a component must return an object",
-            PayloadError::MissingComponent => {
-                "a component payload needs a \"component\" object"
-            }
+            PayloadError::MissingComponent => "a component payload needs a \"component\" object",
             PayloadError::JsCodeNotAllowed => {
                 "\"jsCode\" is not supported on the native path; reference an \
                  island by name in \"clientComponents\" instead"
@@ -74,7 +72,11 @@ impl ComponentPayload {
     /// Validate what a component returned.
     pub fn parse(returned: &Value) -> Result<ComponentPayload, PayloadError> {
         let object = returned.as_object().ok_or(PayloadError::NotAnObject)?;
-        if !object.get("component").map(Value::is_object).unwrap_or(false) {
+        if !object
+            .get("component")
+            .map(Value::is_object)
+            .unwrap_or(false)
+        {
             return Err(PayloadError::MissingComponent);
         }
         if object.contains_key("jsCode") {
@@ -230,9 +232,7 @@ impl RenderCache {
         let mut entries = self.lock();
         let doomed: Vec<String> = entries
             .iter()
-            .filter(|(key, entry)| {
-                key.starts_with(&prefix) && entry.tags.iter().any(|t| t == tag)
-            })
+            .filter(|(key, entry)| key.starts_with(&prefix) && entry.tags.iter().any(|t| t == tag))
             .map(|(key, _)| key.clone())
             .collect();
         for key in &doomed {
@@ -341,11 +341,15 @@ mod tests {
         let entry = payload(&["notes"], None);
         cache.put("app", "List", &json!({ "a": 1, "b": 2 }), &entry);
         assert!(
-            cache.get("app", "List", &json!({ "b": 2, "a": 1 })).is_some(),
+            cache
+                .get("app", "List", &json!({ "b": 2, "a": 1 }))
+                .is_some(),
             "the same arguments written in another order must hit"
         );
         assert!(
-            cache.get("app", "List", &json!({ "a": 1, "b": 3 })).is_none(),
+            cache
+                .get("app", "List", &json!({ "a": 1, "b": 3 }))
+                .is_none(),
             "different arguments must miss"
         );
     }

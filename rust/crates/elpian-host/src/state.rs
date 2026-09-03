@@ -166,10 +166,7 @@ impl SecretStore {
     }
 
     pub fn put(&self, app: &str, name: &str, value: String) {
-        let mut map = self
-            .by_app
-            .lock()
-            .unwrap_or_else(|p| p.into_inner());
+        let mut map = self.by_app.lock().unwrap_or_else(|p| p.into_inner());
         map.entry(app.to_string())
             .or_default()
             .insert(name.to_string(), value);

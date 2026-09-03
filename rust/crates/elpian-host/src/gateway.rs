@@ -92,14 +92,15 @@ fn route(gateway: &Arc<Gateway>, request: &Request) -> Response {
             None => Response::error(404, "no such app"),
         },
 
-        ["apps", app, "client.bc"] if is_read(&request.method) => match runtime.client_bytecode(app)
-        {
-            Some(bytes) => Response::bytes(200, "application/octet-stream", bytes)
-                // A device caches the bytecode by content, and verifies it
-                // against the hash the manifest carried.
-                .with_header("Cache-Control", "public, max-age=31536000, immutable"),
-            None => Response::error(404, "no client bytecode for this app"),
-        },
+        ["apps", app, "client.bc"] if is_read(&request.method) => {
+            match runtime.client_bytecode(app) {
+                Some(bytes) => Response::bytes(200, "application/octet-stream", bytes)
+                    // A device caches the bytecode by content, and verifies it
+                    // against the hash the manifest carried.
+                    .with_header("Cache-Control", "public, max-age=31536000, immutable"),
+                None => Response::error(404, "no client bytecode for this app"),
+            }
+        }
 
         ["apps", app, "fn", function] if request.method == "POST" => {
             invoke_route(gateway, app, function, request, false)
@@ -116,9 +117,7 @@ fn route(gateway: &Arc<Gateway>, request: &Request) -> Response {
         // the host would have no record of what the app reached. Routing it
         // here means one policy governs both halves and one audit trail sees
         // both.
-        ["apps", app, "proxy"] if request.method == "POST" => {
-            proxy_route(gateway, app, request)
-        }
+        ["apps", app, "proxy"] if request.method == "POST" => proxy_route(gateway, app, request),
 
         // A known path with the wrong method deserves a 405 rather than a 404:
         // "you asked the right thing the wrong way" is actionable, "it does not
@@ -181,9 +180,7 @@ fn invoke_route(
             Response::error(404, &error.client_message())
         }
         Err(error @ CallError::WrongKind { .. }) => Response::error(400, &error.client_message()),
-        Err(error @ CallError::CallDepthExceeded) => {
-            Response::error(500, &error.client_message())
-        }
+        Err(error @ CallError::CallDepthExceeded) => Response::error(500, &error.client_message()),
         // 429, because it is the app that is over budget and a caller may
         // usefully retry later — a 500 would say "broken", which it is not.
         Err(CallError::OverQuota { stage, axis }) => {
@@ -241,10 +238,7 @@ fn proxy_route(gateway: &Arc<Gateway>, app_id: &str, request: &Request) -> Respo
             // The guest-facing message, not the operator's. A caller that could
             // distinguish "not allowlisted" from "connection refused" would
             // have a port scanner built out of the error string.
-            Response::json(
-                403,
-                &json!({ "ok": false, "error": error.guest_message() }),
-            )
+            Response::json(403, &json!({ "ok": false, "error": error.guest_message() }))
         }
     }
 }
@@ -259,7 +253,6 @@ fn parse_args(body: &[u8]) -> Result<Value, String> {
     }
     serde_json::from_slice(body).map_err(|e| format!("body is not valid JSON: {e}"))
 }
-
 
 // ---- The admin surface -----------------------------------------------------
 
@@ -296,10 +289,9 @@ fn admin_route(gateway: &Arc<Gateway>, request: &Request, rest: &[&str]) -> Resp
 
     let runtime = &gateway.runtime;
     match rest {
-        ["apps"] if request.method == "GET" => Response::json(
-            200,
-            &json!({ "apps": runtime.app_ids() }),
-        ),
+        ["apps"] if request.method == "GET" => {
+            Response::json(200, &json!({ "apps": runtime.app_ids() }))
+        }
 
         ["apps", app, "meters"] if request.method == "GET" => {
             let meters = runtime.meters(app);

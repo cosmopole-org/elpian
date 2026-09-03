@@ -159,7 +159,8 @@ impl Package {
         }
 
         let mut cursor = MAGIC.len();
-        let index_len = read_u32(bytes, &mut cursor).ok_or(PackageError::Truncated("index length"))?;
+        let index_len =
+            read_u32(bytes, &mut cursor).ok_or(PackageError::Truncated("index length"))?;
         let index_end = cursor
             .checked_add(index_len)
             .filter(|end| *end <= bytes.len())
@@ -208,8 +209,8 @@ impl Package {
             return Err(PackageError::BadSignature);
         }
 
-        let index: Value = serde_json::from_slice(index_raw)
-            .map_err(|e| PackageError::BadIndex(e.to_string()))?;
+        let index: Value =
+            serde_json::from_slice(index_raw).map_err(|e| PackageError::BadIndex(e.to_string()))?;
 
         match index["format"].as_str() {
             Some("EPKG1") => {}

@@ -91,9 +91,7 @@ impl AuthProvider for StaticTokens {
         // it costs nothing worth optimising.
         tokens
             .iter()
-            .find(|(known, _)| {
-                elpian_crypto::constant_time_eq(known.as_bytes(), token.as_bytes())
-            })
+            .find(|(known, _)| elpian_crypto::constant_time_eq(known.as_bytes(), token.as_bytes()))
             .map(|(_, identity)| identity.clone())
     }
 }
@@ -166,7 +164,11 @@ impl AdminAudit {
         // Bounded in memory. A durable trail is the operator's to arrange; what
         // must not happen is the host growing without limit because somebody is
         // hammering a refused endpoint.
-        let capacity = if self.capacity == 0 { 1000 } else { self.capacity };
+        let capacity = if self.capacity == 0 {
+            1000
+        } else {
+            self.capacity
+        };
         if events.len() > capacity {
             let excess = events.len() - capacity;
             events.drain(0..excess);
@@ -216,7 +218,10 @@ mod tests {
         );
 
         assert_eq!(tokens.verify(Some("user-token")).unwrap().id, "alice");
-        assert_eq!(tokens.verify(Some("Bearer user-token")).unwrap().id, "alice");
+        assert_eq!(
+            tokens.verify(Some("Bearer user-token")).unwrap().id,
+            "alice"
+        );
         // Anonymous is a legitimate answer, not an error.
         assert_eq!(tokens.verify(None), None);
         assert_eq!(tokens.verify(Some("guessed")), None);
@@ -255,7 +260,10 @@ mod tests {
         });
         let events = audit.events();
         assert_eq!(events.len(), 2);
-        assert!(!events[0].allowed, "a run of refusals is the interesting case");
+        assert!(
+            !events[0].allowed,
+            "a run of refusals is the interesting case"
+        );
         assert!(events[1].allowed);
     }
 

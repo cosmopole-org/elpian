@@ -55,7 +55,9 @@ pub struct Request {
 
 impl Request {
     pub fn header(&self, name: &str) -> Option<&str> {
-        self.headers.get(&name.to_ascii_lowercase()).map(|s| s.as_str())
+        self.headers
+            .get(&name.to_ascii_lowercase())
+            .map(|s| s.as_str())
     }
 
     /// Path split on `/` with empty segments dropped.
@@ -168,10 +170,7 @@ pub fn read_request(stream: &mut BufReader<TcpStream>) -> Result<Request, u16> {
             break;
         }
         if let Some((name, value)) = trimmed.split_once(':') {
-            headers.insert(
-                name.trim().to_ascii_lowercase(),
-                value.trim().to_string(),
-            );
+            headers.insert(name.trim().to_ascii_lowercase(), value.trim().to_string());
         }
     }
 
@@ -205,13 +204,10 @@ fn percent_decode(input: &str) -> String {
     while i < bytes.len() {
         if bytes[i] == b'%' && i + 2 < bytes.len() {
             let hex = std::str::from_utf8(&bytes[i + 1..i + 3]).ok();
-            match hex.and_then(|h| u8::from_str_radix(h, 16).ok()) {
-                Some(byte) => {
-                    out.push(byte);
-                    i += 3;
-                    continue;
-                }
-                None => {}
+            if let Some(byte) = hex.and_then(|h| u8::from_str_radix(h, 16).ok()) {
+                out.push(byte);
+                i += 3;
+                continue;
             }
         }
         out.push(bytes[i]);
@@ -273,7 +269,12 @@ pub fn serve(
     workers: usize,
     handler: Arc<dyn Fn(Request) -> Response + Send + Sync>,
 ) -> ServerHandle {
-    serve_with_queue(listener, workers, DEFAULT_QUEUE_PER_WORKER * workers.max(1), handler)
+    serve_with_queue(
+        listener,
+        workers,
+        DEFAULT_QUEUE_PER_WORKER * workers.max(1),
+        handler,
+    )
 }
 
 /// As [`serve`], with an explicit queue depth.
@@ -283,7 +284,9 @@ pub fn serve_with_queue(
     queue_depth: usize,
     handler: Arc<dyn Fn(Request) -> Response + Send + Sync>,
 ) -> ServerHandle {
-    let addr = listener.local_addr().expect("bound listener has an address");
+    let addr = listener
+        .local_addr()
+        .expect("bound listener has an address");
     let running = Arc::new(AtomicBool::new(true));
 
     let (tx, rx) = mpsc::sync_channel::<TcpStream>(queue_depth.max(1));

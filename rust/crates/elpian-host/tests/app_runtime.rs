@@ -102,7 +102,12 @@ fn one_function_can_call_another_in_the_same_app() {
     );
 
     assert_eq!(
-        returned(runtime.call("chain", "outer", &json!(null)).unwrap().outcome),
+        returned(
+            runtime
+                .call("chain", "outer", &json!(null))
+                .unwrap()
+                .outcome
+        ),
         json!("payload"),
         "the outer function received the inner function's return value"
     );
@@ -131,17 +136,15 @@ fn a_function_cannot_reach_another_apps_functions() {
                 )]),
             ),
     );
-    runtime.register(
-        AppDefinition::new("victim").with_function(
+    runtime.register(AppDefinition::new("victim").with_function(
+        "secret",
+        FunctionKind::Action,
+        module(vec![func_def(
             "secret",
-            FunctionKind::Action,
-            module(vec![func_def(
-                "secret",
-                vec![],
-                vec![ret(strv("the victim's data"))],
-            )]),
-        ),
-    );
+            vec![],
+            vec![ret(strv("the victim's data"))],
+        )]),
+    ));
 
     let value = returned(
         runtime
@@ -177,7 +180,12 @@ fn calling_a_component_as_an_action_is_refused() {
     }
     // The same function through the right door works.
     assert_eq!(
-        returned(runtime.render("kinds", "List", &json!(null)).unwrap().outcome),
+        returned(
+            runtime
+                .render("kinds", "List", &json!(null))
+                .unwrap()
+                .outcome
+        ),
         json!("ui")
     );
 }
@@ -210,7 +218,9 @@ fn a_closed_app_does_not_hold_the_network_capability_even_if_granted() {
         .with_capabilities(vec![Capability::Network, Capability::State])
         .with_network(NetworkMode::Closed);
     assert!(
-        !closed.effective_capabilities().contains(&Capability::Network),
+        !closed
+            .effective_capabilities()
+            .contains(&Capability::Network),
         "a closed app's egress is absent, not merely blocked downstream"
     );
     assert!(closed.effective_capabilities().contains(&Capability::State));
@@ -247,7 +257,10 @@ fn a_recursive_function_is_stopped_by_the_call_depth_bound() {
                 module(vec![func_def(
                     "again",
                     vec![],
-                    vec![ret(host_call("server.call", vec![strv("again"), strv("x")]))],
+                    vec![ret(host_call(
+                        "server.call",
+                        vec![strv("again"), strv("x")],
+                    ))],
                 )]),
             ),
     );

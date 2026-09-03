@@ -19,12 +19,7 @@ fn version(v: &str, functions: &[(&str, &str)]) -> VersionRecord {
         client: None,
         functions: functions
             .iter()
-            .map(|(name, blob)| {
-                (
-                    name.to_string(),
-                    ("action".to_string(), blob.to_string()),
-                )
-            })
+            .map(|(name, blob)| (name.to_string(), ("action".to_string(), blob.to_string())))
             .collect::<BTreeMap<_, _>>(),
         capabilities: vec!["state".into()],
         secrets: vec![],
@@ -56,21 +51,30 @@ fn two_versions_sharing_a_function_share_its_blob() {
     // costs anything.
     let store = RegistryStore::open(temp_dir("dedupe")).unwrap();
     let unchanged = store.put_blob(b"the function that did not change").unwrap();
-    let v1 = store.put_blob(b"version one of the other function").unwrap();
-    let v2 = store.put_blob(b"version two of the other function").unwrap();
+    let v1 = store
+        .put_blob(b"version one of the other function")
+        .unwrap();
+    let v2 = store
+        .put_blob(b"version two of the other function")
+        .unwrap();
 
     store
-        .install("app", version("1.0.0", &[("same", &unchanged), ("changed", &v1)]))
+        .install(
+            "app",
+            version("1.0.0", &[("same", &unchanged), ("changed", &v1)]),
+        )
         .unwrap();
     store
-        .install("app", version("1.1.0", &[("same", &unchanged), ("changed", &v2)]))
+        .install(
+            "app",
+            version("1.1.0", &[("same", &unchanged), ("changed", &v2)]),
+        )
         .unwrap();
 
     let record = store.app("app").unwrap();
     assert_eq!(record.versions.len(), 2);
     assert_eq!(
-        record.versions["1.0.0"].functions["same"].1,
-        record.versions["1.1.0"].functions["same"].1,
+        record.versions["1.0.0"].functions["same"].1, record.versions["1.1.0"].functions["same"].1,
         "the unchanged function is the same blob in both versions"
     );
 }
@@ -101,7 +105,9 @@ fn installing_does_not_deploy() {
     // An operator can stage a version and cut over separately.
     let store = RegistryStore::open(temp_dir("stage")).unwrap();
     let blob = store.put_blob(b"code").unwrap();
-    store.install("app", version("1.0.0", &[("f", &blob)])).unwrap();
+    store
+        .install("app", version("1.0.0", &[("f", &blob)]))
+        .unwrap();
 
     assert!(
         store.active_version("app").is_none(),
@@ -153,8 +159,12 @@ fn version_comparison_is_numeric_not_lexical() {
 fn the_active_version_cannot_be_removed() {
     let store = RegistryStore::open(temp_dir("remove")).unwrap();
     let blob = store.put_blob(b"code").unwrap();
-    store.install("app", version("1.0.0", &[("f", &blob)])).unwrap();
-    store.install("app", version("1.1.0", &[("f", &blob)])).unwrap();
+    store
+        .install("app", version("1.0.0", &[("f", &blob)]))
+        .unwrap();
+    store
+        .install("app", version("1.1.0", &[("f", &blob)]))
+        .unwrap();
     store.deploy("app", "1.1.0", false).unwrap();
 
     assert!(
@@ -172,7 +182,9 @@ fn the_index_survives_a_reopen() {
     let blob = {
         let store = RegistryStore::open(&dir).unwrap();
         let blob = store.put_blob(b"code").unwrap();
-        store.install("app", version("2.0.0", &[("f", &blob)])).unwrap();
+        store
+            .install("app", version("2.0.0", &[("f", &blob)]))
+            .unwrap();
         store.deploy("app", "2.0.0", false).unwrap();
         blob
     };
@@ -194,7 +206,9 @@ fn an_interrupted_index_write_leaves_the_previous_index_intact() {
     let dir = temp_dir("atomic");
     let store = RegistryStore::open(&dir).unwrap();
     let blob = store.put_blob(b"code").unwrap();
-    store.install("app", version("1.0.0", &[("f", &blob)])).unwrap();
+    store
+        .install("app", version("1.0.0", &[("f", &blob)]))
+        .unwrap();
     store.deploy("app", "1.0.0", false).unwrap();
 
     std::fs::write(dir.join("index.json.tmp999999"), b"{ this is not json").unwrap();
@@ -216,7 +230,9 @@ fn unknown_apps_and_versions_are_reported_rather_than_created() {
     );
 
     let blob = store.put_blob(b"code").unwrap();
-    store.install("real", version("1.0.0", &[("f", &blob)])).unwrap();
+    store
+        .install("real", version("1.0.0", &[("f", &blob)]))
+        .unwrap();
     assert_eq!(
         store.deploy("real", "9.9.9", false),
         Err(RegistryError::UnknownVersion {

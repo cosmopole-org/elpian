@@ -55,8 +55,11 @@ fn counting_module() -> Vec<u8> {
 
 fn app_with(name: &str, stateless: bool) -> std::sync::Arc<AppRuntime> {
     let runtime = AppRuntime::new();
-    let mut def =
-        AppDefinition::new(name).with_function("loadCount", FunctionKind::Action, counting_module());
+    let mut def = AppDefinition::new(name).with_function(
+        "loadCount",
+        FunctionKind::Action,
+        counting_module(),
+    );
     if stateless {
         def = def.stateless("loadCount");
     }
@@ -108,7 +111,9 @@ fn a_stateless_function_gets_a_fresh_instance_every_call() {
 #[test]
 fn an_idle_instance_is_unloaded() {
     let runtime = app_with("evictable", false);
-    runtime.call("evictable", "loadCount", &json!(null)).unwrap();
+    runtime
+        .call("evictable", "loadCount", &json!(null))
+        .unwrap();
     assert_eq!(runtime.pool().loaded(), 1);
     assert_eq!(runtime.pool().idle(), 1, "it went back to the pool warm");
 
@@ -121,7 +126,9 @@ fn an_idle_instance_is_unloaded() {
     assert_eq!(runtime.pool().loaded(), 0, "nothing needed it, so it went");
 
     // And the next call loads it again, from cold.
-    let after = runtime.call("evictable", "loadCount", &json!(null)).unwrap();
+    let after = runtime
+        .call("evictable", "loadCount", &json!(null))
+        .unwrap();
     assert!(after.cold_start);
 }
 
@@ -143,7 +150,12 @@ fn draining_an_app_unloads_only_that_apps_instances() {
     assert_eq!(runtime.pool().loaded(), 1);
 
     // The surviving app's instance is still warm.
-    assert!(!runtime.call("keep", "loadCount", &json!(null)).unwrap().cold_start);
+    assert!(
+        !runtime
+            .call("keep", "loadCount", &json!(null))
+            .unwrap()
+            .cold_start
+    );
 }
 
 #[test]

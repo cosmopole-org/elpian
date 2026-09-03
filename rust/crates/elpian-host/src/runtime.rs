@@ -18,9 +18,9 @@ use crate::app::{AppDefinition, FunctionKind};
 use crate::appfs::AppFs;
 use crate::component::{ComponentPayload, RenderCache};
 use crate::identity::Identity;
+use crate::invoke::{invoke, InvokeLimits, Outcome};
 use crate::pool::{InstancePool, Meters, PoolConfig};
 use crate::quota::{Admission, Quota, QuotaEnforcer};
-use crate::invoke::{invoke, InvokeLimits, Outcome};
 use crate::services::{InvocationLog, ServerContext, ServerServices};
 use crate::state::{SecretStore, StateStore};
 
@@ -43,8 +43,14 @@ pub enum CallError {
     /// The app is over budget. `stage` says how far up the ladder it is and
     /// `axis` which budget it blew — both for the operator; the caller is told
     /// only that the app is over its quota.
-    OverQuota { stage: String, axis: String },
-    UnknownFunction { app: String, function: String },
+    OverQuota {
+        stage: String,
+        axis: String,
+    },
+    UnknownFunction {
+        app: String,
+        function: String,
+    },
     /// The function exists but is the other kind — an action asked to render,
     /// or a component invoked as an action.
     WrongKind {
@@ -210,7 +216,12 @@ impl AppRuntime {
     }
 
     /// Invoke an action (`server.call`).
-    pub fn call(self: &Arc<Self>, app: &str, function: &str, args: &Value) -> Result<Invocation, CallError> {
+    pub fn call(
+        self: &Arc<Self>,
+        app: &str,
+        function: &str,
+        args: &Value,
+    ) -> Result<Invocation, CallError> {
         self.dispatch(app, function, args, FunctionKind::Action, 0, None)
     }
 
@@ -226,7 +237,12 @@ impl AppRuntime {
     }
 
     /// Invoke a server component (`server.render`).
-    pub fn render(self: &Arc<Self>, app: &str, function: &str, args: &Value) -> Result<Invocation, CallError> {
+    pub fn render(
+        self: &Arc<Self>,
+        app: &str,
+        function: &str,
+        args: &Value,
+    ) -> Result<Invocation, CallError> {
         self.dispatch(app, function, args, FunctionKind::Component, 0, None)
     }
 
@@ -291,8 +307,7 @@ impl AppRuntime {
         if depth == 0 {
             let meters = self.meters(app_id);
             let is_write = expected == FunctionKind::Action;
-            if let Admission::Refuse { stage, axis } =
-                self.quotas.admit(app_id, &meters, is_write)
+            if let Admission::Refuse { stage, axis } = self.quotas.admit(app_id, &meters, is_write)
             {
                 return Err(CallError::OverQuota {
                     stage: stage.as_str().to_string(),
@@ -451,10 +466,14 @@ struct NestedInvoker {
 
 impl crate::services::FunctionInvoker for NestedInvoker {
     fn invoke(&self, function: &str, args: &Value, kind: FunctionKind) -> Value {
-        match self
-            .runtime
-            .dispatch(&self.app, function, args, kind, self.depth, self.user.clone())
-        {
+        match self.runtime.dispatch(
+            &self.app,
+            function,
+            args,
+            kind,
+            self.depth,
+            self.user.clone(),
+        ) {
             Ok(Invocation {
                 outcome: Outcome::Returned(value),
                 ..

@@ -97,8 +97,14 @@ fn every_corpus_case_resolves_as_specified() {
             .collect();
         assert_eq!(actual_denied, expected_denied, "denied set in case: {name}");
 
-        if let Some(expected) = case["expect"].get("mayHostChildren").and_then(Value::as_bool) {
-            assert_eq!(policy.may_host_children, expected, "children in case: {name}");
+        if let Some(expected) = case["expect"]
+            .get("mayHostChildren")
+            .and_then(Value::as_bool)
+        {
+            assert_eq!(
+                policy.may_host_children, expected,
+                "children in case: {name}"
+            );
         }
 
         if let Some(expected) = case["expect"].get("limits").and_then(Value::as_object) {
@@ -141,8 +147,14 @@ fn an_api_allowlist_narrows_further_than_the_capability() {
     let policy = Policy::resolve(&manifest, &grant);
 
     assert!(policy.allows_api("net.fetch"));
-    assert!(!policy.allows_api("net.open"), "same capability, not on the list");
-    assert!(!policy.allows_api("kv.get"), "and a capability not held at all");
+    assert!(
+        !policy.allows_api("net.open"),
+        "same capability, not on the list"
+    );
+    assert!(
+        !policy.allows_api("kv.get"),
+        "and a capability not held at all"
+    );
 }
 
 #[test]

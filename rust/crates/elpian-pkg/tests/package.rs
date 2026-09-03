@@ -19,9 +19,18 @@ fn sample() -> Package {
             ]
         }),
         entries: vec![
-            Entry { name: "client".into(), data: b"client bytecode".to_vec() },
-            Entry { name: "fn/save".into(), data: b"save bytecode".to_vec() },
-            Entry { name: "fn/NoteList".into(), data: b"list bytecode".to_vec() },
+            Entry {
+                name: "client".into(),
+                data: b"client bytecode".to_vec(),
+            },
+            Entry {
+                name: "fn/save".into(),
+                data: b"save bytecode".to_vec(),
+            },
+            Entry {
+                name: "fn/NoteList".into(),
+                data: b"list bytecode".to_vec(),
+            },
         ],
     }
 }
@@ -135,7 +144,10 @@ fn something_that_is_not_a_package_is_refused_by_magic() {
         Package::read(b"this is not a package at all", KEY),
         Err(PackageError::BadMagic)
     );
-    assert_eq!(Package::read(b"", KEY), Err(PackageError::Truncated("header")));
+    assert_eq!(
+        Package::read(b"", KEY),
+        Err(PackageError::Truncated("header"))
+    );
 }
 
 #[test]
@@ -169,7 +181,10 @@ fn a_newer_container_format_is_refused_rather_than_guessed_at() {
         written[at..at + 7].copy_from_slice(b"\"EPKG9\"");
     }
     // The edit breaks the signature, which is the first line of defence.
-    assert_eq!(Package::read(&written, KEY), Err(PackageError::BadSignature));
+    assert_eq!(
+        Package::read(&written, KEY),
+        Err(PackageError::BadSignature)
+    );
 
     // Signed correctly, a future format is refused by name rather than parsed.
     let mut future = sample();

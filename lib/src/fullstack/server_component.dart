@@ -132,7 +132,8 @@ class _ServerComponentState extends State<ServerComponent> {
       setState(() => _loading = true);
     }
 
-    final result = await widget.client.renderComponent(widget.name, widget.args);
+    final result =
+        await widget.client.renderComponent(widget.name, widget.args);
 
     if (!mounted || generation != _generation) return;
     setState(() {
@@ -167,7 +168,8 @@ class _ServerComponentState extends State<ServerComponent> {
             _defaultError(_error!);
       }
       if (_loading) {
-        return widget.pending ?? const Center(child: CircularProgressIndicator());
+        return widget.pending ??
+            const Center(child: CircularProgressIndicator());
       }
       return const SizedBox.shrink();
     }

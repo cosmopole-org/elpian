@@ -221,8 +221,18 @@ fn an_authenticated_render_is_not_served_from_the_shared_cache() {
     );
 
     // Anonymous renders do cache.
-    assert!(!runtime.render("peruser", "Panel", &json!(null)).unwrap().cache_hit);
-    assert!(runtime.render("peruser", "Panel", &json!(null)).unwrap().cache_hit);
+    assert!(
+        !runtime
+            .render("peruser", "Panel", &json!(null))
+            .unwrap()
+            .cache_hit
+    );
+    assert!(
+        runtime
+            .render("peruser", "Panel", &json!(null))
+            .unwrap()
+            .cache_hit
+    );
 
     // An authenticated one never reads that entry, and never writes one.
     let alice = Some(Identity {
@@ -264,9 +274,7 @@ fn an_unconfigured_admin_surface_refuses_everyone() {
 
 #[test]
 fn an_operator_token_opens_the_admin_surface() {
-    let server = serve(
-        Gateway::new(app_runtime()).with_operator_tokens(vec!["op-token".into()]),
-    );
+    let server = serve(Gateway::new(app_runtime()).with_operator_tokens(vec!["op-token".into()]));
     let auth = Some("Bearer op-token");
 
     let apps = request(server.addr, "GET", "/admin/apps", auth, "");
@@ -284,9 +292,7 @@ fn an_operator_token_opens_the_admin_surface() {
 
 #[test]
 fn meters_are_readable_through_the_admin_surface() {
-    let server = serve(
-        Gateway::new(app_runtime()).with_operator_tokens(vec!["op".into()]),
-    );
+    let server = serve(Gateway::new(app_runtime()).with_operator_tokens(vec!["op".into()]));
     let auth = Some("Bearer op");
 
     for _ in 0..3 {
@@ -295,7 +301,11 @@ fn meters_are_readable_through_the_admin_surface() {
 
     let meters = request(server.addr, "GET", "/admin/apps/notes/meters", auth, "").json();
     assert_eq!(meters["invocations"], json!(3));
-    assert_eq!(meters["coldStarts"], json!(1), "only the first loaded a module");
+    assert_eq!(
+        meters["coldStarts"],
+        json!(1),
+        "only the first loaded a module"
+    );
     assert!(meters["instructions"].as_u64().unwrap() > 0);
     assert!(meters["storageBytes"].as_u64().unwrap() > 0);
 
@@ -304,9 +314,7 @@ fn meters_are_readable_through_the_admin_surface() {
 
 #[test]
 fn an_operator_can_drain_one_apps_instances() {
-    let server = serve(
-        Gateway::new(app_runtime()).with_operator_tokens(vec!["op".into()]),
-    );
+    let server = serve(Gateway::new(app_runtime()).with_operator_tokens(vec!["op".into()]));
     let auth = Some("Bearer op");
 
     request(server.addr, "POST", "/apps/notes/fn/save", None, "");
@@ -326,17 +334,24 @@ fn an_operator_can_drain_one_apps_instances() {
 fn refused_admin_attempts_are_audited_too() {
     // A run of refusals is the single most interesting thing an admin log can
     // contain, and a trail with only successes would not show it.
-    let server = serve(
-        Gateway::new(app_runtime()).with_operator_tokens(vec!["op".into()]),
-    );
+    let server = serve(Gateway::new(app_runtime()).with_operator_tokens(vec!["op".into()]));
 
     for _ in 0..3 {
-        request(server.addr, "GET", "/admin/apps", Some("Bearer guessed"), "");
+        request(
+            server.addr,
+            "GET",
+            "/admin/apps",
+            Some("Bearer guessed"),
+            "",
+        );
     }
     let audit = request(server.addr, "GET", "/admin/audit", Some("Bearer op"), "").json();
     let events = audit["events"].as_array().unwrap();
 
-    let refusals = events.iter().filter(|e| e["allowed"] == json!(false)).count();
+    let refusals = events
+        .iter()
+        .filter(|e| e["allowed"] == json!(false))
+        .count();
     assert_eq!(refusals, 3, "every refused attempt was recorded");
     assert!(
         events.iter().any(|e| e["allowed"] == json!(true)),

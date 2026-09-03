@@ -42,7 +42,10 @@ fn busy_program(iterations: i64) -> String {
 const RUNAWAY: i64 = 4_000_000_000;
 
 fn spawn(id: &str, iterations: i64) {
-    assert!(api::create_vm_from_ast(id.to_string(), busy_program(iterations)));
+    assert!(api::create_vm_from_ast(
+        id.to_string(),
+        busy_program(iterations)
+    ));
 }
 
 #[test]
@@ -97,7 +100,10 @@ fn an_idle_instance_is_never_deadline_terminated() {
     for _ in 0..5 {
         let report = sweep(&config);
         assert!(
-            !report.deadline_terminated.iter().any(|(id, _)| id == "sup-idle"),
+            !report
+                .deadline_terminated
+                .iter()
+                .any(|(id, _)| id == "sup-idle"),
             "an idle instance was terminated: {:?}",
             report.deadline_terminated
         );
@@ -124,7 +130,10 @@ fn a_finished_turn_leaves_the_instance_off_the_clock() {
     };
     let report = sweep(&config);
     assert!(
-        !report.deadline_terminated.iter().any(|(id, _)| id == "sup-clean"),
+        !report
+            .deadline_terminated
+            .iter()
+            .any(|(id, _)| id == "sup-clean"),
         "a finished instance was put on the deadline clock: {:?}",
         report.deadline_terminated
     );
@@ -166,7 +175,10 @@ fn the_sweep_does_not_block_behind_a_running_turn() {
         swept_in < Duration::from_millis(500),
         "the sweep blocked for {swept_in:?} behind a running turn"
     );
-    assert!(!report.deadline_terminated.iter().any(|(id, _)| id == "sup-hog"));
+    assert!(!report
+        .deadline_terminated
+        .iter()
+        .any(|(id, _)| id == "sup-hog"));
 
     api::terminate_vm("sup-hog");
     runner.join().unwrap();

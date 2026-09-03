@@ -164,9 +164,9 @@ class ElpianServerClient {
       final decoded = jsonDecode(raw);
       if (decoded is Map && decoded['error'] != null) {
         final error = decoded['error'];
-        final message =
-            error is Map ? (error['message']?.toString() ?? 'the call failed')
-                         : error.toString();
+        final message = error is Map
+            ? (error['message']?.toString() ?? 'the call failed')
+            : error.toString();
         return ServerRenderResult(error: message);
       }
       if (decoded is Map<String, dynamic>) {
@@ -188,9 +188,9 @@ class ElpianServerClient {
       final decoded = jsonDecode(raw);
       if (decoded is Map && decoded['error'] != null) {
         final error = decoded['error'];
-        final message =
-            error is Map ? (error['message']?.toString() ?? 'the call failed')
-                         : error.toString();
+        final message = error is Map
+            ? (error['message']?.toString() ?? 'the call failed')
+            : error.toString();
         return ServerCallResult(error: message);
       }
       return ServerCallResult(result: decoded);
@@ -281,7 +281,8 @@ class ElpianNetPolicy {
     if (mode == 'open') return true;
     final host = Uri.tryParse(url)?.host;
     if (host == null || host.isEmpty) return false;
-    return allowlist.any((entry) => _matches(entry.toLowerCase(), host.toLowerCase()));
+    return allowlist
+        .any((entry) => _matches(entry.toLowerCase(), host.toLowerCase()));
   }
 
   /// Whole-label matching, the same rule the server applies: `*.example.com`
@@ -298,7 +299,6 @@ class ElpianNetPolicy {
     return host == entry;
   }
 }
-
 
 /// The result of invoking a server action from Dart.
 class ServerCallResult {

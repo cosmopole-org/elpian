@@ -457,4 +457,3 @@ fn push_json_string(out: &mut String, s: &str) {
     }
     out.push('"');
 }
-

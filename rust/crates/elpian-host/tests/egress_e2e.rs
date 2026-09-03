@@ -300,13 +300,9 @@ fn the_host_header_carries_the_name_while_the_connection_used_the_checked_addres
         }
     });
 
-    let response = elpian_host::fetch::perform(
-        addr,
-        "virtual.example.com",
-        "/",
-        &FetchLimits::default(),
-    )
-    .expect("the request should complete");
+    let response =
+        elpian_host::fetch::perform(addr, "virtual.example.com", "/", &FetchLimits::default())
+            .expect("the request should complete");
     assert_eq!(response.status, 204);
 
     let request = seen.lock().unwrap().clone();
@@ -345,8 +341,11 @@ fn an_oversized_body_is_truncated_during_the_read() {
             let _ = stream.read(&mut buf);
             let body = "x".repeat(64 * 1024);
             let _ = stream.write_all(
-                format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{body}", body.len())
-                    .as_bytes(),
+                format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{body}",
+                    body.len()
+                )
+                .as_bytes(),
             );
         }
     });

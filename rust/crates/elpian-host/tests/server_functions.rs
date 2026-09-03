@@ -241,7 +241,10 @@ fn the_network_is_not_reachable_from_a_server_function_by_default() {
     let ast = program(vec![func_def(
         "reach",
         vec![],
-        vec![ret(host_call("net.fetch", vec![strv("http://example.com")]))],
+        vec![ret(host_call(
+            "net.fetch",
+            vec![strv("http://example.com")],
+        ))],
     )]);
     // `Network` is grantable in principle, but an app that was not granted it
     // holds nothing — the base is deny-all.
@@ -267,7 +270,10 @@ fn a_secret_not_declared_in_the_manifest_reads_as_absent() {
     fx.secrets.put("notes", "apiKey", "s3cret".into());
     fx.secrets.put("notes", "otherKey", "also-here".into());
 
-    assert_eq!(returned(fx.call("declared", json!(null)).0), json!("s3cret"));
+    assert_eq!(
+        returned(fx.call("declared", json!(null)).0),
+        json!("s3cret")
+    );
     assert_eq!(
         returned(fx.call("undeclared", json!(null)).0),
         json!(null),

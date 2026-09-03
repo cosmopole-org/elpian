@@ -21,12 +21,12 @@ use elpian_vm::api;
 use serde_json::{json, Value};
 
 use crate::app::FunctionKind;
-use crate::appfs::AppFs;
 use crate::app::NetworkMode;
+use crate::appfs::AppFs;
 use crate::component::RenderCache;
 use crate::fetch::{fetch, EgressRecord, FetchLimits};
-use crate::identity::Identity;
 use crate::hostcall::{HostCall, HostServices};
+use crate::identity::Identity;
 use crate::state::{SecretStore, StateStore};
 
 /// How a running server function reaches another function of the same app.
@@ -161,10 +161,7 @@ impl ServerServices {
             return Value::Null;
         };
         match call.api.as_str() {
-            "kv.get" => self
-                .state
-                .get(&self.ctx.app, key)
-                .unwrap_or(Value::Null),
+            "kv.get" => self.state.get(&self.ctx.app, key).unwrap_or(Value::Null),
             "kv.set" => {
                 let value = call.arg(1).clone();
                 match self.state.set(&self.ctx.app, key, value) {

@@ -53,7 +53,10 @@ void main() {
   // ---- the connector ------------------------------------------------------
 
   test('an action returns its result', () async {
-    reply = (path, n) async => {'ok': true, 'result': {'id': 7}};
+    reply = (path, n) async => {
+          'ok': true,
+          'result': {'id': 7}
+        };
     final result = await clientFor().callAction('createNote', {'title': 'x'});
     expect(result.ok, isTrue);
     expect(result.result, {'id': 7});
@@ -101,7 +104,8 @@ void main() {
     });
 
     test('an allowlist matches whole labels only', () {
-      final policy = ElpianNetPolicy.brokered(['example.com', '*.api.example.com']);
+      final policy =
+          ElpianNetPolicy.brokered(['example.com', '*.api.example.com']);
       expect(policy.allows('https://example.com/x'), isTrue);
       expect(policy.allows('https://v1.api.example.com/x'), isTrue);
 
@@ -123,7 +127,9 @@ void main() {
       expect(ElpianNetPolicy.fromManifest('closed').mode, 'closed');
       expect(ElpianNetPolicy.fromManifest('open').mode, 'open');
       expect(
-        ElpianNetPolicy.fromManifest({'allow': ['api.example.com']}).mode,
+        ElpianNetPolicy.fromManifest({
+          'allow': ['api.example.com']
+        }).mode,
         'brokered',
       );
     });
@@ -187,7 +193,8 @@ void main() {
 
   testWidgets('a failed first render shows the error builder', (tester) async {
     final client = _StubClient()
-      ..next = (n) async => const ServerRenderResult(error: 'the function failed');
+      ..next =
+          (n) async => const ServerRenderResult(error: 'the function failed');
 
     await tester.pumpWidget(MaterialApp(
       home: ServerComponent(
@@ -260,13 +267,15 @@ void main() {
       };
 
     await tester.pumpWidget(MaterialApp(
-      home: ServerComponent(client: client, name: 'Panel', args: const {'page': 1}),
+      home: ServerComponent(
+          client: client, name: 'Panel', args: const {'page': 1}),
     ));
     await tester.pump();
 
     // Change the arguments, starting a second fetch that finishes first.
     await tester.pumpWidget(MaterialApp(
-      home: ServerComponent(client: client, name: 'Panel', args: const {'page': 2}),
+      home: ServerComponent(
+          client: client, name: 'Panel', args: const {'page': 2}),
     ));
     await tester.pumpAndSettle();
     expect(find.text('fresh'), findsOneWidget);

@@ -183,7 +183,9 @@ impl Executor {
         cb_id: i64,
         payload: Val,
     ) -> (u8, i64, Val) {
-        self.with_rng_installed(move |this| this.single_thread_operation_inner(op_code, cb_id, payload))
+        self.with_rng_installed(move |this| {
+            this.single_thread_operation_inner(op_code, cb_id, payload)
+        })
     }
 
     fn single_thread_operation_inner(
@@ -2722,4 +2724,3 @@ impl Executor {
         Val::new(ty::NULL, Payload::Null)
     }
 }
-

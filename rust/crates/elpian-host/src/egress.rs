@@ -86,7 +86,10 @@ pub enum EgressDecision {
     /// connect, a name that answered with a public address during the check
     /// could answer with `127.0.0.1` a moment later, and the check would have
     /// been performed on an address that is never connected to.
-    Allow { addr: SocketAddr, host: String },
+    Allow {
+        addr: SocketAddr,
+        host: String,
+    },
     Deny(DenyReason),
 }
 
@@ -304,7 +307,10 @@ mod tests {
         assert_eq!(target.host, "evil.example");
 
         assert_eq!(
-            decide(&brokered(&["allowed.example"]), "http://allowed.example@evil.example/"),
+            decide(
+                &brokered(&["allowed.example"]),
+                "http://allowed.example@evil.example/"
+            ),
             EgressDecision::Deny(DenyReason::NotAllowlisted("evil.example".into()))
         );
     }
@@ -318,7 +324,10 @@ mod tests {
 
         assert!(!allowlist_matches(&list, "notexample.com"));
         assert!(!allowlist_matches(&list, "example.com.evil.net"));
-        assert!(!allowlist_matches(&list, "api.example.com"), "the bare suffix is not a subdomain of itself");
+        assert!(
+            !allowlist_matches(&list, "api.example.com"),
+            "the bare suffix is not a subdomain of itself"
+        );
         assert!(!allowlist_matches(&list, "evil-api.example.com"));
     }
 
@@ -341,20 +350,20 @@ mod tests {
     #[test]
     fn addresses_the_host_must_never_reach_on_a_guests_behalf() {
         let blocked = [
-            "127.0.0.1",           // loopback
-            "127.1.2.3",           // the rest of 127/8
-            "0.0.0.0",             // unspecified
-            "10.1.2.3",            // private
-            "172.16.0.1",          // private
-            "192.168.1.1",         // private
-            "169.254.169.254",     // the cloud metadata endpoint
-            "100.64.0.1",          // carrier-grade NAT
-            "198.18.0.1",          // benchmarking
-            "224.0.0.1",           // multicast
-            "::1",                 // v6 loopback
-            "fd00::1",             // v6 unique-local
-            "fe80::1",             // v6 link-local
-            "::ffff:127.0.0.1",    // v4-mapped loopback wearing a v6 hat
+            "127.0.0.1",        // loopback
+            "127.1.2.3",        // the rest of 127/8
+            "0.0.0.0",          // unspecified
+            "10.1.2.3",         // private
+            "172.16.0.1",       // private
+            "192.168.1.1",      // private
+            "169.254.169.254",  // the cloud metadata endpoint
+            "100.64.0.1",       // carrier-grade NAT
+            "198.18.0.1",       // benchmarking
+            "224.0.0.1",        // multicast
+            "::1",              // v6 loopback
+            "fd00::1",          // v6 unique-local
+            "fe80::1",          // v6 link-local
+            "::ffff:127.0.0.1", // v4-mapped loopback wearing a v6 hat
             "::ffff:169.254.169.254",
         ];
         for raw in blocked {

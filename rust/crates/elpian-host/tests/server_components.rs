@@ -64,7 +64,10 @@ fn app() -> std::sync::Arc<AppRuntime> {
                     vec![
                         host_call(
                             "kv.set",
-                            vec![strv("n"), json!({ "type": "identifier", "data": { "name": "v" } })],
+                            vec![
+                                strv("n"),
+                                json!({ "type": "identifier", "data": { "name": "v" } }),
+                            ],
                         ),
                         ret(host_call("cache.revalidate", vec![strv("panel")])),
                     ],
@@ -79,7 +82,12 @@ fn a_component_returns_a_payload_rather_than_rendering() {
     let runtime = app();
     runtime.call("dash", "bump", &json!("first")).unwrap();
 
-    let payload = returned(runtime.render("dash", "Panel", &json!(null)).unwrap().outcome);
+    let payload = returned(
+        runtime
+            .render("dash", "Panel", &json!(null))
+            .unwrap()
+            .outcome,
+    );
     assert_eq!(payload["component"]["type"], json!("text"));
     assert_eq!(payload["component"]["text"], json!("first"));
 }
@@ -104,7 +112,12 @@ fn a_second_render_is_served_from_the_cache_without_running_the_guest() {
 fn an_action_revalidating_a_tag_makes_the_next_render_fresh() {
     let runtime = app();
     runtime.call("dash", "bump", &json!("before")).unwrap();
-    let cached = returned(runtime.render("dash", "Panel", &json!(null)).unwrap().outcome);
+    let cached = returned(
+        runtime
+            .render("dash", "Panel", &json!(null))
+            .unwrap()
+            .outcome,
+    );
     assert_eq!(cached["component"]["text"], json!("before"));
 
     // The state changed *and* the action said so.
@@ -143,7 +156,12 @@ fn different_arguments_are_different_renders() {
         )]),
     ));
 
-    let one = returned(runtime.render("pager", "Page", &json!("one")).unwrap().outcome);
+    let one = returned(
+        runtime
+            .render("pager", "Page", &json!("one"))
+            .unwrap()
+            .outcome,
+    );
     let two = runtime.render("pager", "Page", &json!("two")).unwrap();
 
     assert_eq!(one["component"]["text"], json!("one"));
@@ -171,9 +189,17 @@ fn a_component_that_asked_for_no_caching_runs_every_time() {
         )]),
     ));
 
-    assert!(!runtime.render("live", "Now", &json!(null)).unwrap().cache_hit);
     assert!(
-        !runtime.render("live", "Now", &json!(null)).unwrap().cache_hit,
+        !runtime
+            .render("live", "Now", &json!(null))
+            .unwrap()
+            .cache_hit
+    );
+    assert!(
+        !runtime
+            .render("live", "Now", &json!(null))
+            .unwrap()
+            .cache_hit,
         "a component that named neither a tag nor a TTL is never cached"
     );
 }
@@ -216,9 +242,15 @@ fn one_app_cannot_invalidate_another_apps_cache() {
     runtime.render("beta", "Panel", &json!(null)).unwrap();
 
     // beta clears "shared" — alpha's entry must survive.
-    assert_eq!(returned(runtime.call("beta", "clear", &json!(null)).unwrap().outcome), json!(1));
+    assert_eq!(
+        returned(runtime.call("beta", "clear", &json!(null)).unwrap().outcome),
+        json!(1)
+    );
     assert!(
-        runtime.render("alpha", "Panel", &json!(null)).unwrap().cache_hit,
+        runtime
+            .render("alpha", "Panel", &json!(null))
+            .unwrap()
+            .cache_hit,
         "an app must not be able to clear another's cache by naming a tag they share"
     );
 }
@@ -269,7 +301,10 @@ fn an_uncached_component_works_on_a_warm_instance() {
     for _ in 0..3 {
         let warm = runtime.render("warmcomp", "Live", &json!(null)).unwrap();
         assert!(!warm.cold_start, "the instance is being reused");
-        assert!(!warm.cache_hit, "and nothing is cached, so the guest really ran");
+        assert!(
+            !warm.cache_hit,
+            "and nothing is cached, so the guest really ran"
+        );
         assert_eq!(
             returned(warm.outcome)["component"]["text"],
             json!("still here"),
@@ -291,13 +326,20 @@ fn an_action_returns_correctly_on_a_warm_instance() {
                 module(vec![func_def(
                     "echo",
                     vec!["v"],
-                    vec![ret(json!({ "type": "identifier", "data": { "name": "v" } }))],
+                    vec![ret(
+                        json!({ "type": "identifier", "data": { "name": "v" } }),
+                    )],
                 )]),
             ),
     );
 
     assert_eq!(
-        returned(runtime.call("warmact", "echo", &json!("one")).unwrap().outcome),
+        returned(
+            runtime
+                .call("warmact", "echo", &json!("one"))
+                .unwrap()
+                .outcome
+        ),
         json!("one")
     );
     let warm = runtime.call("warmact", "echo", &json!("two")).unwrap();

@@ -55,10 +55,7 @@ pub const SERVER_DENIED: &[(Capability, &str)] = &[
         Capability::Surface,
         "a server function returns a payload; it never draws",
     ),
-    (
-        Capability::Dom,
-        "there is no document tree on the server",
-    ),
+    (Capability::Dom, "there is no document tree on the server"),
     (
         Capability::Canvas,
         "there is no drawing surface on the server",
@@ -163,6 +160,9 @@ mod tests {
         let caps = server_capabilities(&[Capability::Dom, Capability::VmManage, Capability::State]);
         assert!(!caps.is_allowed(Capability::Dom));
         assert!(!caps.is_allowed(Capability::VmManage));
-        assert!(caps.is_allowed(Capability::State), "a grantable one still lands");
+        assert!(
+            caps.is_allowed(Capability::State),
+            "a grantable one still lands"
+        );
     }
 }

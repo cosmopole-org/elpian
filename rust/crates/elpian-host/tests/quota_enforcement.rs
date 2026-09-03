@@ -65,7 +65,10 @@ fn app(id: &str) -> Arc<AppRuntime> {
                 module(vec![func_def(
                     "outer",
                     vec![],
-                    vec![ret(host_call("server.call", vec![strv("inner"), strv("x")]))],
+                    vec![ret(host_call(
+                        "server.call",
+                        vec![strv("inner"), strv("x")],
+                    ))],
                 )]),
             )
             .with_function(
@@ -165,7 +168,10 @@ fn a_nested_call_is_not_refused_halfway_through() {
             ..Quota::default()
         },
     );
-    let outcome = runtime.call("nested", "outer", &json!(null)).unwrap().outcome;
+    let outcome = runtime
+        .call("nested", "outer", &json!(null))
+        .unwrap()
+        .outcome;
     assert_eq!(outcome, Outcome::Returned(json!("x")));
 }
 

@@ -79,7 +79,10 @@ fn main() {
     let listener = match std::net::TcpListener::bind((config.host.as_str(), config.port)) {
         Ok(listener) => listener,
         Err(error) => {
-            eprintln!("elpiand: cannot bind {}:{}: {error}", config.host, config.port);
+            eprintln!(
+                "elpiand: cannot bind {}:{}: {error}",
+                config.host, config.port
+            );
             std::process::exit(1);
         }
     };
@@ -134,10 +137,16 @@ fn parse_args() -> Result<Config, String> {
             "--port" => config.port = value.parse().map_err(|_| "invalid port".to_string())?,
             "--registry" => config.registry = PathBuf::from(value),
             "--workers" => {
-                config.workers = value.parse().map_err(|_| "invalid worker count".to_string())?
+                config.workers = value
+                    .parse()
+                    .map_err(|_| "invalid worker count".to_string())?
             }
             "--queue" => {
-                config.queue = Some(value.parse().map_err(|_| "invalid queue depth".to_string())?)
+                config.queue = Some(
+                    value
+                        .parse()
+                        .map_err(|_| "invalid queue depth".to_string())?,
+                )
             }
             "--data-root" => config.data_root = Some(PathBuf::from(value)),
             flag => return Err(format!("unknown flag {flag}")),
@@ -274,8 +283,7 @@ fn load_app(dir: &Path) -> Result<AppDefinition, String> {
             Some(other) => return Err(format!("{name}: unknown kind {other}")),
         };
         let module = dir.join("fn").join(format!("{name}.bc"));
-        let bytecode =
-            std::fs::read(&module).map_err(|e| format!("{}: {e}", module.display()))?;
+        let bytecode = std::fs::read(&module).map_err(|e| format!("{}: {e}", module.display()))?;
         app = app.with_function(name, kind, bytecode);
     }
 

@@ -44,7 +44,10 @@ fn rng_program() -> String {
 }
 
 fn spawn(id: &str) {
-    assert!(api::create_vm_from_ast(id.to_string(), rng_program()), "AST should compile");
+    assert!(
+        api::create_vm_from_ast(id.to_string(), rng_program()),
+        "AST should compile"
+    );
     let _ = api::execute_vm(id.to_string());
 }
 
@@ -62,7 +65,10 @@ fn interleaved_instances_do_not_share_a_random_stream() {
     let (a1, b1) = (draw("rng-a", 1), draw("rng-b", 1));
     let (a2, b2) = (draw("rng-a", 2), draw("rng-b", 2));
 
-    assert_eq!(a1, b1, "identically seeded instances start at the same value");
+    assert_eq!(
+        a1, b1,
+        "identically seeded instances start at the same value"
+    );
     assert_eq!(a2, b2, "and stay in step despite interleaving");
     assert_ne!(a1, a2, "a single instance still advances its own stream");
 
@@ -80,7 +86,10 @@ fn seeding_one_instance_does_not_reseed_another() {
 
     let seeded = draw("rng-seeded", 2);
     let untouched = draw("rng-untouched", 2);
-    assert_ne!(seeded, untouched, "the re-seed reached only the instance that asked");
+    assert_ne!(
+        seeded, untouched,
+        "the re-seed reached only the instance that asked"
+    );
     assert_eq!(
         untouched,
         draw("rng-control", 2),

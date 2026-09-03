@@ -86,8 +86,10 @@ impl Policy {
             manifest.requested_capabilities.clone()
         };
 
-        let allowed: BTreeSet<Capability> =
-            requested.intersection(&grant.capabilities).copied().collect();
+        let allowed: BTreeSet<Capability> = requested
+            .intersection(&grant.capabilities)
+            .copied()
+            .collect();
         let denied: BTreeSet<Capability> =
             requested.difference(&grant.capabilities).copied().collect();
 
@@ -123,7 +125,7 @@ impl Policy {
 /// an axis.
 pub fn tightest(requested: Option<&ResourceLimits>, granted: &ResourceLimits) -> ResourceLimits {
     let Some(requested) = requested else {
-        return granted.clone();
+        return *granted;
     };
     fn tighter(a: Option<u64>, b: Option<u64>) -> Option<u64> {
         match (a, b) {

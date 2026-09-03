@@ -273,7 +273,10 @@ fn a_guest_trap_returns_500_without_leaking_the_reason_to_the_caller() {
         error, "the function failed",
         "the caller must not be told about interpreter internals"
     );
-    assert!(!error.contains("subtract"), "the trap detail stayed server-side");
+    assert!(
+        !error.contains("subtract"),
+        "the trap detail stayed server-side"
+    );
 
     server.stop();
 }
@@ -302,7 +305,10 @@ fn a_burst_well_past_the_worker_count_is_absorbed_rather_than_shed() {
         .collect();
 
     let shed = statuses.iter().filter(|s| **s == 503).count();
-    assert_eq!(shed, 0, "{shed} of 64 requests were shed under an ordinary burst");
+    assert_eq!(
+        shed, 0,
+        "{shed} of 64 requests were shed under an ordinary burst"
+    );
     assert!(statuses.iter().all(|s| *s == 200));
 
     server.stop();
@@ -318,12 +324,14 @@ fn the_queue_is_still_bounded() {
     let addr = server.addr;
 
     let handles: Vec<_> = (0..32)
-        .map(|_| std::thread::spawn(move || request(addr, "POST", "/apps/notes/fn/load", "").status))
+        .map(|_| {
+            std::thread::spawn(move || request(addr, "POST", "/apps/notes/fn/load", "").status)
+        })
         .collect();
     let statuses: Vec<u16> = handles.into_iter().map(|h| h.join().unwrap()).collect();
 
     assert!(
-        statuses.iter().any(|s| *s == 503),
+        statuses.contains(&503),
         "a deliberately tiny queue should shed load, got {statuses:?}"
     );
     assert!(

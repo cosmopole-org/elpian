@@ -94,7 +94,8 @@ fn two_guest_turns_overlap_in_wall_time() {
         .map(|id| thread::spawn(move || api::execute_vm(id.to_string())))
         .collect();
     for h in handles {
-        h.join().expect("guest turn should not panic the driving thread");
+        h.join()
+            .expect("guest turn should not panic the driving thread");
     }
     let parallel = started.elapsed();
     api::destroy_vm("par-par-a".into());
@@ -164,7 +165,10 @@ fn terminate_lands_on_an_instance_that_is_mid_turn() {
     while started.elapsed() < Duration::from_millis(50) {
         std::hint::spin_loop();
     }
-    assert!(api::terminate_vm("par-runaway"), "terminate reached the instance");
+    assert!(
+        api::terminate_vm("par-runaway"),
+        "terminate reached the instance"
+    );
 
     runner.join().expect("the terminated turn unwound cleanly");
     assert!(
@@ -192,15 +196,23 @@ fn destroying_an_instance_mid_turn_is_clean() {
     rx.recv().expect("runner started");
 
     let started = Instant::now();
-    assert!(api::destroy_vm("par-doomed".into()), "destroy removed the entry");
+    assert!(
+        api::destroy_vm("par-doomed".into()),
+        "destroy removed the entry"
+    );
     assert!(
         started.elapsed() < Duration::from_secs(2),
         "destroy blocked waiting for the running turn"
     );
-    assert!(!api::vm_exists("par-doomed".into()), "entry is gone immediately");
+    assert!(
+        !api::vm_exists("par-doomed".into()),
+        "entry is gone immediately"
+    );
 
     // The turn is still running against its own handle; stop it so the test
     // does not hang, then confirm the thread unwinds without a panic.
     api::terminate_vm("par-doomed"); // no-op: already unregistered
-    runner.join().expect("the in-flight turn completed without panicking");
+    runner
+        .join()
+        .expect("the in-flight turn completed without panicking");
 }

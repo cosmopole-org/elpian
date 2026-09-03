@@ -191,7 +191,6 @@ mod tests {
     }
 }
 
-
 /// The content address of a blob: `sha256:<hex>`.
 ///
 /// Prefixed with the algorithm so a stored address stays readable if a second
@@ -207,7 +206,11 @@ mod address_tests {
     #[test]
     fn a_content_address_is_stable_and_algorithm_tagged() {
         let a = content_address(b"hello");
-        assert_eq!(a, content_address(b"hello"), "the same bytes address the same");
+        assert_eq!(
+            a,
+            content_address(b"hello"),
+            "the same bytes address the same"
+        );
         assert_ne!(a, content_address(b"hello "), "one byte changes it");
         assert!(a.starts_with("sha256:"));
         assert_eq!(a.len(), "sha256:".len() + 64);
