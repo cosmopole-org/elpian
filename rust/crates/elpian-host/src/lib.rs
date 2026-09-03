@@ -26,10 +26,12 @@
 //! * [`gateway`] — the four routes a device talks to.
 //! * [`component`] — the payload a server component returns, and the cache in
 //!   front of it.
+//! * [`egress`] — the broker: the only way out, and the rules it applies.
 
 pub mod app;
 pub mod appfs;
 pub mod component;
+pub mod egress;
 pub mod gateway;
 pub mod httpcore;
 pub mod hostcall;
@@ -42,6 +44,7 @@ pub mod state;
 pub use app::{AppDefinition, FunctionKind, NetworkMode};
 pub use hostcall::{HostCall, HostServices};
 pub use component::{ComponentPayload, PayloadError, RenderCache};
+pub use egress::{decide, DenyReason, EgressDecision};
 pub use runtime::{AppRuntime, CallError, Invocation};
 pub use invoke::{invoke, InvokeLimits, Outcome};
 pub use posture::{server_capabilities, SERVER_DENIED, SERVER_GRANTABLE};

@@ -118,14 +118,19 @@ currently *every* call.
   so the client saw a broken pipe instead of the refusal and could not tell
   "retry" from "the host is broken". Now: write, half-close, drain.
 
-## P2 — Server components (S2)
+## P2 — Server components (S2) — **host half done**
 
-- [ ] Payload parser shared with the Next.js bridge
-- [ ] `server.render`; host render cache; `revalidate(tag)`
-- [ ] `ServerComponent` widget (pending / ready / error / revalidating)
-- [ ] Islands: client-bundle resolution by name, unknown-island degradation
-- [ ] Streaming over WS into `ElpianStreamWidget`; frame budgets
-- [ ] Tests
+- [x] Payload shape reused from the Next.js bridge, minus `jsCode` (refused, not
+      ignored)
+- [x] `server.render` route; render cache; `cache.revalidate` host API
+- [x] Islands listed by name from `clientComponents`
+- [x] Tests (13)
+- [ ] `ServerComponent` widget (pending / ready / error / revalidating) — **not
+      started**, Dart side
+- [ ] Unknown-island degradation on the device — **not started**, Dart side
+- [ ] Streaming over WS into `ElpianStreamWidget`; frame budgets — **not
+      started**; this is the one piece the std-only runtime decision makes more
+      work, and the piece most likely to reverse it
 
 ## P3 — Registry + hosting (S5)
 
@@ -147,15 +152,26 @@ currently *every* call.
 - [ ] Quota ladder: throttle → strangle → drain → suspend
 - [ ] Tests + benchmarks
 
-## P5 — The proxy (S3)
+## P5 — The proxy (S3) — **decision core done, brought forward**
 
-- [ ] `EgressDecision` / `DenyReason`; the nine ordered checks
-- [ ] Resolve-then-connect (rebinding closed); redirect re-checking
-- [ ] `POST /apps/<app>/proxy`; server-side `net.*` through the broker
-- [ ] `ElpianNetPolicy` in Dart; `netPolicy` on `MiniAppGrant`
-- [ ] Audit records for every allow and deny
-- [ ] Closed-cycle suite + SSRF corpus green
-- [ ] `security-review` run over the diff
+Brought forward out of order because the closed-cycle property is requirement 2
+and it was cheap to finish once S1 existed.
+
+- [x] `EgressDecision` / `DenyReason`; the ordered checks
+- [x] Resolve-then-connect: `Allow` carries the resolved `SocketAddr`, not the
+      hostname, so a caller cannot re-resolve and connect somewhere else
+- [x] Every resolved address checked, not just the first
+- [x] `ElpianNetPolicy` equivalent enforced server-side; closed apps do not hold
+      the gate at all
+- [x] Closed-cycle suite **with a canary listener** + SSRF corpus green
+- [x] Deny reasons are indistinguishable to the guest, detailed to the operator
+- [ ] `POST /apps/<app>/proxy` and the actual outbound HTTP client — **not
+      started**; the decision function is complete and tested, nothing calls it
+      to make a real request yet
+- [ ] Audit records persisted — **not started** (the reasons carry their detail;
+      nothing writes it down)
+- [ ] `ElpianNetPolicy` in Dart; `netPolicy` on `MiniAppGrant` — **not started**
+- [ ] `security-review` run over the diff — **not started**
 
 ## P6 — Packaging (S6)
 
