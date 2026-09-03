@@ -238,7 +238,6 @@ dependencies = [
  "once_cell",
  "serde",
  "serde_json",
- "wasm-bindgen",
 ]
 
 [[package]]
