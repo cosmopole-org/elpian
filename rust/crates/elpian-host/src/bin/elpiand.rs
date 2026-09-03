@@ -43,6 +43,8 @@ struct Config {
     workers: usize,
     queue: Option<usize>,
     data_root: Option<PathBuf>,
+    web_root: Option<PathBuf>,
+    artifact_root: Option<PathBuf>,
 }
 
 fn main() {
@@ -61,7 +63,13 @@ fn main() {
         None => AppRuntime::new(),
     };
 
-    match load_registry(&config.registry, &runtime) {
+    let registry_result = if config.registry.as_os_str().is_empty() {
+        Ok(0)
+    } else {
+        load_registry(&config.registry, &runtime)
+    };
+    match registry_result {
+        Ok(0) if config.registry.as_os_str().is_empty() => {}
         Ok(0) => eprintln!(
             "elpiand: warning: no apps found in {}",
             config.registry.display()
@@ -105,11 +113,26 @@ fn main() {
     );
     std::mem::forget(maintenance);
 
+    let mut gateway = elpian_host::gateway::Gateway::new(Arc::clone(&runtime));
+    if let Some(web_root) = &config.web_root {
+        println!(
+            "[elpian] serving {} for unclaimed paths",
+            web_root.display()
+        );
+        gateway = gateway.with_web_root(web_root.clone());
+    }
+    if let Some(artifact_root) = &config.artifact_root {
+        println!(
+            "[elpian] serving {} under /__elpian/",
+            artifact_root.display()
+        );
+        gateway = gateway.with_artifact_root(artifact_root.clone());
+    }
     let handle = elpian_host::httpcore::serve_with_queue(
         listener,
         config.workers,
         queue,
-        elpian_host::gateway::handler(Arc::clone(&runtime)),
+        elpian_host::gateway::gateway_handler(Arc::new(gateway)),
     );
 
     // The accept loop owns the process from here.
@@ -120,7 +143,8 @@ fn main() {
 }
 
 fn usage() -> String {
-    "usage: elpiand --registry <dir> [--host H] [--port P] [--workers N] [--queue N] [--data-root DIR]"
+    "usage: elpiand --registry <dir> [--host H] [--port P] [--workers N] [--queue N]\n  \
+                [--data-root DIR] [--web-root DIR] [--artifact-root DIR]"
         .into()
 }
 
@@ -134,6 +158,8 @@ fn parse_args() -> Result<Config, String> {
             .unwrap_or(4),
         queue: None,
         data_root: None,
+        web_root: None,
+        artifact_root: None,
     };
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut i = 0;
@@ -158,15 +184,25 @@ fn parse_args() -> Result<Config, String> {
                 )
             }
             "--data-root" => config.data_root = Some(PathBuf::from(value)),
+            "--web-root" => config.web_root = Some(PathBuf::from(value)),
+            "--artifact-root" => config.artifact_root = Some(PathBuf::from(value)),
             flag => return Err(format!("unknown flag {flag}")),
         }
         i += 2;
     }
-    if config.registry.as_os_str().is_empty() {
-        return Err("--registry is required".into());
+    // A host with only a web root is a development server, which is a
+    // legitimate way to run this and should not need a registry that has no
+    // apps in it yet.
+    if config.registry.as_os_str().is_empty() && config.web_root.is_none() {
+        return Err("--registry or --web-root is required".into());
     }
-    if !config.registry.is_dir() {
+    if !config.registry.as_os_str().is_empty() && !config.registry.is_dir() {
         return Err(format!("{} is not a directory", config.registry.display()));
+    }
+    if let Some(web_root) = &config.web_root {
+        if !web_root.is_dir() {
+            return Err(format!("{} is not a directory", web_root.display()));
+        }
     }
     Ok(config)
 }

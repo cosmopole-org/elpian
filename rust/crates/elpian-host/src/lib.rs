@@ -5,7 +5,8 @@
 //!
 //! ## What this replaces
 //!
-//! `elpian-server` created a VM per request, ran it, and returned HTTP 501 the
+//! The previous `elpian-server` (now deleted) created a VM per request, ran it,
+//! and returned HTTP 501 the
 //! moment the guest called the host — so a server function could not log, read
 //! the clock, keep state, or touch a file. There was also no object anywhere
 //! meaning "one mini app": the server knew about a single bytecode blob.
@@ -24,6 +25,8 @@
 //! * [`runtime`] — registered apps, and running one of their functions.
 //! * [`httpcore`] — a small blocking HTTP/1.1 server with a bounded pool.
 //! * [`gateway`] — the routes a device talks to, and the admin surface.
+//! * [`static_files`] — a confined web root, so the host can also stand in for
+//!   a development web server.
 //! * [`component`] — the payload a server component returns, and the cache in
 //!   front of it.
 //! * [`egress`] — the broker: the only way out, and the rules it applies.
@@ -55,6 +58,7 @@ pub mod registry;
 pub mod runtime;
 pub mod services;
 pub mod state;
+pub mod static_files;
 
 pub use app::{AppDefinition, FunctionKind, NetworkMode};
 pub use component::{ComponentPayload, PayloadError, RenderCache};

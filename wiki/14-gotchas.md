@@ -24,7 +24,7 @@ work uses `setTimeout`/`setInterval` calling a named function
 > **On an older toolchain this was the worst trap in the system.** `async` used to
 > compile *cleanly* and produce a program that trapped the VM on first call
 > (`executor.rs:459: the specified data is not runnable`) — and on
-> `elpian-server` that trap poisoned a global lock, so every later request to the
+> the old `elpian-server` that trap poisoned a global lock, so every later request to the
 > process died with a dropped connection while the listener stayed up looking
 > healthy. Both halves are fixed now (rejection in `js2elpian`, poison recovery
 > in `api.rs`), but if you see that signature, you are on an old build.
@@ -276,7 +276,7 @@ counters.
 
 ### 22. No host calls at all — including `console.log`
 
-`console.log` lowers to `askHost("log", …)`, which `elpian-server` does not
+`console.log` lowers to `askHost("log", …)`, which the old `elpian-server` did not
 service. An unhandled host call returns **HTTP 501** with the host-call data as
 the body. This applies to top-level code too: a host call while the program
 initialises fails before your function is reached.

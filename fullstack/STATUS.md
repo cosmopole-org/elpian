@@ -83,10 +83,12 @@ workspace builds and tests. Flutter 3.47.2 / Dart 3.13.2 present — Dart change
       `ElpianServerClient.hostHandlers` on `ElpianVm.registerHostHandlers`
 - [x] Per-function server modules + function table — `elpian-pkg` writes them,
       `elpiand` reads them, the E2E script drives both
-- [ ] `elpian-server` shimmed onto the host so `run dev` keeps working —
-      **not started**; the old dev server still exists untouched
-- [ ] The `elpian` CLI itself does not yet call `elpian-pkg`; packaging is its
-      own binary
+- [x] `elpian-server` **deleted**. `run dev` now runs `elpiand` — the dev server
+      is a case of the real host rather than a second implementation of it, so a
+      difference between what you develop against and what ships cannot hide
+      until deployment. `elpiand` gained `--web-root` and `--artifact-root`
+      (both path-confined) to cover what the old server did.
+- [ ] The `elpian` CLI does not call `elpian-pkg`; packaging is its own binary
 
 ### Benchmark baseline (2-core box, debug build, cold instance per call)
 
@@ -319,15 +321,15 @@ Ordered by how likely it is to matter.
    a maintainer decision on a crate.
 2. **The admin audit does not survive a restart.** Meters now do; the audit is
    still in memory only.
-3. **`elpian-server.rs` still exists**, unused by the new path, and the `elpian`
-   CLI does not call `elpian-pkg`.
+3. **The `elpian` CLI does not call `elpian-pkg`** — packaging is a separate
+   binary, and `elpian create --template closed-fullstack` does not exist.
 4. **ed25519**, gated on whether third-party publishing is in scope.
 
 ## Verification as of the last commit
 
 | | |
 |---|---|
-| `cargo test --workspace` | 608 passed, 0 failed |
+| `cargo test --workspace` | 613 passed, 0 failed |
 | `flutter test` | 317 passed |
 | `flutter analyze lib/` | clean |
 | `scripts/e2e-fullstack.sh` | all checks pass |

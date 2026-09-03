@@ -220,7 +220,7 @@ isInstance isNull isNotEmpty compareTo tryNum method parentMethod superMethod ne
 |---|---|---|
 | Native FFI | `rust/crates/elpian-ffi/src/abi.rs` | Android, iOS, macOS, Linux, Windows (via `rust_builder/`) |
 | WASM | `rust/crates/elpian-wasm/src/lib.rs` | Web (`wasm-bindgen`) |
-| HTTP server | `rust/crates/elpian-vm/src/bin/elpian-server.rs` | Server-side VMs, one per request |
+| HTTP host | `rust/crates/elpian-host/` (`elpiand`) | Server-side VMs, pooled and governed — see [21](21-hosting.md) |
 
 On the Flutter side these are selected by conditional import in
 `lib/elpian_ui.dart`:

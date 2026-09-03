@@ -568,9 +568,13 @@ fn dev(root: &Path, config: Config, host: &str, port: u16, force_engine: bool) -
         .current_dir(root)
         .args(["run", "--quiet", "--manifest-path"])
         .arg(manifest)
+        // `elpiand` replaced the old `elpian-server`. The dev server is now a
+        // case of the real host rather than a second implementation of it: the
+        // thing you develop against is the thing that ships, so a difference
+        // between them cannot hide until deployment.
         .args([
             "--bin",
-            "elpian-server",
+            "elpiand",
             "--",
             "--host",
             host,
@@ -581,9 +585,12 @@ fn dev(root: &Path, config: Config, host: &str, port: u16, force_engine: bool) -
         .arg(&engine)
         .arg("--artifact-root")
         .arg(&out);
-    let server_bytecode = out.join("server.elpian.bc");
-    if server_bytecode.is_file() {
-        command.arg("--server-bytecode").arg(server_bytecode);
+    // The build output doubles as the registry: `elpian.app.json` plus
+    // `fn/<name>.bc` under it is exactly the layout the host reads, so a
+    // project that declares server functions is served without a separate
+    // install step.
+    if out.join("elpian.app.json").is_file() || out.join("index.json").is_file() {
+        command.arg("--registry").arg(&out);
     }
     command
         .stdin(Stdio::inherit())

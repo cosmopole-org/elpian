@@ -32,6 +32,19 @@ pub struct Gateway {
     /// Who may reach `/admin/*`. Unconfigured means nobody.
     pub operator: Arc<OperatorAuth>,
     pub audit: AdminAudit,
+    /// A directory served for paths no route claims.
+    ///
+    /// Present only when a host was asked to be a development server too. It is
+    /// the *last* thing tried, so a static file can never shadow an app route —
+    /// a file called `apps` in the web root must not take over `/apps/...`.
+    pub web_root: Option<std::path::PathBuf>,
+    /// A directory served under `/__elpian/`.
+    ///
+    /// Build output, for development. Under its own prefix rather than merged
+    /// into the web root because the two have different lifetimes — one is
+    /// authored, one is generated — and a generated file quietly shadowing an
+    /// authored one is a confusing afternoon.
+    pub artifact_root: Option<std::path::PathBuf>,
 }
 
 impl Gateway {
@@ -46,7 +59,21 @@ impl Gateway {
             auth: Arc::new(AnonymousOnly),
             operator: Arc::new(OperatorAuth::new(vec![])),
             audit: AdminAudit::new(1000),
+            web_root: None,
+            artifact_root: None,
         }
+    }
+
+    /// Also serve `root` for paths no route claims.
+    pub fn with_web_root(mut self, root: impl Into<std::path::PathBuf>) -> Gateway {
+        self.web_root = Some(root.into());
+        self
+    }
+
+    /// Serve build output under `/__elpian/`.
+    pub fn with_artifact_root(mut self, root: impl Into<std::path::PathBuf>) -> Gateway {
+        self.artifact_root = Some(root.into());
+        self
     }
 
     pub fn with_auth(mut self, auth: Arc<dyn AuthProvider>) -> Gateway {
@@ -139,7 +166,18 @@ fn route_whole(gateway: &Arc<Gateway>, request: &Request) -> Response {
             Response::error(405, "use POST to invoke a function")
         }
 
-        _ => Response::error(404, "no such route"),
+        // Build output, under its own prefix.
+        ["__elpian", rest @ ..] if is_read(&request.method) => match &gateway.artifact_root {
+            Some(root) => crate::static_files::serve(root, &rest.join("/")),
+            None => Response::error(404, "no such route"),
+        },
+
+        // Nothing claimed it. A web root, if one was configured, is tried last
+        // so a file can never shadow an app route.
+        _ => match (&gateway.web_root, is_read(&request.method)) {
+            (Some(root), true) => crate::static_files::serve(root, &request.path),
+            _ => Response::error(404, "no such route"),
+        },
     }
 }
 
