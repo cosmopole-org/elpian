@@ -722,6 +722,12 @@ function __vrMount(child, hostContainer) {
       hostContainer: hostContainer,
       alive: true,
       dirty: false,
+      // Set by a layer above this one (gui.js) when the component is a class
+      // rather than a function. VReact never sets it and never reads the
+      // instance; it only knows to call the hooks below at the two moments a
+      // class component needs them.
+      hasClass: false,
+      classInstance: null,
     };
     __vrRenderComponent(inst);
     return inst;
@@ -769,13 +775,35 @@ function __vrMount(child, hostContainer) {
   return inst;
 }
 
+// Class-component hooks, installed by a layer above VReact.
+//
+// `gui.js` renders class components through this same reconciler. Rather than
+// teaching the reconciler what a class is — which would put a second component
+// model inside a file whose whole point is that there is one — it installs two
+// callbacks here and marks the fiber with `hasClass`.
+//
+// Null when react.js is used on its own, which is the ordinary case: a guest
+// importing only react.js gets function components and pays nothing for a
+// model it is not using.
+var __vrClassHooks = null;
+
+/// Install the class-component hooks. `hooks` is `{ commit, unmount }`.
+function __vrInstallClassHooks(hooks) {
+  __vrClassHooks = hooks;
+}
+
 function __vrRenderComponent(inst) {
-  let fn = inst.fn;
   __vrCur = inst;
   __vrHookIndex = 0;
-  let out = fn(inst.props);
+  // `inst.fn` is read here rather than hoisted into a local: a class
+  // component's hook rebinds it per render, and a stale local would call the
+  // previous render's closure.
+  let out = inst.fn(inst.props);
   __vrCur = null;
   __vrReconcileChildren(inst, __vrNormalize(out), inst.hostContainer);
+  if (inst.hasClass == true && __vrClassHooks != null) {
+    __vrClassHooks.commit(inst);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -898,6 +926,10 @@ function __vrReconcileChildren(parent, newChildren, hostContainer) {
 
 function __vrUnmount(inst) {
   inst.alive = false;
+
+  if (inst.hasClass == true && __vrClassHooks != null) {
+    __vrClassHooks.unmount(inst);
+  }
 
   // Run effect cleanups for a component's own hooks (deepest first would be
   // ideal; this order is adequate for the cleanup contract apps rely on).

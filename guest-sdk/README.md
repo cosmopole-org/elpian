@@ -50,19 +50,25 @@ cargo test -p dart            # the Flutter widget layer end to end
 
 ## gui.js and what it replaced
 
-`gui.js` is the SDK a mini app should import. It carries its own copies of the
-engine, reactive and theme layers, so it composes *instead of* the base prelude
-rather than on top of it — one import, one vocabulary.
+`gui.js` is the SDK a mini app should import. It sits on top of `godot.js`,
+`flutter.js`, `ui.js` and `react.js` — importing it pulls the whole chain, so a
+guest writes one import line and gets one vocabulary, while each layer stays
+its own file with its own tests.
 
-It exists because `ui.js` and `react.js` each built every widget
-independently. A button was `VUI.button(...)` *and* the reconciler's
-`__vrCreateButton`, with separate styling and separate bugs, fourteen widgets
-over. In `gui.js` a widget is one registry entry and both surfaces are
-generated from it: the declarative `Button({...})` and the imperative
-`GUI.button({...})`.
+It exists because `ui.js` and `react.js` each kept their own list of what
+widgets existed: VUI's imperative factories on one side, the reconciler's
+driver tags on the other, with nothing holding the two sets in step. A widget
+added to one was simply missing from the other. (Their *bodies* were never so
+divided — the driver styles through `VUI.styleBox` and delegates several
+widgets to the kit outright — which is why the fix is one list rather than one
+implementation.)
 
-`ui.js` and `react.js` remain for programs that import them directly. New code
-should use `gui.js`.
+In `gui.js` a widget is one registry entry and both surfaces are generated from
+it: the declarative `Button({...})` and the imperative `GUI.button({...})`.
+`widget_parity.rs` checks the two build the same node, per widget.
+
+`ui.js` and `react.js` remain importable on their own. New code should use
+`gui.js`.
 
 ### Class components
 

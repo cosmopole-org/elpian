@@ -198,18 +198,20 @@ pub fn compose_godot_program_js(user_source: &str) -> String {
             .lines()
             .any(|l| l.trim_start().starts_with("import ") && l.contains(needle))
     };
-    // gui.js is the whole SDK in one file — engine, reactive core, theme,
-    // widgets, 3D, canvas. It is composed *instead of* the base prelude, not
-    // after it, because it already contains one.
-    if imports("gui.js") {
-        return format!("{}\n\n{}", strip(GODOT_GUI_JS), strip(user_source));
-    }
-    let wants_react = imports("react.js");
+    // gui.js is the top of the UI stack, not a replacement for it: it adds the
+    // widget registry, the component model and the Scene3D/Canvas controllers
+    // on top of the four layers below. Importing it pulls the whole chain, so a
+    // mini app writes one import line — but each layer stays its own file with
+    // its own tests, rather than being inlined into gui.js and maintained
+    // twice.
+    let wants_gui = imports("gui.js");
+    let wants_react = wants_gui || imports("react.js");
     // react.js is built on VUI, so it implies the UI kit.
     let wants_ui_kit = wants_react || imports("ui.js");
     let wants_net = imports("net.js");
     let wants_caspar = imports("caspar.js");
-    let wants_flutter = imports("flutter.js");
+    // gui.js exposes FL alongside GD, so the Flutter surface comes with it.
+    let wants_flutter = wants_gui || imports("flutter.js");
 
     let mut parts: Vec<String> = vec![strip(GODOT_PRELUDE_JS)];
     if wants_net {
@@ -233,6 +235,9 @@ pub fn compose_godot_program_js(user_source: &str) -> String {
     }
     if wants_react {
         parts.push(strip(GODOT_REACT_JS));
+    }
+    if wants_gui {
+        parts.push(strip(GODOT_GUI_JS));
     }
     parts.push(strip(user_source));
     parts.join("\n\n")
