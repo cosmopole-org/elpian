@@ -115,7 +115,7 @@ impl Capability {
                 Some("canvas") => Capability::Canvas,
                 Some("task") => Capability::Tasks,
                 Some("host") => Capability::HostMessaging,
-                Some("server") => Capability::ServerCall,
+                Some("server") | Some("stream") => Capability::ServerCall,
                 Some("kv") | Some("secret") | Some("cache") | Some("ctx") => Capability::State,
                 // `stringify` and anything the host adds without a family.
                 _ => Capability::Other,

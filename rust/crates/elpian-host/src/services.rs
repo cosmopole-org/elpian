@@ -78,7 +78,7 @@ pub struct InvocationLog {
 }
 
 /// The host side of one invocation.
-pub struct ServerServices {
+pub struct ServerServices<'a> {
     ctx: ServerContext,
     state: StateStore,
     secrets: SecretStore,
@@ -90,13 +90,23 @@ pub struct ServerServices {
     /// means `server.*` answers null — which is what a bare `invoke` in a test
     /// gets, and is the safe direction.
     invoker: Option<Box<dyn FunctionInvoker>>,
+    /// Where a streaming component's frames go. Absent for an ordinary
+    /// invocation, so `stream.emit` from a non-streaming function answers
+    /// false rather than silently doing nothing — a component written for the
+    /// streaming door and invoked through the plain one should be able to tell.
+    ///
+    /// A borrow rather than a boxed `'static` closure, because the sink writes
+    /// to a socket the caller owns and the invocation never outlives it. The
+    /// lifetime says exactly that; a `Box<dyn FnMut + 'static>` would have
+    /// needed a raw pointer to express the same thing less safely.
+    stream: Option<&'a mut dyn FnMut(&Value) -> bool>,
     /// Collected rather than printed, so the caller decides where diagnostics
     /// go — a test asserts on them, a server writes them to its log, and
     /// neither has to intercept stdout.
     pub log: InvocationLog,
 }
 
-impl ServerServices {
+impl<'a> ServerServices<'a> {
     pub fn new(ctx: ServerContext, state: StateStore, secrets: SecretStore) -> Self {
         ServerServices {
             ctx,
@@ -105,6 +115,7 @@ impl ServerServices {
             cache: None,
             random: GuestRandom::new(),
             invoker: None,
+            stream: None,
             log: InvocationLog::default(),
         }
     }
@@ -117,6 +128,15 @@ impl ServerServices {
     /// Let this invocation invalidate cached renders of its own app.
     pub fn set_cache(&mut self, cache: RenderCache) {
         self.cache = Some(cache);
+    }
+
+    /// Make this a streaming invocation: `stream.emit` writes frames to `sink`.
+    ///
+    /// The sink returns `false` when the reader is gone, which `stream.emit`
+    /// passes straight back to the guest. A component computing frames for a
+    /// device that closed the tab should be able to stop.
+    pub fn set_stream(&mut self, sink: &'a mut dyn FnMut(&Value) -> bool) {
+        self.stream = Some(sink);
     }
 
     /// Outbound HTTP, through the broker.
@@ -275,7 +295,7 @@ impl ServerServices {
     }
 }
 
-impl HostServices for ServerServices {
+impl HostServices for ServerServices<'_> {
     fn service(&mut self, call: &HostCall) -> Value {
         match call.api.as_str() {
             "log" | "println" => {
@@ -335,6 +355,25 @@ impl HostServices for ServerServices {
 
             // An action saying "renders tagged this are out of date". The app
             // is not a parameter, so an app can only ever invalidate its own.
+            // One frame of a streaming component.
+            //
+            // Returns whether the frame reached anyone: `false` means the
+            // reader is gone, and a component looping over a large result
+            // should stop rather than compute the rest for nobody.
+            "stream.emit" => {
+                let frame = call.arg(0).clone();
+                match &mut self.stream {
+                    Some(sink) => Value::Bool(sink(&frame)),
+                    None => {
+                        self.log.host.push(format!(
+                            "{}/{}: stream.emit outside a streaming invocation",
+                            self.ctx.app, self.ctx.function
+                        ));
+                        Value::Bool(false)
+                    }
+                }
+            }
+
             // The verified caller. Read-only by construction: there is no host
             // API that sets it, and the value came from a credential this host
             // checked before any guest code ran.

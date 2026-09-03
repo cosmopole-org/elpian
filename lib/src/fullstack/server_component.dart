@@ -230,8 +230,10 @@ class _ServerComponentState extends State<ServerComponent> {
         stylesheet: stylesheet is Map<String, dynamic> ? stylesheet : null,
       );
     } catch (error) {
-      debugPrint('ServerComponent(${widget.name}): unrenderable payload: $error');
-      return widget.errorBuilder?.call(context, 'the server sent a payload this app could not render') ??
+      debugPrint(
+          'ServerComponent(${widget.name}): unrenderable payload: $error');
+      return widget.errorBuilder?.call(
+              context, 'the server sent a payload this app could not render') ??
           _defaultError('the server sent a payload this app could not render');
     }
   }
@@ -269,7 +271,6 @@ class ServerRenderResult {
   /// caller why a function failed, because the caller did not write it.
   final String? error;
 }
-
 
 /// Renders one island, with whatever the server put inside it as children.
 ///

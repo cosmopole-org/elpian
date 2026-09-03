@@ -199,6 +199,90 @@ class ElpianServerClient {
     }
   }
 
+  /// Stream a server component's frames.
+  ///
+  /// The response is newline-delimited JSON — one `ElpianStreamCommand` per
+  /// line — so the returned stream can be handed straight to
+  /// `ElpianStreamWidget`.
+  ///
+  /// Lines are emitted as they arrive rather than after the response completes,
+  /// which is the entire point: the first frame should reach the screen before
+  /// the last one exists.
+  Stream<dynamic> streamComponent(String name, Map<String, dynamic> args) {
+    final controller = StreamController<dynamic>();
+
+    () async {
+      final uri = Uri.parse(
+          '$baseUrl/apps/${Uri.encodeComponent(appId)}/stream/${Uri.encodeComponent(name)}');
+      try {
+        final request = await _client.postUrl(uri).timeout(timeout);
+        request.headers.set('content-type', 'application/json');
+        if (authorization != null) {
+          request.headers.set('authorization', authorization!);
+        }
+        request.add(utf8.encode(jsonEncode(args)));
+        final response = await request.close().timeout(timeout);
+
+        if (response.statusCode != 200) {
+          controller.addError('the stream could not be opened');
+          await controller.close();
+          return;
+        }
+
+        // A chunk boundary can fall anywhere, including mid-line, so lines are
+        // reassembled rather than assumed to align with chunks. Splitting on
+        // chunk boundaries is the classic way this breaks under load and never
+        // in a test.
+        var buffer = '';
+        await for (final chunk in utf8.decoder.bind(response)) {
+          buffer += chunk;
+          var newline = buffer.indexOf('\n');
+          while (newline >= 0) {
+            final line = buffer.substring(0, newline).trim();
+            buffer = buffer.substring(newline + 1);
+            if (line.isNotEmpty) _emitFrame(controller, line);
+            newline = buffer.indexOf('\n');
+          }
+        }
+        // A final line with no trailing newline is still a frame.
+        final tail = buffer.trim();
+        if (tail.isNotEmpty) _emitFrame(controller, tail);
+      } on TimeoutException {
+        controller.addError('the stream timed out');
+      } catch (error) {
+        debugPrint('ElpianServerClient: $appId/$name stream failed: $error');
+        controller.addError('the stream failed');
+      } finally {
+        await controller.close();
+      }
+    }();
+
+    return controller.stream;
+  }
+
+  /// Decode one NDJSON line into a frame.
+  ///
+  /// The host's in-band error frame is turned into a stream error, so a caller
+  /// distinguishes "the component said this" from "the component failed" —
+  /// they arrive on the same socket and must not read the same.
+  void _emitFrame(StreamController<dynamic> controller, String line) {
+    try {
+      final decoded = jsonDecode(line);
+      if (decoded is Map && decoded['action'] == 'error') {
+        controller
+            .addError(decoded['message']?.toString() ?? 'the stream failed');
+        return;
+      }
+      controller.add(decoded);
+    } catch (_) {
+      // A line that is not JSON is the host's problem, not something to crash
+      // the screen over. Skipping keeps a good stream working through one bad
+      // frame.
+      debugPrint(
+          'ElpianServerClient: $appId dropped an unparseable stream line');
+    }
+  }
+
   void close() => _client.close(force: true);
 
   // ---- payload helpers ------------------------------------------------------

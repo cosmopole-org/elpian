@@ -359,6 +359,10 @@ pub fn all_host_apis() -> Vec<String> {
         // that from the request it already routed.
         "server.call",
         "server.render",
+        // A streaming server component pushing one frame to its caller. Gated
+        // with `server.*` because it is the same relationship: the app talking
+        // to the client that invoked it.
+        "stream.emit",
         // Durable per-app state, and the secrets a server function may read.
         // `kv.*` is scoped to the app by the host, never by the guest.
         "kv.get",

@@ -289,6 +289,7 @@ void main() {
   });
 
   _islandTests();
+  group('streaming', _streamingTests);
 }
 
 /// A connector whose answers the test chooses.
@@ -323,8 +324,7 @@ void _islandTests() {
   testWidgets('an island the bundle carries is spliced into the tree',
       (tester) async {
     final client = _StubClient()
-      ..next = (n) async => ServerRenderResult(
-          payload: _payload('''
+      ..next = (n) async => ServerRenderResult(payload: _payload('''
             { "component": { "type": "Column", "props": {}, "children": [
                 { "type": "Text",    "props": { "text": "server-rendered" } },
                 { "type": "Counter", "props": { "start": 7 } }
@@ -353,8 +353,7 @@ void _islandTests() {
     // rendered once from the payload it would be indistinguishable from the
     // static form.
     final client = _StubClient()
-      ..next = (n) async => ServerRenderResult(
-          payload: _payload('''
+      ..next = (n) async => ServerRenderResult(payload: _payload('''
             { "component": { "type": "Column", "props": {}, "children": [
                 { "type": "Tally", "props": {} }
               ] },
@@ -380,8 +379,7 @@ void _islandTests() {
     // A deployment mistake — a component naming an island its client half does
     // not have — must not blank the screen. Everything around it still renders.
     final client = _StubClient()
-      ..next = (n) async => ServerRenderResult(
-          payload: _payload('''
+      ..next = (n) async => ServerRenderResult(payload: _payload('''
             { "component": { "type": "Column", "props": {}, "children": [
                 { "type": "Text", "props": { "text": "still here" } },
                 { "type": "Text", "props": { "text": "the static form of the island" } }
@@ -404,8 +402,7 @@ void _islandTests() {
   testWidgets('an island can wrap the children the server put inside it',
       (tester) async {
     final client = _StubClient()
-      ..next = (n) async => ServerRenderResult(
-          payload: _payload('''
+      ..next = (n) async => ServerRenderResult(payload: _payload('''
             { "component": { "type": "Expander", "props": { "label": "Details" },
                 "children": [
                   { "type": "Text", "props": { "text": "rendered on the server" } }
@@ -457,4 +454,118 @@ class _TallyState extends State<_Tally> {
         onTap: () => setState(() => _count += 1),
         child: Text('$_count'),
       );
+}
+
+// ---- Streaming -------------------------------------------------------------
+//
+// The transport is newline-delimited JSON over a long-lived response. These
+// pin the decoding, because the ways it breaks — a chunk boundary falling
+// mid-line, an in-band error read as a frame — are exactly the ones that never
+// show up in a hand-run test and always show up under load.
+
+void _streamingTests() {
+  late HttpServer server;
+  late String baseUrl;
+  late List<String> chunks;
+
+  setUp(() async {
+    chunks = [];
+    server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    baseUrl = 'http://127.0.0.1:${server.port}';
+    server.listen((request) async {
+      await utf8.decoder.bind(request).join();
+      request.response.statusCode = 200;
+      request.response.headers.contentType =
+          ContentType('application', 'x-ndjson');
+      for (final chunk in chunks) {
+        request.response.write(chunk);
+        await request.response.flush();
+      }
+      await request.response.close();
+    });
+  });
+
+  tearDown(() async => server.close(force: true));
+
+  ElpianServerClient client() =>
+      ElpianServerClient(baseUrl: baseUrl, appId: 'live');
+
+  test('each line becomes one frame', () async {
+    chunks = [
+      '{"action":"setView","view":{"type":"Text"}}\n'
+          '{"action":"patchView","patch":{"a":1}}\n',
+    ];
+    final frames =
+        await client().streamComponent('Progressive', const {}).toList();
+    expect(frames.length, 2);
+    expect((frames[0] as Map)['action'], 'setView');
+    expect((frames[1] as Map)['action'], 'patchView');
+  });
+
+  test('a line split across chunk boundaries is reassembled', () async {
+    // The classic way an NDJSON reader breaks: assuming a chunk is a line.
+    chunks = [
+      '{"action":"set',
+      'View","view":{"ty',
+      'pe":"Text"}}\n{"action":"patchView"}\n',
+    ];
+    final frames =
+        await client().streamComponent('Progressive', const {}).toList();
+    expect(frames.length, 2);
+    expect((frames[0] as Map)['view']['type'], 'Text');
+    expect((frames[1] as Map)['action'], 'patchView');
+  });
+
+  test('a final line with no trailing newline is still a frame', () async {
+    chunks = ['{"action":"setView"}\n{"action":"patchView"}'];
+    final frames =
+        await client().streamComponent('Progressive', const {}).toList();
+    expect(frames.length, 2);
+  });
+
+  test('an in-band error frame becomes a stream error, not a frame', () async {
+    // The status line went out with the first byte, so a failure arrives as a
+    // frame. It must not read as content.
+    chunks = [
+      '{"action":"setView","view":{"type":"Text"}}\n'
+          '{"action":"error","message":"no such function: Ghost"}\n',
+    ];
+    final frames = <dynamic>[];
+    Object? error;
+    try {
+      await for (final frame in client().streamComponent('Ghost', const {})) {
+        frames.add(frame);
+      }
+    } catch (e) {
+      error = e;
+    }
+
+    expect(frames.length, 1, reason: 'the good frame still arrived');
+    expect(error, 'no such function: Ghost');
+  });
+
+  test('one unparseable line does not kill a good stream', () async {
+    chunks = [
+      '{"action":"setView"}\n'
+          'this is not json\n'
+          '{"action":"patchView"}\n',
+    ];
+    final frames =
+        await client().streamComponent('Progressive', const {}).toList();
+    expect(frames.length, 2, reason: 'the bad line was skipped, not fatal');
+  });
+
+  test('an unreachable host errors rather than hanging', () async {
+    final unreachable =
+        ElpianServerClient(baseUrl: 'http://127.0.0.1:1', appId: 'live');
+    Object? error;
+    try {
+      await for (final _
+          in unreachable.streamComponent('Anything', const {})) {}
+    } catch (e) {
+      error = e;
+    }
+    expect(error, isNotNull);
+    unreachable.close();
+  });
 }

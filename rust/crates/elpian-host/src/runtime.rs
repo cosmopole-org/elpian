@@ -267,6 +267,132 @@ impl AppRuntime {
         self.dispatch(app, function, args, FunctionKind::Component, 0, user)
     }
 
+    /// Render a component that emits its UI progressively.
+    ///
+    /// Deliberately its own path rather than a flag on `dispatch`. A streaming
+    /// render is **never cached** — the cache stores one payload, and a stream
+    /// is a sequence — and it is never served *from* the cache either, because
+    /// replaying a finished sequence as one frame would silently change what a
+    /// component does. Keeping it separate makes that structural rather than a
+    /// condition somebody has to remember.
+    pub fn render_stream(
+        self: &Arc<Self>,
+        app_id: &str,
+        function: &str,
+        args: &Value,
+        user: Option<Identity>,
+        sink: &mut dyn FnMut(&Value) -> bool,
+    ) -> Result<(), CallError> {
+        let app = self
+            .read_apps()
+            .get(app_id)
+            .cloned()
+            .ok_or_else(|| CallError::UnknownApp(app_id.to_string()))?;
+
+        let def = app
+            .function(function)
+            .ok_or_else(|| CallError::UnknownFunction {
+                app: app_id.to_string(),
+                function: function.to_string(),
+            })?
+            .clone();
+
+        if def.kind != FunctionKind::Component {
+            return Err(CallError::WrongKind {
+                function: function.to_string(),
+                expected: FunctionKind::Component.as_str(),
+                actual: def.kind.as_str(),
+            });
+        }
+
+        // Quota, before anything runs — the same rule as `dispatch`. A stream
+        // counts as a read, so an app being strangled can still be looked at.
+        let meters = self.meters(app_id);
+        if let Admission::Refuse { stage, axis } = self.quotas.admit(app_id, &meters, false) {
+            return Err(CallError::OverQuota {
+                stage: stage.as_str().to_string(),
+                axis: axis.to_string(),
+            });
+        }
+
+        // Counts frames so a component that neither emitted nor returned a
+        // payload can be told apart from one that streamed successfully.
+        let mut emitted = 0usize;
+        let mut counting_sink = |frame: &Value| {
+            emitted += 1;
+            sink(frame)
+        };
+        let invocation = self.with_instance(&app, &def, |machine_id, cold| {
+            let fs = self.data_root.as_ref().map(|root| {
+                let dir = root.join(&app.id);
+                let _ = std::fs::create_dir_all(&dir);
+                AppFs::new(dir)
+            });
+            let ctx = ServerContext {
+                app: app.id.clone(),
+                machine_id: machine_id.to_string(),
+                function: function.to_string(),
+                declared_secrets: app.declared_secrets.clone(),
+                fs,
+                user: user.clone(),
+                network: app.network.clone(),
+            };
+            let mut services = ServerServices::new(ctx, self.state.clone(), self.secrets.clone());
+            services.set_invoker(Box::new(NestedInvoker {
+                runtime: Arc::clone(self),
+                app: app.id.clone(),
+                depth: 1,
+                user: user.clone(),
+            }));
+            services.set_cache(self.cache.clone());
+
+            services.set_stream(&mut counting_sink);
+
+            let outcome = invoke(
+                machine_id,
+                function,
+                args,
+                &mut services,
+                &self.limits,
+                cold,
+            );
+            Invocation {
+                outcome,
+                log: services.log,
+                cold_start: cold,
+                cache_hit: false,
+            }
+        });
+
+        match invocation.outcome {
+            Outcome::Returned(value) => {
+                // A streaming component may also *return* a final payload. If it
+                // did, that is the last frame — so a component can stream
+                // progress and finish with a complete tree, and one that only
+                // returns still works through this door.
+                if let Ok(payload) = ComponentPayload::parse(&value) {
+                    let frame = json!({ "action": "setView", "view": payload.value["component"] });
+                    sink(&frame);
+                } else if emitted == 0 {
+                    return Err(CallError::WrongKind {
+                        function: function.to_string(),
+                        expected: "a component that emits or returns a payload",
+                        actual: "a component that did neither",
+                    });
+                }
+                Ok(())
+            }
+            Outcome::Trapped(reason) => {
+                eprintln!("[elpian] {app_id}/{function} trapped mid-stream: {reason}");
+                Err(CallError::UnknownFunction {
+                    app: app_id.to_string(),
+                    function: function.to_string(),
+                })
+            }
+            Outcome::TooManyHostCalls => Err(CallError::CallDepthExceeded),
+        }
+    }
+
     fn dispatch(
         self: &Arc<Self>,
         app_id: &str,

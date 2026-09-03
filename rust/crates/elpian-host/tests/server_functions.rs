@@ -73,7 +73,7 @@ impl Fixture {
         self
     }
 
-    fn call(&mut self, function: &str, args: Value) -> (Outcome, ServerServices) {
+    fn call(&mut self, function: &str, args: Value) -> (Outcome, ServerServices<'static>) {
         self.ctx.function = function.to_string();
         let mut services =
             ServerServices::new(self.ctx.clone(), self.state.clone(), self.secrets.clone());

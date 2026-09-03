@@ -18,7 +18,7 @@ use std::sync::Arc;
 
 use serde_json::{json, Value};
 
-use crate::httpcore::{Request, Response};
+use crate::httpcore::{begin_stream, Reply, Request, Response};
 use crate::identity::{AdminAudit, AdminEvent, AnonymousOnly, AuthProvider, OperatorAuth};
 use crate::registry::now_millis;
 use crate::runtime::{AppRuntime, CallError};
@@ -62,15 +62,28 @@ impl Gateway {
 
 /// Build the request handler for a runtime, with anonymous callers and no
 /// admin access. See [`gateway_handler`] for the configurable form.
-pub fn handler(runtime: Arc<AppRuntime>) -> Arc<dyn Fn(Request) -> Response + Send + Sync> {
+pub fn handler(runtime: Arc<AppRuntime>) -> Arc<dyn Fn(Request) -> Reply + Send + Sync> {
     gateway_handler(Arc::new(Gateway::new(runtime)))
 }
 
-pub fn gateway_handler(gateway: Arc<Gateway>) -> Arc<dyn Fn(Request) -> Response + Send + Sync> {
+pub fn gateway_handler(gateway: Arc<Gateway>) -> Arc<dyn Fn(Request) -> Reply + Send + Sync> {
     Arc::new(move |request| route(&gateway, &request))
 }
 
-fn route(gateway: &Arc<Gateway>, request: &Request) -> Response {
+fn route(gateway: &Arc<Gateway>, request: &Request) -> Reply {
+    // The streaming route is matched before the rest, because it is the one
+    // that answers with a socket rather than a response.
+    let segments = request.segments();
+    if let ["apps", app, "stream", function] = segments.as_slice() {
+        if request.method == "POST" {
+            return stream_route(gateway, app, function, request);
+        }
+        return Response::error(405, "use POST to invoke a function").into();
+    }
+    route_whole(gateway, request).into()
+}
+
+fn route_whole(gateway: &Arc<Gateway>, request: &Request) -> Response {
     let runtime = &gateway.runtime;
     let segments = request.segments();
 
@@ -241,6 +254,61 @@ fn proxy_route(gateway: &Arc<Gateway>, app_id: &str, request: &Request) -> Respo
             Response::json(403, &json!({ "ok": false, "error": error.guest_message() }))
         }
     }
+}
+
+/// A server component that emits its UI progressively.
+///
+/// The response is newline-delimited JSON, one command per line, written as the
+/// component produces them.
+///
+/// # Why NDJSON rather than a WebSocket
+///
+/// The traffic here is one-way: the component emits, the device renders. A
+/// WebSocket buys bidirectionality this does not use, and costs a protocol
+/// upgrade, frame masking, ping/pong and a close handshake — all of which have
+/// to be got right to gain nothing. A long-lived response with one JSON object
+/// per line needs none of that, passes through every proxy, and is trivially
+/// readable with `curl`.
+///
+/// Each line is an `ElpianStreamCommand` — the shape `ElpianStreamWidget`
+/// already consumes, so the device side is a transport, not a new protocol.
+fn stream_route(gateway: &Arc<Gateway>, app_id: &str, function: &str, request: &Request) -> Reply {
+    let args = match parse_args(&request.body) {
+        Ok(args) => args,
+        Err(message) => return Response::error(400, &message).into(),
+    };
+    let user = gateway.auth.verify(request.header("authorization"));
+
+    let runtime = Arc::clone(&gateway.runtime);
+    let app = app_id.to_string();
+    let name = function.to_string();
+
+    Reply::Stream(Box::new(move |socket| {
+        begin_stream(socket, "application/x-ndjson").ok();
+
+        // Frames are written the moment the guest emits them. Buffering them
+        // and sending one response would defeat the entire point: the first
+        // frame should reach the device before the last one exists.
+        let outcome = runtime.render_stream(&app, &name, &args, user, &mut |frame| {
+            let mut line = frame.to_string();
+            line.push('\n');
+            // A write failure means the reader is gone. Report it so the
+            // invocation stops rather than computing frames for nobody.
+            socket.write_all(line.as_bytes()).is_ok() && socket.flush().is_ok()
+        });
+
+        // The stream's own error channel: a final line, because the status was
+        // sent with the first byte and cannot be revised.
+        if let Err(error) = outcome {
+            eprintln!(
+                "[elpian] {app}/{name} stream failed: {}",
+                error.client_message()
+            );
+            let line = json!({ "action": "error", "message": error.client_message() });
+            let _ = socket.write_all(format!("{line}\n").as_bytes());
+            let _ = socket.flush();
+        }
+    }))
 }
 
 /// Parse the request body into the function's arguments.

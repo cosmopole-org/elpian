@@ -214,6 +214,7 @@ class VmHostApiCatalog {
   static const serverApiNames = <String>{
     'server.call',
     'server.render',
+    'stream.emit',
   };
 
   /// Durable per-app key/value state, and the secrets a server
@@ -414,6 +415,7 @@ class VmHostApiCatalog {
     'server.render': 'server_call',
     'setInterval': 'timers',
     'setTimeout': 'timers',
+    'stream.emit': 'server_call',
     'stringify': 'other',
     'task.init': 'tasks',
     'task.join': 'tasks',

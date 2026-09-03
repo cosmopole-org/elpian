@@ -66,6 +66,43 @@ impl Request {
     }
 }
 
+/// Writes a streaming response body, one frame at a time, onto the socket.
+pub type StreamWriter = Box<dyn FnOnce(&mut dyn Write) + Send>;
+
+/// What a handler produced: a whole response, or a stream it will write itself.
+pub enum Reply {
+    /// The ordinary case: a complete response, written by the caller.
+    Whole(Response),
+    /// A streaming response. The handler is given the socket and writes frames
+    /// as it produces them.
+    ///
+    /// Used for server components that emit progressively. The alternative —
+    /// buffering every frame and sending one response — would defeat the whole
+    /// point, which is that the first frame reaches the device before the last
+    /// one exists.
+    Stream(StreamWriter),
+}
+
+impl From<Response> for Reply {
+    fn from(response: Response) -> Reply {
+        Reply::Whole(response)
+    }
+}
+
+/// Write the head of a streaming response, then hand back the socket.
+///
+/// `Connection: close` and no `Content-Length`: the body runs until the socket
+/// closes. That is the simplest framing that works, and it is honest — the host
+/// genuinely does not know how many frames a component will emit.
+pub fn begin_stream(stream: &mut dyn Write, content_type: &str) -> std::io::Result<()> {
+    let head = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\n\
+         Cache-Control: no-store\r\nX-Accel-Buffering: no\r\nConnection: close\r\n\r\n"
+    );
+    stream.write_all(head.as_bytes())?;
+    stream.flush()
+}
+
 /// One response.
 pub struct Response {
     pub status: u16,
@@ -267,7 +304,7 @@ pub const DEFAULT_QUEUE_PER_WORKER: usize = 64;
 pub fn serve(
     listener: TcpListener,
     workers: usize,
-    handler: Arc<dyn Fn(Request) -> Response + Send + Sync>,
+    handler: Arc<dyn Fn(Request) -> Reply + Send + Sync>,
 ) -> ServerHandle {
     serve_with_queue(
         listener,
@@ -282,7 +319,7 @@ pub fn serve_with_queue(
     listener: TcpListener,
     workers: usize,
     queue_depth: usize,
-    handler: Arc<dyn Fn(Request) -> Response + Send + Sync>,
+    handler: Arc<dyn Fn(Request) -> Reply + Send + Sync>,
 ) -> ServerHandle {
     let addr = listener
         .local_addr()
@@ -363,7 +400,7 @@ fn shed(mut stream: TcpStream) {
     }
 }
 
-fn serve_one(stream: TcpStream, handler: &dyn Fn(Request) -> Response) {
+fn serve_one(stream: TcpStream, handler: &dyn Fn(Request) -> Reply) {
     // Without these a client that opens a connection and says nothing pins a
     // worker forever, which is a denial of service that costs the client
     // nothing.
@@ -385,6 +422,14 @@ fn serve_one(stream: TcpStream, handler: &dyn Fn(Request) -> Response) {
     };
 
     let head_only = request.method.eq_ignore_ascii_case("HEAD");
-    let response = handler(request);
-    write_response(&mut raw, &response, head_only);
+    match handler(request) {
+        Reply::Whole(response) => write_response(&mut raw, &response, head_only),
+        Reply::Stream(write_frames) => {
+            // A stream has no read timeout to respect — the client is not
+            // sending — but it does need a generous *write* timeout, because a
+            // reader that stops reading must not pin this worker forever.
+            let _ = raw.set_write_timeout(Some(std::time::Duration::from_secs(60)));
+            write_frames(&mut raw);
+        }
+    }
 }

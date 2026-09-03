@@ -132,12 +132,14 @@ currently *every* call.
       a slow earlier response cannot overwrite a newer one, and a failed
       revalidation that keeps working content on screen
 - [x] `ElpianServerClient` + `ElpianNetPolicy` (advisory, whole-label matching)
-- [ ] Island resolution on the device — the payload's `clientComponents` are
-      surfaced and walked, but `IslandBuilder`s are not yet spliced into the
-      rendered tree
-- [ ] Streaming over WS into `ElpianStreamWidget`; frame budgets — **not
-      started**; the one piece the std-only runtime decision makes more work,
-      and the piece most likely to reverse it
+- [x] Island resolution on the device, via the engine's widget registry
+- [x] Streaming server components — **NDJSON, not WebSocket**. The traffic is
+      one-way, so a socket upgrade would buy bidirectionality nothing uses at
+      the cost of masking, ping/pong and a close handshake. This is the piece
+      that was expected to reverse the std-only runtime decision; it did not,
+      because the requirement turned out not to need a WebSocket at all.
+- [ ] Frame budgets — a component can emit without bound. The dead-reader
+      signal lets a well-behaved one stop; a host-side cap does not exist.
 
 ## P3 — Registry + hosting (S5) — **done, with gaps**
 
@@ -306,22 +308,20 @@ Ordered by how likely it is to matter.
    `IslandBuilder`s are not yet substituted into the rendered tree.
 3. **No TLS.** `https` from a server function is refused, not downgraded. Needs
    a maintainer decision on a crate.
-4. **Nothing is in CI.** Both scripts run clean locally; `.github/workflows/`
-   is untouched.
-5. **`security-review` has not been run** over the diff, and S8 asks for it.
-6. **Meters and audit do not survive a restart.**
-7. **`elpian-server.rs` still exists**, unused by the new path, and the `elpian`
+2. **Meters and audit do not survive a restart.**
+3. **`elpian-server.rs` still exists**, unused by the new path, and the `elpian`
    CLI does not call `elpian-pkg`.
-8. **Hibernation, supervisor tree adoption, per-invocation and per-app
+4. **Hibernation, supervisor tree adoption, per-invocation and per-app
    deadlines** — S4's remaining half.
-9. **ed25519**, gated on whether third-party publishing is in scope.
+5. **Frame budgets for streaming** — a component can emit without bound.
+6. **ed25519**, gated on whether third-party publishing is in scope.
 
 ## Verification as of the last commit
 
 | | |
 |---|---|
-| `cargo test --workspace` | 576 passed, 0 failed |
-| `flutter test` | 307 passed |
+| `cargo test --workspace` | 595 passed, 0 failed |
+| `flutter test` | 317 passed |
 | `flutter analyze lib/` | clean |
 | `scripts/e2e-fullstack.sh` | all checks pass |
 | `scripts/check-doc-snippets.py` | 2 compiled, 1 skipped, 0 failed |
