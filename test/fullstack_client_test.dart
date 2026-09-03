@@ -287,6 +287,8 @@ void main() {
         reason: 'the older response must not win by arriving later');
     expect(find.text('stale'), findsNothing);
   });
+
+  _islandTests();
 }
 
 /// A connector whose answers the test chooses.
@@ -308,4 +310,151 @@ class _StubClient extends ElpianServerClient {
     calls += 1;
     return next(calls);
   }
+}
+
+// ---- Islands ---------------------------------------------------------------
+//
+// A server component may name interactive pieces in `clientComponents`. Each is
+// resolved against builders the *client bundle* already carries — source is
+// never shipped for the device to compile, which would be a second compile path
+// on the device and a far wider trust surface than a signed bundle.
+
+void _islandTests() {
+  testWidgets('an island the bundle carries is spliced into the tree',
+      (tester) async {
+    final client = _StubClient()
+      ..next = (n) async => ServerRenderResult(
+          payload: _payload('''
+            { "component": { "type": "Column", "props": {}, "children": [
+                { "type": "Text",    "props": { "text": "server-rendered" } },
+                { "type": "Counter", "props": { "start": 7 } }
+              ] },
+              "clientComponents": { "Counter": {} } }'''));
+
+    await tester.pumpWidget(MaterialApp(
+      home: ServerComponent(
+        client: client,
+        name: 'Panel',
+        islandBuilders: {
+          'Counter': (context, props) => Text('counter:${props['start']}'),
+        },
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('server-rendered'), findsOneWidget,
+        reason: 'the static part still renders');
+    expect(find.text('counter:7'), findsOneWidget,
+        reason: 'the island was built by the client bundle, with its props');
+  });
+
+  testWidgets('an island is interactive, not a snapshot', (tester) async {
+    // The point of an island is that it holds state on the device. If it were
+    // rendered once from the payload it would be indistinguishable from the
+    // static form.
+    final client = _StubClient()
+      ..next = (n) async => ServerRenderResult(
+          payload: _payload('''
+            { "component": { "type": "Column", "props": {}, "children": [
+                { "type": "Tally", "props": {} }
+              ] },
+              "clientComponents": { "Tally": {} } }'''));
+
+    await tester.pumpWidget(MaterialApp(
+      home: ServerComponent(
+        client: client,
+        name: 'Panel',
+        islandBuilders: {'Tally': (context, props) => const _Tally()},
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('0'), findsOneWidget);
+    await tester.tap(find.byType(_Tally));
+    await tester.pumpAndSettle();
+    expect(find.text('1'), findsOneWidget, reason: 'the island kept its state');
+  });
+
+  testWidgets('an island the bundle lacks degrades to the payload it came with',
+      (tester) async {
+    // A deployment mistake — a component naming an island its client half does
+    // not have — must not blank the screen. Everything around it still renders.
+    final client = _StubClient()
+      ..next = (n) async => ServerRenderResult(
+          payload: _payload('''
+            { "component": { "type": "Column", "props": {}, "children": [
+                { "type": "Text", "props": { "text": "still here" } },
+                { "type": "Text", "props": { "text": "the static form of the island" } }
+              ] },
+              "clientComponents": { "MissingIsland": {} } }'''));
+
+    await tester.pumpWidget(MaterialApp(
+      home: ServerComponent(
+        client: client,
+        name: 'Panel',
+        islandBuilders: const {}, // this bundle carries none
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('still here'), findsOneWidget);
+    expect(find.text('the static form of the island'), findsOneWidget);
+  });
+
+  testWidgets('an island can wrap the children the server put inside it',
+      (tester) async {
+    final client = _StubClient()
+      ..next = (n) async => ServerRenderResult(
+          payload: _payload('''
+            { "component": { "type": "Expander", "props": { "label": "Details" },
+                "children": [
+                  { "type": "Text", "props": { "text": "rendered on the server" } }
+                ] },
+              "clientComponents": { "Expander": {} } }'''));
+
+    await tester.pumpWidget(MaterialApp(
+      home: ServerComponent(
+        client: client,
+        name: 'Panel',
+        islandBuilders: {
+          'Expander': (context, props) {
+            final children = (props['#children'] as List?)?.cast<Widget>() ??
+                const <Widget>[];
+            return Column(children: [Text('[${props['label']}]'), ...children]);
+          },
+        },
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('[Details]'), findsOneWidget);
+    expect(find.text('rendered on the server'), findsOneWidget,
+        reason: 'server-rendered children reached the island builder');
+  });
+}
+
+/// A payload in the shape the connector actually produces.
+///
+/// Real payloads come from `jsonDecode`, which always yields
+/// `Map<String, dynamic>`. Dart's `const` map literals do not, so building them
+/// by hand in a test exercises a shape the widget never sees in production.
+Map<String, dynamic> _payload(String json) =>
+    jsonDecode(json) as Map<String, dynamic>;
+
+/// A minimal stateful island, for the interactivity test.
+class _Tally extends StatefulWidget {
+  const _Tally();
+
+  @override
+  State<_Tally> createState() => _TallyState();
+}
+
+class _TallyState extends State<_Tally> {
+  int _count = 0;
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: () => setState(() => _count += 1),
+        child: Text('$_count'),
+      );
 }

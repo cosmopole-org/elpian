@@ -79,6 +79,10 @@ class _ServerComponentState extends State<ServerComponent> {
   late final ElpianEngine _engine = widget.engine ?? ElpianEngine();
   Timer? _timer;
 
+  /// Island names already registered with the engine, so a re-render does not
+  /// re-register them on every frame.
+  final Set<String> _registeredIslands = <String>{};
+
   Map<String, dynamic>? _payload;
   String? _error;
   bool _loading = true;
@@ -94,13 +98,48 @@ class _ServerComponentState extends State<ServerComponent> {
   @override
   void initState() {
     super.initState();
+    _registerIslands();
     _fetch();
     _scheduleRevalidation();
+  }
+
+  /// Teach the engine to build each island this bundle carries.
+  ///
+  /// The engine resolves a node's `type` through its widget registry, so an
+  /// island is just a type the registry happens to know. That is the whole
+  /// mechanism: nothing walks the tree looking for islands, and nothing has to
+  /// rebuild composition by hand.
+  ///
+  /// An island the bundle does *not* carry is deliberately left unregistered.
+  /// The engine then renders the payload's own node for it — its static form —
+  /// rather than the app failing. An app shipping a component that names an
+  /// island its client half lacks is a deployment mistake, and a non-interactive
+  /// panel is a better answer than a blank screen.
+  void _registerIslands() {
+    widget.islandBuilders.forEach((name, build) {
+      if (_registeredIslands.add(name)) {
+        _engine.registerWidget(name, (node, children) {
+          // The payload carries the island's props on the node; children are
+          // whatever the server put inside it, already rendered, so an island
+          // can wrap server-rendered content rather than only replacing it.
+          return _IslandHost(
+            builder: build,
+            props: Map<String, dynamic>.from(node.props),
+            children: children,
+          );
+        });
+      }
+    });
   }
 
   @override
   void didUpdateWidget(ServerComponent oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _registerIslands();
+    _didUpdate(oldWidget);
+  }
+
+  void _didUpdate(ServerComponent oldWidget) {
     if (oldWidget.name != widget.name ||
         !_sameArgs(oldWidget.args, widget.args)) {
       _fetch();
@@ -180,51 +219,35 @@ class _ServerComponentState extends State<ServerComponent> {
     }
 
     final stylesheet = payload['stylesheet'];
-    final rendered = _engine.renderWithStylesheet(
-      _resolveIslands(context, component, payload['clientComponents']),
-      stylesheet: stylesheet is Map<String, dynamic> ? stylesheet : null,
-    );
-    return rendered;
+    // A payload comes from a server, and a device does not trust one. A tree
+    // the engine cannot walk — a mistyped node, a missing field — must show the
+    // error state rather than throwing out of `build`, which in Flutter
+    // replaces the whole subtree with a red screen and takes the surrounding
+    // app down with it.
+    try {
+      return _engine.renderWithStylesheet(
+        component,
+        stylesheet: stylesheet is Map<String, dynamic> ? stylesheet : null,
+      );
+    } catch (error) {
+      debugPrint('ServerComponent(${widget.name}): unrenderable payload: $error');
+      return widget.errorBuilder?.call(context, 'the server sent a payload this app could not render') ??
+          _defaultError('the server sent a payload this app could not render');
+    }
   }
 
-  /// Replace island placeholders with builders this bundle carries.
+  /// Islands the payload named that this bundle cannot build.
   ///
-  /// Walks the tree looking for nodes whose type names a declared island. One
-  /// that resolves is swapped for a marker the engine renders through
-  /// [IslandHost]; one that does not is left exactly as it came, so it renders
-  /// as its static form.
-  Map<String, dynamic> _resolveIslands(
-    BuildContext context,
-    Map<String, dynamic> node,
-    dynamic declared,
-  ) {
-    if (declared is! Map || widget.islandBuilders.isEmpty) return node;
-    return _walk(node, declared.keys.map((k) => k.toString()).toSet());
-  }
-
-  Map<String, dynamic> _walk(Map<String, dynamic> node, Set<String> islands) {
-    final type = node['type']?.toString();
-    if (type != null &&
-        islands.contains(type) &&
-        widget.islandBuilders.containsKey(type)) {
-      // Mark it; `build` cannot return a Widget from inside a JSON tree, so the
-      // swap happens at render time via a type the engine knows.
-      return {
-        ...node,
-        '_island': type,
-      };
-    }
-    final children = node['children'];
-    if (children is List) {
-      return {
-        ...node,
-        'children': children
-            .map((child) =>
-                child is Map<String, dynamic> ? _walk(child, islands) : child)
-            .toList(growable: false),
-      };
-    }
-    return node;
+  /// Exposed for diagnostics rather than used for control flow: an unresolved
+  /// island is not an error at render time, it is a deployment mistake worth
+  /// telling somebody about.
+  List<String> unresolvedIslands() {
+    final declared = _payload?['clientComponents'];
+    if (declared is! Map) return const [];
+    return declared.keys
+        .map((k) => k.toString())
+        .where((name) => !widget.islandBuilders.containsKey(name))
+        .toList(growable: false);
   }
 
   Widget _defaultError(String message) => Padding(
@@ -245,4 +268,33 @@ class ServerRenderResult {
   /// The server's message. Deliberately coarse — the host does not tell a
   /// caller why a function failed, because the caller did not write it.
   final String? error;
+}
+
+
+/// Renders one island, with whatever the server put inside it as children.
+///
+/// A separate widget rather than an inline closure so an island gets its own
+/// element in the tree: it can hold state, and rebuilding the server payload
+/// around it does not throw that state away as long as its position is stable.
+class _IslandHost extends StatelessWidget {
+  const _IslandHost({
+    required this.builder,
+    required this.props,
+    required this.children,
+  });
+
+  final IslandBuilder builder;
+  final Map<String, dynamic> props;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    // Server-rendered children are passed through the props under a reserved
+    // key, so a builder that wants to wrap them can, and one that does not can
+    // ignore them entirely.
+    return builder(context, {
+      ...props,
+      if (children.isNotEmpty) '#children': children,
+    });
+  }
 }
