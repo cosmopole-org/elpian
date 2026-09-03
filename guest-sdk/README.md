@@ -25,9 +25,11 @@ js/     JavaScript preludes, compiled by js2elpian
   caspar.js        the Caspar signed binary action protocol
 
 dart/   Dart preludes, compiled by dart2elpian
-  flutter.dart     a Flutter-shaped widget library in the compiled subset
-  godot.dart       the Dart twin of the SDK's engine transport
-  demo_app.dart    a worked example, exercised by dart/tests/flutter_app.rs
+  gui.dart         the GUI SDK for Dart, entire. GD/GObj (the reflective Godot
+                   surface), the Flutter-shaped widget library, the unified
+                   Color, Canvas + CanvasController, Scene3DController, the
+                   theme tokens and the GUI namespace. One import.
+  demo_app.dart    a worked example, exercised by tests/flutter_app.rs
 
 docs/   Design notes for the larger preludes
 ```
@@ -90,6 +92,40 @@ implementation.)
 In `gui.js` a widget is one registry entry and both surfaces are generated from
 it: the declarative `Button({...})` and the imperative `GUI.button({...})`.
 `widget_parity.rs` checks the two build the same node, per widget.
+
+## gui.dart
+
+The same move on the Dart side. It was two libraries that never met:
+`godot.dart`, the engine transport building a *retained* Godot scene graph over
+`godot.op`, and `flutter.dart`, a Flutter-shaped widget library with its own
+two-phase layout painting *immediately* through `dart:ui`. Two rendering
+models, two composers in two different Rust crates, and no program could use
+both. They are one file now and the two are deleted.
+
+The two backends stay two backends, because they genuinely render differently.
+What they now share is a namespace, a value-type layer and a composer:
+
+| | what it is | when to reach for it |
+| --- | --- | --- |
+| widget layer | `StatelessWidget`, `StatefulWidget`, `setState`, `runApp` | the default; ordinary Flutter, painted through `dart:ui` |
+| engine layer | `GD.create`, `GObj`, `Scene3DController` | 3D, shaders, physics, or any Godot class at all |
+
+`Color` is the one type the merge had to reconcile: the engine's was four
+doubles matching Godot's, the widget layer's a packed `0xAARRGGBB` int matching
+Flutter's, and both spellings are written all over existing guests. The merged
+type answers to both — the unnamed constructor dispatches on arity, which is
+unambiguous because the two forms never shared one:
+
+```dart
+Color(0xFF2196F3)             // Flutter: one packed ARGB int
+Color(1.0, 0.5, 0.25, 1.0)    // Godot:   r, g, b, a
+```
+
+Two front-end defects surfaced during the merge and are fixed or pinned:
+`dart2elpian` emitted a named constructor as a bare static that constructed
+nothing and returned nothing (`named_constructors.rs`), and a getter silently
+stops being called if *any* class in the program declares a field of that name
+(`getter_shadowing.rs`) — which is exactly what merging two libraries causes.
 
 ### Class components
 

@@ -46,7 +46,7 @@ pub use godot_surface::GodotSurface;
 /// The `godot.dart` guest prelude, compiled ahead of the user program so the
 /// `GD`/`GObj` reflective surface, the `VMs` orchestration facade and the
 /// marshaling vocabulary are in scope.
-pub const GODOT_PRELUDE: &str = include_str!("../../../../guest-sdk/dart/godot.dart");
+pub const GODOT_PRELUDE: &str = include_str!("../../../../guest-sdk/dart/gui.dart");
 
 /// The Elpian GUI SDK (`gui.js`) — the engine transport (`GD`/`GObj`), the
 /// embedded-Flutter surface (`FL`), the VUI widget kit, the VReact reconciler,

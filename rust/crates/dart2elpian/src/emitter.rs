@@ -446,6 +446,33 @@ impl Emitter {
 
         for m in &c.methods {
             let sig = self.param_sig(&m.params);
+            // A named constructor has to construct. It is parsed as a static
+            // member, but its body assigns to `this` — so it is emitted as an
+            // ordinary *instance* initializer, where `this` means what the body
+            // says it means, plus a static factory that allocates, runs the
+            // initializer and returns the object.
+            //
+            // Emitting it as a bare static instead (which is what happened
+            // before) produces a method that assigns fields onto the class,
+            // constructs nothing and returns undefined — so `Color.hex(0xFF00)`
+            // silently yielded null, and the first property read off it failed
+            // somewhere else entirely.
+            if m.is_named_ctor {
+                let args = sig.join(", ");
+                self.out.push_str(&format!(
+                    "  static {}({}) {{\n    var __o = new {}();\n    __o.__init_{}({});\n    return __o;\n  }}\n",
+                    m.name, args, c.name, m.name, args
+                ));
+                self.out
+                    .push_str(&format!("  __init_{}({}) {{\n", m.name, args));
+                self.push_scope();
+                self.declare_params(&m.params);
+                self.emit_param_prologue(&m.params, 2);
+                self.emit_stmts(&m.body, 2);
+                self.pop_scope();
+                self.out.push_str("  }\n");
+                continue;
+            }
             let prefix = if m.is_static { "static " } else { "" };
             self.out
                 .push_str(&format!("  {}{}({}) {{\n", prefix, m.name, sig.join(", ")));
