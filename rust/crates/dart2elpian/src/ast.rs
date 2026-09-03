@@ -134,6 +134,11 @@ pub(crate) struct Method {
     pub(crate) is_getter: bool,
     /// A `static` member: belongs to the class, reached as `Class.member`.
     pub(crate) is_static: bool,
+    /// A named constructor (`ClassName.named(...)`). Parsed as a static member,
+    /// but it has to *construct*: the emitter gives it an instance initializer
+    /// so `this` in its body means the new object, plus a static factory that
+    /// allocates, initializes and returns.
+    pub(crate) is_named_ctor: bool,
 }
 
 #[derive(Debug, Clone)]

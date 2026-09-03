@@ -16,22 +16,49 @@ there.
 
 ```
 js/     JavaScript preludes, compiled by js2elpian
-  gui.js           the GUI SDK — state, rendering, scoping, widgets, styling,
-                   Scene3D and Canvas in one import. Start here.
-  godot.js         GD / GObj / G3 — the reflective Godot surface, plus VMs
-  ui.js            VUI, the imperative widget toolkit (superseded by gui.js)
-  react.js         the React-compatible runtime (superseded by gui.js)
-  flutter.js       FL — drives an embedded Flutter engine over flutter.op
+  gui.js           the GUI SDK, entire. GD/GObj (the reflective Godot surface),
+                   FL (the embedded Flutter engine), VUI (theme, typography,
+                   metrics, imperative widgets), VReact (elements, hooks,
+                   scheduler, reconciler), the widget registry, the component
+                   model, Scene3D and Canvas. One import.
   net.js           HTTP, WebSocket and Socket.IO over Godot primitives
   caspar.js        the Caspar signed binary action protocol
 
 dart/   Dart preludes, compiled by dart2elpian
-  flutter.dart     a Flutter-shaped widget library in the compiled subset
-  godot.dart       the Dart twin of godot.js
-  demo_app.dart    a worked example, exercised by dart/tests/flutter_app.rs
+  gui.dart         the GUI SDK for Dart, entire. GD/GObj (the reflective Godot
+                   surface), the Flutter-shaped widget library, the unified
+                   Color, Canvas + CanvasController, Scene3DController, the
+                   theme tokens and the GUI namespace. One import.
+  demo_app.dart    a worked example, exercised by tests/flutter_app.rs
 
 docs/   Design notes for the larger preludes
 ```
+
+## Entry points
+
+An `import` line is a marker the composer resolves; there is no module system.
+Every import, and what it composes ahead of the program:
+
+| import | pulls | composed source |
+| --- | --- | --- |
+| `gui.js` | the SDK | 323 KB → 378 KB bytecode |
+| `net.js` | the SDK + net | 339 KB |
+| `caspar.js` | the SDK + caspar | 344 KB |
+
+**`gui.js` is the door.** It was five files — `godot.js`, `flutter.js`,
+`ui.js`, `react.js` and a `gui.js` layered over them — and a mini app imported
+some combination. They are one file now and the other four are deleted: there
+is no import chain to resolve, no question about which prelude a symbol comes
+from, and no way for two layers to hold different ideas about the same widget.
+
+`net.js` and `caspar.js` are clients, not alternatives. They reach the engine
+through `GD`, so importing either composes the SDK beneath it — a networking
+guest that never draws a widget still carries the reconciler. That is the price
+of one self-contained file, and it is a real one: a prelude is compiled into
+bytecode when the VM is created, and its top-level statements run before the
+guest's first line, inside the same instruction budget the governor meters the
+mini app against. `prelude_cost.rs` pins what that costs so it cannot grow
+unnoticed.
 
 ## These files are not host code
 
@@ -50,19 +77,55 @@ cargo test -p dart            # the Flutter widget layer end to end
 
 ## gui.js and what it replaced
 
-`gui.js` is the SDK a mini app should import. It carries its own copies of the
-engine, reactive and theme layers, so it composes *instead of* the base prelude
-rather than on top of it — one import, one vocabulary.
+`gui.js` is the SDK a mini app imports. It was assembled from `godot.js`,
+`flutter.js`, `ui.js` and `react.js`, which are gone — their contents are
+sections §1–§4 of the file, with their own chapter documentation intact.
 
-It exists because `ui.js` and `react.js` each built every widget
-independently. A button was `VUI.button(...)` *and* the reconciler's
-`__vrCreateButton`, with separate styling and separate bugs, fourteen widgets
-over. In `gui.js` a widget is one registry entry and both surfaces are
-generated from it: the declarative `Button({...})` and the imperative
-`GUI.button({...})`.
+The merge exists because `ui.js` and `react.js` each kept their own list of
+what widgets existed: VUI's imperative factories on one side, the reconciler's
+driver tags on the other, with nothing holding the two sets in step. A widget
+added to one was simply missing from the other. (Their *bodies* were never so
+divided — the driver styles through `VUI.styleBox` and delegates several
+widgets to the kit outright — which is why the fix is one list rather than one
+implementation.)
 
-`ui.js` and `react.js` remain for programs that import them directly. New code
-should use `gui.js`.
+In `gui.js` a widget is one registry entry and both surfaces are generated from
+it: the declarative `Button({...})` and the imperative `GUI.button({...})`.
+`widget_parity.rs` checks the two build the same node, per widget.
+
+## gui.dart
+
+The same move on the Dart side. It was two libraries that never met:
+`godot.dart`, the engine transport building a *retained* Godot scene graph over
+`godot.op`, and `flutter.dart`, a Flutter-shaped widget library with its own
+two-phase layout painting *immediately* through `dart:ui`. Two rendering
+models, two composers in two different Rust crates, and no program could use
+both. They are one file now and the two are deleted.
+
+The two backends stay two backends, because they genuinely render differently.
+What they now share is a namespace, a value-type layer and a composer:
+
+| | what it is | when to reach for it |
+| --- | --- | --- |
+| widget layer | `StatelessWidget`, `StatefulWidget`, `setState`, `runApp` | the default; ordinary Flutter, painted through `dart:ui` |
+| engine layer | `GD.create`, `GObj`, `Scene3DController` | 3D, shaders, physics, or any Godot class at all |
+
+`Color` is the one type the merge had to reconcile: the engine's was four
+doubles matching Godot's, the widget layer's a packed `0xAARRGGBB` int matching
+Flutter's, and both spellings are written all over existing guests. The merged
+type answers to both — the unnamed constructor dispatches on arity, which is
+unambiguous because the two forms never shared one:
+
+```dart
+Color(0xFF2196F3)             // Flutter: one packed ARGB int
+Color(1.0, 0.5, 0.25, 1.0)    // Godot:   r, g, b, a
+```
+
+Two front-end defects surfaced during the merge and are fixed or pinned:
+`dart2elpian` emitted a named constructor as a bare static that constructed
+nothing and returned nothing (`named_constructors.rs`), and a getter silently
+stops being called if *any* class in the program declares a field of that name
+(`getter_shadowing.rs`) — which is exactly what merging two libraries causes.
 
 ### Class components
 

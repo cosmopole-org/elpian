@@ -1,5 +1,5 @@
-//! The JavaScript guest surface: `godot.js` (the JS twin of the Dart prelude)
-//! and the Elpian UI kit (`ui.js`) compiled by js2elpian and run on real VMs
+//! The JavaScript guest surface: `gui.js` — the engine transport, the widget
+//! kit and the reconciler — compiled by js2elpian and run on real VMs
 //! against a mock engine. Pins that:
 //!
 //!   * a JS root program speaks the identical wire protocol (create / set /
@@ -8,7 +8,7 @@
 //!   * `GTimer` rides the VM event loop under `pump`;
 //!   * a JS parent spawns a JS child (`vm.spawn` inherits the language) and
 //!     exchanges messages with it;
-//!   * the UI-kit composition seam works: `import 'ui.js'` pulls the kit in,
+//!   * the SDK composition seam works: `import 'gui.js'` pulls the whole kit in,
 //!     and its widgets emit the expected Control-node op stream.
 
 use std::cell::RefCell;
@@ -118,7 +118,7 @@ fn boot_js(id: &str, source: &str) -> (VmManager, Rc<RefCell<Mock>>) {
 #[test]
 fn js_guest_speaks_the_wire_protocol() {
     let src = r#"
-        import 'godot.js';
+        import 'gui.js';
         function main() {
             let node = GD.create('Node2D');
             node.set('position', new Vector2(4.5, 2.25));
@@ -156,7 +156,7 @@ fn js_guest_speaks_the_wire_protocol() {
 #[test]
 fn js_batching_coalesces_ops_into_one_crossing() {
     let src = r#"
-        import 'godot.js';
+        import 'gui.js';
         function main() {
             GD.beginBatch();
             let a = GD.create('Node2D');
@@ -177,7 +177,7 @@ fn js_batching_coalesces_ops_into_one_crossing() {
 #[test]
 fn js_signal_connect_dispatches_back_into_the_closure() {
     let src = r#"
-        import 'godot.js';
+        import 'gui.js';
         var taps = 0;
         function main() {
             let btn = GD.create('Button');
@@ -210,7 +210,7 @@ fn js_signal_connect_dispatches_back_into_the_closure() {
 #[test]
 fn js_gtimer_fires_on_the_pumped_event_loop() {
     let src = r#"
-        import 'godot.js';
+        import 'gui.js';
         var fired = 0;
         function main() {
             GTimer.periodic(100, () => {
@@ -232,7 +232,7 @@ fn js_gtimer_fires_on_the_pumped_event_loop() {
 #[test]
 fn js_parent_spawns_js_child_and_they_exchange_messages() {
     let src = r#"
-        import 'godot.js';
+        import 'gui.js';
         var childSrc = "function main() { VMs.sendParent('hi from js child'); } main();";
         function main() {
             let pod = GD.create('Node2D');
@@ -257,8 +257,7 @@ fn js_parent_spawns_js_child_and_they_exchange_messages() {
 #[test]
 fn ui_kit_composes_on_import_and_builds_control_nodes() {
     let src = r#"
-        import 'godot.js';
-        import 'ui.js';
+        import 'gui.js';
         function main() {
             let app = VUI.app({ design: [720, 1280], portrait: true });
             let taps = { n: 0 };
@@ -317,7 +316,7 @@ fn ui_kit_composes_on_import_and_builds_control_nodes() {
 #[test]
 fn net_composes_on_import_and_speaks_http_with_a_cookie_jar() {
     let src = r#"
-        import 'godot.js';
+        import 'gui.js';
         import 'net.js';
         function main() {
             Net.setBase('https://play.example');
@@ -381,7 +380,7 @@ fn net_composes_on_import_and_speaks_http_with_a_cookie_jar() {
 #[test]
 fn socket_io_frames_ride_a_websocket_peer() {
     let src = r#"
-        import 'godot.js';
+        import 'gui.js';
         import 'net.js';
         function main() {
             let socket = SocketIO.connect('https://play.example', {});
@@ -417,7 +416,7 @@ fn js_list_higher_order_methods_run_via_the_injected_prelude() {
     // Dispatch::Prelude members; js2elpian injects the `__List_*` helpers so
     // JS guests can actually call them (they used to hit "not runnable").
     let src = r#"
-        import 'godot.js';
+        import 'gui.js';
         function main() {
             let doubled = [1, 2, 3].map((x) => x * 2);
             print('map ' + doubled.join(','));
@@ -449,7 +448,7 @@ fn equality_on_cyclic_objects_terminates_via_identity() {
     // walk, so comparing a self-referential graph (a React instance tree with
     // parent/child back-references) terminates instead of recursing forever.
     let src = r#"
-        import 'godot.js';
+        import 'gui.js';
         function main() {
             let parent = { name: "p", children: [] };
             let child = { name: "c", parent: parent };

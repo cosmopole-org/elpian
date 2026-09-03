@@ -208,6 +208,7 @@ impl Parser {
                     is_async: false,
                     is_getter: true,
                     is_static,
+                    is_named_ctor: false,
                 });
                 continue;
             }
@@ -239,6 +240,7 @@ impl Parser {
                     is_async: false,
                     is_getter: false,
                     is_static: true,
+                    is_named_ctor: true,
                 });
                 continue;
             }
@@ -265,6 +267,7 @@ impl Parser {
                         is_async,
                         is_getter: false,
                         is_static,
+                        is_named_ctor: false,
                     });
                 }
             } else {

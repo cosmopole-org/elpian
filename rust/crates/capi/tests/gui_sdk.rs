@@ -1,11 +1,13 @@
 //! The unified GUI SDK.
 //!
-//! `gui.js` replaces the four preludes a guest used to import in combination.
-//! What it adds over concatenating them is the widget registry: `ui.js` and
-//! `react.js` each built every widget independently — a button existed as
-//! `VUI.button(...)` *and* inside the reconciler's `__vrCreateButton`, with
-//! separate styling and separate bugs, fourteen widgets over. Here a widget is
-//! defined once and both surfaces are generated from it.
+//! `gui.js` is the SDK: the engine transport, the Flutter surface, the widget
+//! kit and the reconciler merged into one file, plus the widget registry that
+//! is the reason to merge them. As four separate preludes, `ui.js` and
+//! `react.js` each carried their own list of which widgets existed — VUI's
+//! factories against the driver's tags — with nothing keeping the two in step,
+//! so a widget could be present in one and absent from the other. Here a widget is defined once and both surfaces are
+//! generated from it. (Whether the two build the *same* node is measured
+//! separately, in `widget_parity.rs`.)
 //!
 //! These check the parts that are new: class components, the registry driving
 //! both surfaces, the Scene3D and Canvas controllers, and scoping.
@@ -190,7 +192,7 @@ askHost("test.emit", [node != null]);
 #[test]
 fn the_imperative_and_declarative_paths_build_the_same_widget() {
     // Both go through the registry, so both produce the same Godot class. When
-    // ui.js and react.js each had their own button, nothing checked this.
+    // The kit and the reconciler each had their own button; nothing checked this.
     let g = boot(
         "gui-same-widget",
         r#"

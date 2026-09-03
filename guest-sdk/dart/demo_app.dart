@@ -5,7 +5,7 @@
 // string interpolation with expressions — the sort of screen you'd actually
 // write in Flutter. Tapping the +/- buttons runs setState and repaints.
 
-import 'flutter.dart';
+import 'gui.dart';
 
 void main() => runApp(DashboardApp());
 

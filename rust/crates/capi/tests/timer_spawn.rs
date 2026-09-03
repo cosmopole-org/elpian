@@ -37,7 +37,7 @@ fn boot(id: &str, src: &str) -> VmManager {
 #[test]
 fn one_shot_timer_scheduled_beside_spawn_still_fires() {
     let src = r#"
-        import 'godot.js';
+        import 'gui.js';
         function main() {
           let pod = GD.create("Node3D");
           GTimer.after(170, () => { print("timer-170 fired"); });
@@ -70,7 +70,7 @@ fn one_shot_timer_beside_spawn_in_dispatch_turn_fires() {
     // games sheet (GTimer.after -> queueFree) and spawns the game VM. The
     // timer must still fire afterwards.
     let src = r#"
-        import 'godot.js';
+        import 'gui.js';
         var btn = null;
         function main() {
           btn = GD.create("Button");
@@ -144,7 +144,7 @@ fn one_shot_timer_beside_spawn_in_dispatch_turn_fires() {
 #[test]
 fn one_shot_timer_scheduled_in_callable_dispatch_turn_fires() {
     let src = r#"
-        import 'godot.js';
+        import 'gui.js';
         var btn = null;
         function main() {
           btn = GD.create("Button");

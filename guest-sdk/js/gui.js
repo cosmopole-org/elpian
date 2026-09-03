@@ -2,57 +2,62 @@
 // gui.js — the Elpian GUI SDK
 // =============================================================================
 //
-// Everything a mini app needs to draw itself: state, rendering, scoping,
-// widgets, styling, 3D scenes and 2D canvases. One import, one vocabulary.
+// Everything a mini app needs to draw itself: the engine transport, the Flutter
+// surface, state, rendering, scoping, widgets, styling, 3D scenes and 2D
+// canvases. One file, one import, one vocabulary.
 //
 //     import 'gui.js';
 //
-//     class Counter extends Component {
-//       state = { n: 0 };
+//     class CounterImpl extends Component {
+//       constructor(props) { super(props); this.state = { n: 0 }; }
 //       render() {
 //         return Column({ gap: 8, children: [
 //           Text({ children: "count: " + this.state.n }),
-//           Button({ label: "+1", onPress: () => this.setState({ n: this.state.n + 1 }) }),
+//           Button({ onPress: () => this.setState({ n: this.state.n + 1 }),
+//                    children: "+1" }),
 //         ]});
 //       }
 //     }
+//     const Counter = GUI.component(CounterImpl);
 //     GUI.mount(Counter);
 //
-// ## What this replaces, and why
+// ## Why one file
 //
-// The SDK used to be four preludes a guest imported in combination:
+// This was five: `godot.js` (the engine transport), `flutter.js` (the embedded
+// Flutter surface), `ui.js` (VUI, the widget kit), `react.js` (VReact, the
+// reconciler), and a `gui.js` layered on top that composed them. A mini app
+// picked a combination and had to know which layer owned which name.
 //
-//     godot.js   the engine transport — GD/GObj, marshaling, callbacks
-//     ui.js      VUI, an *imperative* widget kit over Godot Control nodes
-//     react.js   a React runtime with its own *declarative* widget driver
-//     flutter.js FL, driving an embedded Flutter engine
+// They are one file now, and the other four are deleted. There is no import
+// chain to resolve, no question about which prelude a symbol comes from, and —
+// the reason the split cost more than it bought — no way for two layers to hold
+// different ideas about the same widget. A widget is defined once, in the
+// registry (§5), and both the declarative `Button({…})` and the imperative
+// `GUI.button({…})` are generated from that entry. `GUI.defineWidget` gives a
+// mini app the same deal for widgets of its own.
 //
-// `ui.js` and `react.js` each built the same widgets, independently. A button
-// existed twice — once as `VUI.button(...)` and once inside the reconciler's
-// `__vrCreateButton` — with separate styling, separate theming and separate
-// bugs. Fourteen widgets were duplicated that way across ~5,900 lines. Fixing
-// a button's focus ring meant finding both, and nothing made you.
-//
-// Here every widget is defined **once**, in the widget registry (§4). Both
-// surfaces are generated from it:
-//
-//   * the declarative one, `Button({...})`, which the reconciler drives;
-//   * the imperative one, `GUI.button({...})`, which returns a node directly.
-//
-// Adding a widget means adding one registry entry, and both appear.
+// The cost is honest and worth stating: a guest that only wants the engine
+// bridge, or only `net.js`, now carries the whole SDK. `prelude_cost.rs` pins
+// what that is so it cannot grow unnoticed.
 //
 // ## Layout
 //
-//   §1  Engine transport      GD, GObj, marshaling, callbacks, value types
-//   §2  Reactive core         elements, scheduler, hooks, the reconciler
-//   §3  Theme and styling     tokens, fonts, metrics, skins
-//   §4  Widget registry       one definition per widget
-//   §5  Components            Component base class + function components
-//   §6  Imperative facade     GUI.*, generated from the registry
+//   §1  Engine transport      GD / GObj, marshaling, callbacks, value types
+//   §2  Flutter surface       FL, driving an embedded Flutter engine
+//   §3  Theme and widget kit  VUI: M3 tokens, fonts, metrics, imperative widgets
+//   §4  Reactive core         VReact: elements, hooks, scheduler, reconciler
+//   §5  Widget registry       one definition per widget, two surfaces
+//   §6  Components            the Component base class, class and function
 //   §7  Scene3D               the 3D widget and its controller
 //   §8  Canvas                the 2D drawing widget and its controller
-//   §9  Flutter surface       FL, for hosts that embed a Flutter engine
-//   §10 The GUI namespace     what a mini app actually reaches for
+//   §9  Imperative facade     GUI.*, generated from the registry
+//   §10 Scoping               named regions within one mini app
+//   §11 The GUI namespace     what a mini app actually reaches for
+//
+// Sections §1–§4 are the four preludes, carried over whole with their own
+// documentation intact — they are the layers this SDK is built out of, and
+// their chapter comments are the reference for the wire protocol, the design
+// system and the reconciliation model respectively.
 //
 // ## Class and function components
 //
@@ -69,6 +74,52 @@
 // its VM. `GUI.scope()` adds the *guest-side* half — a named subtree whose
 // state, styles and controllers are its own, so one part of an app cannot
 // reach into another's.
+
+// =============================================================================
+// §1  Engine transport — GD, GObj, and the Godot op protocol
+// =============================================================================
+
+// =============================================================================
+// godot.js — the Elpian guest library for driving the FULL Godot engine, in JS
+// =============================================================================
+//
+// The JavaScript twin of `godot.dart`: the same wire protocol, the same
+// reflective op vocabulary, the same handle/callback model — expressed in the
+// Elpian-JS subset the `js2elpian` front-end compiles. A JS guest program is
+// composed AFTER this prelude (its `import 'godot.js';` line is stripped; the
+// prelude IS the import) and drives the identical C++ GodotController:
+//
+//   * instantiate any registered class      (GD.create('Button'))
+//   * bind any engine singleton             (GD.singleton('DisplayServer'))
+//   * call any method on any object         (node.call('add_child', [child]))
+//   * read / write any property             (node.set('position', Vector2(4, 2)))
+//   * read any class / global constant      (GD.constant('DisplayServer.SCREEN_PORTRAIT'))
+//   * connect any signal to a JS closure    (btn.connect('pressed', (a) => { ... }))
+//   * hand any Godot API a JS Callable      (GD.callable((a) => { ... }))
+//   * load any resource                     (GD.load('res://thing.tscn'))
+//   * evaluate any expression / utility fn  (GD.eval('clamp(x, 0.0, 1.0)', ...))
+//   * introspect everything                 (GD.classes(), GD.classInfo('Control'))
+//   * batch any number of ops into ONE
+//     seam crossing                         (GD.beginBatch() ... GD.endBatch())
+//
+// Language notes (the honest constraints of the subset):
+//   * there is no first-class null — an absent value is 0, and `x == null`
+//     is therefore also true for a numeric zero;
+//   * type tests are the `__isType(v, 'T')` intrinsic (lowered to the VM's
+//     native typeTest opcode) — 'num' / 'String' / 'bool' / 'List' / 'Map' /
+//     'Function' or any class name declared in the program;
+//   * iterate lists with C-style `for` + `.length`; iterate a map's keys with
+//     `m.keys` (a Dart-style getter member on plain maps — not a call).
+//
+// Everything else — ids, batching, marshaling, error convention — matches
+// godot.dart exactly; see that file (and victor/bridge/README.md) for the
+// protocol chapter and the performance model.
+
+// ---------------------------------------------------------------------------
+// async glue — the VM event-loop seam (timers / microtasks re-enter here)
+// ---------------------------------------------------------------------------
+// A pure-JS guest has no dart2elpian emitter prelude, so the dispatch table the
+// host's `__dartDispatch` invocations index into is defined here instead.
 
 var __cbReg = [];
 
@@ -1680,6 +1731,887 @@ G3.raycast = (viewport, camera, x, y, dist) => {
   }
   return hit;
 };
+// =============================================================================
+// §2  Flutter surface — FL, driving an embedded Flutter engine
+// =============================================================================
+
+// =============================================================================
+// flutter.js — FL: drive an embedded, real Flutter engine from an Elpian VM
+// =============================================================================
+//
+// This is the guest half of the **Flutter UI bridge** — the twin of
+// `godot.js`/`godot.dart`, but targeting a real `libflutter` engine embedded in
+// the GDExtension (see `extension/src/flutter_controller.*` and
+// `godot/FLUTTER.md`) instead of ClassDB. Where `GD` reaches every Godot class
+// reflectively, `FL` speaks a small **declarative widget-tree op protocol**: the
+// guest describes a widget tree as plain data, ships it over the `flutter.op`
+// seam, and a fixed AOT-compiled Flutter "interpreter app" running inside the
+// embedded engine reconciles that data into real Flutter widgets and paints
+// them. No JIT, no codegen on the guest side — App-Store-legal, exactly like the
+// rest of this repo.
+//
+//     import 'flutter.js';
+//
+//     var count = 0;
+//     function App() {
+//       return FL.scaffold({
+//         appBar: FL.appBar(FL.text('Counter')),
+//         body: FL.center(FL.column([
+//           FL.text('Taps: ' + count, { size: 32 }),
+//           FL.filledButton('Tap me', function () { count = count + 1; }),
+//         ])),
+//       });
+//     }
+//     var view = FL.mount(GD.host(), App, { design: [720, 1280] });
+//
+// The framework owns the render loop: `mount` takes a *builder* (a function
+// returning the current widget tree), calls it for the first paint, and calls
+// it again after every widget event — so a handler just mutates the state the
+// builder reads (here `count`) and returns. State changed from outside an event
+// (a timer, a network reply) calls `view.update()` (or `view.setState(fn)`).
+//
+// Composition: this prelude is layered *after* `godot.js` (an `import
+// 'flutter.js';` line pulls it in), so it reuses that prelude's callback
+// registry (`__gdRegisterCb` / `__gdCallbacks`) and marshaling. Widget event
+// handlers therefore route back through the very same namespaced-callable path
+// the Godot bridge uses: a handler becomes a `{"callable": cbId}` wire tag, the
+// Rust VmManager rewrites the id into the owning VM's namespace, the C++
+// FlutterController queues `(cb, args)` on an engine event, and the node flushes
+// it as `__godotDispatch([cb, [args…]])` — which reaches the right VM even deep
+// in a spawned subtree. One dispatch path, one sandbox model, for both UIs.
+//
+// ---------------------------------------------------------------------------
+// The op protocol (mirrors godot.op — one seam, `flutter.op`/`flutter.batch`)
+// ---------------------------------------------------------------------------
+//   {"newview": true, "def": id, "parent": {"ref": nodeHandle}, "opts": {…}}
+//                                     spin up an engine + a surface node under
+//                                     `parent` (a Godot node in the VM sandbox)
+//   {"render": viewId, "tree": <serialized widget tree>}
+//                                     reconcile the view to this widget tree
+//                                     (emitted by the framework's flush, not by
+//                                     the app directly)
+//   {"call": viewId, "channel": s, "msg": v}
+//                                     send a raw platform message to the app
+//   {"resize": viewId, "size": [w,h], "dpr": r}  drive metrics explicitly
+//   {"disposeview": viewId}           tear the engine + surface down
+//
+// A serialized widget node is `{"t": type, "p": props, "c": [children…]}` (plus
+// optional `"k": key for keyed reconciliation). Event handlers inside `p` are
+// replaced with `{"callable": cbId}` tags at render time (see __flReify).
+
+// The set of engine views this VM owns.
+var __flViews = {};
+var __flNextView = 1;
+
+// ---------------------------------------------------------------------------
+// Widget construction — every widget is just `{t, p, c}` data
+// ---------------------------------------------------------------------------
+
+// The universal element factory: __flEl('Padding', {all: 8}, [child]). The AOT
+// interpreter app owns the `type -> real Flutter widget` mapping, so new widget
+// types need no change here — only in the app.
+function __flEl(type, props, children) {
+  let node = { t: type, p: props == null ? {} : props };
+  if (children != null) {
+    // A list of children stays a list; a single child (a widget map or a bare
+    // string) is wrapped. Use the VM's neutral type tag, never `.length` — a
+    // widget map is not a list and probing it for `.length` is an error.
+    if (__isType(children, "list")) {
+      node.c = children;
+    } else {
+      node.c = [children];
+    }
+  }
+  return node;
+}
+
+// ---------------------------------------------------------------------------
+// Reify a tree for the wire: turn function-valued props into callable tags,
+// reusing this view's callback slots across renders so re-rendering a tree does
+// not leak an unbounded number of cb ids (the retained-reconciliation trick —
+// the same idea react.js uses for its host callbacks).
+// ---------------------------------------------------------------------------
+
+function __flReify(view, node) {
+  return __flReifyValue(view, node);
+}
+
+// Reify ANY value for the wire, so an event handler or a widget is reachable in
+// EVERY position — a prop value, an element of a prop array (`children`,
+// `actions`, `slivers`, `tabs`, …), or a value nested in a prop map. This is
+// what makes the guest side complete by construction: any widget type built
+// with `FL.el(type, props, children)` and any handler on any prop is expressed
+// uniformly, with no per-widget code here.
+//
+//   * a function            → a `{callable: id}` tag (a durable slot, reused
+//                             across renders so cb ids stay bounded);
+//   * a widget node (has a string `t`) → reified {t, k?, p, c};
+//   * a list                → each element reified;
+//   * any other map          → each value reified (catches handlers/widgets
+//                             nested inside a value object);
+//   * a scalar               → passed through.
+function __flReifyValue(view, v) {
+  if (v == null) {
+    return null;
+  }
+  // Use the VM's neutral type tags (list/map/function) — never `.length`, since
+  // a map is not an array even if it answers to a length probe.
+  if (__isType(v, "function")) {
+    return { callable: __flSlot(view, v) };
+  }
+  if (__isType(v, "list")) {
+    let arr = [];
+    for (let i = 0; i < v.length; i++) {
+      arr.push(__flReifyValue(view, v[i]));
+    }
+    return arr;
+  }
+  if (__isType(v, "map")) {
+    // Widget node: a map carrying a string type tag `t`.
+    if (__isType(v.t, "string")) {
+      let out = { t: v.t };
+      if (v.k != null) {
+        out.k = v.k;
+      }
+      if (v.p != null) {
+        let p = {};
+        for (let key in v.p) {
+          p[key] = __flReifyValue(view, v.p[key]);
+        }
+        out.p = p;
+      }
+      if (v.c != null) {
+        let kids = [];
+        for (let i = 0; i < v.c.length; i++) {
+          kids.push(__flReifyValue(view, v.c[i]));
+        }
+        out.c = kids;
+      }
+      return out;
+    }
+    // Any other map (a value object): reify each value so a handler or widget
+    // nested inside it (a custom decoration, a route map, …) is still reached.
+    let m = {};
+    for (let key in v) {
+      m[key] = __flReifyValue(view, v[key]);
+    }
+    return m;
+  }
+  // Scalars (number / string / bool) pass through.
+  return v;
+}
+
+// Hand back a stable cb id for a handler in this render pass, reusing a slot
+// allocated on a previous render when possible (so cb ids stay bounded by the
+// tree's peak handler count instead of growing every frame).
+//
+// The durable closure registered here is the framework's event driver: it runs
+// the widget's current handler (which only MUTATES app state) and then asks the
+// framework to re-render (`__flSchedule`). This "handler mutates, framework
+// renders" split is exactly VReact's setState → drain model, and it is load
+// bearing: the durable closure is created once at top level, so the re-render's
+// `view`-method call is never lexically inside a dispatch-time closure — the one
+// shape that trips the front-end's closure capture on a resumed turn.
+function __flSlot(view, fn) {
+  let idx = view._hidx;
+  view._hidx = idx + 1;
+  if (idx < view._handlers.length) {
+    view._handlers[idx] = fn;
+    return view._cbids[idx];
+  }
+  view._handlers.push(fn);
+  let cbid = __gdRegisterCb(function (a) {
+    let handler = view._handlers[idx];
+    if (handler != null) {
+      handler(a);
+    }
+    __flSchedule(view);
+  });
+  view._cbids.push(cbid);
+  return cbid;
+}
+
+// Coalesce a re-render: mark the view dirty and, if no flush is already queued,
+// schedule ONE on the VM event loop. Many events in a turn collapse to a single
+// reify + `flutter.op` crossing at the next microtask.
+function __flSchedule(view) {
+  if (view._scheduled) {
+    return;
+  }
+  view._scheduled = true;
+  __later(function () {
+    view._scheduled = false;
+    __flFlush(view);
+  });
+}
+
+// The framework render step: build the tree from the app's builder, reify it,
+// and ship it. A top-level function (never a method reached from a dispatch-time
+// closure) so the reify's engine crossing runs on solid ground.
+function __flFlush(view) {
+  if (view.builder == null) {
+    return;
+  }
+  view._hidx = 0;
+  let reified = __flReify(view, view.builder());
+  askHost("flutter.op", [{ render: view.id, tree: reified }]);
+}
+
+// ---------------------------------------------------------------------------
+// FLView — one embedded Flutter engine + one surface node in the scene
+// ---------------------------------------------------------------------------
+
+class FLView {
+  constructor(id, builder) {
+    this.id = id;
+    this.builder = builder; // () -> root widget tree, called by the framework
+    this._handlers = [];
+    this._cbids = [];
+    this._hidx = 0;
+    this._scheduled = false;
+  }
+
+  // Request a re-render. Handlers normally never call this — mutating app state
+  // and returning is enough, since the framework re-renders after every event —
+  // but a state change from OUTSIDE an event (a `GTimer` tick, a network reply)
+  // calls `update()` to schedule a coalesced flush.
+  update() {
+    __flSchedule(this);
+  }
+
+  // Flutter-style convenience: run `fn` (mutate state), then re-render.
+  setState(fn) {
+    if (fn != null) {
+      fn();
+    }
+    __flSchedule(this);
+  }
+
+  // Swap the root builder and re-render (e.g. navigate to another screen).
+  setBuilder(builder) {
+    this.builder = builder;
+    __flSchedule(this);
+  }
+
+  // Send a raw platform-channel message to the app (escape hatch for custom
+  // channels the interpreter app understands).
+  call(channel, msg) {
+    return __gdUnmarshal(askHost("flutter.op", [{ call: this.id, channel: channel, msg: msg }]));
+  }
+
+  // Explicitly drive window metrics (normally the surface node reports these
+  // from its own resize/DPI automatically).
+  resize(w, h, dpr) {
+    return __gdUnmarshal(askHost("flutter.op", [{ resize: this.id, size: [w, h], dpr: dpr }]));
+  }
+
+  // Tear down the engine and remove the surface node.
+  dispose() {
+    delete __flViews["v" + this.id];
+    return __gdUnmarshal(askHost("flutter.op", [{ disposeview: this.id }]));
+  }
+}
+
+// ===========================================================================
+// Canvas / CustomPainter — the full dart:ui drawing surface, as a display list.
+// ===========================================================================
+//
+// A painter is recorded to a serializable **display list** (a list of op maps)
+// exactly the way the elpis protocol / `dart/src/dart_ui.rs` record a `dart:ui`
+// scene: the guest issues Canvas calls into an `FLCanvas`, they become pure
+// data, and the host's `_ReplayPainter` replays them onto the REAL Flutter
+// `Canvas`. No closures live in the list, so it ships as plain data and repaints
+// on any re-render.
+//
+//     FL.customPaint([300, 200], function (cv) {
+//       var p = FL.paint({ color: [1, 0, 0, 1], style: 'stroke', strokeWidth: 4 });
+//       cv.drawCircle(150, 100, 60, p);
+//       var path = FL.path().moveTo(0, 0).lineTo(300, 200).close();
+//       cv.drawPath(path, FL.paint({ color: [0, 0, 1, 1] }));
+//     })
+//
+// Geometry on the wire: Offset = [x,y]; Rect = [left,top,right,bottom] (LTRB —
+// use FL.ltwh(l,t,w,h) if you think in width/height); RRect = {rect:[…],
+// radius:n} or {rect, tl,tr,bl,br}; Color = [r,g,b,a] (0..1) or a 0xAARRGGBB int.
+
+// Normalize a path argument to plain data (an FLPath, or an already-plain map).
+function __flPathData(p) {
+  if (p == null) {
+    return null;
+  }
+  if (p._verbs != null) {
+    return { verbs: p._verbs, fillType: p._fillType };
+  }
+  return p;
+}
+
+// A Path builder — records verbs; every dart:ui Path method is present.
+class FLPath {
+  constructor() {
+    this._verbs = [];
+    this._fillType = "nonZero";
+  }
+  moveTo(x, y) { this._verbs.push(["moveTo", x, y]); return this; }
+  lineTo(x, y) { this._verbs.push(["lineTo", x, y]); return this; }
+  relativeMoveTo(dx, dy) { this._verbs.push(["rMoveTo", dx, dy]); return this; }
+  relativeLineTo(dx, dy) { this._verbs.push(["rLineTo", dx, dy]); return this; }
+  quadraticBezierTo(x1, y1, x2, y2) { this._verbs.push(["quadTo", x1, y1, x2, y2]); return this; }
+  relativeQuadraticBezierTo(x1, y1, x2, y2) { this._verbs.push(["rQuadTo", x1, y1, x2, y2]); return this; }
+  cubicTo(x1, y1, x2, y2, x3, y3) { this._verbs.push(["cubicTo", x1, y1, x2, y2, x3, y3]); return this; }
+  relativeCubicTo(x1, y1, x2, y2, x3, y3) { this._verbs.push(["rCubicTo", x1, y1, x2, y2, x3, y3]); return this; }
+  conicTo(x1, y1, x2, y2, w) { this._verbs.push(["conicTo", x1, y1, x2, y2, w]); return this; }
+  relativeConicTo(x1, y1, x2, y2, w) { this._verbs.push(["rConicTo", x1, y1, x2, y2, w]); return this; }
+  arcTo(rect, startAngle, sweepAngle, forceMoveTo) {
+    this._verbs.push(["arcTo", rect, startAngle, sweepAngle, forceMoveTo == true]);
+    return this;
+  }
+  arcToPoint(x, y, opts) {
+    let o = opts == null ? {} : opts;
+    this._verbs.push(["arcToPoint", x, y, o.radiusX == null ? 0 : o.radiusX, o.radiusY == null ? 0 : o.radiusY, o.rotation == null ? 0 : o.rotation, o.largeArc == true, o.clockwise != false]);
+    return this;
+  }
+  addRect(rect) { this._verbs.push(["addRect", rect]); return this; }
+  addRRect(rrect) { this._verbs.push(["addRRect", rrect]); return this; }
+  addOval(rect) { this._verbs.push(["addOval", rect]); return this; }
+  addArc(rect, startAngle, sweepAngle) { this._verbs.push(["addArc", rect, startAngle, sweepAngle]); return this; }
+  addPolygon(points, close) { this._verbs.push(["addPolygon", points, close == true]); return this; }
+  addPath(path, dx, dy) { this._verbs.push(["addPath", __flPathData(path), dx == null ? 0 : dx, dy == null ? 0 : dy]); return this; }
+  close() { this._verbs.push(["close"]); return this; }
+  reset() { this._verbs = []; return this; }
+  fillType(t) { this._fillType = t; return this; }
+  data() { return { verbs: this._verbs, fillType: this._fillType }; }
+}
+
+// The Canvas recorder — every dart:ui Canvas method, each pushing one op.
+class FLCanvas {
+  constructor() {
+    this._ops = [];
+  }
+  // ---- layers / transform / clip ----
+  save() { this._ops.push({ op: "save" }); return this; }
+  saveLayer(rect, paint) { this._ops.push({ op: "saveLayer", rect: rect, paint: paint }); return this; }
+  restore() { this._ops.push({ op: "restore" }); return this; }
+  restoreToCount(count) { this._ops.push({ op: "restoreToCount", count: count }); return this; }
+  translate(dx, dy) { this._ops.push({ op: "translate", dx: dx, dy: dy }); return this; }
+  scale(sx, sy) { this._ops.push({ op: "scale", sx: sx, sy: sy == null ? sx : sy }); return this; }
+  rotate(radians) { this._ops.push({ op: "rotate", radians: radians }); return this; }
+  skew(sx, sy) { this._ops.push({ op: "skew", sx: sx, sy: sy }); return this; }
+  transform(matrix16) { this._ops.push({ op: "transform", matrix: matrix16 }); return this; }
+  clipRect(rect, opts) {
+    let o = opts == null ? {} : opts;
+    this._ops.push({ op: "clipRect", rect: rect, clipOp: o.op == null ? "intersect" : o.op, aa: o.aa != false });
+    return this;
+  }
+  clipRRect(rrect, aa) { this._ops.push({ op: "clipRRect", rrect: rrect, aa: aa != false }); return this; }
+  clipPath(path, aa) { this._ops.push({ op: "clipPath", path: __flPathData(path), aa: aa != false }); return this; }
+  // ---- draws ----
+  drawColor(color, blendMode) { this._ops.push({ op: "drawColor", color: color, blend: blendMode == null ? "srcOver" : blendMode }); return this; }
+  drawPaint(paint) { this._ops.push({ op: "drawPaint", paint: paint }); return this; }
+  drawLine(p1, p2, paint) { this._ops.push({ op: "drawLine", p1: p1, p2: p2, paint: paint }); return this; }
+  drawRect(rect, paint) { this._ops.push({ op: "drawRect", rect: rect, paint: paint }); return this; }
+  drawRRect(rrect, paint) { this._ops.push({ op: "drawRRect", rrect: rrect, paint: paint }); return this; }
+  drawDRRect(outer, inner, paint) { this._ops.push({ op: "drawDRRect", outer: outer, inner: inner, paint: paint }); return this; }
+  drawOval(rect, paint) { this._ops.push({ op: "drawOval", rect: rect, paint: paint }); return this; }
+  drawCircle(cx, cy, radius, paint) { this._ops.push({ op: "drawCircle", cx: cx, cy: cy, radius: radius, paint: paint }); return this; }
+  drawArc(rect, startAngle, sweepAngle, useCenter, paint) { this._ops.push({ op: "drawArc", rect: rect, start: startAngle, sweep: sweepAngle, useCenter: useCenter == true, paint: paint }); return this; }
+  drawPath(path, paint) { this._ops.push({ op: "drawPath", path: __flPathData(path), paint: paint }); return this; }
+  drawImage(src, dx, dy, paint) { this._ops.push({ op: "drawImage", src: src, dx: dx, dy: dy, paint: paint }); return this; }
+  drawImageRect(src, srcRect, dstRect, paint) { this._ops.push({ op: "drawImageRect", src: src, srcRect: srcRect, dstRect: dstRect, paint: paint }); return this; }
+  drawImageNine(src, center, dstRect, paint) { this._ops.push({ op: "drawImageNine", src: src, center: center, dstRect: dstRect, paint: paint }); return this; }
+  drawParagraph(paragraph, dx, dy) { this._ops.push({ op: "drawParagraph", paragraph: paragraph, dx: dx, dy: dy }); return this; }
+  drawPoints(mode, points, paint) { this._ops.push({ op: "drawPoints", mode: mode == null ? "points" : mode, points: points, paint: paint }); return this; }
+  drawShadow(path, color, elevation, transparentOccluder) { this._ops.push({ op: "drawShadow", path: __flPathData(path), color: color, elevation: elevation, transparentOccluder: transparentOccluder == true }); return this; }
+  drawVertices(vertices, blendMode, paint) { this._ops.push({ op: "drawVertices", vertices: vertices, blend: blendMode == null ? "srcOver" : blendMode, paint: paint }); return this; }
+  drawAtlas(src, transforms, rects, colors, blendMode, cullRect, paint) { this._ops.push({ op: "drawAtlas", src: src, transforms: transforms, rects: rects, colors: colors, blend: blendMode, cullRect: cullRect, paint: paint }); return this; }
+}
+
+// ---------------------------------------------------------------------------
+// FL — the facade
+// ---------------------------------------------------------------------------
+
+class FL {
+  // Mount a Flutter UI under a Godot node `parent` (any GObj in this VM's
+  // sandbox). `builder` is a function returning the root widget tree; the
+  // framework calls it now and after every event, so a handler need only mutate
+  // the state the builder reads. `opts`: { design: [w,h], transparent: bool,
+  // gpu: bool }. Returns an FLView. The C++ controller creates the engine and a
+  // surface node child of `parent`, so the UI composites over whatever 2D/3D
+  // world lives there.
+  //
+  //     var count = 0;
+  //     function App() {
+  //       return FL.scaffold({ body: FL.center(FL.column([
+  //         FL.text('Taps: ' + count, { size: 32 }),
+  //         FL.filledButton('Tap me', function () { count = count + 1; }),
+  //       ])) });
+  //     }
+  //     var view = FL.mount(GD.host(), App, { design: [720, 1280] });
+  static mount(parent, builder, opts) {
+    let id = __flNextView;
+    __flNextView = __flNextView + 1;
+    let ref = parent == null ? null : { ref: parent.id };
+    // Detect whether the embedded Flutter engine is actually available: a
+    // successful newview replies with the (numeric) view handle; a build with
+    // no libflutter (the placeholder, and every web export) replies with an
+    // error which the front-end surfaces as a throw. Return null so callers can
+    // fall back to a native UI (see bridge/project/scripts/flutter_3d_demo.js).
+    let ok = false;
+    try {
+      let reply = __gdUnmarshal(askHost("flutter.op", [{ newview: true, def: id, parent: ref, opts: opts == null ? {} : opts }]));
+      ok = __isType(reply, "number");
+    } catch (e) {
+      ok = false;
+    }
+    if (!ok) {
+      return null;
+    }
+    let view = new FLView(id, builder);
+    __flViews["v" + id] = view;
+    __flFlush(view); // initial paint
+    return view;
+  }
+
+  // True when the embedded Flutter engine is available in this build. Probes by
+  // mounting a throwaway view under `parent` and disposing it.
+  static available(parent) {
+    let v = FL.mount(parent, function () { return FL.el("SizedBox", {}); }, {});
+    if (v == null) {
+      return false;
+    }
+    v.dispose();
+    return true;
+  }
+
+  // Raw op escape hatch, symmetrical with GD.op.
+  static op(m) {
+    return __gdUnmarshal(askHost("flutter.op", [m]));
+  }
+
+  // ---- widget sugar (thin: every one is __flEl(type, props, children)) -----
+  static el(t, p, c) {
+    return __flEl(t, p, c);
+  }
+  static app(p) {
+    return __flEl("MaterialApp", p);
+  }
+  static scaffold(p) {
+    return __flEl("Scaffold", p);
+  }
+  static appBar(title) {
+    return __flEl("AppBar", { title: title });
+  }
+  static text(s, p) {
+    return __flEl("Text", { data: s, style: p == null ? {} : p });
+  }
+  static column(children) {
+    return __flEl("Column", {}, children);
+  }
+  static row(children) {
+    return __flEl("Row", {}, children);
+  }
+  static stack(children) {
+    return __flEl("Stack", {}, children);
+  }
+  static center(child) {
+    return __flEl("Center", {}, [child]);
+  }
+  static padding(all, child) {
+    return __flEl("Padding", { all: all }, [child]);
+  }
+  static container(p, child) {
+    return __flEl("Container", p, child == null ? null : [child]);
+  }
+  static sizedBox(w, h, child) {
+    return __flEl("SizedBox", { width: w, height: h }, child == null ? null : [child]);
+  }
+  static expanded(child) {
+    return __flEl("Expanded", {}, [child]);
+  }
+  static listView(children) {
+    return __flEl("ListView", {}, children);
+  }
+  static image(src, p) {
+    return __flEl("Image", { src: src, opts: p == null ? {} : p });
+  }
+  static icon(name, p) {
+    return __flEl("Icon", { name: name, opts: p == null ? {} : p });
+  }
+  static filledButton(label, onTap) {
+    return __flEl("FilledButton", { label: label, onTap: onTap });
+  }
+  static textButton(label, onTap) {
+    return __flEl("TextButton", { label: label, onTap: onTap });
+  }
+  static iconButton(name, onTap) {
+    return __flEl("IconButton", { name: name, onTap: onTap });
+  }
+  static textField(p) {
+    return __flEl("TextField", p == null ? {} : p);
+  }
+  static switchTile(value, onChanged) {
+    return __flEl("Switch", { value: value, onChanged: onChanged });
+  }
+  static slider(value, onChanged, p) {
+    let props = p == null ? {} : p;
+    props.value = value;
+    props.onChanged = onChanged;
+    return __flEl("Slider", props);
+  }
+
+  // More content / layout sugar (all thin over __flEl; FL.el reaches anything
+  // the host registry knows, so this list is convenience, not the coverage
+  // boundary — see FLUTTER.md).
+  static align(alignment, child) {
+    return __flEl("Align", { alignment: alignment }, [child]);
+  }
+  static positioned(p, child) {
+    return __flEl("Positioned", p, [child]);
+  }
+  static wrap(children, p) {
+    return __flEl("Wrap", p == null ? {} : p, children);
+  }
+  static flexible(child, flex) {
+    return __flEl("Flexible", { flex: flex == null ? 1 : flex }, [child]);
+  }
+  static aspectRatio(ratio, child) {
+    return __flEl("AspectRatio", { aspectRatio: ratio }, [child]);
+  }
+  static opacity(value, child) {
+    return __flEl("Opacity", { opacity: value }, [child]);
+  }
+  static clip(shape, child) {
+    return __flEl(shape == null ? "ClipRRect" : shape, {}, [child]);
+  }
+  static card(child, p) {
+    return __flEl("Card", p == null ? {} : p, [child]);
+  }
+  static listTile(p) {
+    return __flEl("ListTile", p == null ? {} : p);
+  }
+  static chip(label, p) {
+    let props = p == null ? {} : p;
+    props.label = label;
+    return __flEl("Chip", props);
+  }
+  static checkbox(value, onChanged) {
+    return __flEl("Checkbox", { value: value, onChanged: onChanged });
+  }
+  static radio(value, groupValue, onChanged) {
+    return __flEl("Radio", { value: value, groupValue: groupValue, onChanged: onChanged });
+  }
+  static dropdown(value, items, onChanged) {
+    return __flEl("DropdownButton", { value: value, items: items, onChanged: onChanged });
+  }
+  static scroll(child, p) {
+    return __flEl("SingleChildScrollView", p == null ? {} : p, [child]);
+  }
+  static gridView(children, p) {
+    return __flEl("GridView", p == null ? {} : p, children);
+  }
+  static pageView(children, p) {
+    return __flEl("PageView", p == null ? {} : p, children);
+  }
+  static tabs(tabs, views, p) {
+    let props = p == null ? {} : p;
+    props.tabs = tabs;
+    props.views = views;
+    return __flEl("TabScaffold", props);
+  }
+  static circularProgress(p) {
+    return __flEl("CircularProgressIndicator", p == null ? {} : p);
+  }
+  static linearProgress(p) {
+    return __flEl("LinearProgressIndicator", p == null ? {} : p);
+  }
+  static divider(p) {
+    return __flEl("Divider", p == null ? {} : p);
+  }
+  static circleAvatar(p) {
+    return __flEl("CircleAvatar", p == null ? {} : p);
+  }
+  static tooltip(message, child) {
+    return __flEl("Tooltip", { message: message }, [child]);
+  }
+  static hero(tag, child) {
+    return __flEl("Hero", { tag: tag }, [child]);
+  }
+  static animatedContainer(p, child) {
+    return __flEl("AnimatedContainer", p == null ? {} : p, child == null ? null : [child]);
+  }
+
+  // =========================================================================
+  // The full event surface. Every gesture / pointer / keyboard / focus / drag
+  // / scroll / value callback is reachable — a handler is just a function-valued
+  // prop, converted to a `{callable}` tag by the reifier and dispatched back
+  // through the same path Godot signals use. The host decodes each callback's
+  // details into a JSON argument the handler receives.
+  // =========================================================================
+
+  // GestureDetector — the complete tap / double-tap / long-press / drag / pan /
+  // scale / force-press / secondary / tertiary callback set. Pass any subset in
+  // `handlers`; unknown keys are ignored by the host.
+  //
+  //   onTapDown onTapUp onTap onTapCancel
+  //   onSecondaryTap onSecondaryTapDown onSecondaryTapUp onSecondaryTapCancel
+  //   onTertiaryTapDown onTertiaryTapUp onTertiaryTapCancel
+  //   onDoubleTap onDoubleTapDown onDoubleTapCancel
+  //   onLongPress onLongPressStart onLongPressMoveUpdate onLongPressUp onLongPressEnd
+  //   onVerticalDragStart onVerticalDragUpdate onVerticalDragEnd onVerticalDragDown onVerticalDragCancel
+  //   onHorizontalDragStart onHorizontalDragUpdate onHorizontalDragEnd onHorizontalDragDown onHorizontalDragCancel
+  //   onPanStart onPanUpdate onPanEnd onPanDown onPanCancel
+  //   onScaleStart onScaleUpdate onScaleEnd
+  //   onForcePressStart onForcePressPeak onForcePressUpdate onForcePressEnd
+  static gestures(child, handlers) {
+    let p = handlers == null ? {} : handlers;
+    p.child = child;
+    return __flEl("GestureDetector", p);
+  }
+
+  // InkWell — Material tap feedback: onTap onTapDown onTapUp onTapCancel
+  // onDoubleTap onLongPress onSecondaryTap onHover onFocusChange onHighlightChanged.
+  static inkWell(child, handlers) {
+    let p = handlers == null ? {} : handlers;
+    p.child = child;
+    return __flEl("InkWell", p);
+  }
+
+  // Listener — raw pointer events: onPointerDown onPointerMove onPointerUp
+  // onPointerHover onPointerCancel onPointerSignal onPointerPanZoomStart
+  // onPointerPanZoomUpdate onPointerPanZoomEnd.
+  static listener(child, handlers) {
+    let p = handlers == null ? {} : handlers;
+    p.child = child;
+    return __flEl("Listener", p);
+  }
+
+  // MouseRegion — hover: onEnter onExit onHover (+ cursor).
+  static mouseRegion(child, handlers) {
+    let p = handlers == null ? {} : handlers;
+    p.child = child;
+    return __flEl("MouseRegion", p);
+  }
+
+  // Focus — keyboard focus + key events: onFocusChange onKeyEvent (+ autofocus).
+  static focus(child, handlers) {
+    let p = handlers == null ? {} : handlers;
+    p.child = child;
+    return __flEl("Focus", p);
+  }
+
+  // KeyboardListener — every hardware key: onKeyEvent (down/up/repeat, with
+  // logical/physical key, character, and modifier flags in the details).
+  static keyboard(child, onKeyEvent, p) {
+    let props = p == null ? {} : p;
+    props.child = child;
+    props.onKeyEvent = onKeyEvent;
+    return __flEl("KeyboardListener", props);
+  }
+
+  // NotificationListener — scroll & custom notifications bubbling up:
+  // onNotification (ScrollStart/Update/End/Metrics, OverscrollNotification, …).
+  static notificationListener(child, onNotification) {
+    return __flEl("NotificationListener", { child: child, onNotification: onNotification });
+  }
+
+  // Draggable / DragTarget — drag & drop.
+  //   Draggable handlers: onDragStarted onDragUpdate onDragEnd onDraggableCanceled onDragCompleted
+  //   DragTarget handlers: onWillAccept onAccept onAcceptWithDetails onLeave onMove
+  static draggable(child, feedback, handlers) {
+    let p = handlers == null ? {} : handlers;
+    p.child = child;
+    p.feedback = feedback;
+    return __flEl("Draggable", p);
+  }
+  static dragTarget(builderChild, handlers) {
+    let p = handlers == null ? {} : handlers;
+    p.child = builderChild;
+    return __flEl("DragTarget", p);
+  }
+
+  // Dismissible — swipe to dismiss: onDismissed confirmDismiss onResize onUpdate.
+  static dismissible(key, child, handlers) {
+    let p = handlers == null ? {} : handlers;
+    p.dismissKey = key;
+    p.child = child;
+    return __flEl("Dismissible", p);
+  }
+
+  // RefreshIndicator — pull to refresh: onRefresh.
+  static refreshIndicator(child, onRefresh) {
+    return __flEl("RefreshIndicator", { child: child, onRefresh: onRefresh });
+  }
+
+  // PopScope — intercept back navigation: onPopInvoked (+ canPop).
+  static popScope(child, onPopInvoked, canPop) {
+    return __flEl("PopScope", { child: child, onPopInvoked: onPopInvoked, canPop: canPop });
+  }
+
+  // Form / fields — onChanged onSaved validator onFieldSubmitted onEditingComplete.
+  static form(child, onChanged) {
+    return __flEl("Form", { child: child, onChanged: onChanged });
+  }
+
+  // =========================================================================
+  // Canvas / CustomPainter
+  // =========================================================================
+
+  // Paint a custom drawing at `size` = [w, h]. `painter(cv)` receives an
+  // FLCanvas and issues drawing ops; they are recorded to a display list the
+  // host replays onto the real Flutter Canvas. `opts` may add `child`,
+  // `foreground: true` (draw over the child), `isComplex`, `willChange`.
+  static customPaint(size, painter, opts) {
+    let cv = new FLCanvas();
+    if (painter != null) {
+      painter(cv);
+    }
+    let p = opts == null ? {} : opts;
+    p.size = size;
+    if (p.foreground == true) {
+      p.foregroundOps = cv._ops;
+    } else {
+      p.ops = cv._ops;
+    }
+    return __flEl("CustomPaint", p);
+  }
+
+  // Alias reading like dart:ui's PictureRecorder → Canvas flow.
+  static canvas(size, painter, opts) {
+    return FL.customPaint(size, painter, opts);
+  }
+
+  // A Paint descriptor. Recognized keys: color, blendMode, style('fill'|'stroke'),
+  // strokeWidth, strokeCap('butt'|'round'|'square'), strokeJoin('miter'|'round'|
+  // 'bevel'), strokeMiterLimit, isAntiAlias, shader (a gradient descriptor),
+  // maskFilter ({style:'normal'|'solid'|'outer'|'inner', sigma}), blur (sigma
+  // shortcut), colorFilter, filterQuality, invertColors.
+  static paint(props) {
+    return props == null ? {} : props;
+  }
+
+  // A fresh Path builder.
+  static path() {
+    return new FLPath();
+  }
+
+  // Geometry helpers.
+  static ltwh(l, t, w, h) {
+    return [l, t, l + w, t + h];
+  }
+  static rrect(rect, radius) {
+    return { rect: rect, radius: radius };
+  }
+
+  // Shaders (a Paint's `shader`).
+  static linearGradient(from, to, colors, stops, tileMode) {
+    return { type: "linear", from: from, to: to, colors: colors, stops: stops, tileMode: tileMode };
+  }
+  static radialGradient(center, radius, colors, stops, tileMode) {
+    return { type: "radial", center: center, radius: radius, colors: colors, stops: stops, tileMode: tileMode };
+  }
+  static sweepGradient(center, colors, stops, startAngle, endAngle) {
+    return { type: "sweep", center: center, colors: colors, stops: stops, startAngle: startAngle, endAngle: endAngle };
+  }
+
+  // A Paragraph descriptor for cv.drawParagraph: { text, maxWidth, style,
+  // align('left'|'center'|'right'|'justify') }.
+  static paragraph(text, maxWidth, style, align) {
+    return { text: text, maxWidth: maxWidth, style: style == null ? {} : style, align: align };
+  }
+}
+// =============================================================================
+// §3  Theme and widget kit — VUI
+// =============================================================================
+
+// =============================================================================
+// ui.js — VUI: the Victor UI kit. A full widget toolkit in pure JavaScript,
+// built on Godot Control nodes over the Elpian↔Godot bridge.
+// =============================================================================
+//
+// Import it after godot.js (`import 'godot.js'; import 'ui.js';` — the import
+// lines are markers the composer resolves; there is no module system). Every
+// widget is a real, retained Godot Control node created reflectively through
+// the bridge: VUI does not paint per frame — Godot renders the retained scene,
+// and the guest only reacts to signals.
+//
+//   let app  = VUI.app({ responsive: true });
+//   let page = VUI.column({
+//     gap: 16, pad: 20,
+//     children: [
+//       VUI.heading("Hello"),
+//       VUI.button("Tap me", { onTap: () => VUI.toast("hi!") }),
+//     ],
+//   });
+//   app.push(page);
+//
+// ## The design system
+//
+// VUI follows Material Design 3 (the Flutter widget design language):
+//
+//   * COLOR — a full M3 scheme: primary/secondary/tertiary (+ their
+//     containers and on- roles), error, five surface-container steps,
+//     outline/outlineVariant, inverse roles and a scrim. Legacy token names
+//     (bg, surface2, text, textDim, danger, …) remain as aliases so existing
+//     guests keep working.
+//   * TYPE — a dp-true scale (display 36 / headline 28 / title 22/16 /
+//     body 16/14 / label 12) rendered with a real app font when one is
+//     installed (VUI.installFonts / the `fonts` app option): body + medium +
+//     bold weights with an emoji fallback, Flutter-style.
+//   * SHAPE — radius steps 8/12/16/28/full; buttons are stadium-shaped, cards
+//     round 16, dialogs 28, sheets round the top 28.
+//   * ELEVATION — five shadow levels (VUI.styleBox `shadow: 1..5`).
+//   * TOUCH — every control meets a 48dp minimum target.
+//
+// ## Responsive, mobile-first layout
+//
+// `VUI.app({ responsive: true })` sizes the UI in device-independent pixels:
+// the window content-scale factor is derived from the real screen scale
+// (devicePixelRatio on web, DPI/160 on Android), so `16` means 16dp on every
+// device — exactly Flutter's logical-pixel model. `VUI.metrics()` reports the
+// live logical viewport + Material breakpoints (compact < 600dp ≤ medium <
+// 840dp ≤ expanded), and `VUI.onResize(cb)` fires on every window resize.
+// The legacy fixed-design mode (`design: [w, h]`) still works for guests
+// that want a scaled canvas instead.
+//
+// ## The pieces
+//
+//   theme      — themeDark / themeLight / use / theme (M3 design tokens)
+//   fonts      — installFonts (body/emoji TTFs → app-wide Theme font)
+//   root       — app (CanvasLayer + full-rect page + overlay, responsive dp
+//                mode or fixed-design content-scale mode)
+//   layout     — column, row, grid, scroll, margin, center, panel, spacer,
+//                divider, expand
+//   content    — text, heading, title, caption, icon, badge, chip, avatar,
+//                card, stat, listTile
+//   controls   — button, iconButton, fab, field, toggle, checkbox, slider,
+//                progress, dropdown, textarea
+//   structure  — appBar, tabs, bottomNav, dialog, sheet, toast, window,
+//                webview (external URL in an in-app overlay / OS browser)
+//   motion     — tween, fade, slideY (Godot Tweens over the bridge)
+//
+// ## Conventions
+//
+//   * Factories take one options map and return the widget's Godot node
+//     (a GObj), or a HANDLE — a plain object whose `.node` is the GObj and
+//     whose closures read/drive the widget (`toggle`, `tabs`, `progress`, …).
+//     Anywhere a child is accepted, both shapes work.
+//   * Widget state lives in per-widget state OBJECTS mutated in place (the
+//     front-end's closures capture locals by value, so a reassigned local
+//     would go stale — a mutated object never does).
+//   * There is no first-class null in the subset: an absent option reads as 0
+//     (falsy), and `x ?? d` also replaces an explicit 0. Options that must
+//     distinguish 0 (slider minimums, tab index 0, …) are therefore read with
+//     `__vuiNum(v, d)` which only defaults a true absence… of which the VM has
+//     one representation — so pass such values explicitly when they matter.
+//   * Colors are Color(r, g, b, a) floats (hex literals are not in the
+//     subset).
+//
+// Everything below is ordinary Elpian-JS: it compiles with js2elpian and runs
+// on the VM with no privileged access — the kit is user-space code, the same
+// seam any guest program uses. Read it as living documentation of the bridge.
+
+// ---------------------------------------------------------------------------
+// namespace + tiny helpers
+// ---------------------------------------------------------------------------
 
 var VUI = {};
 
@@ -4901,7 +5833,87 @@ function __vuiNodeOf(x) {
   if (x == null) { return GD.create("Control"); }
   return __vuiNode(x);
 }
+// =============================================================================
+// §4  Reactive core — VReact
+// =============================================================================
 
+// =============================================================================
+// react.js — VReact: a React-compatible runtime for the Victor engine.
+// =============================================================================
+//
+// The third guest library in the stack. Composed AFTER `godot.js` (the engine
+// bridge) and `ui.js` (the VUI widget kit), it turns the Elpian VM into a
+// React renderer whose "DOM" is the retained Godot scene graph:
+//
+//     import 'godot.js';
+//     import 'ui.js';
+//     import 'react.js';
+//
+//     function Counter(props) {
+//       let s = useState(0);
+//       let n = s[0]; let set = s[1];
+//       return _jsxs("column", { gap: 16, children: [
+//         _jsx("heading", { children: "Count: " + n }),
+//         _jsx("button", { onPress: () => { set(n + 1); }, children: "Increment" }),
+//       ]});
+//     }
+//     VictorClient.mountApp(_jsx(Counter, {}), { portrait: true });
+//
+// A developer never writes those `_jsx(...)` calls by hand: they author an
+// ordinary Next.js + React project (JSX, hooks, components) and the Victor
+// toolchain (`templates/victor-nextjs/tools/build.mjs`) transpiles the JSX with
+// Babel's automatic runtime and flattens the modules into the single-file guest
+// program the composer expects. This file is the runtime those programs call
+// into. It is authored entirely in the `js2elpian` subset — so, like `ui.js`,
+// it is user-space code with no privileged access.
+//
+// ## What it is (and is not)
+//
+// VReact is a faithful, from-scratch reimplementation of React's *programming
+// model* — element factory, function components, the full hook surface, and a
+// keyed reconciler that mutates retained host nodes — NOT a port of Facebook's
+// `react` + `react-reconciler` packages. Those packages cannot run here: they
+// rely on `Object.assign`, spread, generators, `Map`/`Set`, prototypes and a
+// dozen other constructs the no-JIT Elpian bytecode subset does not model (see
+// the subset chapter in `js2elpian/src/lib.rs`). VReact stands to React exactly
+// as Preact does: same public API and semantics, an independent, tiny core.
+// A component written against VReact IS ordinary React — the hook rules, the
+// deps arrays, the reconciliation guarantees all hold.
+//
+// ## The rendering model
+//
+// React's host config here targets Godot `Control` nodes instead of the DOM.
+// Every intrinsic element (`"column"`, `"text"`, `"button"`, `"input"`, …, plus
+// the web aliases `"div"`, `"span"`, `"img"`, …) is a *host driver* that
+// creates a real retained Godot node, patches its properties on update, and
+// routes its signals back into event props. The reconciler diffs the element
+// tree on each render and applies the minimal set of node mutations — Godot
+// paints the retained scene; the VM only reacts. Event handlers are bound once
+// through a stable indirection (the baked signal closure reads the *current*
+// prop off the persistent instance), so re-renders never re-wire signals.
+//
+// ## The honest constraints of the subset (documented, not hidden)
+//
+//   * There is no first-class null: an absent value reads as 0 and `x == null`
+//     is also true for a numeric 0. A literal numeric `0` therefore cannot be
+//     rendered as a text child (React would render "0") — use `"" + n` or a
+//     string. Every other value renders normally.
+//   * Deps arrays are compared with `==` (the VM lowers `===` to it), i.e.
+//     value identity for scalars and reference identity for objects — the same
+//     contract as `Object.is` for the cases apps rely on.
+//   * A single `<Context.Provider>` per context is supported app-wide; nesting
+//     two providers of the *same* context with different values is not (the
+//     value lives on the context object). Distinct contexts nest freely.
+//
+// Everything else — the hooks, keys, fragments, refs, effects and their
+// cleanup ordering — behaves as you expect from React.
+
+// ---------------------------------------------------------------------------
+// element model
+// ---------------------------------------------------------------------------
+
+// A VReact element. Tagged so the reconciler can tell an element apart from an
+// arbitrary props map or a plain value child.
 var __VR_ELEMENT = "__vreact_element__";
 var __VR_FRAGMENT = "__vreact_fragment__";
 var __VR_PORTAL = "__vreact_portal__";
@@ -5541,10 +6553,6 @@ function __vrMount(child, hostContainer) {
     let inst = {
       kind: "comp",
       fn: type,
-      // Set by __guiRenderClassOn when this fiber turns out to host a class
-      // component. Not knowable before the first render.
-      hasClass: false,
-      classInstance: null,
       element: child,
       props: child.props,
       key: child.key,
@@ -5553,6 +6561,12 @@ function __vrMount(child, hostContainer) {
       hostContainer: hostContainer,
       alive: true,
       dirty: false,
+      // Set by a layer above this one (gui.js) when the component is a class
+      // rather than a function. VReact never sets it and never reads the
+      // instance; it only knows to call the hooks below at the two moments a
+      // class component needs them.
+      hasClass: false,
+      classInstance: null,
     };
     __vrRenderComponent(inst);
     return inst;
@@ -5600,21 +6614,34 @@ function __vrMount(child, hostContainer) {
   return inst;
 }
 
+// Class-component hooks, installed by a layer above VReact.
+//
+// `gui.js` renders class components through this same reconciler. Rather than
+// teaching the reconciler what a class is — which would put a second component
+// model inside a file whose whole point is that there is one — it installs two
+// callbacks here and marks the fiber with `hasClass`.
+//
+// Null when react.js is used on its own, which is the ordinary case: a guest
+// importing only react.js gets function components and pays nothing for a
+// model it is not using.
+var __vrClassHooks = null;
+
+/// Install the class-component hooks. `hooks` is `{ commit, unmount }`.
+function __vrInstallClassHooks(hooks) {
+  __vrClassHooks = hooks;
+}
+
 function __vrRenderComponent(inst) {
   __vrCur = inst;
   __vrHookIndex = 0;
-  // A class component renders through its instance; a function component is
-  // called directly. Both land in the same reconcile below, which is what makes
-  // them compose freely and share one update queue.
-  // A class component's wrapper renders through `__guiRenderClassOn`, which
-  // sets `hasClass` on the fiber. So the reconciler does not need to know what
-  // kind of component this is *before* calling it — which is just as well,
-  // since a class passed as a value carries nothing that would say so.
+  // `inst.fn` is read here rather than hoisted into a local: a class
+  // component's hook rebinds it per render, and a stale local would call the
+  // previous render's closure.
   let out = inst.fn(inst.props);
   __vrCur = null;
   __vrReconcileChildren(inst, __vrNormalize(out), inst.hostContainer);
-  if (inst.hasClass == true) {
-    __guiCommitClass(inst);
+  if (inst.hasClass == true && __vrClassHooks != null) {
+    __vrClassHooks.commit(inst);
   }
 }
 
@@ -5739,15 +6766,13 @@ function __vrReconcileChildren(parent, newChildren, hostContainer) {
 function __vrUnmount(inst) {
   inst.alive = false;
 
+  if (inst.hasClass == true && __vrClassHooks != null) {
+    __vrClassHooks.unmount(inst);
+  }
+
   // Run effect cleanups for a component's own hooks (deepest first would be
   // ideal; this order is adequate for the cleanup contract apps rely on).
   if (inst.kind == "comp") {
-    // A class component's own teardown runs before its hooks', so a component
-    // that cancels a timer in componentWillUnmount does so while its state is
-    // still intact.
-    if (inst.hasClass == true) {
-      __guiUnmountClass(inst);
-    }
     let hooks = inst.hooks;
     for (let i = 0; i < hooks.length; i++) {
       let h = hooks[i];
@@ -7458,17 +8483,19 @@ function Environment3D(props) { return jsx("environment", props); }
 function StaticBody3D(props) { return jsx("staticbody3d", props); }
 function Area3D(props) { return jsx("area3d", props); }
 function CollisionShape3D(props) { return jsx("collisionshape3d", props); }
-
 // =============================================================================
-// §4  The widget registry
+// §5  The widget registry
 // =============================================================================
 //
 // One definition per widget, used by both surfaces.
 //
-// Before this, `ui.js` and `react.js` each built every widget separately: a
-// button existed as `VUI.button(...)` *and* as `__vrCreateButton(...)`, with
-// their own styling and their own bugs. Fourteen widgets were duplicated that
-// way. Here a widget is one object:
+// Before this there was no such list. `ui.js` knew the widgets its factories
+// covered and `react.js` knew the tags its driver handled, and the two sets
+// were maintained apart — a widget in one and not the other was invisible
+// until a guest asked for it. (The bodies were never as divided as the lists:
+// the driver already styles through `VUI.styleBox` and friends, and delegates
+// `checkbox`, `switch` and `center` to the kit outright.) Here a widget is one
+// object:
 //
 //     GUI.defineWidget("badge", {
 //       container: false,
@@ -7477,7 +8504,7 @@ function CollisionShape3D(props) { return jsx("collisionshape3d", props); }
 //     });
 //
 // and both `Badge({...})` (declarative) and `GUI.badge({...})` (imperative)
-// appear, because §5 and §6 generate them from this table.
+// appear, because §6 and §9 generate them from this table.
 //
 // `update` is what makes the declarative path cheap: the reconciler calls it
 // with the previous props so a re-render mutates the node it already has
@@ -7540,14 +8567,13 @@ function __guiIsContainer(tag) {
   }
   return w.container;
 }
-
 // =============================================================================
-// §4b  The built-in widgets
+// §5b  The built-in widgets
 // =============================================================================
 //
 // Every widget the SDK ships, registered once.
 //
-// The bodies delegate to the driver in §2 (`__vrDriverCreate` /
+// The bodies delegate to the driver `react.js` already carries (`__vrDriverCreate` /
 // `__vrDriverUpdate`), which is the implementation that was already there and
 // is covered by the React tests. Registering them rather than rewriting them is
 // deliberate: the duplication being removed is *two* implementations of each
@@ -7636,9 +8662,8 @@ for (let i = 0; i < __GUI_CONTAINERS.length; i++) {
 for (let i = 0; i < __GUI_LEAVES.length; i++) {
   __guiRegisterDriverWidget(__GUI_LEAVES[i], false);
 }
-
 // =============================================================================
-// §5  Components — class and function, one reconciler
+// §6  Components — class and function, one reconciler
 // =============================================================================
 //
 // A function component is a function from props to elements. A class component
@@ -7817,28 +8842,15 @@ function classComponent(type) {
   if (!__isType(type, "function")) {
     throw "gui: component() needs a class or a function";
   }
-  let wrapper = (props) => {
+  // The reconciler needs no register of these: `__guiRenderClassOn` marks the
+  // fiber it renders on, and the fiber is what the commit and unmount hooks
+  // are handed. Keeping a list of every wrapper ever minted would also mean
+  // never releasing one, in a runtime whose whole job is to be bounded.
+  return (props) => {
     // Rendered through the fiber the reconciler is currently on, so the
     // instance, its state and its lifecycle all live where hooks do.
     return __guiRenderClassOn(__vrCur, type, props);
   };
-  __guiClassWrappers.push(wrapper);
-  return wrapper;
-}
-
-/// Wrappers minted by [classComponent], so the reconciler can recognise one and
-/// give it the unmount and commit hooks a class component needs. A list rather
-/// than a marker property for the same reason as above: a function value cannot
-/// carry one.
-var __guiClassWrappers = [];
-
-function __guiIsClassWrapper(fn) {
-  for (let i = 0; i < __guiClassWrappers.length; i++) {
-    if (__guiClassWrappers[i] === fn) {
-      return true;
-    }
-  }
-  return false;
 }
 
 /// Render a class component on `fiber`, constructing its instance the first
@@ -7910,6 +8922,13 @@ function __guiUnmountClass(fiber) {
   fiber.classInstance = null;
 }
 
+// Hand the two hooks to the reconciler. From here on a class component is
+// rendered by exactly the same machinery as a function one: VReact calls
+// `commit` where it would flush effects and `unmount` where it would run their
+// cleanups, so an update from `setState` coalesces with one from `useState` in
+// a single flush rather than racing it.
+__vrInstallClassHooks({ commit: __guiCommitClass, unmount: __guiUnmountClass });
+
 function __guiShallowCopy(o) {
   let out = {};
   if (o == null) {
@@ -7964,7 +8983,6 @@ function __guiCapitalise(s) {
   }
   return s.substring(0, 1).toUpperCase() + s.substring(1);
 }
-
 // =============================================================================
 // §7  Scene3D — the 3D widget and its controller
 // =============================================================================
@@ -8231,7 +9249,6 @@ function __guiApplyEnvironment(scene, name) {
   holder.set("environment", env);
   __guiAdd(scene.world(), holder);
 }
-
 // =============================================================================
 // §8  Canvas — the 2D drawing widget and its controller
 // =============================================================================
@@ -8387,733 +9404,9 @@ function __guiApplySize(node, props) {
   }
   return node;
 }
-
-var __flViews = {};
-var __flNextView = 1;
-
-// ---------------------------------------------------------------------------
-// Widget construction — every widget is just `{t, p, c}` data
-// ---------------------------------------------------------------------------
-
-// The universal element factory: __flEl('Padding', {all: 8}, [child]). The AOT
-// interpreter app owns the `type -> real Flutter widget` mapping, so new widget
-// types need no change here — only in the app.
-function __flEl(type, props, children) {
-  let node = { t: type, p: props == null ? {} : props };
-  if (children != null) {
-    // A list of children stays a list; a single child (a widget map or a bare
-    // string) is wrapped. Use the VM's neutral type tag, never `.length` — a
-    // widget map is not a list and probing it for `.length` is an error.
-    if (__isType(children, "list")) {
-      node.c = children;
-    } else {
-      node.c = [children];
-    }
-  }
-  return node;
-}
-
-// ---------------------------------------------------------------------------
-// Reify a tree for the wire: turn function-valued props into callable tags,
-// reusing this view's callback slots across renders so re-rendering a tree does
-// not leak an unbounded number of cb ids (the retained-reconciliation trick —
-// the same idea react.js uses for its host callbacks).
-// ---------------------------------------------------------------------------
-
-function __flReify(view, node) {
-  return __flReifyValue(view, node);
-}
-
-// Reify ANY value for the wire, so an event handler or a widget is reachable in
-// EVERY position — a prop value, an element of a prop array (`children`,
-// `actions`, `slivers`, `tabs`, …), or a value nested in a prop map. This is
-// what makes the guest side complete by construction: any widget type built
-// with `FL.el(type, props, children)` and any handler on any prop is expressed
-// uniformly, with no per-widget code here.
-//
-//   * a function            → a `{callable: id}` tag (a durable slot, reused
-//                             across renders so cb ids stay bounded);
-//   * a widget node (has a string `t`) → reified {t, k?, p, c};
-//   * a list                → each element reified;
-//   * any other map          → each value reified (catches handlers/widgets
-//                             nested inside a value object);
-//   * a scalar               → passed through.
-function __flReifyValue(view, v) {
-  if (v == null) {
-    return null;
-  }
-  // Use the VM's neutral type tags (list/map/function) — never `.length`, since
-  // a map is not an array even if it answers to a length probe.
-  if (__isType(v, "function")) {
-    return { callable: __flSlot(view, v) };
-  }
-  if (__isType(v, "list")) {
-    let arr = [];
-    for (let i = 0; i < v.length; i++) {
-      arr.push(__flReifyValue(view, v[i]));
-    }
-    return arr;
-  }
-  if (__isType(v, "map")) {
-    // Widget node: a map carrying a string type tag `t`.
-    if (__isType(v.t, "string")) {
-      let out = { t: v.t };
-      if (v.k != null) {
-        out.k = v.k;
-      }
-      if (v.p != null) {
-        let p = {};
-        for (let key in v.p) {
-          p[key] = __flReifyValue(view, v.p[key]);
-        }
-        out.p = p;
-      }
-      if (v.c != null) {
-        let kids = [];
-        for (let i = 0; i < v.c.length; i++) {
-          kids.push(__flReifyValue(view, v.c[i]));
-        }
-        out.c = kids;
-      }
-      return out;
-    }
-    // Any other map (a value object): reify each value so a handler or widget
-    // nested inside it (a custom decoration, a route map, …) is still reached.
-    let m = {};
-    for (let key in v) {
-      m[key] = __flReifyValue(view, v[key]);
-    }
-    return m;
-  }
-  // Scalars (number / string / bool) pass through.
-  return v;
-}
-
-// Hand back a stable cb id for a handler in this render pass, reusing a slot
-// allocated on a previous render when possible (so cb ids stay bounded by the
-// tree's peak handler count instead of growing every frame).
-//
-// The durable closure registered here is the framework's event driver: it runs
-// the widget's current handler (which only MUTATES app state) and then asks the
-// framework to re-render (`__flSchedule`). This "handler mutates, framework
-// renders" split is exactly VReact's setState → drain model, and it is load
-// bearing: the durable closure is created once at top level, so the re-render's
-// `view`-method call is never lexically inside a dispatch-time closure — the one
-// shape that trips the front-end's closure capture on a resumed turn.
-function __flSlot(view, fn) {
-  let idx = view._hidx;
-  view._hidx = idx + 1;
-  if (idx < view._handlers.length) {
-    view._handlers[idx] = fn;
-    return view._cbids[idx];
-  }
-  view._handlers.push(fn);
-  let cbid = __gdRegisterCb(function (a) {
-    let handler = view._handlers[idx];
-    if (handler != null) {
-      handler(a);
-    }
-    __flSchedule(view);
-  });
-  view._cbids.push(cbid);
-  return cbid;
-}
-
-// Coalesce a re-render: mark the view dirty and, if no flush is already queued,
-// schedule ONE on the VM event loop. Many events in a turn collapse to a single
-// reify + `flutter.op` crossing at the next microtask.
-function __flSchedule(view) {
-  if (view._scheduled) {
-    return;
-  }
-  view._scheduled = true;
-  __later(function () {
-    view._scheduled = false;
-    __flFlush(view);
-  });
-}
-
-// The framework render step: build the tree from the app's builder, reify it,
-// and ship it. A top-level function (never a method reached from a dispatch-time
-// closure) so the reify's engine crossing runs on solid ground.
-function __flFlush(view) {
-  if (view.builder == null) {
-    return;
-  }
-  view._hidx = 0;
-  let reified = __flReify(view, view.builder());
-  askHost("flutter.op", [{ render: view.id, tree: reified }]);
-}
-
-// ---------------------------------------------------------------------------
-// FLView — one embedded Flutter engine + one surface node in the scene
-// ---------------------------------------------------------------------------
-
-class FLView {
-  constructor(id, builder) {
-    this.id = id;
-    this.builder = builder; // () -> root widget tree, called by the framework
-    this._handlers = [];
-    this._cbids = [];
-    this._hidx = 0;
-    this._scheduled = false;
-  }
-
-  // Request a re-render. Handlers normally never call this — mutating app state
-  // and returning is enough, since the framework re-renders after every event —
-  // but a state change from OUTSIDE an event (a `GTimer` tick, a network reply)
-  // calls `update()` to schedule a coalesced flush.
-  update() {
-    __flSchedule(this);
-  }
-
-  // Flutter-style convenience: run `fn` (mutate state), then re-render.
-  setState(fn) {
-    if (fn != null) {
-      fn();
-    }
-    __flSchedule(this);
-  }
-
-  // Swap the root builder and re-render (e.g. navigate to another screen).
-  setBuilder(builder) {
-    this.builder = builder;
-    __flSchedule(this);
-  }
-
-  // Send a raw platform-channel message to the app (escape hatch for custom
-  // channels the interpreter app understands).
-  call(channel, msg) {
-    return __gdUnmarshal(askHost("flutter.op", [{ call: this.id, channel: channel, msg: msg }]));
-  }
-
-  // Explicitly drive window metrics (normally the surface node reports these
-  // from its own resize/DPI automatically).
-  resize(w, h, dpr) {
-    return __gdUnmarshal(askHost("flutter.op", [{ resize: this.id, size: [w, h], dpr: dpr }]));
-  }
-
-  // Tear down the engine and remove the surface node.
-  dispose() {
-    delete __flViews["v" + this.id];
-    return __gdUnmarshal(askHost("flutter.op", [{ disposeview: this.id }]));
-  }
-}
-
-// ===========================================================================
-// Canvas / CustomPainter — the full dart:ui drawing surface, as a display list.
-// ===========================================================================
-//
-// A painter is recorded to a serializable **display list** (a list of op maps)
-// exactly the way the elpis protocol / `dart/src/dart_ui.rs` record a `dart:ui`
-// scene: the guest issues Canvas calls into an `FLCanvas`, they become pure
-// data, and the host's `_ReplayPainter` replays them onto the REAL Flutter
-// `Canvas`. No closures live in the list, so it ships as plain data and repaints
-// on any re-render.
-//
-//     FL.customPaint([300, 200], function (cv) {
-//       var p = FL.paint({ color: [1, 0, 0, 1], style: 'stroke', strokeWidth: 4 });
-//       cv.drawCircle(150, 100, 60, p);
-//       var path = FL.path().moveTo(0, 0).lineTo(300, 200).close();
-//       cv.drawPath(path, FL.paint({ color: [0, 0, 1, 1] }));
-//     })
-//
-// Geometry on the wire: Offset = [x,y]; Rect = [left,top,right,bottom] (LTRB —
-// use FL.ltwh(l,t,w,h) if you think in width/height); RRect = {rect:[…],
-// radius:n} or {rect, tl,tr,bl,br}; Color = [r,g,b,a] (0..1) or a 0xAARRGGBB int.
-
-// Normalize a path argument to plain data (an FLPath, or an already-plain map).
-function __flPathData(p) {
-  if (p == null) {
-    return null;
-  }
-  if (p._verbs != null) {
-    return { verbs: p._verbs, fillType: p._fillType };
-  }
-  return p;
-}
-
-// A Path builder — records verbs; every dart:ui Path method is present.
-class FLPath {
-  constructor() {
-    this._verbs = [];
-    this._fillType = "nonZero";
-  }
-  moveTo(x, y) { this._verbs.push(["moveTo", x, y]); return this; }
-  lineTo(x, y) { this._verbs.push(["lineTo", x, y]); return this; }
-  relativeMoveTo(dx, dy) { this._verbs.push(["rMoveTo", dx, dy]); return this; }
-  relativeLineTo(dx, dy) { this._verbs.push(["rLineTo", dx, dy]); return this; }
-  quadraticBezierTo(x1, y1, x2, y2) { this._verbs.push(["quadTo", x1, y1, x2, y2]); return this; }
-  relativeQuadraticBezierTo(x1, y1, x2, y2) { this._verbs.push(["rQuadTo", x1, y1, x2, y2]); return this; }
-  cubicTo(x1, y1, x2, y2, x3, y3) { this._verbs.push(["cubicTo", x1, y1, x2, y2, x3, y3]); return this; }
-  relativeCubicTo(x1, y1, x2, y2, x3, y3) { this._verbs.push(["rCubicTo", x1, y1, x2, y2, x3, y3]); return this; }
-  conicTo(x1, y1, x2, y2, w) { this._verbs.push(["conicTo", x1, y1, x2, y2, w]); return this; }
-  relativeConicTo(x1, y1, x2, y2, w) { this._verbs.push(["rConicTo", x1, y1, x2, y2, w]); return this; }
-  arcTo(rect, startAngle, sweepAngle, forceMoveTo) {
-    this._verbs.push(["arcTo", rect, startAngle, sweepAngle, forceMoveTo == true]);
-    return this;
-  }
-  arcToPoint(x, y, opts) {
-    let o = opts == null ? {} : opts;
-    this._verbs.push(["arcToPoint", x, y, o.radiusX == null ? 0 : o.radiusX, o.radiusY == null ? 0 : o.radiusY, o.rotation == null ? 0 : o.rotation, o.largeArc == true, o.clockwise != false]);
-    return this;
-  }
-  addRect(rect) { this._verbs.push(["addRect", rect]); return this; }
-  addRRect(rrect) { this._verbs.push(["addRRect", rrect]); return this; }
-  addOval(rect) { this._verbs.push(["addOval", rect]); return this; }
-  addArc(rect, startAngle, sweepAngle) { this._verbs.push(["addArc", rect, startAngle, sweepAngle]); return this; }
-  addPolygon(points, close) { this._verbs.push(["addPolygon", points, close == true]); return this; }
-  addPath(path, dx, dy) { this._verbs.push(["addPath", __flPathData(path), dx == null ? 0 : dx, dy == null ? 0 : dy]); return this; }
-  close() { this._verbs.push(["close"]); return this; }
-  reset() { this._verbs = []; return this; }
-  fillType(t) { this._fillType = t; return this; }
-  data() { return { verbs: this._verbs, fillType: this._fillType }; }
-}
-
-// The Canvas recorder — every dart:ui Canvas method, each pushing one op.
-class FLCanvas {
-  constructor() {
-    this._ops = [];
-  }
-  // ---- layers / transform / clip ----
-  save() { this._ops.push({ op: "save" }); return this; }
-  saveLayer(rect, paint) { this._ops.push({ op: "saveLayer", rect: rect, paint: paint }); return this; }
-  restore() { this._ops.push({ op: "restore" }); return this; }
-  restoreToCount(count) { this._ops.push({ op: "restoreToCount", count: count }); return this; }
-  translate(dx, dy) { this._ops.push({ op: "translate", dx: dx, dy: dy }); return this; }
-  scale(sx, sy) { this._ops.push({ op: "scale", sx: sx, sy: sy == null ? sx : sy }); return this; }
-  rotate(radians) { this._ops.push({ op: "rotate", radians: radians }); return this; }
-  skew(sx, sy) { this._ops.push({ op: "skew", sx: sx, sy: sy }); return this; }
-  transform(matrix16) { this._ops.push({ op: "transform", matrix: matrix16 }); return this; }
-  clipRect(rect, opts) {
-    let o = opts == null ? {} : opts;
-    this._ops.push({ op: "clipRect", rect: rect, clipOp: o.op == null ? "intersect" : o.op, aa: o.aa != false });
-    return this;
-  }
-  clipRRect(rrect, aa) { this._ops.push({ op: "clipRRect", rrect: rrect, aa: aa != false }); return this; }
-  clipPath(path, aa) { this._ops.push({ op: "clipPath", path: __flPathData(path), aa: aa != false }); return this; }
-  // ---- draws ----
-  drawColor(color, blendMode) { this._ops.push({ op: "drawColor", color: color, blend: blendMode == null ? "srcOver" : blendMode }); return this; }
-  drawPaint(paint) { this._ops.push({ op: "drawPaint", paint: paint }); return this; }
-  drawLine(p1, p2, paint) { this._ops.push({ op: "drawLine", p1: p1, p2: p2, paint: paint }); return this; }
-  drawRect(rect, paint) { this._ops.push({ op: "drawRect", rect: rect, paint: paint }); return this; }
-  drawRRect(rrect, paint) { this._ops.push({ op: "drawRRect", rrect: rrect, paint: paint }); return this; }
-  drawDRRect(outer, inner, paint) { this._ops.push({ op: "drawDRRect", outer: outer, inner: inner, paint: paint }); return this; }
-  drawOval(rect, paint) { this._ops.push({ op: "drawOval", rect: rect, paint: paint }); return this; }
-  drawCircle(cx, cy, radius, paint) { this._ops.push({ op: "drawCircle", cx: cx, cy: cy, radius: radius, paint: paint }); return this; }
-  drawArc(rect, startAngle, sweepAngle, useCenter, paint) { this._ops.push({ op: "drawArc", rect: rect, start: startAngle, sweep: sweepAngle, useCenter: useCenter == true, paint: paint }); return this; }
-  drawPath(path, paint) { this._ops.push({ op: "drawPath", path: __flPathData(path), paint: paint }); return this; }
-  drawImage(src, dx, dy, paint) { this._ops.push({ op: "drawImage", src: src, dx: dx, dy: dy, paint: paint }); return this; }
-  drawImageRect(src, srcRect, dstRect, paint) { this._ops.push({ op: "drawImageRect", src: src, srcRect: srcRect, dstRect: dstRect, paint: paint }); return this; }
-  drawImageNine(src, center, dstRect, paint) { this._ops.push({ op: "drawImageNine", src: src, center: center, dstRect: dstRect, paint: paint }); return this; }
-  drawParagraph(paragraph, dx, dy) { this._ops.push({ op: "drawParagraph", paragraph: paragraph, dx: dx, dy: dy }); return this; }
-  drawPoints(mode, points, paint) { this._ops.push({ op: "drawPoints", mode: mode == null ? "points" : mode, points: points, paint: paint }); return this; }
-  drawShadow(path, color, elevation, transparentOccluder) { this._ops.push({ op: "drawShadow", path: __flPathData(path), color: color, elevation: elevation, transparentOccluder: transparentOccluder == true }); return this; }
-  drawVertices(vertices, blendMode, paint) { this._ops.push({ op: "drawVertices", vertices: vertices, blend: blendMode == null ? "srcOver" : blendMode, paint: paint }); return this; }
-  drawAtlas(src, transforms, rects, colors, blendMode, cullRect, paint) { this._ops.push({ op: "drawAtlas", src: src, transforms: transforms, rects: rects, colors: colors, blend: blendMode, cullRect: cullRect, paint: paint }); return this; }
-}
-
-// ---------------------------------------------------------------------------
-// FL — the facade
-// ---------------------------------------------------------------------------
-
-class FL {
-  // Mount a Flutter UI under a Godot node `parent` (any GObj in this VM's
-  // sandbox). `builder` is a function returning the root widget tree; the
-  // framework calls it now and after every event, so a handler need only mutate
-  // the state the builder reads. `opts`: { design: [w,h], transparent: bool,
-  // gpu: bool }. Returns an FLView. The C++ controller creates the engine and a
-  // surface node child of `parent`, so the UI composites over whatever 2D/3D
-  // world lives there.
-  //
-  //     var count = 0;
-  //     function App() {
-  //       return FL.scaffold({ body: FL.center(FL.column([
-  //         FL.text('Taps: ' + count, { size: 32 }),
-  //         FL.filledButton('Tap me', function () { count = count + 1; }),
-  //       ])) });
-  //     }
-  //     var view = FL.mount(GD.host(), App, { design: [720, 1280] });
-  static mount(parent, builder, opts) {
-    let id = __flNextView;
-    __flNextView = __flNextView + 1;
-    let ref = parent == null ? null : { ref: parent.id };
-    // Detect whether the embedded Flutter engine is actually available: a
-    // successful newview replies with the (numeric) view handle; a build with
-    // no libflutter (the placeholder, and every web export) replies with an
-    // error which the front-end surfaces as a throw. Return null so callers can
-    // fall back to a native UI (see bridge/project/scripts/flutter_3d_demo.js).
-    let ok = false;
-    try {
-      let reply = __gdUnmarshal(askHost("flutter.op", [{ newview: true, def: id, parent: ref, opts: opts == null ? {} : opts }]));
-      ok = __isType(reply, "number");
-    } catch (e) {
-      ok = false;
-    }
-    if (!ok) {
-      return null;
-    }
-    let view = new FLView(id, builder);
-    __flViews["v" + id] = view;
-    __flFlush(view); // initial paint
-    return view;
-  }
-
-  // True when the embedded Flutter engine is available in this build. Probes by
-  // mounting a throwaway view under `parent` and disposing it.
-  static available(parent) {
-    let v = FL.mount(parent, function () { return FL.el("SizedBox", {}); }, {});
-    if (v == null) {
-      return false;
-    }
-    v.dispose();
-    return true;
-  }
-
-  // Raw op escape hatch, symmetrical with GD.op.
-  static op(m) {
-    return __gdUnmarshal(askHost("flutter.op", [m]));
-  }
-
-  // ---- widget sugar (thin: every one is __flEl(type, props, children)) -----
-  static el(t, p, c) {
-    return __flEl(t, p, c);
-  }
-  static app(p) {
-    return __flEl("MaterialApp", p);
-  }
-  static scaffold(p) {
-    return __flEl("Scaffold", p);
-  }
-  static appBar(title) {
-    return __flEl("AppBar", { title: title });
-  }
-  static text(s, p) {
-    return __flEl("Text", { data: s, style: p == null ? {} : p });
-  }
-  static column(children) {
-    return __flEl("Column", {}, children);
-  }
-  static row(children) {
-    return __flEl("Row", {}, children);
-  }
-  static stack(children) {
-    return __flEl("Stack", {}, children);
-  }
-  static center(child) {
-    return __flEl("Center", {}, [child]);
-  }
-  static padding(all, child) {
-    return __flEl("Padding", { all: all }, [child]);
-  }
-  static container(p, child) {
-    return __flEl("Container", p, child == null ? null : [child]);
-  }
-  static sizedBox(w, h, child) {
-    return __flEl("SizedBox", { width: w, height: h }, child == null ? null : [child]);
-  }
-  static expanded(child) {
-    return __flEl("Expanded", {}, [child]);
-  }
-  static listView(children) {
-    return __flEl("ListView", {}, children);
-  }
-  static image(src, p) {
-    return __flEl("Image", { src: src, opts: p == null ? {} : p });
-  }
-  static icon(name, p) {
-    return __flEl("Icon", { name: name, opts: p == null ? {} : p });
-  }
-  static filledButton(label, onTap) {
-    return __flEl("FilledButton", { label: label, onTap: onTap });
-  }
-  static textButton(label, onTap) {
-    return __flEl("TextButton", { label: label, onTap: onTap });
-  }
-  static iconButton(name, onTap) {
-    return __flEl("IconButton", { name: name, onTap: onTap });
-  }
-  static textField(p) {
-    return __flEl("TextField", p == null ? {} : p);
-  }
-  static switchTile(value, onChanged) {
-    return __flEl("Switch", { value: value, onChanged: onChanged });
-  }
-  static slider(value, onChanged, p) {
-    let props = p == null ? {} : p;
-    props.value = value;
-    props.onChanged = onChanged;
-    return __flEl("Slider", props);
-  }
-
-  // More content / layout sugar (all thin over __flEl; FL.el reaches anything
-  // the host registry knows, so this list is convenience, not the coverage
-  // boundary — see FLUTTER.md).
-  static align(alignment, child) {
-    return __flEl("Align", { alignment: alignment }, [child]);
-  }
-  static positioned(p, child) {
-    return __flEl("Positioned", p, [child]);
-  }
-  static wrap(children, p) {
-    return __flEl("Wrap", p == null ? {} : p, children);
-  }
-  static flexible(child, flex) {
-    return __flEl("Flexible", { flex: flex == null ? 1 : flex }, [child]);
-  }
-  static aspectRatio(ratio, child) {
-    return __flEl("AspectRatio", { aspectRatio: ratio }, [child]);
-  }
-  static opacity(value, child) {
-    return __flEl("Opacity", { opacity: value }, [child]);
-  }
-  static clip(shape, child) {
-    return __flEl(shape == null ? "ClipRRect" : shape, {}, [child]);
-  }
-  static card(child, p) {
-    return __flEl("Card", p == null ? {} : p, [child]);
-  }
-  static listTile(p) {
-    return __flEl("ListTile", p == null ? {} : p);
-  }
-  static chip(label, p) {
-    let props = p == null ? {} : p;
-    props.label = label;
-    return __flEl("Chip", props);
-  }
-  static checkbox(value, onChanged) {
-    return __flEl("Checkbox", { value: value, onChanged: onChanged });
-  }
-  static radio(value, groupValue, onChanged) {
-    return __flEl("Radio", { value: value, groupValue: groupValue, onChanged: onChanged });
-  }
-  static dropdown(value, items, onChanged) {
-    return __flEl("DropdownButton", { value: value, items: items, onChanged: onChanged });
-  }
-  static scroll(child, p) {
-    return __flEl("SingleChildScrollView", p == null ? {} : p, [child]);
-  }
-  static gridView(children, p) {
-    return __flEl("GridView", p == null ? {} : p, children);
-  }
-  static pageView(children, p) {
-    return __flEl("PageView", p == null ? {} : p, children);
-  }
-  static tabs(tabs, views, p) {
-    let props = p == null ? {} : p;
-    props.tabs = tabs;
-    props.views = views;
-    return __flEl("TabScaffold", props);
-  }
-  static circularProgress(p) {
-    return __flEl("CircularProgressIndicator", p == null ? {} : p);
-  }
-  static linearProgress(p) {
-    return __flEl("LinearProgressIndicator", p == null ? {} : p);
-  }
-  static divider(p) {
-    return __flEl("Divider", p == null ? {} : p);
-  }
-  static circleAvatar(p) {
-    return __flEl("CircleAvatar", p == null ? {} : p);
-  }
-  static tooltip(message, child) {
-    return __flEl("Tooltip", { message: message }, [child]);
-  }
-  static hero(tag, child) {
-    return __flEl("Hero", { tag: tag }, [child]);
-  }
-  static animatedContainer(p, child) {
-    return __flEl("AnimatedContainer", p == null ? {} : p, child == null ? null : [child]);
-  }
-
-  // =========================================================================
-  // The full event surface. Every gesture / pointer / keyboard / focus / drag
-  // / scroll / value callback is reachable — a handler is just a function-valued
-  // prop, converted to a `{callable}` tag by the reifier and dispatched back
-  // through the same path Godot signals use. The host decodes each callback's
-  // details into a JSON argument the handler receives.
-  // =========================================================================
-
-  // GestureDetector — the complete tap / double-tap / long-press / drag / pan /
-  // scale / force-press / secondary / tertiary callback set. Pass any subset in
-  // `handlers`; unknown keys are ignored by the host.
-  //
-  //   onTapDown onTapUp onTap onTapCancel
-  //   onSecondaryTap onSecondaryTapDown onSecondaryTapUp onSecondaryTapCancel
-  //   onTertiaryTapDown onTertiaryTapUp onTertiaryTapCancel
-  //   onDoubleTap onDoubleTapDown onDoubleTapCancel
-  //   onLongPress onLongPressStart onLongPressMoveUpdate onLongPressUp onLongPressEnd
-  //   onVerticalDragStart onVerticalDragUpdate onVerticalDragEnd onVerticalDragDown onVerticalDragCancel
-  //   onHorizontalDragStart onHorizontalDragUpdate onHorizontalDragEnd onHorizontalDragDown onHorizontalDragCancel
-  //   onPanStart onPanUpdate onPanEnd onPanDown onPanCancel
-  //   onScaleStart onScaleUpdate onScaleEnd
-  //   onForcePressStart onForcePressPeak onForcePressUpdate onForcePressEnd
-  static gestures(child, handlers) {
-    let p = handlers == null ? {} : handlers;
-    p.child = child;
-    return __flEl("GestureDetector", p);
-  }
-
-  // InkWell — Material tap feedback: onTap onTapDown onTapUp onTapCancel
-  // onDoubleTap onLongPress onSecondaryTap onHover onFocusChange onHighlightChanged.
-  static inkWell(child, handlers) {
-    let p = handlers == null ? {} : handlers;
-    p.child = child;
-    return __flEl("InkWell", p);
-  }
-
-  // Listener — raw pointer events: onPointerDown onPointerMove onPointerUp
-  // onPointerHover onPointerCancel onPointerSignal onPointerPanZoomStart
-  // onPointerPanZoomUpdate onPointerPanZoomEnd.
-  static listener(child, handlers) {
-    let p = handlers == null ? {} : handlers;
-    p.child = child;
-    return __flEl("Listener", p);
-  }
-
-  // MouseRegion — hover: onEnter onExit onHover (+ cursor).
-  static mouseRegion(child, handlers) {
-    let p = handlers == null ? {} : handlers;
-    p.child = child;
-    return __flEl("MouseRegion", p);
-  }
-
-  // Focus — keyboard focus + key events: onFocusChange onKeyEvent (+ autofocus).
-  static focus(child, handlers) {
-    let p = handlers == null ? {} : handlers;
-    p.child = child;
-    return __flEl("Focus", p);
-  }
-
-  // KeyboardListener — every hardware key: onKeyEvent (down/up/repeat, with
-  // logical/physical key, character, and modifier flags in the details).
-  static keyboard(child, onKeyEvent, p) {
-    let props = p == null ? {} : p;
-    props.child = child;
-    props.onKeyEvent = onKeyEvent;
-    return __flEl("KeyboardListener", props);
-  }
-
-  // NotificationListener — scroll & custom notifications bubbling up:
-  // onNotification (ScrollStart/Update/End/Metrics, OverscrollNotification, …).
-  static notificationListener(child, onNotification) {
-    return __flEl("NotificationListener", { child: child, onNotification: onNotification });
-  }
-
-  // Draggable / DragTarget — drag & drop.
-  //   Draggable handlers: onDragStarted onDragUpdate onDragEnd onDraggableCanceled onDragCompleted
-  //   DragTarget handlers: onWillAccept onAccept onAcceptWithDetails onLeave onMove
-  static draggable(child, feedback, handlers) {
-    let p = handlers == null ? {} : handlers;
-    p.child = child;
-    p.feedback = feedback;
-    return __flEl("Draggable", p);
-  }
-  static dragTarget(builderChild, handlers) {
-    let p = handlers == null ? {} : handlers;
-    p.child = builderChild;
-    return __flEl("DragTarget", p);
-  }
-
-  // Dismissible — swipe to dismiss: onDismissed confirmDismiss onResize onUpdate.
-  static dismissible(key, child, handlers) {
-    let p = handlers == null ? {} : handlers;
-    p.dismissKey = key;
-    p.child = child;
-    return __flEl("Dismissible", p);
-  }
-
-  // RefreshIndicator — pull to refresh: onRefresh.
-  static refreshIndicator(child, onRefresh) {
-    return __flEl("RefreshIndicator", { child: child, onRefresh: onRefresh });
-  }
-
-  // PopScope — intercept back navigation: onPopInvoked (+ canPop).
-  static popScope(child, onPopInvoked, canPop) {
-    return __flEl("PopScope", { child: child, onPopInvoked: onPopInvoked, canPop: canPop });
-  }
-
-  // Form / fields — onChanged onSaved validator onFieldSubmitted onEditingComplete.
-  static form(child, onChanged) {
-    return __flEl("Form", { child: child, onChanged: onChanged });
-  }
-
-  // =========================================================================
-  // Canvas / CustomPainter
-  // =========================================================================
-
-  // Paint a custom drawing at `size` = [w, h]. `painter(cv)` receives an
-  // FLCanvas and issues drawing ops; they are recorded to a display list the
-  // host replays onto the real Flutter Canvas. `opts` may add `child`,
-  // `foreground: true` (draw over the child), `isComplex`, `willChange`.
-  static customPaint(size, painter, opts) {
-    let cv = new FLCanvas();
-    if (painter != null) {
-      painter(cv);
-    }
-    let p = opts == null ? {} : opts;
-    p.size = size;
-    if (p.foreground == true) {
-      p.foregroundOps = cv._ops;
-    } else {
-      p.ops = cv._ops;
-    }
-    return __flEl("CustomPaint", p);
-  }
-
-  // Alias reading like dart:ui's PictureRecorder → Canvas flow.
-  static canvas(size, painter, opts) {
-    return FL.customPaint(size, painter, opts);
-  }
-
-  // A Paint descriptor. Recognized keys: color, blendMode, style('fill'|'stroke'),
-  // strokeWidth, strokeCap('butt'|'round'|'square'), strokeJoin('miter'|'round'|
-  // 'bevel'), strokeMiterLimit, isAntiAlias, shader (a gradient descriptor),
-  // maskFilter ({style:'normal'|'solid'|'outer'|'inner', sigma}), blur (sigma
-  // shortcut), colorFilter, filterQuality, invertColors.
-  static paint(props) {
-    return props == null ? {} : props;
-  }
-
-  // A fresh Path builder.
-  static path() {
-    return new FLPath();
-  }
-
-  // Geometry helpers.
-  static ltwh(l, t, w, h) {
-    return [l, t, l + w, t + h];
-  }
-  static rrect(rect, radius) {
-    return { rect: rect, radius: radius };
-  }
-
-  // Shaders (a Paint's `shader`).
-  static linearGradient(from, to, colors, stops, tileMode) {
-    return { type: "linear", from: from, to: to, colors: colors, stops: stops, tileMode: tileMode };
-  }
-  static radialGradient(center, radius, colors, stops, tileMode) {
-    return { type: "radial", center: center, radius: radius, colors: colors, stops: stops, tileMode: tileMode };
-  }
-  static sweepGradient(center, colors, stops, startAngle, endAngle) {
-    return { type: "sweep", center: center, colors: colors, stops: stops, startAngle: startAngle, endAngle: endAngle };
-  }
-
-  // A Paragraph descriptor for cv.drawParagraph: { text, maxWidth, style,
-  // align('left'|'center'|'right'|'justify') }.
-  static paragraph(text, maxWidth, style, align) {
-    return { text: text, maxWidth: maxWidth, style: style == null ? {} : style, align: align };
-  }
-}
-
 // =============================================================================
-// §6  The imperative facade, §9 scoping, §10 the GUI namespace
+// §9  The imperative facade
 // =============================================================================
-
-// ---------------------------------------------------------------------------
-// §6  The imperative facade
-// ---------------------------------------------------------------------------
 //
 // Not every use of a widget wants a render tree. A one-off dialog, a debug
 // overlay, a node handed to something outside the reconciler's world — those
@@ -9158,9 +9451,9 @@ function __guiBindBuilders(target) {
   return target;
 }
 
-// ---------------------------------------------------------------------------
-// §9  Scoping
-// ---------------------------------------------------------------------------
+// =============================================================================
+// §10 Scoping
+// =============================================================================
 //
 // The host already isolates one mini app from another: every node it creates is
 // stamped with its sandbox, and every callback id is namespaced to its VM. A
@@ -9253,9 +9546,9 @@ class Scope {
 
 var __guiRootScope = new Scope("app", null);
 
-// ---------------------------------------------------------------------------
-// §10  The GUI namespace
-// ---------------------------------------------------------------------------
+// =============================================================================
+// §11 The GUI namespace
+// =============================================================================
 
 var GUI = {
   // -- Rendering ------------------------------------------------------------
