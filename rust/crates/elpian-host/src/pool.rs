@@ -159,10 +159,18 @@ impl Drop for Lease {
 }
 
 /// The pool.
+/// Machine ids must be unique across the whole **process**, not per pool.
+///
+/// The VM registry is a process-global map keyed by machine id, so two pools
+/// numbering their instances independently would hand out the same id for the
+/// same app and function — and one pool destroying its instance would destroy
+/// the other's. Two pools in one process is not hypothetical: it is every test
+/// binary, and any host serving two registries.
+static NEXT_INSTANCE: AtomicU64 = AtomicU64::new(1);
+
 pub struct InstancePool {
     config: PoolConfig,
     instances: Mutex<HashMap<String, Vec<Instance>>>,
-    next_id: AtomicU64,
     pub meters: MeterStore,
 }
 
@@ -171,7 +179,6 @@ impl InstancePool {
         Arc::new(InstancePool {
             config,
             instances: Mutex::new(HashMap::new()),
-            next_id: AtomicU64::new(1),
             meters: MeterStore::default(),
         })
     }
@@ -228,7 +235,7 @@ impl InstancePool {
             "{}::{}::{}",
             app.id,
             def.name,
-            self.next_id.fetch_add(1, Ordering::Relaxed)
+            NEXT_INSTANCE.fetch_add(1, Ordering::Relaxed)
         );
         api::create_vm_from_bytecode(machine_id.clone(), def.bytecode.clone());
         self.apply_governance(&machine_id, app);

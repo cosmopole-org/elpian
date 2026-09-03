@@ -25,6 +25,7 @@ use crate::appfs::AppFs;
 use crate::app::NetworkMode;
 use crate::component::RenderCache;
 use crate::fetch::{fetch, EgressRecord, FetchLimits};
+use crate::identity::Identity;
 use crate::hostcall::{HostCall, HostServices};
 use crate::state::{SecretStore, StateStore};
 
@@ -51,6 +52,14 @@ pub struct ServerContext {
     pub declared_secrets: Vec<String>,
     /// The app's private directory, if it was given one.
     pub fs: Option<AppFs>,
+    /// The caller, if the host verified one. `None` is anonymous.
+    ///
+    /// Constructed by the gateway from a credential it checked, never from
+    /// anything in the request body — a server function that reads this is
+    /// making an authorisation decision, and an identity the caller could set
+    /// would make every such decision forgeable by the person it protects
+    /// against.
+    pub user: Option<Identity>,
     /// The app's egress posture. Present even for a closed app, so the broker
     /// is asked and an attempt is *recorded* rather than the call vanishing —
     /// "this app tried to reach out" is worth knowing.
@@ -322,6 +331,14 @@ impl HostServices for ServerServices {
 
             // An action saying "renders tagged this are out of date". The app
             // is not a parameter, so an app can only ever invalidate its own.
+            // The verified caller. Read-only by construction: there is no host
+            // API that sets it, and the value came from a credential this host
+            // checked before any guest code ran.
+            "ctx.user" => match &self.ctx.user {
+                Some(identity) => identity.to_json(),
+                None => Value::Null,
+            },
+
             "cache.revalidate" => {
                 let Some(tag) = call.str_arg(0) else {
                     return Value::Null;

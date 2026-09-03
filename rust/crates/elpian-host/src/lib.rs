@@ -23,7 +23,7 @@
 //!   and network mode.
 //! * [`runtime`] — registered apps, and running one of their functions.
 //! * [`httpcore`] — a small blocking HTTP/1.1 server with a bounded pool.
-//! * [`gateway`] — the four routes a device talks to.
+//! * [`gateway`] — the routes a device talks to, and the admin surface.
 //! * [`component`] — the payload a server component returns, and the cache in
 //!   front of it.
 //! * [`egress`] — the broker: the only way out, and the rules it applies.
@@ -34,6 +34,7 @@
 //!   corpus both languages read.
 //! * [`registry`] — what apps exist, at what versions, and where their bytecode
 //!   lives.
+//! * [`identity`] — who is calling, who may operate the host, and the audit.
 
 pub mod app;
 pub mod appfs;
@@ -43,6 +44,7 @@ pub mod fetch;
 pub mod gateway;
 pub mod httpcore;
 pub mod hostcall;
+pub mod identity;
 pub mod invoke;
 pub mod policy;
 pub mod pool;
@@ -58,6 +60,8 @@ pub use component::{ComponentPayload, PayloadError, RenderCache};
 pub use egress::{decide, DenyReason, EgressDecision};
 pub use fetch::{fetch, EgressRecord, FetchError, FetchLimits, FetchResponse};
 pub use policy::{Grant, Manifest, Policy};
+pub use gateway::Gateway;
+pub use identity::{AdminAudit, AdminEvent, AuthProvider, Identity, OperatorAuth};
 pub use registry::{AppRecord, RegistryError, RegistryStore, VersionRecord};
 pub use pool::{InstancePool, Meters, PoolConfig};
 pub use runtime::{AppRuntime, CallError, Invocation};

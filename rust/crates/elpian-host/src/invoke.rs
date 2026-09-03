@@ -64,19 +64,29 @@ pub fn invoke(
     args: &Value,
     services: &mut dyn HostServices,
     limits: &InvokeLimits,
+    cold_start: bool,
 ) -> Outcome {
     let mut host_calls = 0u32;
 
-    // Module initialisation. A warm instance has already done this; a cold one
-    // does it now, and its host calls are serviced like any other — a module
-    // that logs at load time is ordinary code, not an error.
-    let mut result = api::execute_vm(machine_id.to_string());
-    match pump(machine_id, &mut result, services, limits, &mut host_calls) {
-        Ok(()) => {}
-        Err(outcome) => return outcome,
-    }
-    if let Some(trap) = api::trap_reason(machine_id) {
-        return Outcome::Trapped(trap);
+    // Module initialisation, on a cold instance only.
+    //
+    // A warm instance has already run its top level, and running it again is
+    // not merely wasteful — it is wrong. The executor's scope stack is unwound
+    // when the top level completes, so a second global run reaches for a scope
+    // that is no longer there. Skipping it *is* the warm path: the whole value
+    // of a warm instance is that this work is already done.
+    //
+    // A module's own host calls are serviced like any other — a module that
+    // logs at load time is ordinary code, not an error.
+    if cold_start {
+        let mut result = api::execute_vm(machine_id.to_string());
+        match pump(machine_id, &mut result, services, limits, &mut host_calls) {
+            Ok(()) => {}
+            Err(outcome) => return outcome,
+        }
+        if let Some(trap) = api::trap_reason(machine_id) {
+            return Outcome::Trapped(trap);
+        }
     }
 
     let mut result = api::execute_vm_func_with_input(

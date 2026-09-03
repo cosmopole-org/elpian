@@ -61,6 +61,7 @@ impl Fixture {
                 function: String::new(),
                 declared_secrets: vec!["apiKey".into()],
                 fs: None,
+                user: None,
                 network: elpian_host::app::NetworkMode::Closed,
             },
         }
@@ -82,6 +83,9 @@ impl Fixture {
             &args,
             &mut services,
             &InvokeLimits::default(),
+            // These fixtures create a VM per call, so every one is cold: the
+            // module's top level still has to run.
+            true,
         );
         (outcome, services)
     }
@@ -330,6 +334,7 @@ fn an_invocation_that_will_not_stop_calling_the_host_is_cut_off() {
         &json!(null),
         &mut services,
         &InvokeLimits { max_host_calls: 50 },
+        true,
     );
 
     assert_eq!(outcome, Outcome::TooManyHostCalls);

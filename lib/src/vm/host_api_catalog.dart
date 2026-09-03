@@ -225,6 +225,7 @@ class VmHostApiCatalog {
     'kv.list',
     'secret.get',
     'cache.revalidate',
+    'ctx.user',
   };
 
   /// Module import and management of other VM instances.
@@ -341,6 +342,7 @@ class VmHostApiCatalog {
     'canvas.translate': 'canvas',
     'clearInterval': 'timers',
     'clearTimeout': 'timers',
+    'ctx.user': 'state',
     'dom.addClass': 'dom',
     'dom.addEventListener': 'dom',
     'dom.appendChild': 'dom',

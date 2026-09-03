@@ -19,16 +19,67 @@ use std::sync::Arc;
 use serde_json::{json, Value};
 
 use crate::httpcore::{Request, Response};
+use crate::identity::{AdminAudit, AdminEvent, AnonymousOnly, AuthProvider, OperatorAuth};
+use crate::registry::now_millis;
 use crate::runtime::{AppRuntime, CallError};
 use crate::Outcome;
 
-/// Build the request handler for a runtime.
-pub fn handler(runtime: Arc<AppRuntime>) -> Arc<dyn Fn(Request) -> Response + Send + Sync> {
-    Arc::new(move |request| route(&runtime, &request))
+/// Everything the gateway needs besides the runtime.
+pub struct Gateway {
+    pub runtime: Arc<AppRuntime>,
+    /// Turns a caller's credential into `ctx.user`.
+    pub auth: Arc<dyn AuthProvider>,
+    /// Who may reach `/admin/*`. Unconfigured means nobody.
+    pub operator: Arc<OperatorAuth>,
+    pub audit: AdminAudit,
 }
 
-fn route(runtime: &Arc<AppRuntime>, request: &Request) -> Response {
+impl Gateway {
+    /// A gateway with anonymous callers and **no** admin access.
+    ///
+    /// The admin surface being closed by default is the important half: an
+    /// unconfigured admin API that is open is how hosts get taken over, and it
+    /// fails silently because nothing looks wrong until somebody finds it.
+    pub fn new(runtime: Arc<AppRuntime>) -> Gateway {
+        Gateway {
+            runtime,
+            auth: Arc::new(AnonymousOnly),
+            operator: Arc::new(OperatorAuth::new(vec![])),
+            audit: AdminAudit::new(1000),
+        }
+    }
+
+    pub fn with_auth(mut self, auth: Arc<dyn AuthProvider>) -> Gateway {
+        self.auth = auth;
+        self
+    }
+
+    pub fn with_operator_tokens(mut self, tokens: Vec<String>) -> Gateway {
+        self.operator = Arc::new(OperatorAuth::new(tokens));
+        self
+    }
+}
+
+/// Build the request handler for a runtime, with anonymous callers and no
+/// admin access. See [`gateway_handler`] for the configurable form.
+pub fn handler(runtime: Arc<AppRuntime>) -> Arc<dyn Fn(Request) -> Response + Send + Sync> {
+    gateway_handler(Arc::new(Gateway::new(runtime)))
+}
+
+pub fn gateway_handler(gateway: Arc<Gateway>) -> Arc<dyn Fn(Request) -> Response + Send + Sync> {
+    Arc::new(move |request| route(&gateway, &request))
+}
+
+fn route(gateway: &Arc<Gateway>, request: &Request) -> Response {
+    let runtime = &gateway.runtime;
     let segments = request.segments();
+
+    // The admin surface is separated by prefix and checked before anything
+    // else, so no admin path can be reached by a route that forgot to ask.
+    if segments.first() == Some(&"admin") {
+        return admin_route(gateway, request, &segments[1..]);
+    }
+
     match segments.as_slice() {
         ["health"] => Response::json(200, &json!({ "status": "ok" })),
 
@@ -51,11 +102,11 @@ fn route(runtime: &Arc<AppRuntime>, request: &Request) -> Response {
         },
 
         ["apps", app, "fn", function] if request.method == "POST" => {
-            invoke_route(runtime, app, function, request, false)
+            invoke_route(gateway, app, function, request, false)
         }
 
         ["apps", app, "render", function] if request.method == "POST" => {
-            invoke_route(runtime, app, function, request, true)
+            invoke_route(gateway, app, function, request, true)
         }
 
         // A known path with the wrong method deserves a 405 rather than a 404:
@@ -74,7 +125,7 @@ fn is_read(method: &str) -> bool {
 }
 
 fn invoke_route(
-    runtime: &Arc<AppRuntime>,
+    gateway: &Arc<Gateway>,
     app: &str,
     function: &str,
     request: &Request,
@@ -85,10 +136,15 @@ fn invoke_route(
         Err(message) => return Response::error(400, &message),
     };
 
+    // The caller's identity comes from a credential this host verified, and
+    // from nowhere else — never from the body, which the caller controls.
+    let user = gateway.auth.verify(request.header("authorization"));
+
+    let runtime = &gateway.runtime;
     let result = if render {
-        runtime.render(app, function, &args)
+        runtime.render_as(app, function, &args, user)
     } else {
-        runtime.call(app, function, &args)
+        runtime.call_as(app, function, &args, user)
     };
 
     match result {
@@ -129,4 +185,104 @@ fn parse_args(body: &[u8]) -> Result<Value, String> {
         return Ok(Value::Null);
     }
     serde_json::from_slice(body).map_err(|e| format!("body is not valid JSON: {e}"))
+}
+
+
+// ---- The admin surface -----------------------------------------------------
+
+/// Routes under `/admin/`.
+///
+/// Every one of them is authorised first and audited whatever the outcome. A
+/// trail with only successes in it cannot show a run of refused attempts, which
+/// is the single most interesting thing an admin log can contain.
+fn admin_route(gateway: &Arc<Gateway>, request: &Request, rest: &[&str]) -> Response {
+    let credential = request.header("authorization");
+    let allowed = gateway.operator.authorize(credential);
+
+    let (action, app) = match rest {
+        ["apps"] => ("list", String::new()),
+        ["apps", app, verb] => (*verb, (*app).to_string()),
+        ["audit"] => ("audit", String::new()),
+        _ => ("unknown", String::new()),
+    };
+
+    gateway.audit.record(AdminEvent {
+        at_ms: now_millis(),
+        action: action.to_string(),
+        app: app.clone(),
+        detail: request.path.clone(),
+        allowed,
+    });
+
+    if !allowed {
+        // The same answer whether the token was wrong or the admin surface was
+        // never configured. Distinguishing them would tell an attacker whether
+        // there is a token to find.
+        return Response::error(401, "not authorised");
+    }
+
+    let runtime = &gateway.runtime;
+    match rest {
+        ["apps"] if request.method == "GET" => Response::json(
+            200,
+            &json!({ "apps": runtime.app_ids() }),
+        ),
+
+        ["apps", app, "meters"] if request.method == "GET" => {
+            let meters = runtime.meters(app);
+            Response::json(
+                200,
+                &json!({
+                    "app": app,
+                    "invocations": meters.invocations,
+                    "coldStarts": meters.cold_starts,
+                    "instructions": meters.instructions,
+                    "computeMs": meters.compute_ms,
+                    "peakMemoryBytes": meters.peak_memory_bytes,
+                    "storageBytes": meters.storage_bytes,
+                }),
+            )
+        }
+
+        ["apps", app, "drain"] if request.method == "POST" => {
+            // Unload every instance of one app without touching any other
+            // tenant — what an operator needs before a redeploy or a suspend.
+            let unloaded = runtime.pool().drain_app(app);
+            Response::json(200, &json!({ "app": app, "unloaded": unloaded.len() }))
+        }
+
+        ["apps", app, "instances"] if request.method == "GET" => Response::json(
+            200,
+            &json!({
+                "app": app,
+                "loaded": runtime.pool().loaded(),
+                "idle": runtime.pool().idle(),
+            }),
+        ),
+
+        ["apps", app, "cache"] if request.method == "DELETE" => {
+            let cleared = runtime.clear_cache(app);
+            Response::json(200, &json!({ "app": app, "cleared": cleared }))
+        }
+
+        ["audit"] if request.method == "GET" => {
+            let events: Vec<Value> = gateway
+                .audit
+                .events()
+                .into_iter()
+                .map(|e| {
+                    json!({
+                        "at": e.at_ms,
+                        "action": e.action,
+                        "app": e.app,
+                        "detail": e.detail,
+                        "allowed": e.allowed,
+                    })
+                })
+                .collect();
+            Response::json(200, &json!({ "events": events }))
+        }
+
+        _ => Response::error(404, "no such admin route"),
+    }
 }

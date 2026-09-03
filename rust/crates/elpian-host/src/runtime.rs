@@ -17,6 +17,7 @@ use serde_json::{json, Value};
 use crate::app::{AppDefinition, FunctionKind};
 use crate::appfs::AppFs;
 use crate::component::{ComponentPayload, RenderCache};
+use crate::identity::Identity;
 use crate::pool::{InstancePool, Meters, PoolConfig};
 use crate::invoke::{invoke, InvokeLimits, Outcome};
 use crate::services::{InvocationLog, ServerContext, ServerServices};
@@ -135,6 +136,14 @@ impl AppRuntime {
         &self.cache
     }
 
+    /// Drop every cached render belonging to one app.
+    ///
+    /// Scoped to the app for the same reason `cache.revalidate` is: an operator
+    /// clearing one tenant's cache must not clear every other tenant's.
+    pub fn clear_cache(&self, app_id: &str) -> usize {
+        self.cache.clear_app(app_id)
+    }
+
     pub fn register(&self, app: AppDefinition) {
         self.write_apps().insert(app.id.clone(), app);
     }
@@ -179,12 +188,34 @@ impl AppRuntime {
 
     /// Invoke an action (`server.call`).
     pub fn call(self: &Arc<Self>, app: &str, function: &str, args: &Value) -> Result<Invocation, CallError> {
-        self.dispatch(app, function, args, FunctionKind::Action, 0)
+        self.dispatch(app, function, args, FunctionKind::Action, 0, None)
+    }
+
+    /// Invoke an action on behalf of a verified caller.
+    pub fn call_as(
+        self: &Arc<Self>,
+        app: &str,
+        function: &str,
+        args: &Value,
+        user: Option<Identity>,
+    ) -> Result<Invocation, CallError> {
+        self.dispatch(app, function, args, FunctionKind::Action, 0, user)
     }
 
     /// Invoke a server component (`server.render`).
     pub fn render(self: &Arc<Self>, app: &str, function: &str, args: &Value) -> Result<Invocation, CallError> {
-        self.dispatch(app, function, args, FunctionKind::Component, 0)
+        self.dispatch(app, function, args, FunctionKind::Component, 0, None)
+    }
+
+    /// Render a component on behalf of a verified caller.
+    pub fn render_as(
+        self: &Arc<Self>,
+        app: &str,
+        function: &str,
+        args: &Value,
+        user: Option<Identity>,
+    ) -> Result<Invocation, CallError> {
+        self.dispatch(app, function, args, FunctionKind::Component, 0, user)
     }
 
     fn dispatch(
@@ -194,6 +225,7 @@ impl AppRuntime {
         args: &Value,
         expected: FunctionKind,
         depth: u32,
+        user: Option<Identity>,
     ) -> Result<Invocation, CallError> {
         if depth >= MAX_CALL_DEPTH {
             return Err(CallError::CallDepthExceeded);
@@ -226,7 +258,13 @@ impl AppRuntime {
 
         // A cached render short-circuits before any instance is created — the
         // point of the cache is to not run the guest, not to run it faster.
-        if expected == FunctionKind::Component {
+        // A component rendered for a *specific* caller is not shared: the
+        // cache key is the app, the component and the arguments, and serving
+        // one user's page to another would be the worst possible cache bug. So
+        // an authenticated render bypasses the cache entirely rather than being
+        // keyed by identity — per-user caching is a real feature, and it needs
+        // to be designed rather than fallen into.
+        if expected == FunctionKind::Component && user.is_none() {
             if let Some(payload) = self.cache.get(&app.id, function, args) {
                 return Ok(Invocation {
                     outcome: Outcome::Returned(payload),
@@ -237,7 +275,7 @@ impl AppRuntime {
             }
         }
 
-        let invocation = self.with_instance(&app, &def, |machine_id| {
+        let invocation = self.with_instance(&app, &def, |machine_id, cold| {
             let fs = self.data_root.as_ref().map(|root| {
                 let dir = root.join(&app.id);
                 let _ = std::fs::create_dir_all(&dir);
@@ -250,6 +288,7 @@ impl AppRuntime {
                 function: function.to_string(),
                 declared_secrets: app.declared_secrets.clone(),
                 fs,
+                user: user.clone(),
                 network: app.network.clone(),
             };
             let mut services = ServerServices::new(ctx, self.state.clone(), self.secrets.clone());
@@ -257,10 +296,22 @@ impl AppRuntime {
                 runtime: Arc::clone(self),
                 app: app.id.clone(),
                 depth: depth + 1,
+                // A nested call acts for the same caller. Dropping the identity
+                // here would silently turn an authenticated chain anonymous
+                // halfway through, and a function checking `ctx.user` two hops
+                // in would refuse work it should have done.
+                user: user.clone(),
             }));
             services.set_cache(self.cache.clone());
 
-            let outcome = invoke(machine_id, function, args, &mut services, &self.limits);
+            let outcome = invoke(
+                machine_id,
+                function,
+                args,
+                &mut services,
+                &self.limits,
+                cold,
+            );
             Invocation {
                 outcome,
                 log: services.log,
@@ -272,7 +323,7 @@ impl AppRuntime {
         // Store only what validates. A component returning something that is
         // not a payload is a bug in that app; caching it would serve the bug
         // back for as long as the entry lived.
-        if expected == FunctionKind::Component {
+        if expected == FunctionKind::Component && user.is_none() {
             if let Outcome::Returned(value) = &invocation.outcome {
                 match ComponentPayload::parse(value) {
                     Ok(payload) => self.cache.put(&app.id, function, args, &payload),
@@ -303,7 +354,7 @@ impl AppRuntime {
         &self,
         app: &AppDefinition,
         def: &crate::app::FunctionDef,
-        body: impl FnOnce(&str) -> Invocation,
+        body: impl FnOnce(&str, bool) -> Invocation,
     ) -> Invocation {
         let lease = self.pool.acquire(app, def);
         let machine_id = lease.machine_id.clone();
@@ -312,7 +363,7 @@ impl AppRuntime {
         let before = api::usage(&machine_id).map(|u| u.instructions).unwrap_or(0);
         let started = std::time::Instant::now();
 
-        let mut invocation = body(&machine_id);
+        let mut invocation = body(&machine_id, cold_start);
         invocation.cold_start = cold_start;
 
         let usage = api::usage(&machine_id);
@@ -350,13 +401,14 @@ struct NestedInvoker {
     runtime: Arc<AppRuntime>,
     app: String,
     depth: u32,
+    user: Option<Identity>,
 }
 
 impl crate::services::FunctionInvoker for NestedInvoker {
     fn invoke(&self, function: &str, args: &Value, kind: FunctionKind) -> Value {
         match self
             .runtime
-            .dispatch(&self.app, function, args, kind, self.depth)
+            .dispatch(&self.app, function, args, kind, self.depth, self.user.clone())
         {
             Ok(Invocation {
                 outcome: Outcome::Returned(value),

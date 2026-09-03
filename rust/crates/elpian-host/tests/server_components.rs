@@ -222,3 +222,85 @@ fn one_app_cannot_invalidate_another_apps_cache() {
         "an app must not be able to clear another's cache by naming a tag they share"
     );
 }
+
+/// A component that is *not* cached must still work on a warm instance.
+///
+/// This is a regression test for a bug the caching tests found by accident:
+/// `invoke` re-ran the module's top level on every call, including on a warm
+/// instance whose top level had already completed. The executor unwinds its
+/// scope stack when the top level finishes, so the second global run reached
+/// for a scope that was no longer there and panicked — and the component
+/// returned `[undefined]`.
+///
+/// Skipping module initialisation on a warm instance is not an optimisation
+/// bolted on afterwards; it *is* the warm path. This test drives a component
+/// with no caching at all so every call after the first is warm and must
+/// produce a real payload.
+#[test]
+fn an_uncached_component_works_on_a_warm_instance() {
+    let runtime = AppRuntime::new();
+    runtime.register(
+        AppDefinition::new("warmcomp")
+            .with_capabilities(vec![Capability::State])
+            .with_function(
+                "Live",
+                FunctionKind::Component,
+                // No `revalidate` stanza, so nothing is ever cached and every
+                // call after the first runs on a reused instance.
+                module(vec![func_def(
+                    "Live",
+                    vec![],
+                    vec![ret(json!({ "type": "object", "data": { "value": {
+                        "component": { "type": "object", "data": { "value": {
+                            "type": strv("text"),
+                            "text": strv("still here") } } }
+                    } } }))],
+                )]),
+            ),
+    );
+
+    let first = runtime.render("warmcomp", "Live", &json!(null)).unwrap();
+    assert!(first.cold_start);
+    assert_eq!(
+        returned(first.outcome)["component"]["text"],
+        json!("still here")
+    );
+
+    for _ in 0..3 {
+        let warm = runtime.render("warmcomp", "Live", &json!(null)).unwrap();
+        assert!(!warm.cold_start, "the instance is being reused");
+        assert!(!warm.cache_hit, "and nothing is cached, so the guest really ran");
+        assert_eq!(
+            returned(warm.outcome)["component"]["text"],
+            json!("still here"),
+            "a warm instance must produce the same payload, not [undefined]"
+        );
+    }
+}
+
+/// The same property for actions, which is where a warm instance is most used.
+#[test]
+fn an_action_returns_correctly_on_a_warm_instance() {
+    let runtime = AppRuntime::new();
+    runtime.register(
+        AppDefinition::new("warmact")
+            .with_capabilities(vec![Capability::State])
+            .with_function(
+                "echo",
+                FunctionKind::Action,
+                module(vec![func_def(
+                    "echo",
+                    vec!["v"],
+                    vec![ret(json!({ "type": "identifier", "data": { "name": "v" } }))],
+                )]),
+            ),
+    );
+
+    assert_eq!(
+        returned(runtime.call("warmact", "echo", &json!("one")).unwrap().outcome),
+        json!("one")
+    );
+    let warm = runtime.call("warmact", "echo", &json!("two")).unwrap();
+    assert!(!warm.cold_start);
+    assert_eq!(returned(warm.outcome), json!("two"));
+}

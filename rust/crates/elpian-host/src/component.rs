@@ -241,6 +241,22 @@ impl RenderCache {
         doomed.len()
     }
 
+    /// Drop every entry belonging to one app, whatever its tags. Returns how
+    /// many went.
+    pub fn clear_app(&self, app: &str) -> usize {
+        let prefix = format!("{app}\u{0}");
+        let mut entries = self.lock();
+        let doomed: Vec<String> = entries
+            .keys()
+            .filter(|key| key.starts_with(&prefix))
+            .cloned()
+            .collect();
+        for key in &doomed {
+            entries.remove(key);
+        }
+        doomed.len()
+    }
+
     pub fn len(&self) -> usize {
         self.lock().len()
     }

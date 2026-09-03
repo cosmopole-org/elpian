@@ -368,6 +368,10 @@ pub fn all_host_apis() -> Vec<String> {
         // app's state, and an app that may change its state is the one that may
         // say the change happened.
         "cache.revalidate",
+        // The verified caller, for a server function that needs to know who it
+        // is acting for. There is no matching setter: the host constructs the
+        // identity from a credential it checked, and a guest can only read it.
+        "ctx.user",
         "net.fetch",
         "net.open",
         "net.send",
