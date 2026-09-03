@@ -4,7 +4,16 @@ Update this file as you go. It is the first thing the next session reads.
 
 **Working branch:** `claude/refactor-architecture`
 **Plan written:** 2026-09-03 (findings verified against the tree that day)
-**Current phase:** P0 not started — the plan is written, no code has changed.
+**Current phase:** **P0 complete.** P1 in progress.
+
+**Environment as found:** Rust toolchain present, crates.io reachable, full
+workspace builds and tests. Flutter 3.47.2 / Dart 3.13.2 present — Dart changes
+*are* verifiable here. The native library must be built first
+(`cd rust && cargo build --release -p elpian-ffi`) and the test run needs
+`LD_LIBRARY_PATH=$PWD/rust/target/release`, or 21 FFI-backed tests silently skip.
+
+**Baselines:** cargo `--workspace` 130 → 285 passed, 0 failed.
+`flutter test` 278 passed (with the native library loaded).
 
 ---
 
@@ -19,18 +28,44 @@ Update this file as you go. It is the first thing the next session reads.
 
 ---
 
-## P0 — Foundation (S0)
+## P0 — Foundation (S0) — **done**
 
-- [ ] S0.1 audit: prove no `Rc` is shared between two VMs (`vm.import`, `vm.send`) — **hard gate**
-- [ ] S0.1 remove `unsafe impl Sync for VM`; document the `Send` justification
-- [ ] S0.2 shard the registry to `Arc<Mutex<VM>>`; fix lock ordering in the tree functions
-- [ ] S0.3 instance-actor ownership model (specified here, built in S1)
-- [ ] S0.4 supervisor sweep thread (`enforce_tree_budgets`, deadlines, eviction)
-- [ ] S0.5 add `surface` to `ElpianCapability` (Dart)
-- [ ] Tests: parallel-turn, isolation-under-contention, terminate-mid-flight, destroy-during-turn under a sanitizer
-- [ ] Benchmark baseline recorded (S8 §5)
+- [x] S0.1 audit: no `Rc` is shared between two VMs — **gate passed**. Everything
+      crossing a VM boundary is owned and `Send`: host-call envelopes and results
+      are `String`, and `vm.send` / `vm.import` carry `serde_json::Value`
+      (`elpian-runtime`'s `Command::{Message,Notify}`), re-materialised into fresh
+      `Rc`s inside the *target* by `convert_json_value_to_val`. Written into the
+      `unsafe impl Send` comment in `sdk/vm.rs`.
+- [x] S0.1 removed `unsafe impl Sync for VM`. It was never needed (a static
+      `Mutex<HashMap<_, VM>>` asks only for `Send`) and was false besides.
+- [x] S0.2 registry sharded into 16 maps of `Arc<Mutex<VM>>`; lock discipline
+      documented on `Registry` and enforced by `Registry::get`.
+- [x] S0.3 ownership model — landed as the sharded handles plus the out-of-band
+      control channel below, which is what the actor model was for.
+- [x] S0.4 `api::supervisor`: `sweep()` and `Supervisor::start`.
+- [x] S0.5 `ElpianCapability.surface` added; `MiniAppGrant.untrusted` includes it;
+      Rust-side parity test reads the Dart enum.
+- [x] Tests: `parallel_execution.rs`, `rng_isolation.rs`, `supervisor.rs` — all
+      fail against the previous design, pass now.
+- [ ] Benchmark baseline recorded (S8 §5) — **deferred to P1**, where there is a
+      server to measure invocations against.
 
-## P1 — Server runtime + RPC (S1, S3 posture)
+### Found during P0, not in the original plan
+
+* **`ExecControl` was a lie in the docs.** Its module comment said the flag was
+  shared `Rc<RefCell<…>>` between the VM handle and the executor; it was a
+  `Copy` field *inside* the executor. So `terminate` needed the executor borrow
+  the running turn was holding, and a request could only land between turns —
+  exactly when it is not needed. Now an `Arc<AtomicU8>`; `pause`/`terminate`/
+  `run_state` take no VM lock at any layer. **Everything in S4's deadline story
+  depends on this**, and the plan had assumed it already worked.
+* **The `random` builtin's state was a bare thread-local.** Correct only while
+  one global lock made all execution serial and single-threaded. Pooled
+  instances would have shared a stream with whatever else ran on their thread
+  and jumped streams on migration. Moved into the executor, swapped onto the
+  thread for the duration of a turn.
+
+## P1 — Server runtime + RPC (S1, S3 posture) — in progress
 
 - [ ] `elpian-host` crate skeleton; dependency decision recorded (tokio/hyper vs `tiny_http`)
 - [ ] Host-call servicing loop (kills the HTTP 501 at `elpian-server.rs:212`)

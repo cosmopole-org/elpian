@@ -243,6 +243,22 @@ enum ElpianCapability {
   /// now fails if the two enums drift again.
   surface('surface'),
 
+  /// Calling this mini app's *own* server functions (`server.*`).
+  ///
+  /// Its own gate, separate from [network], because the two answer different
+  /// questions. A mini app in a closed network posture holds no [network] at
+  /// all and still needs to reach its own backend: that pair — may talk to my
+  /// server, may not talk to anything else — is the closed cycle, and it is not
+  /// expressible with a single gate.
+  serverCall('server_call'),
+
+  /// Durable per-app key/value state (`kv.*`), and the declared secrets a
+  /// server function may read (`secret.get`).
+  ///
+  /// Separate from [storage], which is the fabricated filesystem: a server
+  /// function is routinely given state without being given a filesystem.
+  state('state'),
+
   /// The fail-safe gate for anything the VM does not recognise. Never grant it
   /// to widen a mini app's reach — narrow the API into a real family instead.
   other('other');

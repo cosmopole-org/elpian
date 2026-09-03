@@ -127,11 +127,25 @@ impl VM {
     }
     /// Host: request termination at the next interpreter step boundary.
     ///
-    /// Like [`VM::request_pause`], this deliberately does not touch the
-    /// executor: a guest stuck in a loop is holding the executor borrow, and
-    /// that guest is the one a host most needs to be able to stop.
+    /// An instance that is *idle* — nobody inside the executor — has no run
+    /// loop coming along to acknowledge the flag, so the termination is
+    /// confirmed here and its registers dropped. An instance that is mid-turn
+    /// gets only the flag, and its own step loop confirms it.
+    ///
+    /// The two cases are told apart by whether the executor's borrow is
+    /// available, which is exactly the question being asked: a turn in flight
+    /// is holding it. That also means this never blocks or panics on a running
+    /// guest — the one a host most needs to be able to stop.
     pub fn request_terminate(&self) {
         self.control.request_terminate();
+        if let Ok(mut exec) = self
+            .single_thread_executor
+            .as_ref()
+            .expect("executor present")
+            .try_borrow_mut()
+        {
+            exec.confirm_terminate_if_idle();
+        }
     }
     /// Host: clear a pause flag (requested or confirmed) without driving.
     /// For an instance that was idle when paused — nothing to resume, but the
@@ -142,6 +156,18 @@ impl VM {
     /// Current run state (running / paused / terminated / …).
     pub fn run_state(&self) -> crate::sdk::lifecycle::RunState {
         self.control.state()
+    }
+    /// Acknowledge a pending terminate if the instance is between turns.
+    /// See [`crate::sdk::executor::Executor::confirm_terminate_if_idle`].
+    pub fn confirm_terminate_if_idle(&self) {
+        if let Ok(mut exec) = self
+            .single_thread_executor
+            .as_ref()
+            .expect("executor present")
+            .try_borrow_mut()
+        {
+            exec.confirm_terminate_if_idle();
+        }
     }
     /// A clone of this instance's control flag, for a host that wants to steer
     /// the instance without holding its lock.

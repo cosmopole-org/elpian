@@ -208,6 +208,24 @@ class VmHostApiCatalog {
     'flutter.batch',
   };
 
+  /// A mini app calling its own server functions. Separate from the
+  /// network: an app in a closed posture holds no network at all and
+  /// still reaches its own backend through these.
+  static const serverApiNames = <String>{
+    'server.call',
+    'server.render',
+  };
+
+  /// Durable per-app key/value state, and the secrets a server
+  /// function may read.
+  static const stateApiNames = <String>{
+    'kv.get',
+    'kv.set',
+    'kv.delete',
+    'kv.list',
+    'secret.get',
+  };
+
   /// Module import and management of other VM instances.
   static const vmApiNames = <String>{
     'vm.import',
@@ -242,6 +260,8 @@ class VmHostApiCatalog {
     ...taskApiNames,
     ...hostMessagingApiNames,
     ...surfaceApiNames,
+    ...serverApiNames,
+    ...stateApiNames,
     ...vmApiNames,
   };
 
@@ -371,6 +391,10 @@ class VmHostApiCatalog {
     'gpu.writeTexture': 'gpu',
     'host.request': 'host_messaging',
     'host.send': 'host_messaging',
+    'kv.delete': 'state',
+    'kv.get': 'state',
+    'kv.list': 'state',
+    'kv.set': 'state',
     'log': 'logging',
     'net.close': 'network',
     'net.fetch': 'network',
@@ -381,6 +405,9 @@ class VmHostApiCatalog {
     'random.bytes': 'randomness',
     'random.next': 'randomness',
     'render': 'render',
+    'secret.get': 'state',
+    'server.call': 'server_call',
+    'server.render': 'server_call',
     'setInterval': 'timers',
     'setTimeout': 'timers',
     'stringify': 'other',

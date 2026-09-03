@@ -345,6 +345,24 @@ pub fn all_host_apis() -> Vec<String> {
         // Capability-gated environmental interfaces. Each family is toggled by
         // the host via the instance's capability set; a disabled family makes
         // the corresponding `askHost` short-circuit to null (see executor).
+        // A mini app calling its own server functions. `server.call` invokes an
+        // action and returns its JSON result; `server.render` invokes a server
+        // component and returns a UI payload. Both are resolved *within the
+        // calling app* by the host — a guest cannot name another app's
+        // function, because it never supplies the app identity: the host takes
+        // that from the request it already routed.
+        "server.call",
+        "server.render",
+        // Durable per-app state, and the secrets a server function may read.
+        // `kv.*` is scoped to the app by the host, never by the guest.
+        "kv.get",
+        "kv.set",
+        "kv.delete",
+        "kv.list",
+        // Values are declared by name in the app's manifest and injected by the
+        // host; they are never packaged with the app and never returned to a
+        // client.
+        "secret.get",
         "net.fetch",
         "net.open",
         "net.send",
@@ -686,8 +704,18 @@ pub fn deliver_host_message(machine_id: String, message_json: String, cb_id: i64
 pub fn continue_execution(machine_id: String, input_json: String) -> VmExecResult {
     with_vm_turn(&machine_id, |vm| {
         drive_turn(vm, |vm| {
-            vm.continue_run(input_json);
-            check_host_call(vm, "\"done\"")
+            // Report what the resumed turn actually produced.
+            //
+            // This used to discard `continue_run`'s value and hand back a fixed
+            // `"done"`, which lost the return value of *every* guest function
+            // that made a host call before returning — the driving loop in both
+            // this crate and `ElpianVm.executeFunction` reads `resultValue`
+            // after the last continue, and that is the value it was reading.
+            // A UI event handler rarely returns anything, which is why it went
+            // unnoticed; a server function's return value is the entire point
+            // of calling it.
+            let res = vm.continue_run(input_json);
+            check_host_call(vm, &res.stringify())
         })
     })
     .unwrap_or_else(|| VmExecResult::done("\"vm_not_found\""))
@@ -835,7 +863,22 @@ pub fn resume_execution(machine_id: String) -> VmExecResult {
 /// Request termination: the VM unwinds at its next step boundary and becomes
 /// inert. Further drive calls are no-ops.
 pub fn terminate_vm(machine_id: &str) -> bool {
-    with_control(machine_id, |c| c.request_terminate()).is_some()
+    let Some(entry) = VMS.entry(machine_id) else {
+        return false;
+    };
+    // Set the flag first, unconditionally and without any lock: this is the
+    // half that has to reach a guest currently spinning inside a turn.
+    entry.control.request_terminate();
+
+    // Then, *if* the instance is idle, finish the job — confirm the terminate
+    // and drop its registers. `try_lock` is the test for idleness: a turn in
+    // flight holds this lock. Deliberately not a blocking lock, because waiting
+    // for the turn to end is precisely the behaviour that made terminate
+    // useless against a runaway guest.
+    if let Ok(vm) = entry.vm.try_lock() {
+        vm.confirm_terminate_if_idle();
+    }
+    true
 }
 
 /// Current run state of a VM (running / paused / terminated / …).
