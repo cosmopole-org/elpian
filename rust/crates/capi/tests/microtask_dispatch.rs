@@ -1,6 +1,6 @@
 //! The deferred-callback seam every reactive prelude is built on.
 //!
-//! `react.js` schedules its re-render flush with `__later(__vrFlush)`, which
+//! VReact schedules its re-render flush with `__later(__vrFlush)`, which
 //! pushes the function into `__cbReg` and asks the host for a microtask. When
 //! the microtask fires, `__dartDispatch` reads the slot back and calls it.
 //!
@@ -8,7 +8,7 @@
 //! second render — which is exactly the symptom: the first render happens, then
 //! the VM traps with "the specified data is not runnable".
 //!
-//! These tests use only `godot.js`, so they are cheap to run.
+//! These tests exercise only the transport layer of the SDK.
 
 use elpian_godot::GodotSurface;
 use elpian_godot::{GuestLang, VmManager, ROOT_VM};
@@ -61,7 +61,7 @@ askHost("test.emit", ["scheduled"]);
 
 #[test]
 fn a_deferred_named_function_runs() {
-    // What react.js actually does: `__later(__vrFlush)` — a top-level function
+    // What VReact actually does: `__later(__vrFlush)` — a top-level function
     // *declaration* passed by name, not an inline arrow.
     let (mgr, out) = run(
         "micro-named",

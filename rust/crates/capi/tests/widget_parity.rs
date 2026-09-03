@@ -2,9 +2,9 @@
 //!
 //! `gui.js` unified where a widget is *declared* — one registry entry, from
 //! which both the declarative `Button({...})` and the imperative
-//! `GUI.button({...})` are generated. `ui.js`'s older kit, `VUI.button(...)`,
-//! is a third thing: an independent implementation of the same widgets, kept
-//! because mini apps are written against it.
+//! `GUI.button({...})` are generated. The older imperative kit, `VUI.button(...)`
+//! (§3 of gui.js), is a third thing: an independent implementation of the same
+//! widgets, kept because it is the vocabulary the kit's own widgets use.
 //!
 //! Nothing compared them. This does, by recording the Godot class each surface
 //! builds. The recording works by bracketing each call with a sentinel

@@ -16,18 +16,17 @@ there.
 
 ```
 js/     JavaScript preludes, compiled by js2elpian
-  gui.js           the GUI SDK — state, rendering, scoping, widgets, styling,
-                   Scene3D and Canvas in one import. Start here.
-  godot.js         GD / GObj / G3 — the reflective Godot surface, plus VMs
-  flutter.js       FL — drives an embedded Flutter engine over flutter.op
+  gui.js           the GUI SDK, entire. GD/GObj (the reflective Godot surface),
+                   FL (the embedded Flutter engine), VUI (theme, typography,
+                   metrics, imperative widgets), VReact (elements, hooks,
+                   scheduler, reconciler), the widget registry, the component
+                   model, Scene3D and Canvas. One import.
   net.js           HTTP, WebSocket and Socket.IO over Godot primitives
   caspar.js        the Caspar signed binary action protocol
-  ui.js            VUI: theme, typography, metrics, imperative widgets   ─┐ layers
-  react.js         VReact: elements, hooks, scheduler, reconciler        ─┘ under gui.js
 
 dart/   Dart preludes, compiled by dart2elpian
   flutter.dart     a Flutter-shaped widget library in the compiled subset
-  godot.dart       the Dart twin of godot.js
+  godot.dart       the Dart twin of the SDK's engine transport
   demo_app.dart    a worked example, exercised by dart/tests/flutter_app.rs
 
 docs/   Design notes for the larger preludes
@@ -40,29 +39,24 @@ Every import, and what it composes ahead of the program:
 
 | import | pulls | composed source |
 | --- | --- | --- |
-| `gui.js` | godot + flutter + ui + react + gui | 330 KB |
-| `react.js` | godot + ui + react | 252 KB |
-| `ui.js` | godot + ui | 169 KB |
-| `flutter.js` | godot + flutter | 81 KB |
-| `caspar.js` | godot + caspar | 69 KB |
-| `net.js` | godot + net | 64 KB |
-| `godot.js` | godot | 47 KB |
+| `gui.js` | the SDK | 323 KB → 378 KB bytecode |
+| `net.js` | the SDK + net | 339 KB |
+| `caspar.js` | the SDK + caspar | 344 KB |
 
-**`gui.js` is the door for anything with a user interface.** `ui.js` and
-`react.js` are the layers underneath it, not alternatives to it: everything
-they offer, `gui.js` offers, with the registry and the component model on top.
-They stay importable so a program written before `gui.js` keeps compiling, and
-so each layer can be compiled on its own in the tests — but new code should not
-name them.
+**`gui.js` is the door.** It was five files — `godot.js`, `flutter.js`,
+`ui.js`, `react.js` and a `gui.js` layered over them — and a mini app imported
+some combination. They are one file now and the other four are deleted: there
+is no import chain to resolve, no question about which prelude a symbol comes
+from, and no way for two layers to hold different ideas about the same widget.
 
-The other doors are not redundant, and this is the reason there is more than
-one. A prelude is compiled into bytecode when the VM is created, and its
-top-level statements run before the guest's first line — inside the same
-instruction budget the governor meters the mini app against. `godot.js` alone
-is 69 KB of bytecode; the full `gui.js` stack is 387 KB. A guest that drives
-engine nodes, fetches over HTTP or signs Caspar actions and never draws a
-widget should not spend 5.6× its startup budget on a reconciler it never calls.
-`prelude_cost.rs` measures that and fails if the cheap door stops being cheap.
+`net.js` and `caspar.js` are clients, not alternatives. They reach the engine
+through `GD`, so importing either composes the SDK beneath it — a networking
+guest that never draws a widget still carries the reconciler. That is the price
+of one self-contained file, and it is a real one: a prelude is compiled into
+bytecode when the VM is created, and its top-level statements run before the
+guest's first line, inside the same instruction budget the governor meters the
+mini app against. `prelude_cost.rs` pins what that costs so it cannot grow
+unnoticed.
 
 ## These files are not host code
 
@@ -81,13 +75,12 @@ cargo test -p dart            # the Flutter widget layer end to end
 
 ## gui.js and what it replaced
 
-`gui.js` is the SDK a mini app should import. It sits on top of `godot.js`,
-`flutter.js`, `ui.js` and `react.js` — importing it pulls the whole chain, so a
-guest writes one import line and gets one vocabulary, while each layer stays
-its own file with its own tests.
+`gui.js` is the SDK a mini app imports. It was assembled from `godot.js`,
+`flutter.js`, `ui.js` and `react.js`, which are gone — their contents are
+sections §1–§4 of the file, with their own chapter documentation intact.
 
-It exists because `ui.js` and `react.js` each kept their own list of what
-widgets existed: VUI's imperative factories on one side, the reconciler's
+The merge exists because `ui.js` and `react.js` each kept their own list of
+what widgets existed: VUI's imperative factories on one side, the reconciler's
 driver tags on the other, with nothing holding the two sets in step. A widget
 added to one was simply missing from the other. (Their *bodies* were never so
 divided — the driver styles through `VUI.styleBox` and delegates several
@@ -97,9 +90,6 @@ implementation.)
 In `gui.js` a widget is one registry entry and both surfaces are generated from
 it: the declarative `Button({...})` and the imperative `GUI.button({...})`.
 `widget_parity.rs` checks the two build the same node, per widget.
-
-`ui.js` and `react.js` remain importable on their own. New code should use
-`gui.js`.
 
 ### Class components
 

@@ -597,7 +597,7 @@ fn free_ops_are_namespaced_like_their_defs() {
     use elpian_godot::GuestLang;
     let child_src = "function main() { let n = GD.create('Node3D'); n.queueFree(); } main();";
     let root_src = r#"
-        import 'godot.js';
+        import 'gui.js';
         function main() {
           let junk = GD.create("Node3D");
           junk.queueFree();

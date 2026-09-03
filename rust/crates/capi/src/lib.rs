@@ -48,59 +48,37 @@ pub use godot_surface::GodotSurface;
 /// marshaling vocabulary are in scope.
 pub const GODOT_PRELUDE: &str = include_str!("../../../../guest-sdk/dart/godot.dart");
 
-/// The `godot.js` guest prelude — the JavaScript twin of `godot.dart`. Same
-/// wire protocol, same `GD`/`GObj`/`VMs` surface, expressed in the Elpian-JS
-/// subset the `js2elpian` front-end compiles.
-pub const GODOT_PRELUDE_JS: &str = include_str!("../../../../guest-sdk/js/godot.js");
-
-/// The Elpian UI kit (`ui.js`) — a full widget toolkit in JavaScript built on
-/// Godot `Control` nodes over the bridge. Composed ahead of a JS guest when
-/// its source imports it (`import 'ui.js';`).
-pub const GODOT_UI_KIT_JS: &str = include_str!("../../../../guest-sdk/js/ui.js");
+/// The Elpian GUI SDK (`gui.js`) — the engine transport (`GD`/`GObj`), the
+/// embedded-Flutter surface (`FL`), the VUI widget kit, the VReact reconciler,
+/// the widget registry, the component model and the Scene3D/Canvas controllers,
+/// in one self-contained file. Composed ahead of a JS guest when its source
+/// imports it (`import 'gui.js';`).
+///
+/// This was five preludes a guest imported in combination — `godot.js`,
+/// `flutter.js`, `ui.js`, `react.js` and a `gui.js` layered over them. They are
+/// merged here and the other four are deleted: one file, one copy of every
+/// widget, and no import chain to resolve.
+///
+/// It is the entry point for anything with a user interface, and — because
+/// `net.js` and `caspar.js` reach the engine through `GD` — for those too. A
+/// prelude is compiled and run inside the metered budget the governor holds the
+/// mini app to, so what that costs is pinned by `tests/prelude_cost.rs`.
+pub const GODOT_GUI_JS: &str = include_str!("../../../../guest-sdk/js/gui.js");
 
 /// Elpian networking (`net.js`) — HTTP (Godot `HTTPRequest` + a cookie jar),
 /// WebSocket (`WebSocketPeer` pumped on a guest timer) and a Socket.IO v4
 /// client, all in the Elpian-JS subset. Composed ahead of a JS guest when its
-/// source imports it (`import 'net.js';`); it depends only on `godot.js`.
+/// source imports it (`import 'net.js';`); it reaches the engine through `GD`,
+/// so `gui.js` is composed beneath it.
 pub const GODOT_NET_JS: &str = include_str!("../../../../guest-sdk/js/net.js");
 
 /// Caspar protocol client (`caspar.js`) — the Caspar-node signed binary action
 /// protocol over a `StreamPeerTCP` (framing, dev login, RSA request signing
 /// via Godot `Crypto`, creature signalling with correlation-id result routing)
 /// plus `CaspiNet`, the CaspiGames service-discovery layer. Composed ahead of
-/// a JS guest when its source imports it (`import 'caspar.js';`); it depends
-/// only on `godot.js`.
+/// a JS guest when its source imports it (`import 'caspar.js';`); it reaches
+/// the engine through `GD`, so `gui.js` is composed beneath it.
 pub const GODOT_CASPAR_JS: &str = include_str!("../../../../guest-sdk/js/caspar.js");
-
-/// The Flutter UI bridge (`flutter.js`) — the `FL` facade that drives a real
-/// `libflutter` engine embedded in the GDExtension over the `flutter.op` seam
-/// (declarative widget-tree ops → a fixed AOT interpreter app). Composed ahead
-/// of a JS guest when its source imports it (`import 'flutter.js';`); it depends
-/// only on `godot.js` (it reuses that prelude's callback registry so widget
-/// events route back through the same namespaced-dispatch path).
-pub const GODOT_FLUTTER_JS: &str = include_str!("../../../../guest-sdk/js/flutter.js");
-
-/// The unified GUI SDK (`gui.js`) — state, rendering, scoping, widgets,
-/// styling, 3D scenes and 2D canvases in one import. Composed ahead of a JS
-/// guest when its source imports it (`import 'gui.js';`). It sits on top of the
-/// four layers below rather than replacing them: importing it composes
-/// `godot.js`, `flutter.js`, `ui.js` and `react.js` beneath it, so a mini app
-/// writes one import line while each layer stays one file.
-///
-/// This is the entry point for anything with a user interface. The cheaper
-/// doors (`godot.js`, `net.js`, `caspar.js`, `flutter.js`) exist because a
-/// prelude is compiled and run inside the metered budget the governor holds
-/// the mini app to — see `tests/prelude_cost.rs`.
-pub const GODOT_GUI_JS: &str = include_str!("../../../../guest-sdk/js/gui.js");
-
-/// VReact (`react.js`) — a React-compatible runtime (element factory, the full
-/// hook surface, and a keyed reconciler that mutates retained Godot nodes)
-/// whose host config targets the VUI kit. Composed ahead of a JS guest when its
-/// source imports it (`import 'react.js';`); because it builds on VUI, importing
-/// it implies the UI kit even if `ui.js` is not imported explicitly. This is
-/// what a compiled Next.js-on-Elpian program (see the CLI's nextjs template)
-/// runs on.
-pub const GODOT_REACT_JS: &str = include_str!("../../../../guest-sdk/js/react.js");
 
 /// Service a guest host call: `(user, api_name, args_json)` → reply JSON.
 /// Return NULL (or leave unregistered) to decline — the guest then sees `null`.
@@ -214,46 +192,25 @@ pub fn compose_godot_program_js(user_source: &str) -> String {
             .lines()
             .any(|l| l.trim_start().starts_with("import ") && l.contains(needle))
     };
-    // gui.js is the top of the UI stack, not a replacement for it: it adds the
-    // widget registry, the component model and the Scene3D/Canvas controllers
-    // on top of the four layers below. Importing it pulls the whole chain, so a
-    // mini app writes one import line — but each layer stays its own file with
-    // its own tests, rather than being inlined into gui.js and maintained
-    // twice.
-    let wants_gui = imports("gui.js");
-    let wants_react = wants_gui || imports("react.js");
-    // react.js is built on VUI, so it implies the UI kit.
-    let wants_ui_kit = wants_react || imports("ui.js");
+    // `gui.js` is the whole SDK in one file: the engine transport, the Flutter
+    // surface, the widget kit, the reconciler and everything built on them. It
+    // is composed on its own, not on top of anything.
+    //
+    // `net.js` and `caspar.js` reach the engine through `GD`, which lives in
+    // gui.js, so importing either composes gui.js beneath it. That is more than
+    // a networking-only guest needs — the whole UI stack rather than the 47 KB
+    // transport it actually calls — and it is the price of one self-contained
+    // file. `tests/prelude_cost.rs` pins what it costs so it cannot grow
+    // unnoticed.
     let wants_net = imports("net.js");
     let wants_caspar = imports("caspar.js");
-    // gui.js exposes FL alongside GD, so the Flutter surface comes with it.
-    let wants_flutter = wants_gui || imports("flutter.js");
 
-    let mut parts: Vec<String> = vec![strip(GODOT_PRELUDE_JS)];
+    let mut parts: Vec<String> = vec![strip(GODOT_GUI_JS)];
     if wants_net {
-        // net.js depends only on godot.js; compose it before the UI layers so
-        // widgets and components can reach the network from construction time.
         parts.push(strip(GODOT_NET_JS));
     }
     if wants_caspar {
-        // caspar.js depends only on godot.js; compose it before the UI layers
-        // so app scaffolding can open node connections from construction time.
         parts.push(strip(GODOT_CASPAR_JS));
-    }
-    if wants_flutter {
-        // flutter.js depends only on godot.js (it reuses the callback registry
-        // and marshaling); compose it before the UI layers so components can
-        // mount Flutter surfaces from construction time.
-        parts.push(strip(GODOT_FLUTTER_JS));
-    }
-    if wants_ui_kit {
-        parts.push(strip(GODOT_UI_KIT_JS));
-    }
-    if wants_react {
-        parts.push(strip(GODOT_REACT_JS));
-    }
-    if wants_gui {
-        parts.push(strip(GODOT_GUI_JS));
     }
     parts.push(strip(user_source));
     parts.join("\n\n")

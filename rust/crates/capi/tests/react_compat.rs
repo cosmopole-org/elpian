@@ -1,6 +1,6 @@
 //! Does the React runtime still work on the current Elpian?
 //!
-//! `react.js` is 2,600 lines of hook machinery and a keyed reconciler that
+//! VReact (§4 of `gui.js`) is 2,600 lines of hook machinery and a keyed reconciler that
 //! mutates retained Godot nodes. It was exercised by exactly one thing — the
 //! Tritonix fixture, which imports it and checks the program *compiles*. Nobody
 //! had checked that `useState` schedules a re-render, that a state update in
@@ -88,7 +88,7 @@ impl Guest {
 
 fn boot(machine: &str, program: &str) -> Guest {
     let mock = Rc::new(RefCell::new(MockEngine::default()));
-    let source = format!("import 'react.js';\n{program}");
+    let source = format!("import 'gui.js';\n{program}");
 
     let mut mgr = VmManager::new_root_lang(
         Box::new(GodotSurface),

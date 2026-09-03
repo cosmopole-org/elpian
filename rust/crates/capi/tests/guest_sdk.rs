@@ -7,21 +7,20 @@
 //! defines), so the only thing that can tell us it is valid is the front-end
 //! that compiles it.
 //!
-//! Until this file existed, only some of it was ever compiled. `godot.js`,
-//! `ui.js` and `net.js` were exercised because tests happened to import them,
-//! and `react.js` only because the Tritonix fixture pulls it in.
-//! `caspar.js` and `flutter.js` — 55 KB of it — were
-//! compiled by nothing at all. A syntax error or an unsupported construct in
-//! any of them would have shipped and only surfaced when a mini app tried to
-//! import it.
+//! Until this file existed, only some of it was ever compiled. The SDK was
+//! five preludes then, and coverage was accidental: `godot.js`, `ui.js` and
+//! `net.js` were exercised because tests happened to import them, `react.js`
+//! only because a fixture pulled it in, and `caspar.js` and `flutter.js` — 55
+//! KB — by nothing at all. Four of those five are now merged into `gui.js`,
+//! which every test here compiles, so the accident is gone; what remains is
+//! this file making it deliberate.
 //!
 //! These tests compile each prelude on its own. They check the *front-end*
 //! accepts it, not that it behaves correctly at runtime — the behavioural
 //! tests are the multi_vm / js_guest suites.
 
 use elpian_godot::{
-    compose_godot_program, compose_godot_program_js, GODOT_CASPAR_JS, GODOT_FLUTTER_JS,
-    GODOT_GUI_JS, GODOT_NET_JS, GODOT_PRELUDE_JS, GODOT_REACT_JS, GODOT_UI_KIT_JS,
+    compose_godot_program, compose_godot_program_js, GODOT_CASPAR_JS, GODOT_GUI_JS, GODOT_NET_JS,
 };
 
 /// Every JavaScript prelude, with the imports it depends on.
@@ -32,14 +31,9 @@ use elpian_godot::{
 fn js_preludes() -> Vec<(&'static str, &'static str, &'static str)> {
     vec![
         // (name, the import line a guest would write, the source itself)
-        ("godot.js", "", GODOT_PRELUDE_JS),
-        // gui.js sits on top of the other four; its import pulls the chain.
         ("gui.js", "import 'gui.js';", GODOT_GUI_JS),
-        ("ui.js", "import 'ui.js';", GODOT_UI_KIT_JS),
         ("net.js", "import 'net.js';", GODOT_NET_JS),
         ("caspar.js", "import 'caspar.js';", GODOT_CASPAR_JS),
-        ("flutter.js", "import 'flutter.js';", GODOT_FLUTTER_JS),
-        ("react.js", "import 'react.js';", GODOT_REACT_JS),
     ]
 }
 
@@ -106,7 +100,7 @@ fn the_javascript_preludes_reach_bytecode_not_just_the_ast() {
     // Parsing is not the whole front-end: a construct can lower to an AST the
     // bytecode compiler then rejects. The preludes that carry the most surface
     // are checked all the way through.
-    for name in ["ui.js", "react.js", "gui.js"] {
+    for name in ["gui.js", "net.js", "caspar.js"] {
         let import = format!("import '{name}';");
         let composed = compose_godot_program_js(&format!("{import}\nvar __probe = 1;"));
         assert!(
@@ -133,41 +127,21 @@ fn the_dart_prelude_compiles() {
 }
 
 #[test]
-fn a_prelude_that_imports_another_pulls_it_in() {
-    // The dependency rule the composer implements: importing react.js implies
-    // ui.js, because VReact's host config targets the UI kit. If that stopped
-    // working, react.js would compile alone and fail at runtime on a missing
-    // VUI.
-    let composed = compose_godot_program_js("import 'react.js';\nvar a = 1;");
-    assert!(
-        composed.contains("VUI") || composed.len() > GODOT_REACT_JS.len(),
-        "importing react.js should also compose the UI kit it builds on"
-    );
-    assert!(
-        js2elpian::try_parse_js(&composed).is_ok(),
-        "react.js + its dependencies should compile together"
-    );
-
-    // gui.js sits two layers further up: it needs the reconciler it registers
-    // widgets for, the kit it themes through, the engine underneath both, and
-    // the Flutter surface it re-exports. Composing it alone would compile —
-    // the front-end resolves names late — and fail at the first render.
-    let gui = compose_godot_program_js("import 'gui.js';\nvar a = 1;");
-    for (name, marker) in [
-        ("godot.js", "class GD {"),
-        ("ui.js", "var VUI = {}"),
-        ("react.js", "function __vrDriverCreate("),
-        ("flutter.js", "function __flEl("),
-    ] {
+fn a_client_prelude_pulls_in_the_sdk_it_calls_through() {
+    // The one dependency rule left: `net.js` and `caspar.js` reach the engine
+    // through `GD`, which lives in gui.js. If that stopped being composed they
+    // would compile alone and fail at the first request.
+    for import in ["net.js", "caspar.js"] {
+        let composed = compose_godot_program_js(&format!("import '{import}';\nvar a = 1;"));
         assert!(
-            gui.contains(marker),
-            "importing gui.js should also compose {name} beneath it"
+            composed.contains("class GD {"),
+            "importing {import} should also compose the SDK it calls through"
+        );
+        assert!(
+            js2elpian::try_parse_js(&composed).is_ok(),
+            "{import} + the SDK should compile together"
         );
     }
-    assert!(
-        js2elpian::try_parse_js(&gui).is_ok(),
-        "gui.js + its dependencies should compile together"
-    );
 }
 
 /// Every `askHost` name the preludes actually call must be a name the VM
@@ -194,13 +168,9 @@ fn every_host_api_the_preludes_call_is_documented_and_gateable() {
     // Scan the preludes for `askHost("name"` / `askHost('name'`.
     let mut called: BTreeSet<String> = BTreeSet::new();
     for src in [
-        GODOT_PRELUDE_JS,
-        GODOT_UI_KIT_JS,
+        GODOT_GUI_JS,
         GODOT_NET_JS,
         GODOT_CASPAR_JS,
-        GODOT_FLUTTER_JS,
-        GODOT_REACT_JS,
-        GODOT_GUI_JS,
         elpian_godot::GODOT_PRELUDE,
     ] {
         let mut rest = src;
