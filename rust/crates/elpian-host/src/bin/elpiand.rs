@@ -186,9 +186,12 @@ fn load_store(root: &Path, runtime: &Arc<AppRuntime>) -> Result<usize, String> {
         };
         match elpian_host::registry::definition_from(&store, &id, &active) {
             Ok(app) => {
-                println!("[elpian]   {id} {} (from the store)", active.version);
-                runtime.register(app);
-                loaded += 1;
+                if runtime.register(app) {
+                    println!("[elpian]   {id} {} (from the store)", active.version);
+                    loaded += 1;
+                } else {
+                    eprintln!("elpiand: skipping {id:?}: not a valid app id");
+                }
             }
             // One app whose blob is missing or corrupt must not stop the host
             // serving the rest.
@@ -208,8 +211,12 @@ fn load_plain_directory(root: &Path, runtime: &Arc<AppRuntime>) -> Result<usize,
         }
         match load_app(&dir) {
             Ok(app) => {
-                runtime.register(app);
-                loaded += 1;
+                let id = app.id.clone();
+                if runtime.register(app) {
+                    loaded += 1;
+                } else {
+                    eprintln!("elpiand: skipping {id:?}: not a valid app id");
+                }
             }
             // One malformed app must not stop the host from serving the rest:
             // a registry is a shared surface and a bad entry is an operational

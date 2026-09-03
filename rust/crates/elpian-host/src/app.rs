@@ -109,6 +109,38 @@ pub struct AppDefinition {
     pub client_bytecode: Option<Vec<u8>>,
 }
 
+/// Whether `id` is a name this host will accept for an app.
+///
+/// An app id is not just a map key: it becomes a **directory name** for the
+/// app's private filesystem (`AppRuntime::dispatch` joins it onto the data
+/// root), a prefix for its state and cache keys, and a path segment in every
+/// URL that reaches it. An id of `..` or `.` therefore roots an app's
+/// filesystem at its neighbours' parent, and `AppFs`'s confinement — which is
+/// correct — then enforces the wrong boundary, because the boundary it was
+/// handed is already wrong.
+///
+/// The id comes from the app's own manifest, which is to say from the app, so
+/// it is untrusted. Validating it at every point where one enters the system is
+/// cheaper and more reliable than defending each place it is later used.
+///
+/// The charset is deliberately narrow: lowercase alphanumerics, plus `-`, `_`
+/// and `.` inside the name. No leading `.` (which would also make a hidden
+/// directory), no `/` or `\`, no `..`, nothing that needs escaping in a URL.
+pub fn valid_app_id(id: &str) -> bool {
+    if id.is_empty() || id.len() > 128 {
+        return false;
+    }
+    // Must start with an alphanumeric: this rules out `.`, `..` and `.hidden`
+    // in one condition rather than three special cases.
+    let mut chars = id.chars();
+    let first = chars.next().unwrap_or('\0');
+    if !first.is_ascii_lowercase() && !first.is_ascii_digit() {
+        return false;
+    }
+    id.chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_' || c == '.')
+}
+
 impl AppDefinition {
     pub fn new(id: impl Into<String>) -> Self {
         AppDefinition {
@@ -213,5 +245,45 @@ impl AppDefinition {
 
     pub fn function(&self, name: &str) -> Option<&FunctionDef> {
         self.functions.get(name)
+    }
+
+    /// Whether this definition's id is one the host will serve.
+    pub fn has_valid_id(&self) -> bool {
+        valid_app_id(&self.id)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ids_that_would_escape_a_directory_are_refused() {
+        // Each of these becomes a directory name joined onto the data root, so
+        // an id that traverses roots the app at its neighbours' parent — and
+        // `AppFs` then confines correctly to the wrong place.
+        for id in [
+            "..",
+            ".",
+            "../other",
+            "a/../b",
+            "a/b",
+            "a\\b",
+            ".hidden",
+            "",
+            "/absolute",
+            "with space",
+            "UPPER",
+            "sneaky\u{0}null",
+        ] {
+            assert!(!valid_app_id(id), "{id:?} should be refused");
+        }
+    }
+
+    #[test]
+    fn ordinary_ids_are_accepted() {
+        for id in ["notes", "my-app", "my_app", "app.v2", "a", "app123"] {
+            assert!(valid_app_id(id), "{id:?} should be accepted");
+        }
     }
 }

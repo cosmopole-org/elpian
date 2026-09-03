@@ -64,26 +64,62 @@ fn usage() -> String {
         .into()
 }
 
-/// Read `--key`, falling back to the environment.
-///
-/// An unsigned package is not a supported state: the container always carries a
-/// signature, and a build with no key configured gets a well-known development
-/// key with a warning. Making "no signature" representable would mean every
-/// verifier needed a branch for it, and that branch is the one that gets
-/// reached by accident in production.
-fn signing_key(flags: &Flags) -> Vec<u8> {
+/// The key an operator configured, if any.
+fn configured_key(flags: &Flags) -> Option<Vec<u8>> {
     if let Some(key) = flags.get("key") {
-        return key.into_bytes();
+        return Some(key.into_bytes());
     }
-    if let Ok(key) = std::env::var("ELPIAN_SIGNING_KEY") {
-        return key.into_bytes();
-    }
-    eprintln!(
-        "elpian-pkg: warning: no --key and no ELPIAN_SIGNING_KEY; using the \
-         development key. Packages signed with it are not distributable."
-    );
-    b"elpian-development-key".to_vec()
+    std::env::var("ELPIAN_SIGNING_KEY")
+        .ok()
+        .map(String::into_bytes)
 }
+
+/// The key to *sign* with. Falls back to a well-known development key so
+/// `package` works out of the box, and says so.
+///
+/// An unsigned package is deliberately not representable: the container always
+/// carries a signature. Making "no signature" a state would mean every verifier
+/// needed a branch for it, and that branch is the one reached by accident in
+/// production.
+fn key_for_signing(flags: &Flags) -> Vec<u8> {
+    match configured_key(flags) {
+        Some(key) => key,
+        None => {
+            eprintln!(
+                "elpian-pkg: warning: no --key and no ELPIAN_SIGNING_KEY; using the \
+                 development key. Packages signed with it are NOT distributable — \
+                 anyone can forge one, because the key is in the source."
+            );
+            DEVELOPMENT_KEY.to_vec()
+        }
+    }
+}
+
+/// The key to *verify* against. There is deliberately no fallback.
+///
+/// This is the important half. `verify` and `install` used to share the signing
+/// fallback, which made the signature check meaningless whenever no key was
+/// configured: the development key is public, so anyone could sign a package
+/// that verified — and `install` takes the app's capabilities, network posture
+/// and resource limits from that same manifest, so a forged package chooses its
+/// own privileges.
+///
+/// A verification path must never have a default key. Refusing is the only safe
+/// answer, and it is a loud one.
+fn key_for_verifying(flags: &Flags) -> Result<Vec<u8>, String> {
+    configured_key(flags).ok_or_else(|| {
+        "no signing key. Pass --key or set ELPIAN_SIGNING_KEY.\n\n\
+         There is no default for verification: the development key is public, \
+         so verifying against it would accept a package anyone could forge.\n\
+         To check a package built with the development key, pass it explicitly:\n    \
+         --key elpian-development-key"
+            .to_string()
+    })
+}
+
+/// The key `package` falls back to. Public by construction — it exists so a
+/// first build works, not so anything trusts it.
+const DEVELOPMENT_KEY: &[u8] = b"elpian-development-key";
 
 struct Flags {
     positional: Vec<String>,
@@ -154,6 +190,20 @@ fn cmd_package(args: &[String]) -> Result<(), String> {
     )
     .map_err(|e| format!("elpian.app.json is not valid JSON: {e}"))?;
 
+    // The id becomes a directory name, a state-key prefix and a URL segment on
+    // the host, so it is checked here — at the point where a package is built —
+    // as well as when one is loaded. Failing at build time tells the author;
+    // failing only at load time tells the operator about somebody else's bug.
+    let id = manifest["id"]
+        .as_str()
+        .ok_or("elpian.app.json has no \"id\"")?;
+    if !elpian_host::app::valid_app_id(id) {
+        return Err(format!(
+            "{id:?} is not a valid app id. Use lowercase letters, digits, \
+             '-', '_' and '.', starting with a letter or digit."
+        ));
+    }
+
     let declared = manifest["functions"]
         .as_array()
         .ok_or("elpian.app.json has no \"functions\" array")?;
@@ -208,7 +258,7 @@ fn cmd_package(args: &[String]) -> Result<(), String> {
     }
 
     let package = Package { manifest, entries };
-    let bytes = package.write(&signing_key(&flags));
+    let bytes = package.write(&key_for_signing(&flags));
     std::fs::write(out, &bytes).map_err(|e| format!("{out}: {e}"))?;
 
     println!(
@@ -250,7 +300,7 @@ fn cmd_verify(args: &[String]) -> Result<(), String> {
         .ok_or("verify needs a package path")?;
     let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
 
-    let package = Package::read(&bytes, &signing_key(&flags)).map_err(|e| e.message())?;
+    let package = Package::read(&bytes, &key_for_verifying(&flags)?).map_err(|e| e.message())?;
     println!(
         "ok: {} {} — {} entries verified",
         package.manifest["id"].as_str().unwrap_or("?"),
@@ -275,12 +325,15 @@ fn cmd_install(args: &[String]) -> Result<(), String> {
 
     // Verified *before* anything is written. An install that unpacked first and
     // checked afterwards would leave a rejected package's bytes in the registry.
-    let package = Package::read(&bytes, &signing_key(&flags)).map_err(|e| e.message())?;
+    let package = Package::read(&bytes, &key_for_verifying(&flags)?).map_err(|e| e.message())?;
 
     let id = package.manifest["id"]
         .as_str()
         .ok_or("the manifest has no id")?
         .to_string();
+    if !elpian_host::app::valid_app_id(&id) {
+        return Err(format!("{id:?} is not a valid app id; refusing to install"));
+    }
     let version = package.manifest["version"]
         .as_str()
         .unwrap_or("0.0.0")

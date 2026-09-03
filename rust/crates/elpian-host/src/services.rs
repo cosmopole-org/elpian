@@ -83,6 +83,9 @@ pub struct ServerServices {
     state: StateStore,
     secrets: SecretStore,
     cache: Option<RenderCache>,
+    /// This invocation's own randomness stream. Per-instance rather than
+    /// process-global — see [`GuestRandom`].
+    random: GuestRandom,
     /// Set when this invocation is allowed to call sibling functions. Absent
     /// means `server.*` answers null — which is what a bare `invoke` in a test
     /// gets, and is the safe direction.
@@ -100,6 +103,7 @@ impl ServerServices {
             state,
             secrets,
             cache: None,
+            random: GuestRandom::new(),
             invoker: None,
             log: InvocationLog::default(),
         }
@@ -292,12 +296,15 @@ impl HostServices for ServerServices {
             }
             "time.monotonic" => json!(monotonic_millis()),
 
-            "random.next" => json!(next_random()),
+            "random.next" => json!(self.random.next_f64()),
             "random.bytes" => {
                 let count = call.arg(0).as_u64().unwrap_or(0).min(4096) as usize;
-                json!((0..count)
-                    .map(|_| (next_random() * 256.0) as u8)
-                    .collect::<Vec<u8>>())
+                // Straight from the OS. A guest asking for *bytes* is usually
+                // about to use them for something a scrambled float from a
+                // non-cryptographic generator is not good enough for.
+                let mut bytes = vec![0u8; count];
+                fill_os_random(&mut bytes);
+                json!(bytes)
             }
 
             // A server function calling a sibling. The app is *not* a
@@ -389,28 +396,81 @@ fn monotonic_millis() -> u64 {
 ///
 /// Deliberately *not* the VM's deterministic `random` builtin: that one is
 /// seeded and reproducible, which is right for a guest's own arithmetic and
-/// wrong for anything a guest would use to make an id. This draws from the
-/// OS-independent entropy the host can reach without a dependency — good enough
-/// for ids and jitter, and explicitly not for keys.
-fn next_random() -> f64 {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    use std::time::{SystemTime, UNIX_EPOCH};
-    static STATE: AtomicU64 = AtomicU64::new(0);
+/// wrong for anything a guest would use to make an id.
+///
+/// # Why this is per-instance and OS-seeded
+///
+/// It was one process-global xorshift state shared by every app on the host.
+/// That is worse than it sounds: the output is the top 53 bits of an invertible
+/// multiply of the full state, so two draws recover the state and every
+/// subsequent value the *whole host* produces becomes predictable — including
+/// another tenant's. An app minting an invite id, a share link or a reset token
+/// from `random.next` would be handing a co-tenant the next one, with no
+/// cross-app API involved: the shared generator *is* the channel.
+///
+/// So each `ServerServices` — one per invocation — gets its own stream, seeded
+/// from OS entropy. One app's draws are no longer on the same sequence as
+/// another's.
+///
+/// `random.bytes` draws bytes from the OS directly rather than from this, since
+/// a name that says "bytes" will be used for things a scrambled float is not
+/// good enough for.
+struct GuestRandom {
+    state: u64,
+}
 
-    let mut x = STATE.load(Ordering::Relaxed);
-    if x == 0 {
-        // Seed from the clock on first use, so two processes started at
-        // different times do not draw the same sequence.
-        x = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_nanos() as u64)
-            .unwrap_or(0x9E37_79B9_7F4A_7C15)
-            | 1;
+impl GuestRandom {
+    fn new() -> GuestRandom {
+        let mut seed = [0u8; 8];
+        fill_os_random(&mut seed);
+        let state = u64::from_le_bytes(seed);
+        GuestRandom {
+            // xorshift64* is undefined at zero, and a failed entropy read must
+            // not silently produce a fixed stream.
+            state: if state == 0 {
+                0x9E37_79B9_7F4A_7C15
+            } else {
+                state
+            },
+        }
     }
-    x ^= x >> 12;
-    x ^= x << 25;
-    x ^= x >> 27;
-    STATE.store(x, Ordering::Relaxed);
-    let scrambled = x.wrapping_mul(0x2545_F491_4F6C_DD1D);
-    (scrambled >> 11) as f64 / (1u64 << 53) as f64
+
+    fn next_f64(&mut self) -> f64 {
+        let mut x = self.state;
+        x ^= x >> 12;
+        x ^= x << 25;
+        x ^= x >> 27;
+        self.state = x;
+        let scrambled = x.wrapping_mul(0x2545_F491_4F6C_DD1D);
+        (scrambled >> 11) as f64 / (1u64 << 53) as f64
+    }
+}
+
+/// Fill `out` with operating-system entropy.
+///
+/// Reading `/dev/urandom` rather than taking a dependency, matching the way the
+/// rest of this tree hand-rolls its primitives. If the read fails — no `/dev`
+/// in a container, an exhausted descriptor table — the buffer is filled from a
+/// clock- and address-derived mix instead. That fallback is **not** good
+/// randomness and is documented as such at every call site: it exists so a
+/// guest gets *something* non-repeating rather than a fixed sequence, not
+/// because it is fit for a secret.
+fn fill_os_random(out: &mut [u8]) {
+    use std::io::Read;
+    if let Ok(mut file) = std::fs::File::open("/dev/urandom") {
+        if file.read_exact(out).is_ok() {
+            return;
+        }
+    }
+    let mut mix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0x9E37_79B9_7F4A_7C15)
+        ^ (out.as_ptr() as u64);
+    for byte in out.iter_mut() {
+        mix ^= mix >> 12;
+        mix ^= mix << 25;
+        mix ^= mix >> 27;
+        *byte = (mix.wrapping_mul(0x2545_F491_4F6C_DD1D) >> 56) as u8;
+    }
 }

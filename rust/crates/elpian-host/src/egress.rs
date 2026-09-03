@@ -107,7 +107,22 @@ impl Target {
     /// URL crate: what is needed is host, port and scheme, and a parser whose
     /// behaviour on the odd cases is *visible here* is worth more than one
     /// whose is not — the odd cases are the attack.
+    ///
+    /// Rejects any control character anywhere in the URL, before anything is
+    /// split out of it.
+    ///
+    /// This is not tidiness. The path ends up interpolated into an HTTP request
+    /// line (`fetch::perform`), so a CR or LF in it lets a guest write a second
+    /// request onto the socket — with a method, headers and a body of its
+    /// choosing, to an origin the broker approved. That turns a deliberately
+    /// GET-only, header-fixed, body-less client into an arbitrary HTTP writer
+    /// aimed at whatever the host can reach. The check lives *here*, in the one
+    /// function every caller must go through, rather than at the point of use,
+    /// so a future call site cannot skip it.
     pub fn parse(url: &str) -> Option<Target> {
+        if url.bytes().any(|b| b < 0x21 || b == 0x7f) {
+            return None;
+        }
         let (scheme, rest) = url.split_once("://")?;
         let scheme = scheme.to_ascii_lowercase();
 
@@ -412,6 +427,38 @@ mod tests {
         );
         // The operator's version does distinguish them.
         assert!(reasons[2].audit_detail().contains("10.0.0.1"));
+    }
+
+    #[test]
+    fn a_url_carrying_control_characters_does_not_parse() {
+        // The path is interpolated into an HTTP request line. A CR or LF in it
+        // would let a guest append a second, entirely attacker-written request
+        // to an origin the broker approved.
+        for url in [
+            "http://api.example.com/x\r\nX-Injected: yes",
+            "http://api.example.com/x\nGET /admin HTTP/1.1",
+            "http://api.example.com/x\r\n\r\nPOST /internal HTTP/1.1",
+            "http://api.example.com/pa th",
+            "http://api.example.com/x\0y",
+            "http://api.exa\rmple.com/",
+            "http://api.example.com/x\x7f",
+        ] {
+            assert_eq!(Target::parse(url), None, "{url:?} should not parse");
+            // And the decision function refuses it too, whatever the mode.
+            assert_eq!(
+                decide(&NetworkMode::Open, url),
+                EgressDecision::Deny(DenyReason::MalformedUrl),
+                "{url:?} should be denied"
+            );
+        }
+    }
+
+    #[test]
+    fn an_ordinary_path_still_parses() {
+        // The control-character check must not reject legitimate URLs.
+        let target = Target::parse("http://api.example.com/v1/things?a=1&b=%20c").unwrap();
+        assert_eq!(target.host, "api.example.com");
+        assert_eq!(target.path, "/v1/things?a=1&b=%20c");
     }
 
     #[test]

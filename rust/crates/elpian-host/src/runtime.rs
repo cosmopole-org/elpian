@@ -14,7 +14,7 @@ use std::sync::{Arc, RwLock};
 use elpian_vm::api;
 use serde_json::{json, Value};
 
-use crate::app::{AppDefinition, FunctionKind};
+use crate::app::{valid_app_id, AppDefinition, FunctionKind};
 use crate::appfs::AppFs;
 use crate::component::{ComponentPayload, RenderCache};
 use crate::identity::Identity;
@@ -168,8 +168,18 @@ impl AppRuntime {
         self.cache.clear_app(app_id)
     }
 
-    pub fn register(&self, app: AppDefinition) {
+    /// Register an app, or refuse it.
+    ///
+    /// Refusing here rather than at each use site is the point: the id becomes
+    /// a directory name, a state-key prefix and a URL segment, and defending
+    /// each of those separately is how one of them gets missed. See
+    /// [`valid_app_id`].
+    pub fn register(&self, app: AppDefinition) -> bool {
+        if !valid_app_id(&app.id) {
+            return false;
+        }
         self.write_apps().insert(app.id.clone(), app);
+        true
     }
 
     pub fn unregister(&self, app_id: &str) -> bool {
@@ -336,7 +346,16 @@ impl AppRuntime {
         }
 
         let invocation = self.with_instance(&app, &def, |machine_id, cold| {
+            // `app.id` was validated at registration, so this join cannot
+            // leave the data root. The assertion keeps that dependency visible
+            // rather than implicit — a future path that registered without
+            // checking would fail here instead of silently rooting an app at
+            // its neighbours.
             let fs = self.data_root.as_ref().map(|root| {
+                debug_assert!(
+                    valid_app_id(&app.id),
+                    "unvalidated app id reached the filesystem"
+                );
                 let dir = root.join(&app.id);
                 let _ = std::fs::create_dir_all(&dir);
                 AppFs::new(dir)

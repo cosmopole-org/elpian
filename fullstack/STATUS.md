@@ -326,7 +326,27 @@ Ordered by how likely it is to matter.
 | `scripts/e2e-fullstack.sh` | all checks pass |
 | `scripts/check-doc-snippets.py` | 2 compiled, 1 skipped, 0 failed |
 
-One unexplained flake: `elpian-godot-capi::multi_vm` failed twice in
-full-workspace runs early on and has not reproduced since — 9/9 alone including
-under three-way parallel load, and repeatedly clean in workspace runs. It is not
-in code this program touched. Recorded, not explained.
+### The `multi_vm` flake — mechanism identified, not proven
+
+`elpian-godot-capi::multi_vm::aggregate_budget_overrun_kills_the_whole_branch`
+has failed roughly 3 times in 40+ runs of its full test binary, and **never** in
+~30 runs on its own. That asymmetry is the clue, and it points at something my
+work plausibly caused:
+
+* `api::enforce_tree_budgets()` sweeps **every root in the process**, not one
+  manager's, and every `VmManager` calls it (`manager.rs:1096`).
+* Cargo runs that binary's 14 tests concurrently **in one process**, each with
+  its own `VmManager`.
+* Before S0, the global registry lock serialised all guest execution, so two
+  managers' sweeps could not interleave with each other's turns. After S0 they
+  genuinely can — so manager A's sweep can now evaluate, and destroy, manager
+  B's subtree, and attribute the destruction to itself.
+
+That is a real design issue (a process-global sweep in a multi-manager process),
+and S0 is what made it *reachable*. I could not reproduce it under targeted
+load, so the causal chain above is a **hypothesis supported by reading the code**
+rather than a demonstrated failure path.
+
+Worth noting it does not obviously affect production: there is one manager per
+process there. The fix, if wanted, is to scope the sweep to a manager's own
+roots rather than the whole forest.
