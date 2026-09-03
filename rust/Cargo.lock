@@ -24,10 +24,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "elpian-crypto"
+version = "0.1.0"
+
+[[package]]
 name = "elpian-dart-runtime"
 version = "0.1.0"
 dependencies = [
  "dart2elpian",
+ "elpian-crypto",
  "elpian-vm",
  "js2elpian",
  "serde",
@@ -59,6 +64,7 @@ dependencies = [
 name = "elpian-host"
 version = "0.1.0"
 dependencies = [
+ "elpian-crypto",
  "elpian-vm",
  "serde",
  "serde_json",

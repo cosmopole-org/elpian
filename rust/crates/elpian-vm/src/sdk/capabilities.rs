@@ -15,7 +15,11 @@
 use std::collections::HashMap;
 
 /// A class of side effect a guest may be permitted to perform.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+// `Ord` is derived so capability sets can live in a `BTreeSet` and iterate
+// deterministically. For a fieldless enum the ordering is declaration order,
+// which is stable across runs — that matters because these sets are written
+// into manifests and package indexes that must rebuild byte-identically.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Capability {
     /// Diagnostic logging (`log`).
     Logging,

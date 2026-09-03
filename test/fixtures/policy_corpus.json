@@ -1,0 +1,153 @@
+{
+  "//": "Manifest ∩ grant conformance cases, read by BOTH languages.",
+  "//why": [
+    "The Dart client and the Rust host both resolve what a mini app holds. If",
+    "they resolved it differently, an app would hold one set of capabilities on",
+    "a phone and another on the server, and the difference would surface only as",
+    "a bug in whichever direction was more permissive.",
+    "",
+    "This file is the shared source of truth. Rust reads it in",
+    "elpian-host/tests/policy_conformance.rs; Dart reads it in",
+    "test/policy_conformance_test.dart. A case added here must pass in both.",
+    "",
+    "Capability names are wire names (Capability::as_str / ElpianCapability.wireName).",
+    "A null limit means unbounded on that axis."
+  ],
+  "cases": [
+    {
+      "name": "an empty request means everything granted",
+      "why": "An app that simply omitted the field would otherwise launch with no capabilities and fail confusingly. Least privilege applies to what an app states, not to what it forgot to state.",
+      "manifest": { "requestedCapabilities": [] },
+      "grant": { "capabilities": ["state", "logging"] },
+      "expect": { "capabilities": ["logging", "state"], "denied": [] }
+    },
+    {
+      "name": "a request narrower than the grant is honoured",
+      "why": "Least privilege: a generous grant does not push capabilities onto an app that did not ask.",
+      "manifest": { "requestedCapabilities": ["logging"] },
+      "grant": { "capabilities": ["state", "logging", "network"] },
+      "expect": { "capabilities": ["logging"], "denied": [] }
+    },
+    {
+      "name": "a request wider than the grant is cut down, and the excess is reported",
+      "why": "The security direction. The denied set exists so an app can be told exactly what it did not get.",
+      "manifest": { "requestedCapabilities": ["logging", "network", "vm_manage"] },
+      "grant": { "capabilities": ["logging"] },
+      "expect": { "capabilities": ["logging"], "denied": ["network", "vm_manage"] }
+    },
+    {
+      "name": "an unknown capability name is dropped, not rejected",
+      "why": "A manifest written against a newer Elpian must not brick the app on an older host, and dropping can only narrow what is asked for.",
+      "manifest": { "requestedCapabilities": ["logging", "telepathy"] },
+      "grant": { "capabilities": ["logging", "state"] },
+      "expect": { "capabilities": ["logging"], "denied": [] }
+    },
+    {
+      "name": "an empty grant yields nothing",
+      "manifest": { "requestedCapabilities": ["logging"] },
+      "grant": { "capabilities": [] },
+      "expect": { "capabilities": [], "denied": ["logging"] }
+    },
+    {
+      "name": "limits intersect axis by axis, tighter wins",
+      "manifest": {
+        "requestedCapabilities": [],
+        "requestedLimits": { "maxInstructions": 1000, "maxMemoryBytes": 999999 }
+      },
+      "grant": {
+        "capabilities": ["logging"],
+        "limits": { "maxInstructions": 5000, "maxMemoryBytes": 4096 }
+      },
+      "expect": {
+        "capabilities": ["logging"],
+        "denied": [],
+        "limits": { "maxInstructions": 1000, "maxMemoryBytes": 4096 }
+      }
+    },
+    {
+      "name": "a null axis means unbounded from that side, so the other wins",
+      "why": "NOT min-on-Option, which would let an app widen its budget by omitting an axis.",
+      "manifest": {
+        "requestedCapabilities": [],
+        "requestedLimits": { "maxInstructions": null, "maxMemoryBytes": 4096 }
+      },
+      "grant": {
+        "capabilities": ["logging"],
+        "limits": { "maxInstructions": 5000, "maxMemoryBytes": null }
+      },
+      "expect": {
+        "capabilities": ["logging"],
+        "denied": [],
+        "limits": { "maxInstructions": 5000, "maxMemoryBytes": 4096 }
+      }
+    },
+    {
+      "name": "null on both sides stays null",
+      "manifest": {
+        "requestedCapabilities": [],
+        "requestedLimits": { "maxInstructions": null }
+      },
+      "grant": { "capabilities": ["logging"], "limits": { "maxInstructions": null } },
+      "expect": {
+        "capabilities": ["logging"],
+        "denied": [],
+        "limits": { "maxInstructions": null }
+      }
+    },
+    {
+      "name": "no requested limits at all means the grant's budget applies",
+      "manifest": { "requestedCapabilities": [] },
+      "grant": { "capabilities": ["logging"], "limits": { "maxInstructions": 777 } },
+      "expect": {
+        "capabilities": ["logging"],
+        "denied": [],
+        "limits": { "maxInstructions": 777 }
+      }
+    },
+    {
+      "name": "hosting children needs all three of request, grant and vm_manage",
+      "manifest": { "requestedCapabilities": ["vm_manage"], "allowsChildren": true },
+      "grant": { "capabilities": ["vm_manage"], "mayHostChildren": true },
+      "expect": { "capabilities": ["vm_manage"], "denied": [], "mayHostChildren": true }
+    },
+    {
+      "name": "hosting children is refused without the grant",
+      "manifest": { "requestedCapabilities": ["vm_manage"], "allowsChildren": true },
+      "grant": { "capabilities": ["vm_manage"], "mayHostChildren": false },
+      "expect": { "capabilities": ["vm_manage"], "denied": [], "mayHostChildren": false }
+    },
+    {
+      "name": "hosting children is refused without the manifest asking",
+      "manifest": { "requestedCapabilities": ["vm_manage"], "allowsChildren": false },
+      "grant": { "capabilities": ["vm_manage"], "mayHostChildren": true },
+      "expect": { "capabilities": ["vm_manage"], "denied": [], "mayHostChildren": false }
+    },
+    {
+      "name": "hosting children is refused without vm_manage surviving the intersection",
+      "why": "The capability is the mechanism; asking and being allowed are not enough if the gate itself was not granted.",
+      "manifest": { "requestedCapabilities": ["vm_manage"], "allowsChildren": true },
+      "grant": { "capabilities": ["logging"], "mayHostChildren": true },
+      "expect": { "capabilities": [], "denied": ["vm_manage"], "mayHostChildren": false }
+    },
+    {
+      "name": "an empty request with a vm_manage grant can still host children",
+      "why": "The empty-request rule means the app is treated as requesting everything granted, so vm_manage is held.",
+      "manifest": { "requestedCapabilities": [], "allowsChildren": true },
+      "grant": { "capabilities": ["vm_manage"], "mayHostChildren": true },
+      "expect": { "capabilities": ["vm_manage"], "denied": [], "mayHostChildren": true }
+    },
+    {
+      "name": "the surface capability resolves on both sides",
+      "why": "It was missing from the Dart enum entirely while the VM had it, so godot.op and flutter.op fell through to the catch-all gate.",
+      "manifest": { "requestedCapabilities": ["surface"] },
+      "grant": { "capabilities": ["surface", "render"] },
+      "expect": { "capabilities": ["surface"], "denied": [] }
+    },
+    {
+      "name": "the server-side capabilities resolve on both sides",
+      "manifest": { "requestedCapabilities": ["server_call", "state"] },
+      "grant": { "capabilities": ["server_call", "state", "logging"] },
+      "expect": { "capabilities": ["server_call", "state"], "denied": [] }
+    }
+  ]
+}

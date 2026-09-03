@@ -30,6 +30,10 @@
 //! * [`fetch`] — performing the request the broker allowed, and auditing it.
 //! * [`pool`] — loading instances on demand, unloading them when nothing needs
 //!   them, and the cost meters.
+//! * [`policy`] — manifest ∩ grant, ported from Dart and checked against a
+//!   corpus both languages read.
+//! * [`registry`] — what apps exist, at what versions, and where their bytecode
+//!   lives.
 
 pub mod app;
 pub mod appfs;
@@ -40,7 +44,9 @@ pub mod gateway;
 pub mod httpcore;
 pub mod hostcall;
 pub mod invoke;
+pub mod policy;
 pub mod pool;
+pub mod registry;
 pub mod posture;
 pub mod runtime;
 pub mod services;
@@ -51,6 +57,8 @@ pub use hostcall::{HostCall, HostServices};
 pub use component::{ComponentPayload, PayloadError, RenderCache};
 pub use egress::{decide, DenyReason, EgressDecision};
 pub use fetch::{fetch, EgressRecord, FetchError, FetchLimits, FetchResponse};
+pub use policy::{Grant, Manifest, Policy};
+pub use registry::{AppRecord, RegistryError, RegistryStore, VersionRecord};
 pub use pool::{InstancePool, Meters, PoolConfig};
 pub use runtime::{AppRuntime, CallError, Invocation};
 pub use invoke::{invoke, InvokeLimits, Outcome};
