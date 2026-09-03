@@ -83,7 +83,7 @@ Exhaustive lists (every widget prop, every CSS property) live in the source:
 - **VM (Rust):** `rust/crates/elpian-vm/src/sdk/` — `executor.rs` (the interpreter), `compiler.rs`
   (AST→bytecode), `program.rs` (decode), `limits.rs`, `capabilities.rs`,
   `hierarchy.rs`, `lifecycle.rs`, `stdlib/mod.rs`; public API in `rust/crates/elpian-vm/src/api.rs`.
-- **VM embedding:** `rust/crates/elpian-vm/src/api/ffi.rs` (native), `rust/crates/elpian-vm/src/api/wasm.rs` (web),
+- **VM embedding:** `rust/crates/elpian-ffi/src/abi.rs` (native), `rust/crates/elpian-wasm/src/lib.rs` (web),
   `rust/crates/elpian-vm/src/bin/elpian-server.rs` (the HTTP server VM).
 - **Flutter host:** `lib/src/vm/` (widget + runtimes + host handlers),
   `lib/src/core/` (engine, registry, events, DOM), `lib/src/widgets/`,

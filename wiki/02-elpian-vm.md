@@ -218,8 +218,8 @@ isInstance isNull isNotEmpty compareTo tryNum method parentMethod superMethod ne
 
 | Surface | File | Target |
 |---|---|---|
-| Native FFI | `rust/crates/elpian-vm/src/api/ffi.rs` | Android, iOS, macOS, Linux, Windows (via `rust_builder/`) |
-| WASM | `rust/crates/elpian-vm/src/api/wasm.rs` | Web (`wasm-bindgen`) |
+| Native FFI | `rust/crates/elpian-ffi/src/abi.rs` | Android, iOS, macOS, Linux, Windows (via `rust_builder/`) |
+| WASM | `rust/crates/elpian-wasm/src/lib.rs` | Web (`wasm-bindgen`) |
 | HTTP server | `rust/crates/elpian-vm/src/bin/elpian-server.rs` | Server-side VMs, one per request |
 
 On the Flutter side these are selected by conditional import in

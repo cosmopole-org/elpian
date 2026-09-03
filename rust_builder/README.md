@@ -8,7 +8,7 @@ job is to put `libelpian_vm` where the app can load it.
 
 | Platform | Wiring | Produces |
 |---|---|---|
-| Linux | `linux/CMakeLists.txt` → `cargo build --release -p elpian-vm` | `rust/target/release/libelpian_vm.so`, bundled |
+| Linux | `linux/CMakeLists.txt` → `cargo build --release -p elpian-ffi` | `rust/target/release/libelpian_vm.so`, bundled |
 | Windows | `windows/CMakeLists.txt` → same | `rust/target/release/elpian_vm.dll`, bundled |
 | Android | `android/build.gradle` → `cargo ndk` per ABI | `build/jniLibs/<abi>/libelpian_vm.so` |
 | iOS | `ios/*.podspec` → `tool/build_apple.sh ios` | a universal `libelpian_vm.a`, linked |

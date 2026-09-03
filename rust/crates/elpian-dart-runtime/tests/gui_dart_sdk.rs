@@ -15,9 +15,9 @@
 use elpian_dart_runtime::{DartCapabilitySet, DartRuntime, ResourceMeter};
 use serde_json::Value;
 
-fn frame(app: &str) -> Value {
+fn frame(machine_id: &str, app: &str) -> Value {
     let mut rt = DartRuntime::from_flutter_app(
-        "gui",
+        machine_id,
         app,
         DartCapabilitySet::full(),
         ResourceMeter::unbounded(),
@@ -39,6 +39,7 @@ fn ops(f: &Value) -> Vec<String> {
 #[test]
 fn the_canvas_widget_paints_what_its_painter_draws() {
     let f = frame(
+        "gui_canvas_ops",
         r#"
 import 'gui.dart';
 
@@ -72,6 +73,7 @@ fn canvas_drawing_is_offset_into_the_widgets_own_box() {
     // window regardless of where it was laid out — which looks fine in a
     // full-screen test and wrong in every real layout.
     let f = frame(
+        "gui_canvas_offset",
         r#"
 import 'gui.dart';
 
@@ -106,6 +108,7 @@ void main() => runApp(Shifted());
 #[test]
 fn the_theme_is_shared_and_replaceable() {
     let f = frame(
+        "gui_theme",
         r#"
 import 'gui.dart';
 
