@@ -289,3 +289,148 @@ fn hibernation_can_be_turned_off() {
     assert!(parked.is_empty());
     assert_eq!(runtime.pool().hibernated(), 0);
 }
+
+// ---- The maintenance sweep -------------------------------------------------
+
+#[test]
+fn the_maintenance_sweep_parks_then_unloads_without_being_asked() {
+    // Both halves were implemented with nothing calling them on a clock. An
+    // instance nothing has asked for is holding memory for nobody, and "when
+    // the next request happens to arrive" is not a schedule.
+    let runtime = AppRuntime::new();
+    assert!(runtime.register(
+        AppDefinition::new("swept")
+            .with_capabilities(vec![Capability::State])
+            .with_function("loadCount", FunctionKind::Action, counting_module())
+    ));
+    runtime.call("swept", "loadCount", &json!(null)).unwrap();
+    assert_eq!(runtime.pool().loaded(), 1);
+
+    let maintenance = elpian_host::pool::PoolMaintenance::start(
+        std::sync::Arc::clone(runtime.pool()),
+        PoolConfig {
+            // Everything idle parks and is unloaded on the first pass.
+            hibernate_after: Some(Duration::ZERO),
+            idle_ttl: Duration::ZERO,
+            sweep_interval: Duration::from_millis(20),
+            ..PoolConfig::default()
+        },
+    );
+
+    let started = std::time::Instant::now();
+    while runtime.pool().loaded() > 0 && started.elapsed() < Duration::from_secs(5) {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    maintenance.stop();
+
+    assert_eq!(
+        runtime.pool().loaded(),
+        0,
+        "the sweep unloaded an instance nothing was using"
+    );
+    // And the app still works — the next call simply loads it again.
+    assert!(
+        runtime
+            .call("swept", "loadCount", &json!(null))
+            .unwrap()
+            .cold_start
+    );
+}
+
+#[test]
+fn the_sweep_stops_when_its_handle_is_dropped() {
+    let runtime = AppRuntime::new();
+    let maintenance = elpian_host::pool::PoolMaintenance::start(
+        std::sync::Arc::clone(runtime.pool()),
+        PoolConfig {
+            sweep_interval: Duration::from_millis(10),
+            ..PoolConfig::default()
+        },
+    );
+    // `stop` joins the thread, so returning from it proves the loop exited
+    // rather than being left running behind the test.
+    maintenance.stop();
+}
+
+// ---- Meter persistence -----------------------------------------------------
+
+#[test]
+fn meters_survive_a_restart() {
+    // Meters are what an operator bills and throttles on. Losing them on a
+    // restart is not cosmetic: an app that had spent 95% of its quota comes
+    // back at 0% and the ladder starts again from `serve`. A restart must not
+    // be a way to reset a budget.
+    let dir = std::env::temp_dir().join(format!("elpian-meters-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+
+    let before = {
+        let runtime = AppRuntime::with_data_root(&dir);
+        assert!(runtime.register(
+            AppDefinition::new("billed")
+                .with_capabilities(vec![Capability::State])
+                .with_function("loadCount", FunctionKind::Action, counting_module())
+        ));
+        for _ in 0..3 {
+            runtime.call("billed", "loadCount", &json!(null)).unwrap();
+        }
+        runtime.pool().meters.flush().expect("meters written");
+        runtime.meters("billed")
+    };
+    assert_eq!(before.invocations, 3);
+
+    // A fresh runtime over the same data root — a restart.
+    let after = AppRuntime::with_data_root(&dir).meters("billed");
+    assert_eq!(after.invocations, 3, "the count came back");
+    assert_eq!(after.cold_starts, before.cold_starts);
+    assert!(after.instructions > 0, "and so did the instruction total");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn an_unreadable_meter_file_does_not_stop_the_host_starting() {
+    // A host that will not start because it cannot read last week's counters is
+    // worse than one that starts with them at zero.
+    let dir = std::env::temp_dir().join(format!("elpian-meters-bad-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("meters.json"), b"{ this is not json").unwrap();
+
+    let runtime = AppRuntime::with_data_root(&dir);
+    assert_eq!(runtime.meters("anything").invocations, 0);
+
+    // And it still works from there.
+    assert!(runtime.register(
+        AppDefinition::new("fresh")
+            .with_capabilities(vec![Capability::State])
+            .with_function("loadCount", FunctionKind::Action, counting_module())
+    ));
+    runtime.call("fresh", "loadCount", &json!(null)).unwrap();
+    assert_eq!(runtime.meters("fresh").invocations, 1);
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn storage_is_read_when_asked_rather_than_restored() {
+    // Storage is a *level*, not an accumulated total. Restoring last run's
+    // figure would report something with no relation to what is on disk now.
+    let dir = std::env::temp_dir().join(format!("elpian-meters-level-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("meters.json"),
+        br#"{"schema":1,"apps":{"app":{"invocations":5,"storageBytes":99999}}}"#,
+    )
+    .unwrap();
+
+    let runtime = AppRuntime::with_data_root(&dir);
+    let meters = runtime.meters("app");
+    assert_eq!(meters.invocations, 5, "accumulated totals are restored");
+    assert_eq!(
+        meters.storage_bytes, 0,
+        "the level is read from the store, which is empty"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

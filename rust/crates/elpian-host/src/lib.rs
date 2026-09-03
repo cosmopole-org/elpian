@@ -65,7 +65,7 @@ pub use hostcall::{HostCall, HostServices};
 pub use identity::{AdminAudit, AdminEvent, AuthProvider, Identity, OperatorAuth};
 pub use invoke::{invoke, InvokeLimits, Outcome};
 pub use policy::{Grant, Manifest, Policy};
-pub use pool::{InstancePool, Meters, PoolConfig};
+pub use pool::{InstancePool, Meters, PoolConfig, PoolMaintenance};
 pub use posture::{server_capabilities, SERVER_DENIED, SERVER_GRANTABLE};
 pub use quota::{Admission, Quota, QuotaEnforcer, Stage};
 pub use registry::{AppRecord, RegistryError, RegistryStore, VersionRecord};

@@ -36,6 +36,15 @@ const MAX_CALL_DEPTH: u32 = 8;
 /// what matters is that one app cannot grow it without limit.
 const DEFAULT_RENDER_CACHE_ENTRIES: usize = 1024;
 
+/// How many frames one streaming render may emit.
+///
+/// The dead-reader signal lets a *well-behaved* component stop when nobody is
+/// listening. A component that ignores it, or one with a bug, would emit
+/// forever into a reader that is still there — so the host caps it too. Past
+/// the cap the sink reports the reader as gone, which is the signal a guest
+/// already has to handle, rather than a new failure mode for it to learn.
+const MAX_STREAM_FRAMES: usize = 10_000;
+
 /// Why an invocation could not be attempted.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CallError {
@@ -122,6 +131,10 @@ impl AppRuntime {
 
     pub fn with_data_root(root: impl Into<PathBuf>) -> Arc<AppRuntime> {
         let root = root.into();
+        // Counters live beside the app data they describe, so moving one moves
+        // the other.
+        let _ = std::fs::create_dir_all(&root);
+        let meters = crate::pool::MeterStore::persisted(root.join("meters.json"));
         Arc::new(AppRuntime {
             apps: RwLock::new(HashMap::new()),
             state: StateStore::default(),
@@ -129,7 +142,7 @@ impl AppRuntime {
             data_root: Some(root),
             limits: RwLock::new(InvokeLimits::default()),
             cache: RenderCache::new(DEFAULT_RENDER_CACHE_ENTRIES),
-            pool: InstancePool::new(PoolConfig::default()),
+            pool: InstancePool::with_meters(PoolConfig::default(), meters),
             quotas: QuotaEnforcer::new(),
         })
     }
@@ -334,7 +347,16 @@ impl AppRuntime {
         // Counts frames so a component that neither emitted nor returned a
         // payload can be told apart from one that streamed successfully.
         let mut emitted = 0usize;
+        let mut over_budget = false;
         let mut counting_sink = |frame: &Value| {
+            if emitted >= MAX_STREAM_FRAMES {
+                over_budget = true;
+                // Reported as "the reader is gone" rather than a new signal: a
+                // guest already has to handle that answer, and inventing a
+                // second one would mean components that handled the first
+                // correctly still looped forever on this.
+                return false;
+            }
             emitted += 1;
             sink(frame)
         };
@@ -379,6 +401,12 @@ impl AppRuntime {
                 cache_hit: false,
             }
         });
+
+        if over_budget {
+            eprintln!(
+                "[elpian] {app_id}/{function} hit the {MAX_STREAM_FRAMES}-frame stream budget"
+            );
+        }
 
         match invocation.outcome {
             Outcome::Returned(value) => {

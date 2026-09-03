@@ -96,6 +96,15 @@ fn main() {
         .queue
         .unwrap_or(elpian_host::httpcore::DEFAULT_QUEUE_PER_WORKER * config.workers.max(1));
     println!("[elpian] {} workers, queue depth {queue}", config.workers);
+    // Keep the pool tidy: park idle instances, then unload ones that stayed
+    // idle. Without this both are implemented and nothing calls them, so an
+    // instance nothing has asked for holds memory until the process exits.
+    let maintenance = elpian_host::pool::PoolMaintenance::start(
+        Arc::clone(runtime.pool()),
+        elpian_host::pool::PoolConfig::default(),
+    );
+    std::mem::forget(maintenance);
+
     let handle = elpian_host::httpcore::serve_with_queue(
         listener,
         config.workers,

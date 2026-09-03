@@ -80,6 +80,8 @@ pub struct PoolConfig {
     /// The most warm instances any one function may hold, so a single hot
     /// function cannot evict every other app's.
     pub max_per_function: usize,
+    /// How often the maintenance sweep runs.
+    pub sweep_interval: Duration,
 }
 
 impl Default for PoolConfig {
@@ -89,6 +91,7 @@ impl Default for PoolConfig {
             hibernate_after: Some(Duration::from_secs(30)),
             max_instances: 256,
             max_per_function: 8,
+            sweep_interval: Duration::from_secs(10),
         }
     }
 }
@@ -113,9 +116,103 @@ pub struct Meters {
 #[derive(Clone, Default)]
 pub struct MeterStore {
     by_app: Arc<Mutex<HashMap<String, Meters>>>,
+    /// Where the counters are written, if anywhere.
+    ///
+    /// Meters are what an operator bills and throttles on, so losing them on a
+    /// restart is not a cosmetic gap: an app that had used 95% of its quota
+    /// comes back at 0% and the ladder starts again from `serve`. A restart
+    /// should not be a way to reset a budget.
+    path: Option<Arc<std::path::PathBuf>>,
 }
 
 impl MeterStore {
+    /// A store backed by a file, loading whatever is already there.
+    ///
+    /// A file that is missing or unreadable yields an empty store rather than
+    /// an error: a host that will not start because it cannot read last week's
+    /// counters is worse than one that starts with them at zero, and the
+    /// operator sees the diagnostic either way.
+    pub fn persisted(path: impl Into<std::path::PathBuf>) -> MeterStore {
+        let path = path.into();
+        let by_app = match std::fs::read_to_string(&path) {
+            Ok(raw) => Self::parse(&raw).unwrap_or_else(|error| {
+                eprintln!(
+                    "[elpian] meters at {} are unreadable ({error}); starting from zero",
+                    path.display()
+                );
+                HashMap::new()
+            }),
+            Err(_) => HashMap::new(),
+        };
+        MeterStore {
+            by_app: Arc::new(Mutex::new(by_app)),
+            path: Some(Arc::new(path)),
+        }
+    }
+
+    fn parse(raw: &str) -> Result<HashMap<String, Meters>, String> {
+        let value: serde_json::Value = serde_json::from_str(raw).map_err(|e| e.to_string())?;
+        let apps = value["apps"].as_object().ok_or("no apps object")?;
+        Ok(apps
+            .iter()
+            .map(|(id, m)| {
+                let u = |key: &str| m[key].as_u64().unwrap_or(0);
+                (
+                    id.clone(),
+                    Meters {
+                        invocations: u("invocations"),
+                        cold_starts: u("coldStarts"),
+                        instructions: u("instructions"),
+                        compute_ms: u("computeMs"),
+                        peak_memory_bytes: u("peakMemoryBytes"),
+                        // Storage is a *level* read from the state store when
+                        // asked, not an accumulated total, so it is never
+                        // restored — restoring it would report a figure that
+                        // has nothing to do with what is on disk now.
+                        storage_bytes: 0,
+                    },
+                )
+            })
+            .collect())
+    }
+
+    /// Write the counters out. Atomic, for the same reason the registry index
+    /// is: a crash mid-write must leave the old figures, not half of them.
+    pub fn flush(&self) -> Result<(), String> {
+        let Some(path) = &self.path else {
+            return Ok(());
+        };
+        let map = self.by_app.lock().unwrap_or_else(|p| p.into_inner());
+        let apps: serde_json::Map<String, serde_json::Value> = map
+            .iter()
+            .map(|(id, m)| {
+                (
+                    id.clone(),
+                    serde_json::json!({
+                        "invocations": m.invocations,
+                        "coldStarts": m.cold_starts,
+                        "instructions": m.instructions,
+                        "computeMs": m.compute_ms,
+                        "peakMemoryBytes": m.peak_memory_bytes,
+                    }),
+                )
+            })
+            .collect();
+        let rendered =
+            serde_json::to_string_pretty(&serde_json::json!({ "schema": 1, "apps": apps }))
+                .map_err(|e| e.to_string())?;
+        drop(map);
+
+        let temp = path.with_extension(format!("tmp{}", std::process::id()));
+        {
+            use std::io::Write as _;
+            let mut file = std::fs::File::create(&temp).map_err(|e| e.to_string())?;
+            file.write_all(rendered.as_bytes())
+                .map_err(|e| e.to_string())?;
+            file.sync_all().map_err(|e| e.to_string())?;
+        }
+        std::fs::rename(&temp, path.as_path()).map_err(|e| e.to_string())
+    }
     pub fn record(&self, app: &str, sample: impl FnOnce(&mut Meters)) {
         let mut map = self.by_app.lock().unwrap_or_else(|p| p.into_inner());
         sample(map.entry(app.to_string()).or_default());
@@ -207,10 +304,15 @@ pub struct InstancePool {
 
 impl InstancePool {
     pub fn new(config: PoolConfig) -> Arc<InstancePool> {
+        Self::with_meters(config, MeterStore::default())
+    }
+
+    /// A pool whose counters are the ones given — a persisted store, typically.
+    pub fn with_meters(config: PoolConfig, meters: MeterStore) -> Arc<InstancePool> {
         Arc::new(InstancePool {
             config,
             instances: Mutex::new(HashMap::new()),
-            meters: MeterStore::default(),
+            meters,
         })
     }
 
@@ -538,4 +640,74 @@ fn oldest_idle(list: &[Instance]) -> Option<usize> {
         .filter_map(|(i, inst)| inst.idle_since.map(|since| (i, since)))
         .min_by_key(|(_, since)| *since)
         .map(|(i, _)| i)
+}
+
+/// A background thread that keeps the pool tidy.
+///
+/// Both halves of the work — parking idle instances, then unloading ones that
+/// stayed idle — were implemented and tested with nothing calling them on a
+/// clock. An instance nothing has asked for is holding memory for nobody, and
+/// "when the next request happens to arrive" is not a schedule.
+///
+/// Dropping the handle stops the sweep.
+pub struct PoolMaintenance {
+    running: Arc<std::sync::atomic::AtomicBool>,
+    handle: Option<std::thread::JoinHandle<()>>,
+}
+
+impl PoolMaintenance {
+    pub fn start(pool: Arc<InstancePool>, config: PoolConfig) -> PoolMaintenance {
+        let running = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let flag = Arc::clone(&running);
+        let handle = std::thread::Builder::new()
+            .name("elpian-pool".into())
+            .spawn(move || {
+                while flag.load(Ordering::Acquire) {
+                    // Park first, then evict. In that order an instance gets a
+                    // chance to be parked and woken cheaply before it is
+                    // unloaded — the reverse would unload instances that were
+                    // about to be useful.
+                    pool.hibernate_idle(&config);
+                    pool.evict_idle_with(&config);
+
+                    // Persist the counters on the same clock. An app that had
+                    // spent 95% of its quota must not come back at 0% after a
+                    // restart — a restart should not be a way to reset a budget.
+                    if let Err(error) = pool.meters.flush() {
+                        eprintln!("[elpian] could not persist meters: {error}");
+                    }
+
+                    // Slept in slices so a stop is observed promptly however
+                    // long the interval is.
+                    let mut slept = Duration::ZERO;
+                    while slept < config.sweep_interval && flag.load(Ordering::Acquire) {
+                        let slice = config.sweep_interval.min(Duration::from_millis(200));
+                        std::thread::sleep(slice);
+                        slept += slice;
+                    }
+                }
+            })
+            .expect("pool maintenance thread should spawn");
+        PoolMaintenance {
+            running,
+            handle: Some(handle),
+        }
+    }
+
+    pub fn stop(mut self) {
+        self.shutdown();
+    }
+
+    fn shutdown(&mut self) {
+        self.running.store(false, Ordering::Release);
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+        }
+    }
+}
+
+impl Drop for PoolMaintenance {
+    fn drop(&mut self) {
+        self.shutdown();
+    }
 }

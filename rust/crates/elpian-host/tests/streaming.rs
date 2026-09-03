@@ -300,3 +300,55 @@ fn a_stream_of_an_unknown_function_reports_the_error_in_band() {
 
     server.stop();
 }
+
+#[test]
+fn a_component_that_emits_without_bound_is_capped() {
+    // The dead-reader signal lets a well-behaved component stop when nobody is
+    // listening. One that ignores it, or has a bug, would emit forever into a
+    // reader that *is* still there — so the host caps it too, and reports the
+    // cap through the signal a guest already handles rather than inventing a
+    // second one.
+    let runtime = AppRuntime::new();
+    assert!(runtime.register(
+        AppDefinition::new("firehose")
+            .with_capabilities(vec![Capability::ServerCall])
+            .with_function(
+                "Endless",
+                FunctionKind::Component,
+                module(vec![func_def(
+                    "Endless",
+                    vec![],
+                    vec![
+                        json!({ "type": "definition", "data": {
+                            "leftSide": { "type": "identifier", "data": { "name": "i" } },
+                            "rightSide": i64v(0) } }),
+                        json!({ "type": "loopStmt", "data": {
+                            "condition": { "type": "arithmetic", "data": {
+                                "operation": "<",
+                                "operand1": { "type": "identifier", "data": { "name": "i" } },
+                                "operand2": i64v(1000000) } },
+                            // Never checks the return value: this is the
+                            // component that ignores the signal.
+                            "body": [ host_call(
+                                "stream.emit",
+                                vec![json!({ "type": "object", "data": { "value": {
+                                    "action": strv("setView") } } })],
+                            ) ] } }),
+                        ret(strv("done")),
+                    ],
+                )]),
+            )
+    ));
+
+    let mut frames = 0usize;
+    let _ = runtime.render_stream("firehose", "Endless", &json!(null), None, &mut |_| {
+        frames += 1;
+        true
+    });
+
+    assert!(frames > 0, "it did stream");
+    assert!(
+        frames <= 10_000,
+        "the host capped it at the frame budget, got {frames}"
+    );
+}

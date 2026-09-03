@@ -138,8 +138,8 @@ currently *every* call.
       the cost of masking, ping/pong and a close handshake. This is the piece
       that was expected to reverse the std-only runtime decision; it did not,
       because the requirement turned out not to need a WebSocket at all.
-- [ ] Frame budgets — a component can emit without bound. The dead-reader
-      signal lets a well-behaved one stop; a host-side cap does not exist.
+- [x] Frame budgets — a stream is capped at 10,000 frames, reported through the
+      dead-reader signal a guest already handles rather than a new one
 
 ## P3 — Registry + hosting (S5) — **done, with gaps**
 
@@ -185,7 +185,11 @@ Brought forward because "load on demand, unload when not needed" is requirement
       per-turn deadline (one stretch of execution), and now a per-*invocation*
       deadline. The middle one alone is not enough: a guest making host calls
       starts a new turn each time, so a loop of quick calls resets it forever
-- [ ] Meter persistence across restart — **not started**; counters are in memory
+- [x] Meter persistence — counters live beside the app data and are written
+      atomically on the maintenance sweep. A restart must not be a way to reset
+      a quota: an app at 95% would otherwise come back at 0% and the ladder
+      would start again from `serve`. Storage is deliberately *not* restored —
+      it is a level read from the store, not an accumulated total.
 
 ### Benchmark, cold-per-call vs warm pool (2-core, debug)
 
@@ -313,21 +317,17 @@ Ordered by how likely it is to matter.
    `IslandBuilder`s are not yet substituted into the rendered tree.
 3. **No TLS.** `https` from a server function is refused, not downgraded. Needs
    a maintainer decision on a crate.
-2. **Meters and audit do not survive a restart.**
+2. **The admin audit does not survive a restart.** Meters now do; the audit is
+   still in memory only.
 3. **`elpian-server.rs` still exists**, unused by the new path, and the `elpian`
    CLI does not call `elpian-pkg`.
-4. **Frame budgets for streaming** — a component can emit without bound. The
-   dead-reader signal lets a well-behaved one stop; a host-side cap does not
-   exist.
-5. **Nothing drives `hibernate_idle` or `evict_idle` on a timer.** Both are
-   implemented and tested; `elpiand` does not yet run a sweep.
-6. **ed25519**, gated on whether third-party publishing is in scope.
+4. **ed25519**, gated on whether third-party publishing is in scope.
 
 ## Verification as of the last commit
 
 | | |
 |---|---|
-| `cargo test --workspace` | 602 passed, 0 failed |
+| `cargo test --workspace` | 608 passed, 0 failed |
 | `flutter test` | 317 passed |
 | `flutter analyze lib/` | clean |
 | `scripts/e2e-fullstack.sh` | all checks pass |
