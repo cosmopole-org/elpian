@@ -13,7 +13,13 @@ library;
 
 import 'dart:convert';
 
-import '../ffi/api.dart';
+// Conditional, exactly as `elpian_vm.dart` and the bindings import below are.
+// A plain import here compiles fine everywhere the analyzer and `flutter test`
+// run — they are all native — and breaks only the web build, where dart2js
+// refuses `dart:ffi`. That is the whole gap: this line reached the web through
+// `elpian_governance.dart` -> `mini_app_host.dart` -> `elpian_vm.dart`, and no
+// local gate compiles for the web.
+import '../ffi/api.dart' if (dart.library.js_interop) '../ffi/api_web.dart';
 import 'governor.dart';
 import 'models.dart';
 import 'native_bindings.dart' if (dart.library.js_interop) 'web_bindings.dart'

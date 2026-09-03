@@ -757,9 +757,10 @@ fn cli_root() -> PathBuf {
             .parent()
             .and_then(|p| p.parent())
             .and_then(|p| p.parent())
-            && dir.join("elpian_client").is_dir() {
-                return dir.to_path_buf();
-            }
+            && dir.join("elpian_client").is_dir()
+        {
+            return dir.to_path_buf();
+        }
     }
     baked
 }
