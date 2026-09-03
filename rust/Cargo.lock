@@ -71,6 +71,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "elpian-pkg"
+version = "0.1.0"
+dependencies = [
+ "elpian-crypto",
+ "serde_json",
+]
+
+[[package]]
 name = "elpian-runtime"
 version = "0.1.0"
 dependencies = [
