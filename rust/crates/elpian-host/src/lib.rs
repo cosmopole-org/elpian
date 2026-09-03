@@ -27,6 +27,7 @@
 //! * [`component`] — the payload a server component returns, and the cache in
 //!   front of it.
 //! * [`egress`] — the broker: the only way out, and the rules it applies.
+//! * [`fetch`] — performing the request the broker allowed, and auditing it.
 //! * [`pool`] — loading instances on demand, unloading them when nothing needs
 //!   them, and the cost meters.
 
@@ -34,6 +35,7 @@ pub mod app;
 pub mod appfs;
 pub mod component;
 pub mod egress;
+pub mod fetch;
 pub mod gateway;
 pub mod httpcore;
 pub mod hostcall;
@@ -48,6 +50,7 @@ pub use app::{AppDefinition, FunctionKind, NetworkMode};
 pub use hostcall::{HostCall, HostServices};
 pub use component::{ComponentPayload, PayloadError, RenderCache};
 pub use egress::{decide, DenyReason, EgressDecision};
+pub use fetch::{fetch, EgressRecord, FetchError, FetchLimits, FetchResponse};
 pub use pool::{InstancePool, Meters, PoolConfig};
 pub use runtime::{AppRuntime, CallError, Invocation};
 pub use invoke::{invoke, InvokeLimits, Outcome};

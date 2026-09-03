@@ -61,6 +61,7 @@ impl Fixture {
                 function: String::new(),
                 declared_secrets: vec!["apiKey".into()],
                 fs: None,
+                network: elpian_host::app::NetworkMode::Closed,
             },
         }
     }

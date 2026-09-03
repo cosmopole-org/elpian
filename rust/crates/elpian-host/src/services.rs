@@ -22,7 +22,9 @@ use serde_json::{json, Value};
 
 use crate::app::FunctionKind;
 use crate::appfs::AppFs;
+use crate::app::NetworkMode;
 use crate::component::RenderCache;
+use crate::fetch::{fetch, EgressRecord, FetchLimits};
 use crate::hostcall::{HostCall, HostServices};
 use crate::state::{SecretStore, StateStore};
 
@@ -49,6 +51,10 @@ pub struct ServerContext {
     pub declared_secrets: Vec<String>,
     /// The app's private directory, if it was given one.
     pub fs: Option<AppFs>,
+    /// The app's egress posture. Present even for a closed app, so the broker
+    /// is asked and an attempt is *recorded* rather than the call vanishing —
+    /// "this app tried to reach out" is worth knowing.
+    pub network: NetworkMode,
 }
 
 /// Diagnostics a host collects from an invocation.
@@ -58,6 +64,8 @@ pub struct InvocationLog {
     pub guest: Vec<String>,
     /// Lines the host wrote about the guest.
     pub host: Vec<String>,
+    /// Every egress decision this invocation caused, allowed or denied.
+    pub egress: Vec<EgressRecord>,
 }
 
 /// The host side of one invocation.
@@ -96,6 +104,47 @@ impl ServerServices {
     /// Let this invocation invalidate cached renders of its own app.
     pub fn set_cache(&mut self, cache: RenderCache) {
         self.cache = Some(cache);
+    }
+
+    /// Outbound HTTP, through the broker.
+    ///
+    /// A guest reaching here already holds `Capability::Network`, which a
+    /// closed app never does — so this is the *brokered* and *open* path. The
+    /// broker is still asked, because holding the capability is not the same
+    /// as being allowed to reach a particular address.
+    fn service_fetch(&mut self, call: &HostCall) -> Value {
+        let Some(url) = call.str_arg(0) else {
+            return Value::Null;
+        };
+        let app = self.ctx.app.clone();
+        let function = self.ctx.function.clone();
+        let mut records = Vec::new();
+
+        let result = fetch(
+            &self.ctx.network,
+            url,
+            &FetchLimits::default(),
+            |record| records.push(record),
+            &app,
+            &function,
+        );
+        self.log.egress.extend(records);
+
+        match result {
+            Ok(response) => json!({
+                "status": response.status,
+                "body": response.body,
+            }),
+            Err(error) => {
+                self.log
+                    .host
+                    .push(format!("net.fetch refused: {}", error.audit_detail()));
+                // An error is a null with a message rather than a thrown value:
+                // the guest subset has no try/catch, so an error has to be a
+                // value the guest can test.
+                json!({ "error": error.guest_message() })
+            }
+        }
     }
 
     fn service_kv(&mut self, call: &HostCall) -> Value {
@@ -282,6 +331,8 @@ impl HostServices for ServerServices {
                     None => json!(0),
                 }
             }
+
+            "net.fetch" => self.service_fetch(call),
 
             api if api.starts_with("kv.") => self.service_kv(call),
             api if api.starts_with("fs.") => self.service_fs(call),

@@ -250,6 +250,7 @@ impl AppRuntime {
                 function: function.to_string(),
                 declared_secrets: app.declared_secrets.clone(),
                 fs,
+                network: app.network.clone(),
             };
             let mut services = ServerServices::new(ctx, self.state.clone(), self.secrets.clone());
             services.set_invoker(Box::new(NestedInvoker {
