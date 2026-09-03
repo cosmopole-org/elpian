@@ -9,7 +9,6 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 
 use elpian_vm::api;
@@ -18,8 +17,8 @@ use serde_json::{json, Value};
 use crate::app::{AppDefinition, FunctionKind};
 use crate::appfs::AppFs;
 use crate::component::{ComponentPayload, RenderCache};
+use crate::pool::{InstancePool, Meters, PoolConfig};
 use crate::invoke::{invoke, InvokeLimits, Outcome};
-use crate::posture::server_capabilities;
 use crate::services::{InvocationLog, ServerContext, ServerServices};
 use crate::state::{SecretStore, StateStore};
 
@@ -90,10 +89,7 @@ pub struct AppRuntime {
     data_root: Option<PathBuf>,
     limits: InvokeLimits,
     cache: RenderCache,
-    /// Makes each instance's machine id unique. Ids must not be reused while a
-    /// previous instance could still be finishing: the registry is keyed by id,
-    /// and a reused one would address the wrong instance.
-    next_instance: AtomicU64,
+    pool: Arc<InstancePool>,
 }
 
 impl AppRuntime {
@@ -105,7 +101,7 @@ impl AppRuntime {
             data_root: None,
             limits: InvokeLimits::default(),
             cache: RenderCache::new(DEFAULT_RENDER_CACHE_ENTRIES),
-            next_instance: AtomicU64::new(1),
+            pool: InstancePool::new(PoolConfig::default()),
         })
     }
 
@@ -118,8 +114,21 @@ impl AppRuntime {
             data_root: Some(root),
             limits: InvokeLimits::default(),
             cache: RenderCache::new(DEFAULT_RENDER_CACHE_ENTRIES),
-            next_instance: AtomicU64::new(1),
+            pool: InstancePool::new(PoolConfig::default()),
         })
+    }
+
+    pub fn pool(&self) -> &Arc<InstancePool> {
+        &self.pool
+    }
+
+    /// This app's accumulated cost meters.
+    pub fn meters(&self, app_id: &str) -> Meters {
+        let mut meters = self.pool.meters.get(app_id);
+        // Storage is a level held elsewhere, so it is read at the moment it is
+        // asked for rather than accumulated.
+        meters.storage_bytes = self.state.bytes_used(app_id) as u64;
+        meters
     }
 
     pub fn cache(&self) -> &RenderCache {
@@ -278,32 +287,55 @@ impl AppRuntime {
         Ok(invocation)
     }
 
-    /// Create, govern, run and destroy one instance.
+    /// Lease an instance, run `body` against it, and hand it back.
     ///
-    /// The single place an instance's lifetime is decided, so the warm pool
-    /// replaces this function rather than every caller. Governance is applied
-    /// *before* `body` runs — there is no window in which guest code executes
-    /// ungoverned.
-    fn with_instance<R>(
+    /// The single place an instance's lifetime is decided. Governance is
+    /// applied by the pool before `body` runs — on creation *and* on reuse,
+    /// because an app's grant can change between calls and a warm instance
+    /// carrying the old one would be a way to keep a capability after it was
+    /// revoked.
+    ///
+    /// An instance that trapped is discarded rather than reused: whatever left
+    /// it in that state is still in its module scope, and handing it to the
+    /// next caller would spread one call's failure across every later one.
+    fn with_instance(
         &self,
         app: &AppDefinition,
         def: &crate::app::FunctionDef,
-        body: impl FnOnce(&str) -> R,
-    ) -> R {
-        let machine_id = format!(
-            "{}::{}::{}",
-            app.id,
-            def.name,
-            self.next_instance.fetch_add(1, Ordering::Relaxed)
-        );
+        body: impl FnOnce(&str) -> Invocation,
+    ) -> Invocation {
+        let lease = self.pool.acquire(app, def);
+        let machine_id = lease.machine_id.clone();
+        let cold_start = lease.cold_start;
 
-        api::create_vm_from_bytecode(machine_id.clone(), def.bytecode.clone());
-        api::set_capabilities(&machine_id, server_capabilities(&app.effective_capabilities()));
-        api::set_limits(&machine_id, app.limits.clone());
+        let before = api::usage(&machine_id).map(|u| u.instructions).unwrap_or(0);
+        let started = std::time::Instant::now();
 
-        let result = body(&machine_id);
-        api::destroy_vm(machine_id);
-        result
+        let mut invocation = body(&machine_id);
+        invocation.cold_start = cold_start;
+
+        let usage = api::usage(&machine_id);
+        let elapsed_ms = started.elapsed().as_millis() as u64;
+        self.pool.meters.record(&app.id, |m| {
+            m.invocations += 1;
+            if cold_start {
+                m.cold_starts += 1;
+            }
+            m.compute_ms += elapsed_ms;
+            if let Some(usage) = &usage {
+                m.instructions += usage.instructions.saturating_sub(before);
+                m.peak_memory_bytes = m.peak_memory_bytes.max(usage.peak_memory_bytes);
+            }
+        });
+
+        let healthy = matches!(invocation.outcome, Outcome::Returned(_))
+            && api::trap_reason(&machine_id).is_none();
+        if healthy && !def.stateless {
+            lease.release();
+        } else {
+            lease.discard();
+        }
+        invocation
     }
 }
 

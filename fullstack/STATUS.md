@@ -142,15 +142,47 @@ currently *every* call.
 - [ ] Flutter shell: app-scoped manifest, artifact hash verification, net policy
 - [ ] Tests
 
-## P4 — Serverless + meters (S4)
+## P4 — Serverless + meters (S4) — **core done, brought forward**
 
-- [ ] Instance pool, supervisor node adoption, policy applied before first run
-- [ ] Lifecycle: Cold/Loading/Warm/Busy/Hibernate/Failed + transitions
-- [ ] Bounded queues, scale-up, cold-start attribution
-- [ ] Three deadline layers
-- [ ] `CostSample` → rolling meters, persisted
-- [ ] Quota ladder: throttle → strangle → drain → suspend
-- [ ] Tests + benchmarks
+Brought forward because "load on demand, unload when not needed" is requirement
+3 in the user's own words, and every call was cold until this landed.
+
+- [x] Instance pool with warm reuse; policy applied on creation **and on reuse**
+      (a grant can change between calls; a warm instance carrying the old one
+      would be a way to keep a revoked capability)
+- [x] Cold-start attribution (`coldStart` on every response)
+- [x] Idle TTL eviction, per-function share cap, host-wide cap, `drain_app`
+- [x] Trapped instances discarded rather than reused
+- [x] `stateless` opt-out per function, with the reasoning written down
+- [x] Cost meters: invocations, cold starts, instructions, compute ms, peak
+      memory, storage — **finding F5 said this did not exist anywhere**
+- [x] Tests (7) + benchmark
+- [ ] Supervisor node adoption into the VM tree — **not started**; the pool
+      tracks instances itself and does not yet hang them under a per-app node,
+      so `subtree_usage` and `destroy_vm_tree` are not yet doing this work
+- [ ] Hibernate/wake — **not started**
+- [ ] Three deadline layers — **not started** (S0's supervisor has the
+      per-turn one; per-invocation and per-app are not wired)
+- [ ] Quota ladder: throttle → strangle → drain → suspend — **not started**;
+      meters are collected, nothing acts on them
+- [ ] Meter persistence across restart — **not started**
+
+### Benchmark, cold-per-call vs warm pool (2-core, debug)
+
+| Metric | Cold per call | Warm pool |
+|---|---|---|
+| Invoke latency p50 | 0.64ms | **0.52ms** |
+| Invoke latency p99 | 1.02ms | **0.84ms** |
+| Throughput @ 1 | 1373 req/s | **1509 req/s** |
+| Throughput @ 8 | 2861 req/s | **3105 req/s** |
+| Throughput @ 64 | 2812 req/s | **2926 req/s** |
+
+An 18% latency improvement is *modest on purpose to report honestly*: the
+benchmark's module is three lines, so its initialisation is nearly free and
+there is little for warm reuse to save. The saving scales with what a module
+does at load time — a real one building a lookup table or parsing a template
+pays that on every cold call and none of the warm ones. The number to watch
+after a realistic sample lands is this one.
 
 ## P5 — The proxy (S3) — **decision core done, brought forward**
 

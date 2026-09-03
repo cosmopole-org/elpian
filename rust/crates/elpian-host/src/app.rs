@@ -44,6 +44,14 @@ pub struct FunctionDef {
     pub name: String,
     pub kind: FunctionKind,
     pub bytecode: Vec<u8>,
+    /// Whether this function must get a fresh instance every call.
+    ///
+    /// The default is reuse, which is what makes a warm pool worth having and
+    /// what guest authors expect. But module-level state survives reuse, so a
+    /// function that stashes anything derived from `ctx.user` in a module
+    /// variable has a path by which one caller's data reaches another. Setting
+    /// this is how such a function says so.
+    pub stateless: bool,
 }
 
 /// Whether an app may reach anything beyond its own two halves.
@@ -127,8 +135,17 @@ impl AppDefinition {
                 name,
                 kind,
                 bytecode,
+                stateless: false,
             },
         );
+        self
+    }
+
+    /// Mark an already-added function as needing a fresh instance per call.
+    pub fn stateless(mut self, name: &str) -> Self {
+        if let Some(f) = self.functions.get_mut(name) {
+            f.stateless = true;
+        }
         self
     }
 
