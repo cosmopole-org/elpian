@@ -1,15 +1,37 @@
 /* tslint:disable */
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
+export const elpian_wasm_adopt: (a: number, b: number, c: number, d: number) => [number, number];
+export const elpian_wasm_capability_allows: (a: number, b: number, c: number, d: number) => [number, number];
+export const elpian_wasm_charge_storage: (a: number, b: number, c: number) => [number, number];
 export const elpian_wasm_continue_execution: (a: number, b: number, c: number, d: number) => [number, number];
 export const elpian_wasm_create_vm_from_ast: (a: number, b: number, c: number, d: number) => number;
 export const elpian_wasm_create_vm_from_bytecode: (a: number, b: number, c: number, d: number) => number;
 export const elpian_wasm_create_vm_from_code: (a: number, b: number, c: number, d: number) => number;
 export const elpian_wasm_deliver_host_message: (a: number, b: number, c: number, d: number, e: number) => [number, number];
+export const elpian_wasm_destroy_tree: (a: number, b: number) => [number, number];
 export const elpian_wasm_destroy_vm: (a: number, b: number) => number;
+export const elpian_wasm_effective_capabilities: (a: number, b: number) => [number, number];
+export const elpian_wasm_enforce_tree_budgets: () => [number, number];
 export const elpian_wasm_execute: (a: number, b: number) => [number, number];
 export const elpian_wasm_execute_func: (a: number, b: number, c: number, d: number, e: number) => [number, number];
 export const elpian_wasm_execute_func_with_input: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
+export const elpian_wasm_limits: (a: number, b: number) => [number, number];
+export const elpian_wasm_local_capabilities: (a: number, b: number) => [number, number];
+export const elpian_wasm_pause: (a: number, b: number) => [number, number];
+export const elpian_wasm_pause_tree: (a: number, b: number) => [number, number];
+export const elpian_wasm_resume: (a: number, b: number) => [number, number];
+export const elpian_wasm_sandbox_capabilities: (a: number, b: number, c: number, d: number) => [number, number];
+export const elpian_wasm_set_capabilities: (a: number, b: number, c: number, d: number) => [number, number];
+export const elpian_wasm_set_capability: (a: number, b: number, c: number, d: number, e: number) => [number, number];
+export const elpian_wasm_set_limits: (a: number, b: number, c: number, d: number) => [number, number];
+export const elpian_wasm_snapshot: (a: number, b: number) => [number, number];
+export const elpian_wasm_state: (a: number, b: number) => [number, number];
+export const elpian_wasm_subtree_usage: (a: number, b: number) => [number, number];
+export const elpian_wasm_terminate: (a: number, b: number) => [number, number];
+export const elpian_wasm_terminate_tree: (a: number, b: number) => [number, number];
+export const elpian_wasm_tree: (a: number, b: number) => [number, number];
+export const elpian_wasm_usage: (a: number, b: number) => [number, number];
 export const elpian_wasm_validate_ast: (a: number, b: number) => number;
 export const elpian_wasm_vm_exists: (a: number, b: number) => number;
 export const elpian_wasm_init: () => void;

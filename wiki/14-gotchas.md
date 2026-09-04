@@ -404,3 +404,42 @@ A component that names neither a tag nor a TTL is never cached. That is
 deliberate — caching one that reads changing state would serve a stale page with
 no way for it to say otherwise — but it does mean a component you *expected* to
 be cached is not, unless you said so with `ui(tree, ["tag"])`.
+
+---
+
+## The browser target compiles things it cannot run
+
+`wasm32-unknown-unknown` has **no clock and no threads**, and std does not tell
+you at compile time. `std::time::Instant::now()` builds fine and traps at run
+time with `RuntimeError: unreachable`; `std::thread::spawn` does the same.
+
+This is not hypothetical. A single clock read added to the VM's per-turn
+bookkeeping killed the VM on its *first* turn in the browser: the wasm module
+loaded, the VM was created, and `execute` trapped before anything rendered. The
+symptom was a blank white page on GitHub Pages, and **every check in the
+repository was green** — it built, `cargo build --target wasm32-unknown-unknown`
+succeeded, `cargo test` passed on the host, and the web export contained all the
+files the workflow asserts.
+
+Two rules follow.
+
+**Gate on the target, not the architecture.**
+
+```rust
+// Right: wasi and emscripten have clocks and must keep them.
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+
+// Wrong: this also disables the clock on wasi.
+#[cfg(target_arch = "wasm32")]
+```
+
+**Absent is not zero.** Where a platform has no clock, say so — return `None`
+and have callers skip time-based rules. Substituting `0` makes every turn look
+as though it began at the same instant, so a deadline sweep would consider every
+instance infinitely overdue and terminate all of them. A wrong number is worse
+than no number.
+
+The guard is `scripts/wasm-smoke.sh`, which builds the VM for the browser target
+and **runs** it in node — creating a VM, driving a turn, resuming after a host
+call, and doing fifty turns in a row. Building is not running, and only running
+catches this.

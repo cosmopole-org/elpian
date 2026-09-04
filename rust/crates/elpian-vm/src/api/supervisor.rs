@@ -32,7 +32,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use super::{now_ms, VMS};
+use super::{monotonic_millis, VMS};
 
 /// What the sweep enforces, and how often.
 #[derive(Clone, Debug)]
@@ -95,12 +95,16 @@ impl SweepReport {
 /// the same enforcement without a background thread.
 pub fn sweep(config: &SupervisorConfig) -> SweepReport {
     let mut report = SweepReport::default();
-    let now = now_ms();
+
+    // Without a monotonic clock there is nothing to compare against, so the
+    // time-based rules are skipped rather than guessed at. Aggregate budgets
+    // still apply — they are counted, not timed.
+    let now = monotonic_millis();
 
     for (id, entry) in VMS.snapshot() {
         let busy_since = entry.busy_since_ms.load(Ordering::Acquire);
 
-        if let Some(deadline) = config.turn_deadline {
+        if let (Some(deadline), Some(now)) = (config.turn_deadline, now) {
             // `0` means idle: a deadline only applies to a turn in flight.
             if busy_since != 0 {
                 let running = Duration::from_millis(now.saturating_sub(busy_since));
@@ -115,7 +119,7 @@ pub fn sweep(config: &SupervisorConfig) -> SweepReport {
             }
         }
 
-        if let Some(idle_after) = config.idle_after {
+        if let (Some(idle_after), Some(now)) = (config.idle_after, now) {
             if busy_since == 0 {
                 let last = entry.last_turn_end_ms.load(Ordering::Acquire);
                 if last != 0 && Duration::from_millis(now.saturating_sub(last)) >= idle_after {
@@ -133,11 +137,19 @@ pub fn sweep(config: &SupervisorConfig) -> SweepReport {
 }
 
 /// A running supervisor. Dropping it stops the sweep.
+///
+/// Not available on `wasm32-unknown-unknown`, which has neither threads nor a
+/// clock. A compile error is the right failure there: the alternative is code
+/// that builds and then traps at run time, which is exactly the shape of bug
+/// that put a blank page on the web build. [`sweep`] remains available
+/// everywhere for an embedder with its own scheduler.
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 pub struct Supervisor {
     running: Arc<AtomicBool>,
     handle: Option<std::thread::JoinHandle<()>>,
 }
 
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 impl Supervisor {
     /// Start sweeping on a background thread, handing each non-quiet report to
     /// `on_report`.
@@ -189,6 +201,7 @@ impl Supervisor {
     }
 }
 
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 impl Drop for Supervisor {
     fn drop(&mut self) {
         self.shutdown();
