@@ -181,10 +181,37 @@ static VMS: Lazy<Registry> = Lazy::new(Registry::new);
 /// Monotonic base for the millisecond timestamps the supervisor compares.
 /// `Instant` is not representable in an atomic, so turn starts are stored as a
 /// millisecond offset from this.
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 static PROCESS_START: Lazy<std::time::Instant> = Lazy::new(std::time::Instant::now);
 
-fn now_ms() -> u64 {
-    PROCESS_START.elapsed().as_millis() as u64
+/// Milliseconds since the process started, or `None` where the platform has no
+/// monotonic clock.
+///
+/// # Why this is an `Option` rather than a number
+///
+/// `std::time::Instant::now()` **compiles** on `wasm32-unknown-unknown` and
+/// **traps at run time** — the target has no clock, and std's implementation is
+/// an `unreachable`. Calling it once per guest turn therefore killed the VM on
+/// its first turn in the browser, which showed up as a blank page: the wasm
+/// module loaded, the VM was created, and `execute` trapped before anything
+/// rendered.
+///
+/// The gate is `target_os = "unknown"` specifically, not `target_arch =
+/// "wasm32"`: wasi and emscripten both have working clocks and must keep them.
+///
+/// Returning `None` rather than a fabricated `0` matters. A fake zero would make
+/// every turn look as though it began at the same instant, so a deadline sweep
+/// would consider every instance infinitely overdue and terminate all of them.
+/// Absent is the truth, and the callers below are written to do nothing with it.
+fn monotonic_millis() -> Option<u64> {
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+    {
+        None
+    }
+    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+    {
+        Some(PROCESS_START.elapsed().as_millis() as u64)
+    }
 }
 
 /// Run `body` against a registered instance, or return `None` if it is unknown.
@@ -216,15 +243,22 @@ fn with_vm_turn<R>(machine_id: &str, body: impl FnOnce(&mut VM) -> R) -> Option<
     }
     impl Drop for ClearOnExit {
         fn drop(&mut self) {
-            self.ended.store(now_ms().max(1), Ordering::Release);
+            if let Some(now) = monotonic_millis() {
+                self.ended.store(now.max(1), Ordering::Release);
+            }
             self.busy.store(0, Ordering::Release);
         }
     }
     // `max(1)` so a turn that begins in the first millisecond of the process is
     // still distinguishable from the `0` that means idle.
-    entry
-        .busy_since_ms
-        .store(now_ms().max(1), Ordering::Release);
+    //
+    // Without a clock the marker simply stays `0` — the instance never looks
+    // busy, so a deadline sweep leaves it alone. That is the honest behaviour
+    // on a platform that cannot measure elapsed time, and it is safe because
+    // such a platform (the browser) runs no sweep to begin with.
+    if let Some(now) = monotonic_millis() {
+        entry.busy_since_ms.store(now.max(1), Ordering::Release);
+    }
     let _clear = ClearOnExit {
         busy: entry.busy_since_ms.clone(),
         ended: entry.last_turn_end_ms.clone(),

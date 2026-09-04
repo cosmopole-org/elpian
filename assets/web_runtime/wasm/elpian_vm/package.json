@@ -1,8 +1,9 @@
 {
-  "name": "elpian-vm",
+  "name": "elpian-wasm",
   "type": "module",
-  "description": "Elpian AST-based bytecode VM — a pure executor. Ingests Elpian AST JSON / bytecode (produced by front-end crates such as js2elpian / dart2elpian) and executes it, yielding host calls to the embedding runtime.",
+  "description": "wasm-bindgen browser adapter for the Elpian VM.",
   "version": "0.1.0",
+  "license": "BSD-3-Clause",
   "files": [
     "elpian_vm_bg.wasm",
     "elpian_vm.js",
