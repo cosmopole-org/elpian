@@ -4,22 +4,42 @@
 //! for the whole of a guest turn, so every instance in the process executed in
 //! strict sequence no matter how many threads drove them, and one instance in a
 //! long loop blocked every unrelated call — including the ones a host would use
-//! to inspect or stop it. These tests fail against that design and pass against
-//! the sharded registry.
+//! to inspect or stop it.
 //!
-//! Timings are deliberately loose. The claim under test is "these overlap", not
-//! "these are fast", so the thresholds only have to separate *concurrent* from
-//! *serialised* — a factor of two apart at minimum — and not be sensitive to
-//! how quick the machine is.
+//! # These are proofs, not measurements
+//!
+//! An earlier version of this file asserted a *speedup*: run two turns
+//! sequentially, run them again on two threads, and require the second to be
+//! meaningfully faster. That was the wrong instrument twice over.
+//!
+//! * Cargo runs this file's tests on parallel threads in one process, and the
+//!   others here deliberately burn CPU. On a two-core runner the measurement
+//!   was competing with its own siblings, so it reported ~1.1x and failed a
+//!   0.8x threshold — while the behaviour under test was perfectly correct.
+//! * The work was sized by timing a calibration run, which is itself distorted
+//!   by that contention. The binary took 5 seconds on one run and 182 on the
+//!   next.
+//!
+//! Overlap is a *behavioural* property and can be proved by contradiction
+//! without a stopwatch: if execution were serialised, a second instance could
+//! not complete a turn while the first was still inside one. That is what
+//! [`a_second_instance_runs_while_the_first_is_still_inside_a_turn`] asserts,
+//! deterministically and with no threshold.
+//!
+//! Guest work here is bounded by an **instruction limit**, not by a
+//! wall-clock-calibrated iteration count. A limit is the same on every machine,
+//! so these tests take the same time on a fast laptop and a loaded CI runner,
+//! and a guest that must stop always stops.
 
-use elpian_vm::api;
+use elpian_vm::api::{self, ResourceLimits};
 use serde_json::json;
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{mpsc, Arc};
 use std::thread;
 use std::time::{Duration, Instant};
 
-/// A program whose top level counts to `iterations` — a predictable, sizeable
-/// chunk of guest CPU with no host calls in it.
+/// A program whose top level counts to `iterations` — a predictable chunk of
+/// guest CPU with no host calls in it.
 fn busy_program(iterations: i64) -> String {
     json!({
         "type": "program",
@@ -45,113 +65,125 @@ fn busy_program(iterations: i64) -> String {
     .to_string()
 }
 
-fn spawn_busy(id: &str, iterations: i64) {
+/// A loop long enough that it will not finish on its own during a test.
+const EFFECTIVELY_UNBOUNDED: i64 = 4_000_000_000;
+
+/// Register an instance that runs until stopped.
+///
+/// The instruction budget is a **backstop**, not the mechanism under test: if a
+/// test's own stop fails, the guest traps here instead of running until the CI
+/// job times out. It is generous enough that nothing reaches it while the tests
+/// behave.
+fn spawn_runaway(id: &str) {
     assert!(
-        api::create_vm_from_ast(id.to_string(), busy_program(iterations)),
+        api::create_vm_from_ast(id.to_string(), busy_program(EFFECTIVELY_UNBOUNDED)),
         "busy program should compile"
     );
-}
-
-/// Wall time of one top-level run.
-fn time_run(id: &str) -> Duration {
-    let started = Instant::now();
-    api::execute_vm(id.to_string());
-    started.elapsed()
-}
-
-/// Calibrate an iteration count that takes a measurable but bounded time on
-/// this machine, so the test is neither flaky on a slow box nor slow on a fast
-/// one.
-fn calibrated_iterations() -> i64 {
-    let probe = 200_000;
-    spawn_busy("par-probe", probe);
-    let elapsed = time_run("par-probe");
-    api::destroy_vm("par-probe".into());
-
-    // Aim for roughly 300ms of guest CPU per instance.
-    let per_iter = elapsed.as_secs_f64() / probe as f64;
-    let target = (0.3 / per_iter.max(f64::MIN_POSITIVE)) as i64;
-    target.clamp(probe, 20_000_000)
-}
-
-#[test]
-fn two_guest_turns_overlap_in_wall_time() {
-    let iterations = calibrated_iterations();
-
-    // Baseline: the same two runs back to back on one thread.
-    spawn_busy("par-seq-a", iterations);
-    spawn_busy("par-seq-b", iterations);
-    let sequential = time_run("par-seq-a") + time_run("par-seq-b");
-    api::destroy_vm("par-seq-a".into());
-    api::destroy_vm("par-seq-b".into());
-
-    // The same work, two threads.
-    spawn_busy("par-par-a", iterations);
-    spawn_busy("par-par-b", iterations);
-    let started = Instant::now();
-    let handles: Vec<_> = ["par-par-a", "par-par-b"]
-        .into_iter()
-        .map(|id| thread::spawn(move || api::execute_vm(id.to_string())))
-        .collect();
-    for h in handles {
-        h.join()
-            .expect("guest turn should not panic the driving thread");
-    }
-    let parallel = started.elapsed();
-    api::destroy_vm("par-par-a".into());
-    api::destroy_vm("par-par-b".into());
-
-    // Serialised, `parallel` would match `sequential`. Genuinely overlapped, it
-    // approaches half. Assert only that it is clearly under — 80% leaves room
-    // for a busy CI box without admitting a serialised result.
-    assert!(
-        parallel.as_secs_f64() < sequential.as_secs_f64() * 0.8,
-        "two turns did not overlap: {parallel:?} parallel vs {sequential:?} sequential \
-         ({iterations} iterations each)"
+    api::set_limits(
+        id,
+        ResourceLimits {
+            max_instructions: Some(500_000_000),
+            ..ResourceLimits::unlimited()
+        },
     );
 }
 
-/// The property that actually matters operationally: one instance grinding away
-/// must not stop the host doing anything else. Under the global lock this
-/// deadlocked the *whole registry* for the duration of the loop.
-#[test]
-fn a_long_running_guest_does_not_block_other_instances() {
-    let iterations = calibrated_iterations() * 4; // long enough to still be running
-    spawn_busy("par-hog", iterations);
-    spawn_busy("par-quick", 1_000);
+/// Register an instance whose turn finishes quickly on its own.
+fn spawn_quick(id: &str) {
+    assert!(api::create_vm_from_ast(id.to_string(), busy_program(2_000)));
+}
 
-    let (tx, rx) = mpsc::channel();
-    let hog = thread::spawn(move || {
-        tx.send(()).expect("receiver alive");
-        api::execute_vm("par-hog".to_string());
+// ---- The overlap proof -----------------------------------------------------
+
+/// Two guest turns really do run at the same time.
+///
+/// Proof by contradiction, with no timing threshold: instance A is put inside a
+/// long turn on its own thread; instance B then completes a whole turn; and A is
+/// confirmed to have *still been running* when B finished. Under the old global
+/// lock B could not have started, let alone finished, until A was done.
+///
+/// The final check is what makes it airtight — without it the test would pass
+/// vacuously if A had not actually begun.
+#[test]
+fn a_second_instance_runs_while_the_first_is_still_inside_a_turn() {
+    spawn_runaway("par-first");
+    spawn_quick("par-second");
+
+    let first_finished = Arc::new(AtomicBool::new(false));
+    let finished_flag = Arc::clone(&first_finished);
+    let (entered_tx, entered_rx) = mpsc::channel();
+
+    let first = thread::spawn(move || {
+        entered_tx.send(()).expect("receiver alive");
+        api::execute_vm("par-first".to_string());
+        finished_flag.store(true, Ordering::SeqCst);
     });
 
-    // Wait until the hog thread has entered the runtime, then insist an
-    // unrelated instance completes a turn while it is still in there.
-    rx.recv().expect("hog thread started");
-    let quick = time_run("par-quick");
+    entered_rx.recv().expect("the first thread started");
+    // Let it get properly inside the loop, so "still running" below is a
+    // statement about a turn in flight rather than one about to begin.
+    thread::sleep(Duration::from_millis(50));
+
+    let started = Instant::now();
+    api::execute_vm("par-second".to_string());
+    let second_took = started.elapsed();
+
     assert!(
-        quick < Duration::from_secs(5),
-        "an unrelated instance was blocked behind a busy one for {quick:?}"
+        !first_finished.load(Ordering::SeqCst),
+        "the first instance finished before the second ran, so this proved nothing"
+    );
+    assert!(
+        second_took < Duration::from_secs(30),
+        "the second instance was blocked behind the first for {second_took:?}"
     );
 
-    // And the registry itself stays responsive mid-turn.
-    assert!(api::vm_exists("par-hog".into()));
-    assert!(api::usage("par-hog").is_some(), "usage readable mid-turn");
-
-    api::terminate_vm("par-hog");
-    hog.join().expect("hog thread finished");
-    api::destroy_vm("par-hog".into());
-    api::destroy_vm("par-quick".into());
+    api::terminate_vm("par-first");
+    first.join().expect("the terminated turn unwound cleanly");
+    api::destroy_vm("par-first".into());
+    api::destroy_vm("par-second".into());
 }
+
+/// The registry itself stays answerable while a guest is mid-turn.
+///
+/// Under the global lock these calls queued behind the running turn, which is
+/// what made a runaway guest impossible to inspect or stop.
+#[test]
+fn the_registry_answers_while_a_guest_is_running() {
+    spawn_runaway("par-inspect");
+
+    let (tx, rx) = mpsc::channel();
+    let runner = thread::spawn(move || {
+        tx.send(()).expect("receiver alive");
+        api::execute_vm("par-inspect".to_string());
+    });
+    rx.recv().expect("runner started");
+    thread::sleep(Duration::from_millis(50));
+
+    let started = Instant::now();
+    assert!(api::vm_exists("par-inspect".into()));
+    assert!(matches!(
+        api::run_state("par-inspect"),
+        Some(api::RunState::Running)
+    ));
+    let asked_in = started.elapsed();
+    assert!(
+        asked_in < Duration::from_secs(5),
+        "inspecting a running instance took {asked_in:?}"
+    );
+
+    api::terminate_vm("par-inspect");
+    runner.join().expect("the runner finished");
+    api::destroy_vm("par-inspect".into());
+}
+
+// ---- Control that must reach a running guest -------------------------------
 
 /// A terminate request must reach an instance that is *already inside* a turn,
 /// not merely one parked between turns. This is what lets a host stop a runaway
 /// guest at all.
 #[test]
 fn terminate_lands_on_an_instance_that_is_mid_turn() {
-    // Big enough that it would run for many seconds if left alone.
-    spawn_busy("par-runaway", calibrated_iterations() * 200);
+    spawn_runaway("par-runaway");
 
     let (tx, rx) = mpsc::channel();
     let runner = thread::spawn(move || {
@@ -159,21 +191,19 @@ fn terminate_lands_on_an_instance_that_is_mid_turn() {
         api::execute_vm("par-runaway".to_string());
     });
     rx.recv().expect("runner started");
+    thread::sleep(Duration::from_millis(50));
 
-    // Give it a moment to be well inside the loop, then pull the plug.
     let started = Instant::now();
-    while started.elapsed() < Duration::from_millis(50) {
-        std::hint::spin_loop();
-    }
     assert!(
         api::terminate_vm("par-runaway"),
         "terminate reached the instance"
     );
-
     runner.join().expect("the terminated turn unwound cleanly");
+
     assert!(
-        started.elapsed() < Duration::from_secs(10),
-        "terminate did not stop the guest promptly"
+        started.elapsed() < Duration::from_secs(30),
+        "terminate did not stop the guest promptly: {:?}",
+        started.elapsed()
     );
     assert!(matches!(
         api::run_state("par-runaway"),
@@ -182,11 +212,17 @@ fn terminate_lands_on_an_instance_that_is_mid_turn() {
     api::destroy_vm("par-runaway".into());
 }
 
-/// Unregistering an instance that is mid-turn must be safe: the running turn
-/// holds its own handle and finishes, and the destroy does not block on it.
+/// Unregistering an instance that is mid-turn must be safe and immediate: the
+/// running turn holds its own handle and finishes, and the destroy does not
+/// block on it.
+///
+/// Note the ordering. `destroy_vm` removes the entry, which takes the control
+/// flag with it — so after destroying there is no longer any way to stop the
+/// in-flight turn. The terminate therefore goes *first*; the instruction budget
+/// on the instance is the backstop if it did not land.
 #[test]
 fn destroying_an_instance_mid_turn_is_clean() {
-    spawn_busy("par-doomed", calibrated_iterations() * 200);
+    spawn_runaway("par-doomed");
 
     let (tx, rx) = mpsc::channel();
     let runner = thread::spawn(move || {
@@ -194,6 +230,10 @@ fn destroying_an_instance_mid_turn_is_clean() {
         api::execute_vm("par-doomed".to_string());
     });
     rx.recv().expect("runner started");
+    thread::sleep(Duration::from_millis(50));
+
+    // Stop the turn first, while the control flag is still reachable.
+    api::terminate_vm("par-doomed");
 
     let started = Instant::now();
     assert!(
@@ -206,13 +246,71 @@ fn destroying_an_instance_mid_turn_is_clean() {
     );
     assert!(
         !api::vm_exists("par-doomed".into()),
-        "entry is gone immediately"
+        "the entry is gone immediately"
     );
 
-    // The turn is still running against its own handle; stop it so the test
-    // does not hang, then confirm the thread unwinds without a panic.
-    api::terminate_vm("par-doomed"); // no-op: already unregistered
+    // The turn was still running against its own handle when the entry went.
+    // It must unwind without panicking and without touching freed state.
     runner
         .join()
         .expect("the in-flight turn completed without panicking");
+}
+
+// ---- The measurement, kept out of the gate ---------------------------------
+
+/// How much throughput actually improves with concurrency.
+///
+/// `#[ignore]`d deliberately. This is a *benchmark*: its result depends on the
+/// machine's core count and on whatever else is running, including the other
+/// tests in this file. Gating CI on it made a green build depend on how busy a
+/// shared runner happened to be, which is how it failed at ~1.1x on a two-core
+/// box while every behavioural property above held.
+///
+/// Run it on purpose, on an idle machine:
+///
+/// ```text
+/// cargo test -p elpian-vm --test parallel_execution -- --ignored --nocapture
+/// ```
+#[test]
+#[ignore = "a benchmark: depends on core count and machine load, so it is not a gate"]
+fn measure_concurrency_speedup() {
+    const ITERATIONS: i64 = 3_000_000;
+
+    let run = |id: &str| {
+        assert!(api::create_vm_from_ast(
+            id.to_string(),
+            busy_program(ITERATIONS)
+        ));
+    };
+
+    run("bench-seq-a");
+    run("bench-seq-b");
+    let started = Instant::now();
+    api::execute_vm("bench-seq-a".to_string());
+    api::execute_vm("bench-seq-b".to_string());
+    let sequential = started.elapsed();
+
+    run("bench-par-a");
+    run("bench-par-b");
+    let started = Instant::now();
+    let handles: Vec<_> = ["bench-par-a", "bench-par-b"]
+        .into_iter()
+        .map(|id| thread::spawn(move || api::execute_vm(id.to_string())))
+        .collect();
+    for handle in handles {
+        handle.join().expect("no thread panicked");
+    }
+    let parallel = started.elapsed();
+
+    println!(
+        "\ncores: {}\nsequential: {sequential:?}\nparallel:   {parallel:?}\nspeedup:    {:.2}x",
+        std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(0),
+        sequential.as_secs_f64() / parallel.as_secs_f64().max(f64::MIN_POSITIVE),
+    );
+
+    for id in ["bench-seq-a", "bench-seq-b", "bench-par-a", "bench-par-b"] {
+        api::destroy_vm(id.into());
+    }
 }
