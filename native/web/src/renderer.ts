@@ -259,14 +259,9 @@ export class DomRenderer {
         }
         return;
       }
-      case 'scene3d': {
-        el.addEventListener('click', (e) => {
-          if (!rec.props.clickable) return;
-          const r = el.getBoundingClientRect();
-          this.emit(rec, { type: 'tap', localX: e.clientX - r.left, localY: e.clientY - r.top });
-        });
+      case 'scene3d':
+        // Taps come from the gesture recognizer (`gestures: ['tap']` when clickable).
         return;
-      }
       case 'video':
       case 'audio': {
         const media = document.createElement(rec.kind);
