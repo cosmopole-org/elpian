@@ -74,7 +74,7 @@ open class RenderPadding : RenderObject() {
  * `height` tighten that axis (SizedBox); min/max add constraints.
  */
 open class RenderConstrainedBox : RenderObject() {
-    fun additional(): Constraints {
+    open fun additional(): Constraints {
         val p = props
         var minW = p.d("minWidth") ?: 0.0
         var maxW = p.d("maxWidth") ?: INF

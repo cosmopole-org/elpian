@@ -249,5 +249,5 @@ open class RenderShaderMask : RenderProxy() {
  * Provides the inherited text style (Flutter `DefaultTextStyle`).
  */
 open class RenderDefaultTextStyle : RenderProxy() {
-    val textStyle: TextStyle get() = props["style"] as? TextStyle ?: TextStyle()
+    open val textStyle: TextStyle get() = props["style"] as? TextStyle ?: TextStyle()
 }

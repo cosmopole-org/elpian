@@ -15,7 +15,7 @@ import kotlin.math.max
  */
 
 /** props: { top, right, bottom, left, width, height } */
-class RenderPositioned : RenderObject() {
+open class RenderPositioned : RenderObject() {
     val isPositioned: Boolean
         get() {
             val p = props
