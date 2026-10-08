@@ -100,6 +100,11 @@ class ImageLoader(context: Context, private val maxDimension: Int = 4096) {
         cache.evictAll()
     }
 
+    /** Memory pressure: drop the least recently used half of the cache. */
+    fun trim() {
+        cache.trimToSize(cache.size() / 2)
+    }
+
     private fun bytes(src: String): ByteArray? {
         val s = src.trim()
         return when {

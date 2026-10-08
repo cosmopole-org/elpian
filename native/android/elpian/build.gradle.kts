@@ -43,7 +43,10 @@ android {
         sourceSets["main"].java.srcDir(godotSources)
         sourceSets["main"].assets.srcDirs(godotAndroid.resolve("src/main/assets"))
     }
-    testOptions { unitTests.isReturnDefaultValues = true }
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+        unitTests.isIncludeAndroidResources = true
+    }
 }
 
 if (elpianGodot) tasks.named("preBuild") { dependsOn(syncGodotSources) }
@@ -112,4 +115,7 @@ dependencies {
     }
     testImplementation("junit:junit:4.13.2")
     testImplementation(kotlin("test"))
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.test:core:1.6.1")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
 }
