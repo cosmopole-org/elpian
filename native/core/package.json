@@ -1,0 +1,14 @@
+{
+  "name": "@elpian/native-core",
+  "version": "1.0.0",
+  "description": "Platform-neutral Elpian engine: CSS, layout, widgets, host APIs, runtimes and Godot, shared by the web, Android, iOS and Expo bridges",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "tsc -p tsconfig.json && node --test dist-test/"
+  },
+  "license": "MIT"
+}
