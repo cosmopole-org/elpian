@@ -3,9 +3,11 @@
 // dependency, so it is unit-tested on the JVM; the `elpian` module renders it.
 plugins {
     id("org.jetbrains.kotlin.jvm")
+    `maven-publish`
 }
 
 java {
+    withSourcesJar()
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
 }
@@ -19,3 +21,15 @@ dependencies {
 }
 
 tasks.test { useJUnit() }
+
+publishing {
+    publications {
+        create<MavenPublication>("release") {
+            groupId = "dev.elpian"
+            artifactId = "elpian-core"
+            version = rootProject.extra["elpianVersion"] as String
+            from(components["java"])
+        }
+    }
+    repositories { maven { name = "local"; url = uri(rootProject.extra["elpianRepo"] as String) } }
+}

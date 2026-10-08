@@ -2,6 +2,7 @@
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
+    `maven-publish`
 }
 
 // The embedded Godot engine (Scene3D). The Godot library is ~87 MB of native
@@ -43,6 +44,7 @@ android {
         sourceSets["main"].java.srcDir(godotSources)
         sourceSets["main"].assets.srcDirs(godotAndroid.resolve("src/main/assets"))
     }
+    publishing { singleVariant("release") { withSourcesJar() } }
     testOptions {
         unitTests.isReturnDefaultValues = true
         unitTests.isIncludeAndroidResources = true
@@ -118,4 +120,20 @@ dependencies {
     testImplementation("org.robolectric:robolectric:4.14.1")
     testImplementation("androidx.test:core:1.6.1")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+}
+
+// `gradle publish` writes dev.elpian:elpian-core and dev.elpian:elpian-android
+// to the local repository the Expo module ships (-Pelpian.repo=<dir>).
+afterEvaluate {
+    publishing {
+        publications {
+            create<MavenPublication>("release") {
+                groupId = "dev.elpian"
+                artifactId = "elpian-android"
+                version = rootProject.extra["elpianVersion"] as String
+                from(components["release"])
+            }
+        }
+        repositories { maven { name = "local"; url = uri(rootProject.extra["elpianRepo"] as String) } }
+    }
 }
