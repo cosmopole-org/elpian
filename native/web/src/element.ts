@@ -11,7 +11,8 @@
  *   <elpian-view kind="nextjs" options='{"route":"/","serverBaseUrl":"https://…"}'></elpian-view>
  *
  * Session events (ready, error, println, updateApp, routeChanged, …) are
- * dispatched as `elpian:<event>` CustomEvents on the host element as well.
+ * dispatched as `elpian:<event>` CustomEvents on the host element as well,
+ * and every one also as a non-bubbling `elpian:event` with `{event, payload}`.
  */
 import { SessionRegistry, setPlatform, type JsonMap } from '@elpian/native-core';
 import { ICON_FAMILY } from './css.js';
@@ -42,6 +43,7 @@ export function installElpian(options: Partial<WebPlatformOptions> = {}): WebPla
     const byEvent = listeners.get(surface)?.get(event);
     if (byEvent) for (const l of [...byEvent]) l(payload);
     elements.get(surface)?.dispatchEvent(new CustomEvent(`elpian:${event}`, { detail: payload, bubbles: true }));
+    elements.get(surface)?.dispatchEvent(new CustomEvent('elpian:event', { detail: { event, payload }, bubbles: false }));
   });
   installFonts(assetBase);
   const p = platform;

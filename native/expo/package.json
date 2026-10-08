@@ -1,0 +1,45 @@
+{
+  "name": "@elpian/expo",
+  "version": "1.0.0",
+  "description": "Elpian mini apps in Expo / React Native: native Android Views (Kotlin core), native UIKit (Swift core), and the DOM host on web",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "react-native": "src/index.ts",
+  "files": [
+    "build",
+    "src",
+    "android",
+    "ios",
+    "app.plugin.js",
+    "expo-module.config.json",
+    "!android/build",
+    "!ios/build"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepare-native": "node scripts/prepare-native.mjs",
+    "prepack": "npm run build && node scripts/prepare-native.mjs"
+  },
+  "keywords": [
+    "react-native",
+    "expo",
+    "elpian",
+    "mini-apps"
+  ],
+  "dependencies": {
+    "@elpian/web": "1.0.0"
+  },
+  "peerDependencies": {
+    "expo": "*",
+    "react": "*",
+    "react-native": "*"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.0",
+    "expo": "~57.0.27",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "typescript": "5.7.3"
+  },
+  "license": "MIT"
+}
