@@ -66,7 +66,7 @@ dependencies {
     api(project(":elpian-core"))
     implementation("androidx.core:core-ktx:1.13.1")
     // Guest sandboxes: QuickJS for JS mini apps, Chicory for WASM.
-    implementation("app.cash.quickjs:quickjs-android:0.9.2")
+    implementation("wang.harlon.quickjs:wrapper-android:3.2.3")
     chicoryRuntime("com.dylibso.chicory:runtime:$chicoryVersion")
     implementation(files(chicoryAndroidJar))
     implementation("com.dylibso.chicory:wasm:$chicoryVersion")
