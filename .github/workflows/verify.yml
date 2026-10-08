@@ -11,8 +11,8 @@ name: Verify
 #
 # Layout notes that shape the jobs below:
 #   * There are four Dart packages, each with its own pubspec and analysis
-#     options: the root `elpian_ui`, `example/`, `cli/elpian_client/` and
-#     `godot/`. Each is analysed in its own directory — analysing them from the
+#     options: `flutter/` (elpian_ui), `flutter/example/`, `cli/elpian_client/`
+#     and `godot/`. Each is analysed in its own directory — analysing them from the
 #     root resolves their dependencies against the wrong package.
 #   * `rust/` is a virtual workspace whose crates live under `rust/crates/`.
 #     `cli/` is a separate Cargo project with its own lockfile, so it needs its
@@ -184,18 +184,18 @@ jobs:
 
       - name: Resolve dependencies
         run: |
-          flutter pub get
-          for pkg in example cli/elpian_client godot; do
+          for pkg in flutter flutter/example cli/elpian_client godot; do
             (cd "$pkg" && flutter pub get)
           done
 
       - name: Format check
+        working-directory: flutter
         run: dart format --output=none --set-exit-if-changed lib test
 
       - name: Analyze (all packages)
         run: |
           fail=0
-          for pkg in . example cli/elpian_client godot; do
+          for pkg in flutter flutter/example cli/elpian_client godot; do
             echo "::group::flutter analyze — $pkg"
             (cd "$pkg" && flutter analyze --no-pub) || fail=1
             echo "::endgroup::"
@@ -203,12 +203,13 @@ jobs:
           exit $fail
 
       - name: Test — elpian_ui
+        working-directory: flutter
         env:
           LD_LIBRARY_PATH: ${{ github.workspace }}/rust/target/release
         run: flutter test --no-pub
 
       - name: Test — example
-        working-directory: example
+        working-directory: flutter/example
         env:
           LD_LIBRARY_PATH: ${{ github.workspace }}/rust/target/release
         run: flutter test --no-pub

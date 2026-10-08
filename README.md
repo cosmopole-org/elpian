@@ -41,13 +41,13 @@ final widget = ElpianEngine().renderFromJson({
 ## 🖼️ Demo Screenshots
 
 <p align="center">
-  <img src="example/IMG_20260226_161047_415.jpg" alt="Elpian landing page" width="31%" />
-  <img src="example/Screenshot_20260225_185558_Chrome.jpg" alt="QuickJS calculator demo" width="31%" />
-  <img src="example/Screenshot_20260225_185705_Chrome.jpg" alt="QuickJS whiteboard demo" width="31%" />
+  <img src="flutter/example/IMG_20260226_161047_415.jpg" alt="Elpian landing page" width="31%" />
+  <img src="flutter/example/Screenshot_20260225_185558_Chrome.jpg" alt="QuickJS calculator demo" width="31%" />
+  <img src="flutter/example/Screenshot_20260225_185705_Chrome.jpg" alt="QuickJS whiteboard demo" width="31%" />
 </p>
 
 <p align="center">
-  <img src="example/Screenshot_20260226_161118_Telegram.jpg" alt="3D scene demo" width="48%" />
+  <img src="flutter/example/Screenshot_20260226_161118_Telegram.jpg" alt="3D scene demo" width="48%" />
 </p>
 
 > These screenshots highlight real Elpian examples: landing UI rendering, QuickJS calculator + whiteboard, 3D scene graph rendering, and Canvas API primitives.
@@ -118,7 +118,7 @@ This mode uses your Next.js server as the UI source and fetches real Next.js rou
 
 ### Caspar point-signaling machine (Node.js + Docker example)
 
-A complete VM-oriented machine example is available at `example/caspar-node-machine/`. It demonstrates how a Caspar machine program can use host-imported point signaling APIs to broadcast Elpian runtime mode selection (`nextjs_server`, `streaming_server`, or `fully_client_side`), then push `ui.init` and incremental `ui.patch` packets without exposing its own HTTP/WebSocket transport.
+A complete VM-oriented machine example is available at `flutter/example/caspar-node-machine/`. It demonstrates how a Caspar machine program can use host-imported point signaling APIs to broadcast Elpian runtime mode selection (`nextjs_server`, `streaming_server`, or `fully_client_side`), then push `ui.init` and incremental `ui.patch` packets without exposing its own HTTP/WebSocket transport.
 
 ### Render UI from JSON
 

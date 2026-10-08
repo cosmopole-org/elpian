@@ -27,14 +27,14 @@ on:
   push:
     branches: [main]
     paths:
-      - "lib/**"
+      - "flutter/**"
       - "rust/**"
       - "cli/**"
       - "godot/**"
       - ".github/workflows/build_showcase.yml"
   pull_request:
     paths:
-      - "lib/**"
+      - "flutter/**"
       - "cli/**"
       - ".github/workflows/build_showcase.yml"
 
@@ -171,7 +171,7 @@ jobs:
       # native equivalent to lean on, and it is only reachable in a browser.
       # Run it before the expensive builds so a broken seam fails fast.
       - name: Test the Godot web transport
-        working-directory: elpian
+        working-directory: elpian/flutter
         run: |
           flutter pub get
           flutter test --platform chrome test/godot_web_transport_test.dart
@@ -191,7 +191,7 @@ jobs:
         working-directory: elpian/rust/crates/elpian-wasm
         run: |
           wasm-pack build --release --target web --out-name elpian_vm \
-            --out-dir "$GITHUB_WORKSPACE/elpian/assets/web_runtime/wasm/elpian_vm"
+            --out-dir "$GITHUB_WORKSPACE/elpian/flutter/assets/web_runtime/wasm/elpian_vm"
 
       - name: Build the Flutter web engine shell
         working-directory: elpian/cli/elpian_client
@@ -428,19 +428,19 @@ jobs:
       # the CLI template generated, rather than a hand-maintained copy.
       - name: Bundle the showcase bytecode into the example app
         run: |
-          mkdir -p elpian/example/assets/showcase
-          cp showcase-app/dist/client.elpian.bc        elpian/example/assets/showcase/
-          cp showcase-app/dist/elpian.manifest.json    elpian/example/assets/showcase/
-          ls -l elpian/example/assets/showcase
+          mkdir -p elpian/flutter/example/assets/showcase
+          cp showcase-app/dist/client.elpian.bc        elpian/flutter/example/assets/showcase/
+          cp showcase-app/dist/elpian.manifest.json    elpian/flutter/example/assets/showcase/
+          ls -l elpian/flutter/example/assets/showcase
 
       - name: Build the APK
-        working-directory: elpian/example
+        working-directory: elpian/flutter/example
         run: |
           flutter pub get
           flutter build apk --release --split-per-abi
 
       - name: Assert the APK contains the showcase
-        working-directory: elpian/example
+        working-directory: elpian/flutter/example
         run: |
           set -e
           ls -lh build/app/outputs/flutter-apk/*.apk
@@ -464,5 +464,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: showcase-apk${{ env.GODOT_ENGINE_PRESENT == 'true' && '-with-godot' || '-placeholder' }}
-          path: elpian/example/build/app/outputs/flutter-apk/app-*-release.apk
+          path: elpian/flutter/example/build/app/outputs/flutter-apk/app-*-release.apk
           retention-days: 14
