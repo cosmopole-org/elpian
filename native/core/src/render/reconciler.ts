@@ -66,7 +66,7 @@ import {
   RenderTransform,
   RenderVisibility,
 } from './paint/box.js';
-import { RenderCanvas, RenderControl, RenderGesture, RenderImage, RenderMedia, RenderScene3D, RenderWeb } from './paint/leaves.js';
+import { RenderCanvas, RenderControl, RenderGesture, RenderImage, RenderMedia, RenderScene3D, RenderWeb, RenderNative } from './paint/leaves.js';
 import { RenderText } from './paint/text.js';
 
 type Factory = () => RenderObject;
@@ -118,6 +118,7 @@ const factories: Record<string, Factory> = {
   scene3d: () => new RenderScene3D(),
   media: () => new RenderMedia(),
   web: () => new RenderWeb(),
+  native: () => new RenderNative(),
   gesture: () => new RenderGesture(),
   // animated
   animatedPadding: () => new RenderAnimatedPadding(),

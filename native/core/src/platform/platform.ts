@@ -1,13 +1,10 @@
 /**
- * What the core needs from the platform it runs on.
- *
- * The web host implements this directly in the browser; the Android and iOS
- * hosts implement it in Kotlin / Swift and expose it to the core's JS engine
- * as the `__elpianHost` global (see bridge/native-host.ts). Everything here is
- * synchronous except networking, so the core can lay out and paint inside a
- * single turn.
+ * What the core needs from the platform it runs on — the browser (web host,
+ * Expo on the web) or a test harness. Everything is synchronous except
+ * networking, so the core lays out and paints inside a single turn.
  */
 import type { ControlMeasureSpec, Size, TextMetrics, TextSpec, ViewOp } from '../render/view.js';
+import type { ElpianVmBinding, JsSandboxFactory, WasmEngine } from '../vm/bindings.js';
 
 export interface Viewport {
   width: number;
@@ -90,6 +87,11 @@ export interface Platform {
   /** Load a bundled asset (`asset:` URIs / Flutter asset paths) as text or base64. */
   loadAsset?(path: string, encoding: 'utf8' | 'base64'): Promise<string>;
   godot?: GodotPlatformBinding;
+
+  // ---- sandboxes (see vm/bindings.ts) ----
+  elpianVm?: ElpianVmBinding;
+  jsSandbox?: JsSandboxFactory;
+  wasm?: WasmEngine;
 }
 
 let current: Platform | null = null;

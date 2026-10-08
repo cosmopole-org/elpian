@@ -1,7 +1,7 @@
 {
   "name": "@elpian/native-core",
   "version": "1.0.0",
-  "description": "Platform-neutral Elpian engine: CSS, layout, widgets, host APIs, runtimes and Godot, shared by the web, Android, iOS and Expo bridges",
+  "description": "The TypeScript Elpian engine (CSS, layout, widgets, host APIs, runtimes, Godot) behind the web host",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

@@ -2,14 +2,13 @@
  * The view protocol — the only thing a platform renderer has to understand.
  *
  * The core lays out the Elpian tree itself and emits a flat stream of
- * operations over a small set of primitive *view kinds*. Each platform
- * (Android Views, UIKit, the DOM, React Native) maps a kind onto its own
- * native element and applies the props. Frames are always in logical pixels,
+ * operations over a small set of primitive *view kinds*. The web renderer
+ * maps each kind onto DOM elements and applies the props. Frames are always in logical pixels,
  * relative to the parent view's top-left corner (a scroll view's children are
  * relative to its content origin).
  *
- * The protocol is deliberately JSON-only so it crosses the JS↔native boundary
- * (QuickJS on Android, JavaScriptCore on iOS) as one string per frame.
+ * The protocol is JSON-only, so a renderer can live in the page, a worker or
+ * a test harness alike.
  */
 import type { Color } from '../css/color.js';
 import type { Alignment, Border, BorderRadius, BoxFit, BoxShadow, Filter, Gradient, Matrix4, TextShadow } from '../css/types.js';
@@ -30,7 +29,8 @@ export type ViewKind =
   | 'scene3d' // an embedded Godot viewport
   | 'video'
   | 'audio'
-  | 'web'; // an embedded web page (iframe / embed / object)
+  | 'web' // an embedded web page (iframe / embed / object)
+  | 'native'; // a host-registered native component (a server-component island)
 
 export interface TextStyleSpec {
   color: Color;
@@ -220,6 +220,11 @@ export interface ViewProps {
   tracks?: { src: string; kind: string; srclang: string | null; label: string | null; default: boolean }[] | null;
   html?: string | null;
   javascript?: boolean;
+
+  // ---- native island ----
+  /** The host-registered component name (`registerNativeComponent`). */
+  component?: string | null;
+  componentProps?: Record<string, any> | null;
 }
 
 export type ViewOp =

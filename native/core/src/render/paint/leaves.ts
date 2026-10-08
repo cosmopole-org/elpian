@@ -359,6 +359,34 @@ export class RenderWeb extends RenderObject {
   }
 }
 
+/**
+ * A host-registered native component (an island). props { component,
+ * componentProps, width?, height?, onEvent }. Fills bounded constraints, else
+ * the platform's measured size, else its explicit size; Elpian children are
+ * laid over it (server-rendered content the native component wraps).
+ */
+export class RenderNative extends RenderObject {
+  protected performLayout(c: Constraints): void {
+    const measured = this.owner?.platform.measureControl?.({ kind: 'native', props: { component: this.props.component, componentProps: this.props.componentProps ?? {} } }, c.maxWidth) ?? null;
+    const w = this.props.width ?? measured?.width ?? (Number.isFinite(c.maxWidth) ? c.maxWidth : 0);
+    const h = this.props.height ?? measured?.height ?? (Number.isFinite(c.maxHeight) ? c.maxHeight : 0);
+    this.size = constrain(c, { width: w, height: h });
+    for (const child of this.children) {
+      child.layout({ minWidth: 0, maxWidth: this.size.width, minHeight: 0, maxHeight: this.size.height });
+      child.offset = { x: 0, y: 0 };
+    }
+  }
+  viewKind(): ViewKind {
+    return 'native';
+  }
+  viewProps(): Omit<ViewProps, 'frame'> {
+    return { component: this.props.component ?? null, componentProps: this.props.componentProps ?? {} };
+  }
+  handleViewEvent(event: ViewEvent): void {
+    this.props.onEvent?.(event);
+  }
+}
+
 // ----------------------------------------------------------------------------
 // Gesture region
 // ----------------------------------------------------------------------------

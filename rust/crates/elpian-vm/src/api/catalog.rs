@@ -180,3 +180,67 @@ fn render() -> String {
 pub fn dart_catalog() -> String {
     render()
 }
+
+/// The TypeScript twin of [dart_catalog] for the native hosts
+/// (`native/core/src/vm/host-api-catalog.ts`): the same sets, the same
+/// capability map, so the native `HostHandler` dispatches and gates exactly as
+/// the Flutter one does.
+pub fn ts_catalog() -> String {
+    let mut by_set: BTreeMap<&'static str, Vec<String>> = BTreeMap::new();
+    let mut capability_of: Vec<(String, &'static str)> = Vec::new();
+    for name in all_host_apis() {
+        let cap = Capability::for_api(&name);
+        by_set.entry(dart_set_for(cap)).or_default().push(name.clone());
+        capability_of.push((name, cap.as_str()));
+    }
+    capability_of.sort();
+
+    let mut out = String::new();
+    out.push_str(
+        "// GENERATED FILE — DO NOT EDIT BY HAND.\n\
+         //\n\
+         // Produced from the VM's own host-API list and capability mapping by:\n\
+         //\n\
+         //     cd rust && cargo run --bin gen-host-api-catalog -- \\\n\
+         //         ../native/core/src/vm/host-api-catalog.ts\n\
+         //\n\
+         // The TypeScript twin of flutter/lib/src/vm/host_api_catalog.dart;\n\
+         // `cargo test -p elpian-vm --test host_api_catalog` fails when it is stale.\n\n",
+    );
+    for (set_name, comment) in SET_ORDER {
+        let Some(names) = by_set.get(set_name) else {
+            continue;
+        };
+        let comment = comment.replace("\n  /// ", "\n * ");
+        out.push_str(&format!("/** {comment} */\n"));
+        out.push_str(&format!("export const {set_name}: ReadonlySet<string> = new Set([\n"));
+        for n in names {
+            out.push_str(&format!("  '{n}',\n"));
+        }
+        out.push_str("]);\n\n");
+    }
+    out.push_str("/** The complete advertised surface. */\n");
+    out.push_str("export const allHostApiNames: ReadonlySet<string> = new Set([\n");
+    for (set_name, _) in SET_ORDER {
+        if by_set.contains_key(set_name) {
+            out.push_str(&format!("  ...{set_name},\n"));
+        }
+    }
+    out.push_str("]);\n\n");
+    out.push_str(
+        "/** The capability that gates each API (`Capability::for_api`). */\n\
+         export const capabilityOf: Readonly<Record<string, string>> = {\n",
+    );
+    for (name, cap) in &capability_of {
+        out.push_str(&format!("  '{name}': '{cap}',\n"));
+    }
+    out.push_str("};\n\n");
+    out.push_str(
+        "/** The capability gating [apiName], or `'other'` for a name the VM does not\n\
+         \x20* advertise — the fail-safe gate, never a pass. */\n\
+         export function capabilityFor(apiName: string): string {\n\
+         \x20 return Object.prototype.hasOwnProperty.call(capabilityOf, apiName) ? capabilityOf[apiName] : 'other';\n\
+         }\n",
+    );
+    out
+}

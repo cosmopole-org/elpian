@@ -10,7 +10,7 @@
 //! It is now generated. This test fails the build when the checked-in file
 //! drifts from what the generator would write.
 
-use elpian_vm::api::catalog::dart_catalog;
+use elpian_vm::api::catalog::{dart_catalog, ts_catalog};
 use elpian_vm::api::{all_host_apis, Capability};
 
 /// Where the generated catalog lives.
@@ -53,6 +53,21 @@ fn the_checked_in_catalog_is_current() {
             path.display()
         );
     }
+}
+
+/// The native hosts' TypeScript twin of the catalog must be current too.
+#[test]
+fn the_checked_in_native_catalog_is_current() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../native/core/src/vm/host-api-catalog.ts");
+    let on_disk = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+    assert!(
+        on_disk == ts_catalog(),
+        "{} is stale. Regenerate it:\n    cd rust && cargo run --bin \
+         gen-host-api-catalog -- ../native/core/src/vm/host-api-catalog.ts\n",
+        path.display()
+    );
 }
 
 #[test]
