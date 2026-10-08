@@ -10,7 +10,7 @@
 //! It is now generated. This test fails the build when the checked-in file
 //! drifts from what the generator would write.
 
-use elpian_vm::api::catalog::{dart_catalog, ts_catalog};
+use elpian_vm::api::catalog::{dart_catalog, kotlin_catalog, swift_catalog, ts_catalog};
 use elpian_vm::api::{all_host_apis, Capability};
 
 /// Where the generated catalog lives.
@@ -66,6 +66,37 @@ fn the_checked_in_native_catalog_is_current() {
         on_disk == ts_catalog(),
         "{} is stale. Regenerate it:\n    cd rust && cargo run --bin \
          gen-host-api-catalog -- ../native/core/src/vm/host-api-catalog.ts\n",
+        path.display()
+    );
+}
+
+/// The Android core's Kotlin twin of the catalog must be current too.
+#[test]
+fn the_checked_in_kotlin_catalog_is_current() {
+    const REL: &str =
+        "native/android/elpian-core/src/main/kotlin/dev/elpian/core/vm/HostApiCatalog.kt";
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..").join(REL);
+    let on_disk = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+    assert!(
+        on_disk == kotlin_catalog(),
+        "{} is stale. Regenerate it:\n    cd rust && cargo run --bin \
+         gen-host-api-catalog -- ../{REL}\n",
+        path.display()
+    );
+}
+
+/// The iOS core's Swift twin of the catalog must be current too.
+#[test]
+fn the_checked_in_swift_catalog_is_current() {
+    const REL: &str = "native/ios/Sources/ElpianCore/VM/HostApiCatalog.swift";
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..").join(REL);
+    let on_disk = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+    assert!(
+        on_disk == swift_catalog(),
+        "{} is stale. Regenerate it:\n    cd rust && cargo run --bin \
+         gen-host-api-catalog -- ../{REL}\n",
         path.display()
     );
 }
