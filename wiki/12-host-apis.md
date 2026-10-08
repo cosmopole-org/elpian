@@ -7,7 +7,7 @@ chapter lists what is behind it and how to add your own.
 declare function askHost(name: string, payload: unknown): unknown;
 ```
 
-The allowlist lives in `lib/src/vm/host_api_catalog.dart` — **107 names** across
+The allowlist lives in `flutter/lib/src/vm/host_api_catalog.dart` — **107 names** across
 four families. An API name not registered leaves the VM suspended.
 
 ---
@@ -64,7 +64,7 @@ askHost('setInterval', ['tick', 1000]);
 ## DOM (30)
 
 A retained element tree the guest can query and mutate, independent of the
-render tree (`lib/src/core/dom_api.dart`).
+render tree (`flutter/lib/src/core/dom_api.dart`).
 
 **Query** — `dom.getElementById` `dom.getElementsByClassName`
 `dom.getElementsByTagName` `dom.querySelector` `dom.querySelectorAll`
@@ -122,7 +122,7 @@ or throwing. Write guest code that tolerates a null result from a host call.
 
 ## Writing a custom host handler
 
-The signature (`lib/src/vm/elpian_vm.dart`):
+The signature (`flutter/lib/src/vm/elpian_vm.dart`):
 
 ```dart
 /// The VM sandbox calls host functions via `askHost(apiName, payload)`.
@@ -189,7 +189,7 @@ const data = JSON.parse(body as string);
    to `Other`; `net.*` maps to `Network` and can be revoked centrally.
 5. **The payload is a stringified value**, not necessarily JSON of your
    arguments — check `_normalizedArgs` / `_asHostArgs` in
-   `lib/src/vm/host_handler.dart` for how the built-ins normalise it.
+   `flutter/lib/src/vm/host_handler.dart` for how the built-ins normalise it.
 
 ---
 
@@ -232,7 +232,7 @@ The embedder's loop is always: **execute → if `has_host_call`, service it →
 
 ## Integrations
 
-`lib/src/integrations/` contains two prebuilt embeddings worth reading as
+`flutter/lib/src/integrations/` contains two prebuilt embeddings worth reading as
 worked examples of the host side:
 
 - **`nextjs_bridge.dart` / `nextjs_server_widget.dart`** — server-driven

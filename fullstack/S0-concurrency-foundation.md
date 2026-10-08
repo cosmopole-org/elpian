@@ -171,7 +171,7 @@ frames, so add a supervisor thread: every *N* ms (default 250), run
 ### S0.5 — Fix the capability drift
 
 Add `surface('surface')` to `ElpianCapability`
-(`lib/src/vm/governance/models.dart:215`) so it stops resolving to
+(`flutter/lib/src/vm/governance/models.dart:215`) so it stops resolving to
 `ElpianCapability.other`. Small, independent, and the conformance corpus in S8
 is what keeps it fixed.
 
@@ -183,7 +183,7 @@ is what keeps it fixed.
 | `rust/crates/elpian-vm/src/api.rs` | `Arc<Mutex<VM>>` slots; lookup/turn lock split; lock ordering in the tree fns |
 | `rust/crates/elpian-vm/src/api/govern.rs` | Follow the slot API |
 | `rust/crates/elpian-ffi/src/manager.rs` | Follow the slot API |
-| `lib/src/vm/governance/models.dart` | Add the `surface` capability |
+| `flutter/lib/src/vm/governance/models.dart` | Add the `surface` capability |
 | `rust/crates/elpian-vm/tests/concurrency.rs` | **New** — see below |
 
 ## 5. Verification

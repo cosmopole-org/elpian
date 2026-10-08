@@ -24,7 +24,7 @@ contract. A component that also mutates should call an action.
 ### The payload
 
 Deliberately the **same shape the Next.js bridge already speaks**
-(`wiki/17-nextjs-integration.md`), so `lib/src/integrations/nextjs_bridge.dart`
+(`wiki/17-nextjs-integration.md`), so `flutter/lib/src/integrations/nextjs_bridge.dart`
 and its tests carry over instead of a third parallel format:
 
 ```json
@@ -107,7 +107,7 @@ el('ServerComponent', {
 }, [])
 ```
 
-A new widget builder in `lib/src/widgets/` resolves it: fetch → render the
+A new widget builder in `flutter/lib/src/widgets/` resolves it: fetch → render the
 returned tree with the app's engine → cache by `(app, fn, args)` with the
 payload's `revalidateSeconds`. It owns four states (pending / ready / error /
 revalidating) and holds the previous tree while revalidating, so a refresh does
@@ -115,7 +115,7 @@ not flash.
 
 Client-side needs, all new:
 - `server.call` / `server.render` serviced in `HostHandler`
-  (`lib/src/vm/host_handler.dart`) — the first real network the Flutter host
+  (`flutter/lib/src/vm/host_handler.dart`) — the first real network the Flutter host
   performs on a guest's behalf. Routed through the client net policy (S3).
 - An island resolver on `ElpianServices`, so islands render in the mini app's
   own registry and cannot reach a sibling's.
@@ -124,7 +124,7 @@ Client-side needs, all new:
 
 ## 4. Streaming
 
-`ElpianStreamWidget` (`lib/src/stream/elpian_stream_widget.dart`) already
+`ElpianStreamWidget` (`flutter/lib/src/stream/elpian_stream_widget.dart`) already
 consumes `setView` / `patch` / `stylesheet` commands. S2 gives it a transport.
 
 ```
@@ -161,11 +161,11 @@ the host drops matching cache entries. Bounded, boring, and enough.
 |---|---|
 | `elpian-host/src/surface/server.rs` | `server.render`, streaming frames, cache |
 | `elpian-host/src/gateway/ws.rs` | Stream sockets, frame budgets |
-| `lib/src/vm/host_handler.dart` | `server.call` / `server.render` |
-| `lib/src/widgets/server_component.dart` | **New** — the `ServerComponent` builder |
-| `lib/src/core/elpian_services.dart` | Island registry, scoped stylesheet load |
-| `lib/src/integrations/nextjs_bridge.dart` | Extract the shared payload parser |
-| `lib/src/stream/elpian_stream_widget.dart` | WS transport binding |
+| `flutter/lib/src/vm/host_handler.dart` | `server.call` / `server.render` |
+| `flutter/lib/src/widgets/server_component.dart` | **New** — the `ServerComponent` builder |
+| `flutter/lib/src/core/elpian_services.dart` | Island registry, scoped stylesheet load |
+| `flutter/lib/src/integrations/nextjs_bridge.dart` | Extract the shared payload parser |
+| `flutter/lib/src/stream/elpian_stream_widget.dart` | WS transport binding |
 | `cli/rust/main.rs` | `src/server/components/`, `src/client/islands/` in the manifests |
 
 ## 7. Verification

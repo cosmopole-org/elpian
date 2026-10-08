@@ -4,7 +4,7 @@
 //! a thin wrapper so the same rendering can be unit-tested for staleness.
 //!
 //! ```text
-//! cargo run --bin gen-host-api-catalog -- ../lib/src/vm/host_api_catalog.dart
+//! cargo run --bin gen-host-api-catalog -- ../flutter/lib/src/vm/host_api_catalog.dart
 //! cargo run --bin gen-host-api-catalog            # print to stdout
 //! ```
 

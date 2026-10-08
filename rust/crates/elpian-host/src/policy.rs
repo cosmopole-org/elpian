@@ -2,7 +2,7 @@
 //!
 //! # Why this is a port rather than a new design
 //!
-//! `MiniAppPolicy.resolve` in `lib/src/superapp/mini_app.dart` already decides
+//! `MiniAppPolicy.resolve` in `flutter/lib/src/superapp/mini_app.dart` already decides
 //! what a mini app holds, and a device already applies it. A server that
 //! resolved the same question differently would mean an app could hold one set
 //! of capabilities on a phone and another on the host — and the difference

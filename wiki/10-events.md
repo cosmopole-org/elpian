@@ -1,9 +1,9 @@
 # 10 — The event system
 
 40+ event types, three propagation phases, tree-aware dispatch, and a bridge
-that turns a tap into a VM function call. Sources: `lib/src/core/event_system.dart`,
+that turns a tap into a VM function call. Sources: `flutter/lib/src/core/event_system.dart`,
 `event_dispatcher.dart`, `event_enabled_widget.dart`, and the routing in
-`lib/src/vm/elpian_vm_widget.dart`. Narrative reference: `EVENT_SYSTEM.md`.
+`flutter/lib/src/vm/elpian_vm_widget.dart`. Narrative reference: `EVENT_SYSTEM.md`.
 
 ## Declaring a handler
 
@@ -235,7 +235,7 @@ Beyond node-attached handlers, the system provides:
 ## Timers, not `async`
 
 There is no `async`/`await` in the guest. Deferred work uses the timer host APIs
-(`lib/src/vm/timer_host_api.dart`), which call back into the VM by function name:
+(`flutter/lib/src/vm/timer_host_api.dart`), which call back into the VM by function name:
 
 ```ts
 askHost('setTimeout', ['tick', 1000]);

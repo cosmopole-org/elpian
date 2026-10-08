@@ -90,9 +90,9 @@ Exhaustive lists (every widget prop, every CSS property) live in the source:
   `hierarchy.rs`, `lifecycle.rs`, `stdlib/mod.rs`; public API in `rust/crates/elpian-vm/src/api.rs`.
 - **VM embedding:** `rust/crates/elpian-ffi/src/abi.rs` (native), `rust/crates/elpian-wasm/src/lib.rs` (web),
   `rust/crates/elpian-vm/src/bin/elpian-server.rs` (the HTTP server VM).
-- **Flutter host:** `lib/src/vm/` (widget + runtimes + host handlers),
-  `lib/src/core/` (engine, registry, events, DOM), `lib/src/widgets/`,
-  `lib/src/html_widgets/`, `lib/src/css/`, `lib/src/canvas/`, `lib/src/godot/`. Public surface: `lib/elpian_ui.dart`.
+- **Flutter host:** `flutter/lib/src/vm/` (widget + runtimes + host handlers),
+  `flutter/lib/src/core/` (engine, registry, events, DOM), `flutter/lib/src/widgets/`,
+  `flutter/lib/src/html_widgets/`, `flutter/lib/src/css/`, `flutter/lib/src/canvas/`, `flutter/lib/src/godot/`. Public surface: `lib/elpian_ui.dart`.
 - **Compilers:** `rust/crates/js2elpian/src/lib.rs` (JS→AST→bytecode),
   `rust/crates/dart2elpian/src/lib.rs` (Dart→JS subset) — vendored in-repo.
 - **CLI:** `cli/rust/main.rs` (single file), `cli/README.md`.

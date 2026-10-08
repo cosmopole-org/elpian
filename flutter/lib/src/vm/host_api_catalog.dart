@@ -3,7 +3,7 @@
 // Produced from the VM's own host-API list and capability mapping by:
 //
 //     cd rust && cargo run --bin gen-host-api-catalog -- \
-//         ../lib/src/vm/host_api_catalog.dart
+//         ../flutter/lib/src/vm/host_api_catalog.dart
 //
 // The Rust sources are `api::all_host_apis()` (which names the VM treats
 // as native askHost targets) and `Capability::for_api` (which gate each

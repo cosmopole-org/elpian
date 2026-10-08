@@ -180,7 +180,7 @@ These map exactly to the CLI's `--template client|server|fullstack`; see
 
 ## Two runtimes, one semantics
 
-`ElpianRuntime` (`lib/src/vm/runtime_kind.dart`) selects the execution backend:
+`ElpianRuntime` (`flutter/lib/src/vm/runtime_kind.dart`) selects the execution backend:
 
 ```dart
 enum ElpianRuntime { elpian, quickJs, wasm }

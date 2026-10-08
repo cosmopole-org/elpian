@@ -16,7 +16,7 @@
 //!
 //! ```text
 //! cd rust && cargo run --bin gen-host-api-catalog -- \\
-//!     ../lib/src/vm/host_api_catalog.dart
+//!     ../flutter/lib/src/vm/host_api_catalog.dart
 //! ```
 
 use std::collections::BTreeMap;
@@ -112,7 +112,7 @@ fn render() -> String {
          // Produced from the VM's own host-API list and capability mapping by:\n\
          //\n\
          //     cd rust && cargo run --bin gen-host-api-catalog -- \\\n\
-         //         ../lib/src/vm/host_api_catalog.dart\n\
+         //         ../flutter/lib/src/vm/host_api_catalog.dart\n\
          //\n\
          // The Rust sources are `api::all_host_apis()` (which names the VM treats\n\
          // as native askHost targets) and `Capability::for_api` (which gate each\n\

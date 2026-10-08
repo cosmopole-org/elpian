@@ -140,7 +140,7 @@ app's request token; `open` → direct `http` package call. It also becomes the
 transport under `server.call` / `server.render`, so one place decides what
 leaves the device.
 
-`MiniAppGrant` (`lib/src/superapp/mini_app.dart:145`) gains a `netPolicy`
+`MiniAppGrant` (`flutter/lib/src/superapp/mini_app.dart:145`) gains a `netPolicy`
 field, so a super app hosting mini apps locally gets the same three modes
 without a server involved — the mode is a property of the mini app, not of the
 deployment.
@@ -152,9 +152,9 @@ deployment.
 | `elpian-host/src/broker/**` | **New** — policy, resolver guard, audit |
 | `elpian-host/src/surface/net.rs` | `net.*` for server functions → broker |
 | `elpian-host/src/gateway/routes.rs` | `POST /apps/<app>/proxy` |
-| `lib/src/vm/net_policy.dart` | **New** — the client policy |
-| `lib/src/vm/host_handler.dart` | Implement `net.*` through the policy |
-| `lib/src/superapp/mini_app.dart` | `netPolicy` on the grant, resolved into the policy |
+| `flutter/lib/src/vm/net_policy.dart` | **New** — the client policy |
+| `flutter/lib/src/vm/host_handler.dart` | Implement `net.*` through the policy |
+| `flutter/lib/src/superapp/mini_app.dart` | `netPolicy` on the grant, resolved into the policy |
 | `rust/crates/elpian-vm/src/api/govern.rs` | Network mode in the JSON control plane |
 
 ## 6. Verification

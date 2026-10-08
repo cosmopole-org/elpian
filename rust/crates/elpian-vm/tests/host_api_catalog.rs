@@ -1,6 +1,6 @@
 //! The Dart host-API catalog must stay in step with the VM's own list.
 //!
-//! `lib/src/vm/host_api_catalog.dart` used to be maintained by hand alongside
+//! `flutter/lib/src/vm/host_api_catalog.dart` used to be maintained by hand alongside
 //! `api::all_host_apis()`. The two drifted: 34 APIs the VM advertised — every
 //! `fs.*`, `net.*`, `gpu.*`, `time.*`, `random.*`, `task.*` and `host.*` name,
 //! plus `log` and `vm.import` — had no presence on the Dart side at all, so a
@@ -21,7 +21,7 @@ use elpian_vm::api::{all_host_apis, Capability};
 /// `crates/`.
 fn catalog_path() -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../lib/src/vm/host_api_catalog.dart")
+        .join("../../../flutter/lib/src/vm/host_api_catalog.dart")
 }
 
 #[test]
@@ -49,7 +49,7 @@ fn the_checked_in_catalog_is_current() {
         panic!(
             "{} is stale.\n\n{first_diff}\n\nRegenerate it:\n    \
              cd rust && cargo run --bin gen-host-api-catalog -- \
-             ../lib/src/vm/host_api_catalog.dart\n",
+             ../flutter/lib/src/vm/host_api_catalog.dart\n",
             path.display()
         );
     }
@@ -109,7 +109,7 @@ fn the_catalog_names_every_advertised_api() {
 #[test]
 fn the_dart_capability_enum_matches_the_vms() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../lib/src/vm/governance/models.dart");
+        .join("../../../flutter/lib/src/vm/governance/models.dart");
     let dart = std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
 
@@ -151,7 +151,7 @@ fn the_dart_capability_enum_matches_the_vms() {
         "ElpianCapability has drifted from the VM's Capability enum.\n\
          missing from Dart: {missing:?}\n\
          present only in Dart: {extra:?}\n\n\
-         Add the member to `lib/src/vm/governance/models.dart` with its wire \
+         Add the member to `flutter/lib/src/vm/governance/models.dart` with its wire \
          name, and consider whether `MiniAppGrant.untrusted` should include it."
     );
 }

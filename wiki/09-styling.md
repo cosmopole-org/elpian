@@ -1,7 +1,7 @@
 # 09 — The styling system
 
 Elpian ships a real CSS engine in Dart: **201 style properties** on `CSSStyle`
-(`lib/src/models/css_style.dart`), a parser (`lib/src/css/css_parser.dart`,
+(`flutter/lib/src/models/css_style.dart`), a parser (`flutter/lib/src/css/css_parser.dart`,
 1200 lines), a stylesheet manager with cascade and `!important`, JSON
 stylesheets, CSS variables, media queries and keyframes.
 
@@ -147,7 +147,7 @@ controller.
 ## JSON stylesheets
 
 A complete stylesheet is expressible as JSON — rules, media queries, variables
-and keyframes (`lib/src/css/json_stylesheet_parser.dart`, `JSON_STYLESHEET.md`).
+and keyframes (`flutter/lib/src/css/json_stylesheet_parser.dart`, `JSON_STYLESHEET.md`).
 
 ```json
 {

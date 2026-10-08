@@ -33,7 +33,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all
 
 cargo build --release -p elpian-ffi    # what Flutter links: libelpian_vm
-cargo run --bin gen-host-api-catalog -- ../lib/src/vm/host_api_catalog.dart
+cargo run --bin gen-host-api-catalog -- ../flutter/lib/src/vm/host_api_catalog.dart
 
 # The browser VM. wasm-pack needs a package, not the virtual root:
 cd crates/elpian-wasm && wasm-pack build --release --target web

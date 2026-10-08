@@ -26,7 +26,7 @@ between the two. Get it right and everything else follows.
 | `children` | array | Child nodes, recursively |
 | `key` | string | Stable identity; also used as the CSS `#id` selector |
 
-`ElpianNode.fromJson` (`lib/src/models/elpian_node.dart`) parses exactly this.
+`ElpianNode.fromJson` (`flutter/lib/src/models/elpian_node.dart`) parses exactly this.
 A top-level `style` is folded into `props['style']` if props does not already
 have one, so both spellings work for styling.
 
@@ -126,8 +126,8 @@ The event object's shape is in [`10-events.md`](10-events.md).
 ## Scoped rendering — partial updates
 
 Re-emitting the whole tree on every keystroke is wasteful. `Scope` nodes create
-**independent re-render boundaries** (`lib/src/vm/scoped_components.dart`,
-`lib/src/vm/scope_patch.dart`).
+**independent re-render boundaries** (`flutter/lib/src/vm/scoped_components.dart`,
+`flutter/lib/src/vm/scope_patch.dart`).
 
 ```dart
 Map<String, dynamic> scopedComponent(String key, Map<String, dynamic> component)
@@ -202,7 +202,7 @@ with `minHeight` from the incoming constraints.
 
 ## Embedding: `ElpianVmWidget`
 
-The Flutter side of the contract (`lib/src/vm/elpian_vm_widget.dart`):
+The Flutter side of the contract (`flutter/lib/src/vm/elpian_vm_widget.dart`):
 
 ```dart
 ElpianVmWidget.fromBytecode({

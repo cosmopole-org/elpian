@@ -141,7 +141,7 @@ Three pieces, all required:
    boots the engine on the first surface request, into the canvas Flutter put in
    the platform-view slot.
 3. **The binding** — resolved automatically by the conditional import in
-   `lib/src/godot/godot_binding.dart`; nothing has to be installed by hand.
+   `flutter/lib/src/godot/godot_binding.dart`; nothing has to be installed by hand.
 
 Presence of `window.__elpianGodotDrain` *is* the liveness signal that makes
 `Scene3D` swap its placeholder for a viewport, so the glue is only shipped when
