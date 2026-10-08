@@ -64,6 +64,7 @@ are enforced.
 | [`20-proxy-and-egress.md`](20-proxy-and-egress.md) | The three network modes, what `closed` guarantees, and why client policy is advisory. |
 | [`21-hosting.md`](21-hosting.md) | Run `elpiand`: the registry, policy, the pool, meters, quotas, the admin surface. |
 | [`22-packaging.md`](22-packaging.md) | `.elpianpkg`: determinism, verification, signing and its limit. |
+| [`23-native-hosts.md`](23-native-hosts.md) | Android (Kotlin), iOS (Swift), Web and Expo hosts of the same mini apps. |
 
 ## How an agent should use this skill
 

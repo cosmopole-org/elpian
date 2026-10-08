@@ -1,0 +1,145 @@
+name: Native
+
+# The native hosts of Elpian mini apps (native/):
+#   * native/core + native/web — the TypeScript engine and the DOM host (web only);
+#   * native/android — the Kotlin core (pure JVM, unit-tested) and the Android
+#     Views host (Robolectric end-to-end tests), plus the Elpian VM's JNI build;
+#   * native/ios — the Swift core (tested on Linux and macOS) and the UIKit host
+#     (compiled for the iOS simulator);
+#   * native/expo — the Expo / React Native module over all three.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["native/**", "rust/crates/elpian-ffi/**", "rust/crates/elpian-vm/**", "flutter/assets/web_runtime/**", ".github/workflows/native.yml"]
+  pull_request:
+    paths: ["native/**", "rust/crates/elpian-ffi/**", "rust/crates/elpian-vm/**", "flutter/assets/web_runtime/**", ".github/workflows/native.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  web:
+    name: Web — TypeScript core and DOM host
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: native/package-lock.json
+      - name: Install
+        working-directory: native
+        run: npm ci
+      - name: Typecheck
+        working-directory: native
+        run: npx tsc -b core web
+      - name: Test the core
+        working-directory: native
+        run: npm test -w core
+      - name: Install Chromium
+        run: |
+          npm install -g playwright@1.49.1
+          npx playwright install --with-deps chromium
+      - name: Build and test the DOM host in Chromium
+        working-directory: native/web
+        run: npm test
+
+  # ---------------------------------------------------------------------------
+  android:
+    name: Android — Kotlin core and Views host
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.14.3"
+      - name: Core unit tests (JVM)
+        working-directory: native/android
+        run: gradle --no-daemon :elpian-core:test
+      - name: Host tests (Robolectric) and release build
+        working-directory: native/android
+        run: gradle --no-daemon :elpian:testDebugUnitTest :elpian:assembleRelease
+      - name: Publish the libraries (as the Expo module ships them)
+        working-directory: native/android
+        run: gradle --no-daemon publish
+
+  android-vm:
+    name: Android — Elpian VM (JNI) for all ABIs
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+      - name: Build libelpian_vm.so
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
+        run: native/android/scripts/build-rust.sh
+      - name: Check the JNI exports
+        run: |
+          for so in native/android/elpian/src/main/jniLibs/*/libelpian_vm.so; do
+            nm -D "$so" | grep -q Java_dev_elpian_android_vm_ElpianVmNative_nativeCall || { echo "missing JNI exports in $so"; exit 1; }
+          done
+
+  # ---------------------------------------------------------------------------
+  swift-linux:
+    name: iOS core — Swift on Linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container: swift:6.0
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test ElpianCore
+        working-directory: native/ios
+        run: swift build && swift test
+
+  ios:
+    name: iOS — Swift core and UIKit host
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test ElpianCore (macOS)
+        working-directory: native/ios
+        run: swift test
+      - name: Build the Elpian VM xcframework
+        run: native/ios/scripts/build-rust.sh
+      - name: Build the UIKit host for the iOS simulator
+        working-directory: native/ios
+        run: |
+          xcodebuild -scheme Elpian -destination 'generic/platform=iOS Simulator' \
+            -skipPackagePluginValidation build | tail -50
+          test "${PIPESTATUS[0]}" -eq 0
+
+  # ---------------------------------------------------------------------------
+  expo:
+    name: Expo module — typecheck and package
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: native/package-lock.json
+      - name: Install
+        working-directory: native
+        run: npm ci
+      - name: Build
+        working-directory: native/expo
+        run: npx tsc -p tsconfig.json
