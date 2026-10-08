@@ -636,6 +636,8 @@ public func deepEqual(_ a: Any?, _ b: Any?) -> Bool {
         }
         return true
     }
+    // Other typed values (TextStyle, …) compare structurally when they are Hashable.
+    if let hx = x as? AnyHashable, let hy = y as? AnyHashable, !(type(of: x) is AnyClass) { return hx == hy }
     return false
 }
 
