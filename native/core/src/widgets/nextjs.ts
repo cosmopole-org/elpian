@@ -93,7 +93,7 @@ const nextjsLink: WidgetBuilder = (node, children, ctx) => {
           fontWeight: s?.fontWeight ?? (isButtonLike ? 700 : undefined),
           letterSpacing: s?.letterSpacing ?? undefined,
         },
-        { textAlign: s?.textAlign ?? (isButtonLike ? 'center' : 'start') },
+        { align: s?.textAlign ?? (isButtonLike ? 'center' : 'start') },
       );
 
   const styled = applyStyle(content, s, { applyFlex: false }, ctx);

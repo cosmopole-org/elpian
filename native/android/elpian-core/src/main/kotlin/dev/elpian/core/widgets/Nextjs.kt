@@ -113,7 +113,7 @@ private val nextjsLink: WidgetBuilder = { node, children, ctx ->
                 fontWeight = s?.fontWeight ?: (if (isButtonLike) 700 else null),
                 letterSpacing = s?.letterSpacing,
             ),
-            mapOf("textAlign" to (s?.textAlign ?: (if (isButtonLike) "center" else "start"))),
+            mapOf("align" to (s?.textAlign ?: (if (isButtonLike) "center" else "start"))),
         )
     }
 
