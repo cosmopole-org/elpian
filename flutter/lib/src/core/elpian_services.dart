@@ -46,6 +46,7 @@ library;
 
 import '../canvas/canvas_context_store.dart';
 import '../css/stylesheet.dart';
+import 'document_index.dart';
 import 'event_dispatcher.dart';
 import 'event_system.dart';
 import 'widget_registry.dart';
@@ -64,7 +65,8 @@ class ElpianServices {
         events = events ?? EventDispatcher(),
         eventBus = eventBus ?? EventBus(),
         stylesheets = stylesheets ?? GlobalStylesheetManager(),
-        canvasContexts = canvasContexts ?? CanvasContextStore();
+        canvasContexts = canvasContexts ?? CanvasContextStore(),
+        document = DocumentIndex();
 
   /// Which mini app these services belong to. Used to namespace host-side
   /// resources so an id collision cannot cross an app boundary.
@@ -84,6 +86,10 @@ class ElpianServices {
 
   /// This mini app's 2D drawing contexts.
   final CanvasContextStore canvasContexts;
+
+  /// Id / name references across the rendered document (`<datalist>`,
+  /// `<map>`), indexed by the engine before each render.
+  final DocumentIndex document;
 
   /// The services every un-scoped caller sees.
   ///
@@ -141,6 +147,7 @@ class ElpianServices {
     eventBus.removeAllEventListeners();
     stylesheets.clear();
     canvasContexts.clearAll();
+    document.clear();
   }
 
   @override

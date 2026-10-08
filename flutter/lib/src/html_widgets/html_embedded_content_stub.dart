@@ -1,49 +1,33 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
+import 'html_embedded_link_card.dart';
+
+/// Embedded web content where neither `dart:io` nor the web platform is
+/// available: a card that opens the URL.
 class HtmlEmbeddedContent extends StatelessWidget {
   final String url;
   final String label;
+
+  /// Inline document (`srcdoc`), shown instead of [url] where supported.
+  final String? html;
+
+  /// Extra element attributes (honoured by the web iframe).
+  final Map<String, String> attributes;
 
   const HtmlEmbeddedContent({
     super.key,
     required this.url,
     required this.label,
+    this.html,
+    this.attributes = const {},
   });
 
   @override
   Widget build(BuildContext context) {
-    if (url.isEmpty) {
-      return Center(
-        child: Text('$label source is required'),
-      );
-    }
-
-    return Container(
-      decoration:
-          BoxDecoration(border: Border.all(color: Colors.grey.shade400)),
-      padding: const EdgeInsets.all(12),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              '$label: $url',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(width: 8),
-          IconButton(
-            icon: const Icon(Icons.open_in_new),
-            tooltip: 'Open $label',
-            onPressed: () async {
-              final uri = Uri.tryParse(url);
-              if (uri == null) return;
-              await launchUrl(uri, mode: LaunchMode.externalApplication);
-            },
-          ),
-        ],
-      ),
+    return EmbeddedLinkCard(
+      url: url,
+      label: label,
+      hasInlineDocument: html != null && html!.isNotEmpty,
     );
   }
 }

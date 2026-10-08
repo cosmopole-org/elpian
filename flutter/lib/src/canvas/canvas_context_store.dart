@@ -62,7 +62,19 @@ class CanvasContext {
     required this.id,
     required this.width,
     required this.height,
-  });
+  }) {
+    executor.imageCache.addListener(_onImageLoaded);
+  }
+
+  /// An image arrived: if the last recording skipped a draw waiting for one,
+  /// re-record from scratch so the image appears.
+  void _onImageLoaded() {
+    if (!executor.waitingForImages) return;
+    _forceFullRebuild = true;
+    _picture?.dispose();
+    _picture = null;
+    _markDirty();
+  }
 
   void setSize(double w, double h) {
     if (w == width && h == height) return;
@@ -130,6 +142,7 @@ class CanvasContext {
   }
 
   void dispose() {
+    executor.imageCache.removeListener(_onImageLoaded);
     _picture?.dispose();
     _picture = null;
     _pendingCommands.clear();

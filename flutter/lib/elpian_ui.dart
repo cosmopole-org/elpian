@@ -59,6 +59,7 @@ export 'src/css/json_stylesheet_parser.dart';
 
 // ── Canvas 2D ──────────────────────────────────────────────────────
 export 'src/canvas/canvas_api.dart';
+export 'src/canvas/canvas_image_cache.dart';
 export 'src/canvas/canvas_widget.dart';
 
 // Embedded Godot 3D — the `Scene3D` widget, its controller, and the op protocol.

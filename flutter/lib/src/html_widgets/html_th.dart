@@ -1,23 +1,9 @@
 import 'package:flutter/material.dart';
 import '../models/elpian_node.dart';
-import '../css/css_properties.dart';
+import 'html_td.dart';
 
+/// `<th>`: a header cell — a `<td>` that is bold and centred by default.
 class HtmlTh {
-  static Widget build(ElpianNode node, List<Widget> children) {
-    final text = node.props['text'] as String? ?? '';
-    final child = children.isNotEmpty
-        ? children.first
-        : Text(text, style: const TextStyle(fontWeight: FontWeight.bold));
-
-    Widget result = Container(
-      padding: const EdgeInsets.all(8.0),
-      child: child,
-    );
-
-    if (node.style != null) {
-      result = CSSProperties.applyStyle(result, node.style);
-    }
-
-    return result;
-  }
+  static Widget build(ElpianNode node, List<Widget> children) =>
+      HtmlTd.buildCell(node, children, header: true);
 }

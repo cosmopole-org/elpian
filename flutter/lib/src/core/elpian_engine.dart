@@ -104,6 +104,9 @@ class ElpianEngine {
     _registry.register('Card', ElpianCard.build);
     _registry.register('Scaffold', ElpianScaffold.build);
     _registry.register('AppBar', ElpianAppBar.build);
+    _registry.register('Drawer', ElpianDrawer.build);
+    _registry.register(
+        'FloatingActionButton', ElpianFloatingActionButton.build);
     _registry.register('Canvas', ElpianCanvasWidget.build);
     _registry.register('CachedCanvas', ElpianCachedCanvas.build);
     _registry.register(ScopeContract.type, ElpianScope.build);
@@ -198,6 +201,12 @@ class ElpianEngine {
     _registry.register('tr', HtmlTr.build);
     _registry.register('td', HtmlTd.build);
     _registry.register('th', HtmlTh.build);
+    for (final tag in ['thead', 'tbody', 'tfoot']) {
+      _registry.register(tag, HtmlTableSection.fromNode);
+    }
+    _registry.register('caption', HtmlCaption.build);
+    _registry.register('colgroup', HtmlColgroup.fromNode);
+    _registry.register('col', HtmlColgroup.fromNode);
     _registry.register('form', HtmlForm.build);
     _registry.register('label', HtmlLabel.build);
     _registry.register('select', HtmlSelect.build);
@@ -260,8 +269,28 @@ class ElpianEngine {
     _registry.register('area', HtmlArea.build);
   }
 
-  Widget render(ElpianNode node, {String? parentId}) =>
-      services.runScoped(() => _render(node, parentId: parentId));
+  Widget render(ElpianNode node, {String? parentId}) => services.runScoped(() {
+        // Resolve cross-element references (`<input list>` → `<datalist>`,
+        // `<img usemap>` → `<map>`) before any builder runs, so they work
+        // whatever the document order.
+        services.document.index(node);
+        return _render(node, parentId: parentId);
+      });
+
+  /// Widgets whose builders recognise their own gestures and dispatch the
+  /// node's events themselves (`InkWell`, `GestureDetector`, drag and drop,
+  /// `Dismissible`, `FloatingActionButton`). The generic event wrapper still
+  /// registers these nodes for dispatch, but must not add a competing
+  /// GestureDetector around them — it would fight theirs in the gesture
+  /// arena and report taps twice.
+  static const Set<String> selfDispatchingTypes = {
+    'InkWell',
+    'GestureDetector',
+    'Draggable',
+    'DragTarget',
+    'Dismissible',
+    'FloatingActionButton',
+  };
 
   /// The render itself, always run inside this engine's service scope so
   /// builders capture the right mini app's dispatcher, stylesheets and canvas
@@ -342,6 +371,7 @@ class ElpianEngine {
         key: key == null ? null : ValueKey<String>(key),
         node: nodeWithStyle,
         parentId: parentId,
+        handleGestures: !selfDispatchingTypes.contains(nodeWithStyle.type),
         child: result,
       );
     } else if (key != null && key.isNotEmpty) {

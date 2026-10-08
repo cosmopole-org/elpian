@@ -248,6 +248,21 @@ class CSSParser {
       animationRepeat:
           styleMap['animationRepeat'] ?? styleMap['animation-repeat'] as bool?,
       keyframes: _parseKeyframes(styleMap['keyframes']),
+      // Tables.
+      verticalAlign:
+          (styleMap['verticalAlign'] ?? styleMap['vertical-align'])?.toString(),
+      borderCollapse:
+          (styleMap['borderCollapse'] ?? styleMap['border-collapse'])
+              ?.toString(),
+      // `border-spacing: H V` — the horizontal value is used for both axes.
+      borderSpacing: parseDouble(
+          (styleMap['borderSpacing'] ?? styleMap['border-spacing'])
+              ?.toString()
+              .trim()
+              .split(RegExp(r'\s+'))
+              .first),
+      captionSide:
+          (styleMap['captionSide'] ?? styleMap['caption-side'])?.toString(),
     );
   }
 

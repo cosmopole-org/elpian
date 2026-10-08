@@ -77,7 +77,8 @@ class _ElpianCanvasState extends State<ElpianCanvas> {
 class CanvasPainter extends CustomPainter {
   final CanvasAPIExecutor executor;
 
-  CanvasPainter(this.executor);
+  /// Repaints when an image a `drawImage` / pattern is waiting for arrives.
+  CanvasPainter(this.executor) : super(repaint: executor.imageCache);
 
   @override
   void paint(Canvas canvas, Size size) {

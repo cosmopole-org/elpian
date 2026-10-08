@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import '../models/elpian_node.dart';
-import '../css/css_properties.dart';
+import 'html_table.dart';
 
+/// `<tr>`: a row of cells. Its table lays the cells out on the grid (see
+/// `HtmlTable`); a row outside a table shows them side by side.
+/// `style.backgroundColor` paints behind the row's cells.
 class HtmlTr {
   static Widget build(ElpianNode node, List<Widget> children) {
-    Widget result = Row(children: children);
-
-    if (node.style != null) {
-      result = CSSProperties.applyStyle(result, node.style);
-    }
-
-    return result;
+    return HtmlTableRow(
+      node: node,
+      cells: children,
+      cellNodes: node.children,
+    );
   }
 }

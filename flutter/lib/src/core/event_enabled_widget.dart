@@ -11,11 +11,18 @@ class EventEnabledWidget extends StatefulWidget {
   final ElpianNode node;
   final String? parentId;
 
+  /// Whether to recognise tap / drag / swipe gestures for the node's events.
+  /// `false` for widgets that recognise and dispatch their own (see
+  /// `ElpianEngine.selfDispatchingTypes`); the node is still registered for
+  /// dispatch, and pointer, hover and keyboard events are still wired.
+  final bool handleGestures;
+
   const EventEnabledWidget({
     Key? key,
     required this.child,
     required this.node,
     this.parentId,
+    this.handleGestures = true,
   }) : super(key: key);
 
   @override
@@ -90,22 +97,23 @@ class _EventEnabledWidgetState extends State<EventEnabledWidget> {
     final events = widget.node.events!;
 
     // Wrap with GestureDetector for tap/click events
-    if (_hasAnyEvent(events, [
-      'click',
-      'tap',
-      'doubletap',
-      'longpress',
-      'tapdown',
-      'tapup',
-      'tapcancel',
-      'drag',
-      'dragstart',
-      'dragend',
-      'swipeleft',
-      'swiperight',
-      'swipeup',
-      'swipedown',
-    ])) {
+    if (widget.handleGestures &&
+        _hasAnyEvent(events, [
+          'click',
+          'tap',
+          'doubletap',
+          'longpress',
+          'tapdown',
+          'tapup',
+          'tapcancel',
+          'drag',
+          'dragstart',
+          'dragend',
+          'swipeleft',
+          'swiperight',
+          'swipeup',
+          'swipedown',
+        ])) {
       result = GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: events.containsKey('click') || events.containsKey('tap')

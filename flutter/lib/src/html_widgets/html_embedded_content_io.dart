@@ -1,16 +1,29 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import 'html_embedded_link_card.dart';
+
+/// Embedded web content on native platforms: an inline web view where
+/// `webview_flutter` has one (Android, iOS, macOS) — loading the URL, or the
+/// inline document (`srcdoc`) when given — and a card that opens the URL in
+/// the browser elsewhere (Windows, Linux, tests).
 class HtmlEmbeddedContent extends StatefulWidget {
   final String url;
   final String label;
+
+  /// Inline document (`srcdoc`); takes precedence over [url], as in HTML.
+  final String? html;
+
+  /// Extra element attributes (honoured by the web iframe only).
+  final Map<String, String> attributes;
 
   const HtmlEmbeddedContent({
     super.key,
     required this.url,
     required this.label,
+    this.html,
+    this.attributes = const {},
   });
 
   @override
@@ -21,35 +34,43 @@ class _HtmlEmbeddedContentState extends State<HtmlEmbeddedContent> {
   WebViewController? _controller;
 
   bool get _supportsInlineWebView {
+    if (kIsWeb) return false;
     return defaultTargetPlatform == TargetPlatform.android ||
         defaultTargetPlatform == TargetPlatform.iOS ||
         defaultTargetPlatform == TargetPlatform.macOS;
   }
 
+  bool get _hasDocument => widget.html != null && widget.html!.isNotEmpty;
+
   @override
   void initState() {
     super.initState();
-    _configureControllerFor(widget.url);
+    _configure();
   }
 
   @override
   void didUpdateWidget(covariant HtmlEmbeddedContent oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.url != widget.url) {
-      _configureControllerFor(widget.url);
+    if (oldWidget.url != widget.url || oldWidget.html != widget.html) {
+      _configure();
     }
   }
 
-  void _configureControllerFor(String url) {
-    if (_supportsInlineWebView && _isHttpLike(url)) {
-      final controller = _controller ??
-          (WebViewController()..setJavaScriptMode(JavaScriptMode.unrestricted));
-      controller.loadRequest(Uri.parse(url));
-      _controller = controller;
+  void _configure() {
+    final canLoad = _hasDocument || _isHttpLike(widget.url);
+    if (!_supportsInlineWebView || !canLoad) {
+      _controller = null;
       return;
     }
-
-    _controller = null;
+    final controller = _controller ??
+        (WebViewController()..setJavaScriptMode(JavaScriptMode.unrestricted));
+    if (_hasDocument) {
+      controller.loadHtmlString(widget.html!,
+          baseUrl: _isHttpLike(widget.url) ? widget.url : null);
+    } else {
+      controller.loadRequest(Uri.parse(widget.url));
+    }
+    _controller = controller;
   }
 
   static bool _isHttpLike(String value) {
@@ -58,41 +79,16 @@ class _HtmlEmbeddedContentState extends State<HtmlEmbeddedContent> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.url.isEmpty) {
-      return Center(
-        child: Text('${widget.label} source is required'),
+    final controller = _controller;
+    if (controller != null) {
+      return EmbeddedContentBox(
+        child: ClipRect(child: WebViewWidget(controller: controller)),
       );
     }
-
-    if (_controller != null) {
-      return ClipRect(child: WebViewWidget(controller: _controller!));
-    }
-
-    return Container(
-      decoration:
-          BoxDecoration(border: Border.all(color: Colors.grey.shade400)),
-      padding: const EdgeInsets.all(12),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              '${widget.label}: ${widget.url}',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(width: 8),
-          IconButton(
-            icon: const Icon(Icons.open_in_new),
-            tooltip: 'Open ${widget.label}',
-            onPressed: () async {
-              final uri = Uri.tryParse(widget.url);
-              if (uri == null) return;
-              await launchUrl(uri, mode: LaunchMode.externalApplication);
-            },
-          ),
-        ],
-      ),
+    return EmbeddedLinkCard(
+      url: widget.url,
+      label: widget.label,
+      hasInlineDocument: _hasDocument,
     );
   }
 }

@@ -52,25 +52,37 @@ class _ElpianShimmerWidgetState extends State<_ElpianShimmerWidget>
 
   @override
   Widget build(BuildContext context) {
+    final style = widget.node.style;
+    final baseColor = style?.shimmerBaseColor ?? const Color(0xFFE0E0E0);
+    final highlightColor =
+        style?.shimmerHighlightColor ?? const Color(0xFFF5F5F5);
+
+    // The shimmer gradient is painted with `srcATop`, i.e. only where the
+    // child is already opaque. The skeleton placeholder must therefore be
+    // filled (with the base colour) — an undecorated box is transparent and
+    // the shimmer would paint nothing at all.
     final child = widget.children.isNotEmpty
-        ? widget.children.first
+        ? (widget.children.length == 1
+            ? widget.children.first
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: widget.children,
+              ))
         : Container(
-            width: widget.node.style?.width ?? 200,
-            height: widget.node.style?.height ?? 20,
+            width: style?.width ?? 200,
+            height: style?.height ?? 20,
+            margin: style?.margin,
             decoration: BoxDecoration(
-              borderRadius:
-                  widget.node.style?.borderRadius ?? BorderRadius.circular(4),
+              color: style?.backgroundColor ?? baseColor,
+              borderRadius: style?.borderRadius ?? BorderRadius.circular(4),
             ),
           );
-
-    final baseColor =
-        widget.node.style?.shimmerBaseColor ?? const Color(0xFFE0E0E0);
-    final highlightColor =
-        widget.node.style?.shimmerHighlightColor ?? const Color(0xFFF5F5F5);
 
     return AnimatedBuilder(
       animation: _animation,
       builder: (context, childWidget) {
+        final t = _animation.value;
         return ShaderMask(
           shaderCallback: (bounds) {
             return LinearGradient(
@@ -78,9 +90,9 @@ class _ElpianShimmerWidgetState extends State<_ElpianShimmerWidget>
               end: Alignment.centerRight,
               colors: [baseColor, highlightColor, baseColor],
               stops: [
-                (_animation.value - 0.3).clamp(0.0, 1.0),
-                _animation.value.clamp(0.0, 1.0),
-                (_animation.value + 0.3).clamp(0.0, 1.0),
+                (t - 0.3).clamp(0.0, 1.0),
+                t.clamp(0.0, 1.0),
+                (t + 0.3).clamp(0.0, 1.0),
               ],
             ).createShader(bounds);
           },

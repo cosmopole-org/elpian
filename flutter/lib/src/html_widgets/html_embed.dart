@@ -22,7 +22,7 @@ class HtmlEmbed {
   static Widget _buildTypedEmbeddedWidget(ElpianNode node, String src) {
     final type = (node.props['type'] as String? ?? '').toLowerCase();
 
-    if (_looksLikeImage(type, src)) {
+    if (looksLikeImage(type, src)) {
       return HtmlImg.build(node, const []);
     }
 
@@ -34,10 +34,10 @@ class HtmlEmbed {
       return HtmlAudio.build(node, const []);
     }
 
-    return HtmlEmbeddedContent(url: src, label: 'embed');
+    return HtmlEmbeddedContent(url: src, label: node.type);
   }
 
-  static bool _looksLikeImage(String type, String src) {
+  static bool looksLikeImage(String type, String src) {
     return type.startsWith('image/') ||
         src.endsWith('.png') ||
         src.endsWith('.jpg') ||

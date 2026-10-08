@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import '../models/elpian_node.dart';
 import '../css/css_properties.dart';
+import 'html_source.dart';
 
+/// `<audio>`: plays `src` — or, without one, the first playable
+/// `<source src>` child — with play/pause/stop and a scrubber.
 class HtmlAudio {
   static Widget build(ElpianNode node, List<Widget> children) {
     Widget result = _HtmlAudioPlayer(node: node);
@@ -31,7 +34,7 @@ class _HtmlAudioPlayerState extends State<_HtmlAudioPlayer> {
   bool _isReady = false;
   String? _error;
 
-  String get _src => widget.node.props['src'] as String? ?? '';
+  String get _src => HtmlSource.mediaSource(widget.node);
   bool get _autoplay => widget.node.props['autoplay'] == true;
   bool get _loop => widget.node.props['loop'] == true;
   bool get _muted => widget.node.props['muted'] == true;
@@ -46,7 +49,7 @@ class _HtmlAudioPlayerState extends State<_HtmlAudioPlayer> {
   @override
   void didUpdateWidget(covariant _HtmlAudioPlayer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final oldSrc = oldWidget.node.props['src'] as String? ?? '';
+    final oldSrc = HtmlSource.mediaSource(oldWidget.node);
     if (oldSrc != _src) {
       _loadSource();
     }

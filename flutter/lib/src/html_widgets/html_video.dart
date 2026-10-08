@@ -2,7 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import '../models/elpian_node.dart';
 import '../css/css_properties.dart';
+import 'html_source.dart';
+import 'html_track.dart';
 
+/// `<video>`: plays `src` — or, without one, the first playable
+/// `<source src>` child — with play/pause and a scrubber. A `<track>` of kind
+/// subtitles/captions (the `default` one, else the first) is loaded and its
+/// cues are shown over the picture, toggled with the CC button.
 class HtmlVideo {
   static Widget build(ElpianNode node, List<Widget> children) {
     Widget result = _HtmlVideoPlayer(node: node);
@@ -28,7 +34,10 @@ class _HtmlVideoPlayerState extends State<_HtmlVideoPlayer> {
   VideoPlayerController? _controller;
   Future<void>? _initializeFuture;
 
-  String get _src => widget.node.props['src'] as String? ?? '';
+  bool _showCaptions = true;
+
+  String get _src => HtmlSource.mediaSource(widget.node);
+  ElpianNode? get _track => HtmlTrack.captionTrack(widget.node);
   bool get _autoplay => widget.node.props['autoplay'] == true;
   bool get _loop => widget.node.props['loop'] == true;
   bool get _muted => widget.node.props['muted'] == true;
@@ -42,8 +51,9 @@ class _HtmlVideoPlayerState extends State<_HtmlVideoPlayer> {
   @override
   void didUpdateWidget(covariant _HtmlVideoPlayer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final oldSrc = oldWidget.node.props['src'] as String? ?? '';
-    if (oldSrc != _src) {
+    final oldSrc = HtmlSource.mediaSource(oldWidget.node);
+    final oldTrack = HtmlTrack.captionTrack(oldWidget.node)?.props['src'];
+    if (oldSrc != _src || oldTrack != _track?.props['src']) {
       _disposeController();
       _initController();
     }
@@ -54,9 +64,17 @@ class _HtmlVideoPlayerState extends State<_HtmlVideoPlayer> {
       return;
     }
 
+    final track = _track;
+    final captions = track == null
+        ? null
+        : HtmlTrack.load(track).catchError((Object e) {
+            debugPrint('Elpian video: caption track failed: $e');
+            return HtmlTrack.parse('WEBVTT\n');
+          });
     final controller = _src.startsWith('http://') || _src.startsWith('https://')
-        ? VideoPlayerController.networkUrl(Uri.parse(_src))
-        : VideoPlayerController.asset(_src);
+        ? VideoPlayerController.networkUrl(Uri.parse(_src),
+            closedCaptionFile: captions)
+        : VideoPlayerController.asset(_src, closedCaptionFile: captions);
 
     _controller = controller;
     _initializeFuture = controller.initialize().then((_) async {
@@ -138,7 +156,18 @@ class _HtmlVideoPlayerState extends State<_HtmlVideoPlayer> {
                 aspectRatio: controller.value.aspectRatio == 0
                     ? (16 / 9)
                     : controller.value.aspectRatio,
-                child: VideoPlayer(controller),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    VideoPlayer(controller),
+                    if (_track != null && _showCaptions)
+                      ValueListenableBuilder<VideoPlayerValue>(
+                        valueListenable: controller,
+                        builder: (_, value, __) =>
+                            ClosedCaption(text: value.caption.text),
+                      ),
+                  ],
+                ),
               ),
             ),
             VideoProgressIndicator(
@@ -160,6 +189,15 @@ class _HtmlVideoPlayerState extends State<_HtmlVideoPlayer> {
                     });
                   },
                 ),
+                if (_track != null)
+                  IconButton(
+                    tooltip: _track!.props['label']?.toString() ?? 'Captions',
+                    icon: Icon(_showCaptions
+                        ? Icons.closed_caption
+                        : Icons.closed_caption_off),
+                    onPressed: () =>
+                        setState(() => _showCaptions = !_showCaptions),
+                  ),
                 Expanded(
                   child: Text(
                     _src,
