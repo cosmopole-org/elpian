@@ -18,6 +18,9 @@
 //! the artifact named `elpian_vm` means the Dart bindings did not change.
 
 pub mod abi;
+pub mod dispatch;
+#[cfg(feature = "jni")]
+pub mod jni;
 pub mod manager;
 
 pub use manager::FlutterSurface;
