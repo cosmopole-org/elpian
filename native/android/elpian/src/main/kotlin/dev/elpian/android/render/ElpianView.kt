@@ -143,6 +143,132 @@ abstract class ElpianGroup(context: Context, attrs: android.util.AttributeSet? =
         return r
     }
 
+    // ---------------------------------------------------------------------
+    // Touches through skew / perspective transforms
+    // ---------------------------------------------------------------------
+
+    /** The matrix-transformed child that owns the current touch stream. */
+    private var matrixTarget: ElpianView? = null
+    private var disallowIntercept = false
+
+    override fun requestDisallowInterceptTouchEvent(disallowIntercept: Boolean) {
+        this.disallowIntercept = disallowIntercept
+        super.requestDisallowInterceptTouchEvent(disallowIntercept)
+    }
+
+    private fun hasMatrixChild(): Boolean {
+        for (i in 0 until childCount) if ((getChildAt(i) as? ElpianView)?.drawMatrix != null) return true
+        return false
+    }
+
+    /**
+     * This group's view coordinates → [child]'s local coordinates through the
+     * inverse of what [drawChild] paints: p = T(-translation) · M⁻¹ · (q + scroll − origin).
+     * The 3×3 projective inverse unprojects onto the z = 0 plane, as Flutter's
+     * hit testing does through the inverse Matrix4.
+     */
+    private fun inverseFor(child: ElpianView): Matrix? {
+        val m = child.drawMatrix ?: return null
+        val inv = Matrix()
+        if (!m.invert(inv)) return null
+        val t = Matrix()
+        t.setTranslate((scrollX - child.left).toFloat(), (scrollY - child.top).toFloat())
+        t.postConcat(inv)
+        t.postTranslate(-child.translationX, -child.translationY)
+        return t
+    }
+
+    private fun isAffine(m: Matrix): Boolean {
+        val v = FloatArray(9)
+        m.getValues(v)
+        return v[6] == 0f && v[7] == 0f && v[8] == 1f
+    }
+
+    /**
+     * [ev] mapped into [child]. Affine maps (incl. skew) go through
+     * MotionEvent.transform; perspective maps are applied exactly to the
+     * action pointer (other pointers follow by the same offset). Raw screen
+     * coordinates are preserved either way.
+     */
+    private fun mapInto(child: ElpianView, ev: MotionEvent, t: Matrix): MotionEvent {
+        val copy = MotionEvent.obtain(ev)
+        if (isAffine(t)) {
+            copy.transform(t)
+        } else {
+            val i = if (ev.actionMasked == MotionEvent.ACTION_POINTER_DOWN || ev.actionMasked == MotionEvent.ACTION_POINTER_UP) ev.actionIndex else 0
+            val pts = floatArrayOf(ev.getX(i), ev.getY(i))
+            t.mapPoints(pts)
+            copy.offsetLocation(pts[0] - ev.getX(i), pts[1] - ev.getY(i))
+        }
+        return copy
+    }
+
+    private fun route(child: ElpianView, ev: MotionEvent): Boolean {
+        val t = inverseFor(child) ?: return false
+        val copy = mapInto(child, ev, t)
+        child.matrixRouted = true
+        try {
+            return child.dispatchTouchEvent(copy)
+        } finally {
+            child.matrixRouted = false
+            copy.recycle()
+        }
+    }
+
+    private fun hits(child: ElpianView, ev: MotionEvent): Boolean {
+        val t = inverseFor(child) ?: return false
+        val pts = floatArrayOf(ev.x, ev.y)
+        t.mapPoints(pts)
+        return pts[0] >= 0 && pts[1] >= 0 && pts[0] <= child.width && pts[1] <= child.height
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        val action = ev.actionMasked
+        if (action == MotionEvent.ACTION_DOWN) {
+            matrixTarget = null
+            disallowIntercept = false
+        }
+        val target = matrixTarget
+        if (target != null) {
+            if (!disallowIntercept && onInterceptTouchEvent(ev)) {
+                // An ancestor gesture (e.g. this scroll view) takes the stream over.
+                val cancel = MotionEvent.obtain(ev)
+                cancel.action = MotionEvent.ACTION_CANCEL
+                route(target, cancel)
+                cancel.recycle()
+                matrixTarget = null
+                return onTouchEvent(ev)
+            }
+            val r = route(target, ev)
+            if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) matrixTarget = null
+            return r || true
+        }
+        if (action != MotionEvent.ACTION_DOWN || !hasMatrixChild()) return super.dispatchTouchEvent(ev)
+        // Hit-test children top-down in paint order; transformed ones by their drawn shape.
+        val hit = android.graphics.Rect()
+        var superTried = false
+        val n = childCount
+        for (pos in n - 1 downTo 0) {
+            val child = getChildAt(getChildDrawingOrder(n, pos)) ?: continue
+            if (child.visibility != View.VISIBLE) continue
+            if (child is ElpianView && child.drawMatrix != null) {
+                if (!hits(child, ev)) continue
+                if (onInterceptTouchEvent(ev)) return super.dispatchTouchEvent(ev)
+                if (route(child, ev)) {
+                    matrixTarget = child
+                    return true
+                }
+            } else if (!superTried) {
+                child.getHitRect(hit)
+                if (hit.contains((ev.x + scrollX).toInt(), (ev.y + scrollY).toInt())) {
+                    superTried = true
+                    if (super.dispatchTouchEvent(ev)) return true
+                }
+            }
+        }
+        return if (superTried) false else super.dispatchTouchEvent(ev)
+    }
+
     override fun dispatchSetPressed(pressed: Boolean) {
         // Pressed state (ripples) never propagates to child views.
     }
@@ -240,6 +366,8 @@ class ElpianView(context: Context, val viewId: Int, val kind: String, internal v
 
     /** A transform that View properties cannot express, drawn by the parent. */
     internal var drawMatrix: Matrix? = null
+    /** True while the parent dispatches a touch mapped through [drawMatrix]'s inverse. */
+    internal var matrixRouted = false
     private var transform: Matrix4? = null
     private var transformOrigin: DoubleArray? = null
     /** Gesture-driven offsets (Dismissible), in device px. */
@@ -492,6 +620,8 @@ class ElpianView(context: Context, val viewId: Int, val kind: String, internal v
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         if (pointerEventsNone) return false
+        // A skew / perspective transform is hit-tested by the parent through its inverse.
+        if (drawMatrix != null && !matrixRouted) return false
         val handled = super.dispatchTouchEvent(ev)
         val g = gestures
         val wants = g != null && g.onTouch(ev)
