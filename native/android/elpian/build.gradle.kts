@@ -48,6 +48,37 @@ android {
 
 if (elpianGodot) tasks.named("preBuild") { dependsOn(syncGodotSources) }
 
+/**
+ * Bundles the repository's Material Icons font (native/assets/fonts, the same
+ * file the web host ships) as `assets/fonts/MaterialIcons-Regular.ttf`
+ * without committing a second copy of the binary.
+ */
+abstract class CopyElpianFonts : DefaultTask() {
+    @get:InputFiles
+    abstract val fonts: ConfigurableFileCollection
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun copy() {
+        val out = outputDir.get().asFile.resolve("fonts")
+        out.mkdirs()
+        for (f in fonts.files) if (f.isFile) f.copyTo(out.resolve(f.name), overwrite = true)
+    }
+}
+
+val copyElpianFonts = tasks.register<CopyElpianFonts>("copyElpianFonts") {
+    fonts.from(rootProject.file("../assets/fonts/MaterialIcons-Regular.ttf"))
+    outputDir.set(layout.buildDirectory.dir("generated/elpian-assets"))
+}
+
+androidComponents {
+    onVariants { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(copyElpianFonts, CopyElpianFonts::outputDir)
+    }
+}
+
 // Chicory's runtime jar minus `ByteArrayMemory`: that opt-in memory uses
 // VarHandles, which D8 rejects below minSdk 26 and fails every app dexing the
 // jar. Nothing else references it; Chicory's default (and our) memory is
@@ -65,6 +96,7 @@ val chicoryAndroidJar = tasks.register<Jar>("chicoryAndroidJar") {
 dependencies {
     api(project(":elpian-core"))
     implementation("androidx.core:core-ktx:1.13.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     // Guest sandboxes: QuickJS for JS mini apps, Chicory for WASM.
     implementation("wang.harlon.quickjs:wrapper-android:3.2.3")
     chicoryRuntime("com.dylibso.chicory:runtime:$chicoryVersion")
