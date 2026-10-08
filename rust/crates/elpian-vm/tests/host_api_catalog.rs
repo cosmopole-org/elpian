@@ -75,7 +75,9 @@ fn the_checked_in_native_catalog_is_current() {
 fn the_checked_in_kotlin_catalog_is_current() {
     const REL: &str =
         "native/android/elpian-core/src/main/kotlin/dev/elpian/core/vm/HostApiCatalog.kt";
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..").join(REL);
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .join(REL);
     let on_disk = std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
     assert!(
@@ -90,7 +92,9 @@ fn the_checked_in_kotlin_catalog_is_current() {
 #[test]
 fn the_checked_in_swift_catalog_is_current() {
     const REL: &str = "native/ios/Sources/ElpianCore/VM/HostApiCatalog.swift";
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..").join(REL);
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .join(REL);
     let on_disk = std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
     assert!(

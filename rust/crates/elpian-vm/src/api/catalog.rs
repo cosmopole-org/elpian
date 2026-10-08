@@ -190,7 +190,10 @@ pub fn ts_catalog() -> String {
     let mut capability_of: Vec<(String, &'static str)> = Vec::new();
     for name in all_host_apis() {
         let cap = Capability::for_api(&name);
-        by_set.entry(dart_set_for(cap)).or_default().push(name.clone());
+        by_set
+            .entry(dart_set_for(cap))
+            .or_default()
+            .push(name.clone());
         capability_of.push((name, cap.as_str()));
     }
     capability_of.sort();
@@ -213,7 +216,9 @@ pub fn ts_catalog() -> String {
         };
         let comment = comment.replace("\n  /// ", "\n * ");
         out.push_str(&format!("/** {comment} */\n"));
-        out.push_str(&format!("export const {set_name}: ReadonlySet<string> = new Set([\n"));
+        out.push_str(&format!(
+            "export const {set_name}: ReadonlySet<string> = new Set([\n"
+        ));
         for n in names {
             out.push_str(&format!("  '{n}',\n"));
         }
@@ -245,13 +250,21 @@ pub fn ts_catalog() -> String {
     out
 }
 
+/// Host API names grouped by the set that declares them.
+type ApiSets = BTreeMap<&'static str, Vec<String>>;
+/// `(api name, capability)` pairs, sorted by name.
+type CapabilityMap = Vec<(String, &'static str)>;
+
 /// The sets and the sorted capability map every catalog renders from.
-fn grouped() -> (BTreeMap<&'static str, Vec<String>>, Vec<(String, &'static str)>) {
+fn grouped() -> (ApiSets, CapabilityMap) {
     let mut by_set: BTreeMap<&'static str, Vec<String>> = BTreeMap::new();
     let mut capability_of: Vec<(String, &'static str)> = Vec::new();
     for name in all_host_apis() {
         let cap = Capability::for_api(&name);
-        by_set.entry(dart_set_for(cap)).or_default().push(name.clone());
+        by_set
+            .entry(dart_set_for(cap))
+            .or_default()
+            .push(name.clone());
         capability_of.push((name, cap.as_str()));
     }
     capability_of.sort();
@@ -362,7 +375,9 @@ pub fn swift_catalog() -> String {
         first = false;
         let comment = comment.replace("\n  /// ", "\n    /// ");
         out.push_str(&format!("    /// {comment}\n"));
-        out.push_str(&format!("    public static let {set_name}: Set<String> = [\n"));
+        out.push_str(&format!(
+            "    public static let {set_name}: Set<String> = [\n"
+        ));
         for n in names {
             out.push_str(&format!("        {},\n", quoted(n)));
         }
