@@ -5,7 +5,7 @@
  * of the shortest side, sweeps start at 3 o'clock, and shadow blur radii are
  * converted from Flutter's `blurRadius` to the CSS blur length.
  */
-import { toCssColor, type Alignment, type Border, type BorderRadius, type BoxShadow, type Color, type Filter, type Gradient, type TextShadow, type TextStyleSpec } from '@elpian/native-core';
+import { toCssColor, type Alignment, type Border, type BorderRadius, type BoxShadow, type Color, type Filter, type Gradient, type TextShadow, type TextStyleSpec } from '../lib.js';
 
 export const css = toCssColor;
 

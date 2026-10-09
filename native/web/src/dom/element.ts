@@ -14,7 +14,7 @@
  * dispatched as `elpian:<event>` CustomEvents on the host element as well,
  * and every one also as a non-bubbling `elpian:event` with `{event, payload}`.
  */
-import { SessionRegistry, setPlatform, type JsonMap } from '@elpian/native-core';
+import { SessionRegistry, setPlatform, type JsonMap } from '../lib.js';
 import { ICON_FAMILY } from './css.js';
 import { WebPlatform, type WebPlatformOptions } from './platform.js';
 

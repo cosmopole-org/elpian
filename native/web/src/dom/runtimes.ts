@@ -8,8 +8,8 @@
  *  - WASM guests — the browser's WebAssembly, every function import bound to
  *    the core's host-call dispatcher.
  */
-import type { ElpianVmBinding, JsSandbox, JsSandboxFactory, WasmEngine, WasmImportHandler, WasmInstanceHandle } from '@elpian/native-core';
-import { base64Decode } from '@elpian/native-core';
+import type { ElpianVmBinding, JsSandbox, JsSandboxFactory, WasmEngine, WasmImportHandler, WasmInstanceHandle } from '../lib.js';
+import { base64Decode } from '../lib.js';
 
 export interface RuntimeAssets {
   /** URL of `elpian_vm.js` (wasm-bindgen glue; the .wasm sits next to it). */

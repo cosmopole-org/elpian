@@ -8,7 +8,7 @@ import kotlin.math.min
 
 enum class AnimationStatus { dismissed, forward, reverse, completed }
 
-/** A run's completion (the TypeScript core's Promise). */
+/** A run's completion (the TypeScript engine (native/web)'s Promise). */
 class Completion {
     private var done = false
     private val callbacks = ArrayList<() -> Unit>()

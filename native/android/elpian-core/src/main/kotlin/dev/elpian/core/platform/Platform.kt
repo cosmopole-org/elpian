@@ -103,7 +103,7 @@ interface Platform {
     val wasm: WasmEngine? get() = null
 }
 
-/** The installed platform (one per process, as in the TypeScript core). */
+/** The installed platform (one per process, as in the TypeScript engine (native/web)). */
 object Platforms {
     @Volatile private var current: Platform? = null
 

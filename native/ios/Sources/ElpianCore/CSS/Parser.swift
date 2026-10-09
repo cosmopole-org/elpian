@@ -2,7 +2,7 @@ import Foundation
 
 /**
  * The CSS value parser — a port of `CSSParser` (flutter/lib/src/css/css_parser.dart),
- * line for line with css/parser.ts in the TypeScript core.
+ * line for line with css/parser.ts in the TypeScript engine (native/web).
  *
  * `parse(map)` turns an inline/cascaded style map (camelCase or kebab-case
  * keys, numbers or CSS strings) into a resolved [CSSStyle]. Everything the

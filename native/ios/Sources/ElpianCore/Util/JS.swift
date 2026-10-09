@@ -1,7 +1,7 @@
 import Foundation
 
 /**
- * JavaScript semantics the TypeScript core relies on implicitly — `String(v)`,
+ * JavaScript semantics the TypeScript engine (native/web) relies on implicitly — `String(v)`,
  * `parseFloat`, `parseInt`, `Math.round`, UTF-16 `substring` / `indexOf` and
  * `RegExp` — defined once so every ported file reads values the same way.
  */

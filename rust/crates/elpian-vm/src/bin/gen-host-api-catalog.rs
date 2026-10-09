@@ -5,7 +5,7 @@
 //!
 //! ```text
 //! cargo run --bin gen-host-api-catalog -- ../flutter/lib/src/vm/host_api_catalog.dart
-//! cargo run --bin gen-host-api-catalog -- ../native/core/src/vm/host-api-catalog.ts
+//! cargo run --bin gen-host-api-catalog -- ../native/web/src/vm/host-api-catalog.ts
 //! cargo run --bin gen-host-api-catalog -- \
 //!     ../native/android/elpian-core/src/main/kotlin/dev/elpian/core/vm/HostApiCatalog.kt
 //! cargo run --bin gen-host-api-catalog -- ../native/ios/Sources/ElpianCore/VM/HostApiCatalog.swift

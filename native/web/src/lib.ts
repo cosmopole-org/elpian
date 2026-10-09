@@ -1,6 +1,8 @@
 /**
- * @elpian/native-core — the TypeScript Elpian engine behind the web host
- * (and Expo on the web). Android and iOS have their own Kotlin and Swift cores. See native/README.md for the architecture.
+ * The Elpian engine for the web: CSS, layout, widgets, animations, canvas,
+ * Godot ops, host APIs, runtimes, governance and sessions — rendered by the
+ * DOM host in ./dom. Android and iOS run their own Kotlin and Swift ports of
+ * this engine. See native/README.md for the architecture.
  */
 export * from './platform/platform.js';
 export * from './render/view.js';

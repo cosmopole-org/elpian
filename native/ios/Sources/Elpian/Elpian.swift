@@ -40,7 +40,7 @@ public struct ElpianOptions {
  *     _ = view.on("println") { print($0 ?? "") }
  */
 public enum Elpian {
-    /** The core's version (ElpianCore.VERSION in the Kotlin and TypeScript cores). */
+    /** The core's version (ElpianCore.VERSION in the Kotlin and TypeScript engines). */
     public static let coreVersion = "1.0.0"
 
     private static var platform_: IOSPlatform?

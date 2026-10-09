@@ -3,7 +3,7 @@
 // Produced from the VM's own host-API list and capability mapping by:
 //
 //     cd rust && cargo run --bin gen-host-api-catalog -- \
-//         ../native/core/src/vm/host-api-catalog.ts
+//         ../native/web/src/vm/host-api-catalog.ts
 //
 // The TypeScript twin of flutter/lib/src/vm/host_api_catalog.dart;
 // `cargo test -p elpian-vm --test host_api_catalog` fails when it is stale.

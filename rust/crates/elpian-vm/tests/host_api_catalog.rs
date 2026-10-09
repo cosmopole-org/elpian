@@ -59,13 +59,13 @@ fn the_checked_in_catalog_is_current() {
 #[test]
 fn the_checked_in_native_catalog_is_current() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../native/core/src/vm/host-api-catalog.ts");
+        .join("../../../native/web/src/vm/host-api-catalog.ts");
     let on_disk = std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
     assert!(
         on_disk == ts_catalog(),
         "{} is stale. Regenerate it:\n    cd rust && cargo run --bin \
-         gen-host-api-catalog -- ../native/core/src/vm/host-api-catalog.ts\n",
+         gen-host-api-catalog -- ../native/web/src/vm/host-api-catalog.ts\n",
         path.display()
     );
 }

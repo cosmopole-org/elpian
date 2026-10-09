@@ -5,7 +5,7 @@
  * carries replies and signals back, `__elpianGodotSurface(id)` hands out the
  * element hosting the engine canvas.
  */
-import type { GodotPlatformBinding } from '@elpian/native-core';
+import type { GodotPlatformBinding } from '../lib.js';
 
 type W = Window & {
   __elpianGodotQueue?: string[];

@@ -59,7 +59,7 @@ class ReconcilerTest {
     }
 
     // Expected outputs below were produced by running the same trees through
-    // the TypeScript core (native/core/src) with the same fake measureText.
+    // the TypeScript engine (native/web) (native/web/src) with the same fake measureText.
 
     @Test
     fun paddingAndFlexRow() {

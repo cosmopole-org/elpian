@@ -170,7 +170,7 @@ public func setPlatform(_ platform: Platform) {
     platformLock.unlock()
 }
 
-/** The installed platform. Traps when none is installed, as the TypeScript core throws. */
+/** The installed platform. Traps when none is installed, as the TypeScript engine (native/web) throws. */
 public func platform() -> Platform {
     platformLock.lock()
     defer { platformLock.unlock() }

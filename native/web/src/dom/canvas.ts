@@ -9,7 +9,7 @@
  * The parameter vocabulary is documented in native/docs/canvas.md and shared
  * by the Android, iOS and Flutter painters.
  */
-import { toCssColor } from '@elpian/native-core';
+import { toCssColor } from '../lib.js';
 
 type Params = Record<string, any>;
 interface Cmd {
