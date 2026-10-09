@@ -35,7 +35,7 @@ for (const target of ['ElpianCore', 'Elpian']) {
 }
 mkdirSync(join(vendor, 'include'), { recursive: true });
 cpSync(join(repoRoot, 'rust', 'crates', 'elpian-ffi', 'include', 'elpian_vm.h'), join(vendor, 'include', 'elpian_vm.h'));
-const xcframework = join(nativeRoot, 'ios', 'build', 'ElpianVM.xcframework');
+const xcframework = join(nativeRoot, 'ios', 'Frameworks', 'ElpianVM.xcframework');
 if (existsSync(xcframework)) cpSync(xcframework, join(vendor, 'ElpianVM.xcframework'), { recursive: true });
 else console.warn('@elpian/expo: ElpianVM.xcframework not built (native/ios/scripts/build-rust.sh); the Elpian VM runtime will report itself unavailable on iOS');
 mkdirSync(join(vendor, 'fonts'), { recursive: true });

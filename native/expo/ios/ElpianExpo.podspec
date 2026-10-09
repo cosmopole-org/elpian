@@ -41,7 +41,7 @@ Pod::Spec.new do |s|
   if respond_to?(:spm_dependency, true)
     spm_dependency(s,
       url: 'https://github.com/swiftwasm/WasmKit.git',
-      requirement: { kind: 'upToNextMajorVersion', minimumVersion: '0.1.6' },
+      requirement: { kind: 'upToNextMinorVersion', minimumVersion: '0.2.0' },
       products: ['WasmKit']
     )
   end
