@@ -235,6 +235,9 @@ export function reconcileChildren(parent: RenderObject, ws: W[], owner: RenderOw
     result[newTop] = match ? updateRenderObject(match, w, owner) : createRenderObject(w, owner, parent);
     newTop++;
   }
+  // The bottom run matched above, in order (after the middle, which may have
+  // shrunk or grown — so resume at the bottom run's first old object).
+  oldTop = oldBottom + 1;
   newBottom = ws.length - 1;
   oldBottom = old.length - 1;
   while (oldTop <= oldBottom && newTop <= newBottom) {
