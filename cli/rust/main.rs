@@ -97,6 +97,10 @@ struct ServeArgs {
 #[derive(Args)]
 struct CreateArgs {
     directory: PathBuf,
+    /// Which host renders the app on the web: the Flutter engine or the
+    /// native DOM host (@elpian/web). Recorded in `elpian.config.json`.
+    #[arg(long, value_enum, default_value_t = Renderer::Flutter)]
+    renderer: Renderer,
     #[arg(short, long, value_enum, default_value_t = Template::Client)]
     template: Template,
 }
@@ -120,6 +124,9 @@ enum RunTask {
     Build {
         #[arg(short, long, value_enum)]
         mode: Option<Mode>,
+        /// Override `renderer` from `elpian.config.json`.
+        #[arg(long, value_enum)]
+        renderer: Option<Renderer>,
     },
     Dev {
         #[arg(short = 'H', long, default_value = "127.0.0.1")]
@@ -130,7 +137,23 @@ enum RunTask {
         mode: Option<Mode>,
         #[arg(long)]
         build_engine: bool,
+        /// Override `renderer` from `elpian.config.json`.
+        #[arg(long, value_enum)]
+        renderer: Option<Renderer>,
     },
+}
+
+/// The web host a project's client runs in. Both run the same `__elpian/`
+/// manifest and the same client AST / bytecode on the Elpian VM; they differ
+/// in what draws the UI.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, ValueEnum, PartialEq)]
+#[serde(rename_all = "lowercase")]
+enum Renderer {
+    /// The Flutter web engine (`cli/elpian_client`, built with `flutter build web`).
+    #[default]
+    Flutter,
+    /// The native DOM host (`native/web`, `@elpian/web`), built with npm.
+    Native,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, ValueEnum, PartialEq)]
@@ -148,6 +171,8 @@ struct Config {
     out_dir: PathBuf,
     #[serde(default = "default_mode")]
     mode: Mode,
+    #[serde(default)]
+    renderer: Renderer,
     engine_dir: Option<PathBuf>,
     engine_project: Option<PathBuf>,
     #[serde(default = "default_base")]
@@ -212,6 +237,7 @@ fn real_main() -> Result<()> {
         CommandName::Create(args) => create_project(
             &absolute(&env::current_dir()?, &args.directory),
             args.template,
+            args.renderer,
         ),
         CommandName::Run { task } => {
             let root = env::current_dir()?;
@@ -220,10 +246,13 @@ fn real_main() -> Result<()> {
                     println!("Installed {} Elpian package(s)", install(&root)?);
                     Ok(())
                 }
-                RunTask::Build { mode } => {
+                RunTask::Build { mode, renderer } => {
                     let mut config = load_config(&root)?;
                     if let Some(mode) = mode {
                         config.mode = mode;
+                    }
+                    if let Some(renderer) = renderer {
+                        config.renderer = renderer;
                     }
                     for artifact in build_project(&root, &config, true)? {
                         println!(
@@ -237,7 +266,11 @@ fn real_main() -> Result<()> {
                         );
                     }
                     if config.client.is_some() {
-                        println!("Deployable web app: {}/web", config.out_dir.display());
+                        println!(
+                            "Deployable web app ({} renderer): {}/web",
+                            renderer_name(config.renderer),
+                            config.out_dir.display()
+                        );
                     }
                     Ok(())
                 }
@@ -246,10 +279,14 @@ fn real_main() -> Result<()> {
                     port,
                     mode,
                     build_engine,
+                    renderer,
                 } => {
                     let mut config = load_config(&root)?;
                     if let Some(mode) = mode {
                         config.mode = mode;
+                    }
+                    if let Some(renderer) = renderer {
+                        config.renderer = renderer;
                     }
                     dev(&root, config, &host, port, build_engine)
                 }
@@ -697,6 +734,195 @@ fn resolve_source(path: &Path) -> Result<PathBuf> {
         .ok_or_else(|| anyhow!("source file not found: {}", path.display()))
 }
 
+fn renderer_name(renderer: Renderer) -> &'static str {
+    match renderer {
+        Renderer::Flutter => "flutter",
+        Renderer::Native => "native",
+    }
+}
+
+/// The web root the project's client is served from: `engineDir` when set,
+/// otherwise the configured renderer's host, built (or refreshed) for the
+/// project's base path.
+fn resolve_engine(root: &Path, config: &Config, force: bool) -> Result<PathBuf> {
+    if let Some(dir) = config.engine_dir.as_ref() {
+        return Ok(absolute(root, dir));
+    }
+    let base = normalize_base(&config.base_path);
+    match config.renderer {
+        Renderer::Flutter => {
+            let engine_project = config
+                .engine_project
+                .as_ref()
+                .map(|value| absolute(root, value))
+                .unwrap_or_else(|| cli_root().join("elpian_client"));
+            ensure_engine(&engine_project, &base, force)
+        }
+        Renderer::Native => ensure_native_engine(&base, force),
+    }
+}
+
+/// Stage the native DOM host (`native/web`) as a web root for `base`.
+///
+/// `@elpian/web` is built once with npm (`npm ci` in `native/`, then the
+/// package's build, which bundles `dist/elpian-web.js` and copies the fonts and
+/// the Elpian VM / QuickJS runtime files into `assets/`). The staged root adds
+/// an `index.html` that fetches the same `__elpian/elpian.manifest.json` the
+/// Flutter shell reads and mounts the client as a `miniapp` session on the
+/// Elpian VM. Like the Flutter engine it is keyed by base path.
+fn ensure_native_engine(base: &str, force: bool) -> Result<PathBuf> {
+    let native = workspace().join("native");
+    let web = native.join("web");
+    if !web.join("package.json").is_file() {
+        bail!("the native web host is missing at {}", web.display());
+    }
+    let bundle = web.join("dist/elpian-web.js");
+    if force
+        || !bundle.is_file()
+        || !web.join("assets/runtime").is_dir()
+        || native_host_stale(&web, &bundle)?
+    {
+        if !native.join("node_modules").is_dir() {
+            run_checked(Command::new(npm()).current_dir(&native).args([
+                "ci",
+                "--no-audit",
+                "--no-fund",
+            ]))
+            .context("installing the native web host's npm dependencies")?;
+        }
+        run_checked(Command::new(npm()).current_dir(&web).args(["run", "build"]))
+            .context("building the native web host (@elpian/web)")?;
+    }
+    let slug: String = base
+        .trim_matches('/')
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    let engine = web.join("build/elpian-engine").join(if slug.is_empty() {
+        "root".to_string()
+    } else {
+        slug
+    });
+    if engine.exists() {
+        fs::remove_dir_all(&engine)?;
+    }
+    fs::create_dir_all(&engine)?;
+    for file in ["elpian-web.js", "elpian-web.js.map"] {
+        let source = web.join("dist").join(file);
+        if source.is_file() {
+            fs::copy(&source, engine.join(file))?;
+        }
+    }
+    copy_tree(&web.join("assets"), &engine.join("assets"))?;
+    fs::write(
+        engine.join("index.html"),
+        NATIVE_INDEX_HTML.replace("{{BASE}}", base),
+    )?;
+    Ok(engine)
+}
+
+/// Whether any `native/web/src` file is newer than the built bundle.
+fn native_host_stale(web: &Path, bundle: &Path) -> Result<bool> {
+    let built = fs::metadata(bundle)?.modified()?;
+    for entry in WalkDir::new(web.join("src")) {
+        let entry = entry?;
+        if entry.file_type().is_file() && entry.metadata()?.modified()? > built {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn npm() -> &'static str {
+    if cfg!(windows) { "npm.cmd" } else { "npm" }
+}
+
+/// The native renderer's page: the counterpart of `cli/elpian_client`'s
+/// `main.dart` — fetch the manifest, download the client AST / bytecode and
+/// run it on the Elpian VM, rendered by the DOM host.
+const NATIVE_INDEX_HTML: &str = r#"<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <base href="{{BASE}}">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Elpian</title>
+  <style>
+    /* The host follows the system light/dark preference (its viewport's darkMode); the page does too. */
+    :root { color-scheme: light dark; }
+    html, body { margin: 0; height: 100%; background: Canvas; color: CanvasText; font-family: system-ui, sans-serif; }
+    #app { position: fixed; inset: 0; }
+    .elpian-status { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 32px; box-sizing: border-box; }
+    .elpian-status h1 { font-size: 24px; margin: 0 0 12px; }
+    .elpian-status pre { white-space: pre-wrap; max-width: 720px; margin: 0 auto 24px; user-select: text; }
+    .elpian-status button { font: inherit; padding: 10px 24px; border-radius: 20px; border: 0; background: #6750a4; color: #fff; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module">
+    import { installElpian, mountElpian } from './elpian-web.js';
+
+    installElpian({ assetBase: new URL('assets/', document.baseURI).href });
+    const app = document.getElementById('app');
+    let session = null;
+
+    function status(html) {
+      let el = document.querySelector('.elpian-status');
+      if (!html) { el?.remove(); return; }
+      if (!el) { el = document.createElement('div'); el.className = 'elpian-status'; document.body.appendChild(el); }
+      el.innerHTML = html;
+      return el;
+    }
+
+    function failure(message) {
+      const el = status('<div><h1>Elpian client could not start</h1><pre></pre><button>Retry</button></div>');
+      el.querySelector('pre').textContent = message;
+      el.querySelector('button').onclick = start;
+    }
+
+    async function fetchOk(url) {
+      const res = await fetch(url, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`GET ${url} returned HTTP ${res.status}`);
+      return res;
+    }
+
+    function base64(bytes) {
+      let bin = '';
+      for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+      return btoa(bin);
+    }
+
+    async function start() {
+      status('<div>Loading…</div>');
+      try {
+        await session?.close();
+        session = null;
+        const nonce = Date.now();
+        const manifest = await (await fetchOk(new URL(`__elpian/elpian.manifest.json?v=${nonce}`, document.baseURI))).json();
+        const client = manifest?.client;
+        if (!client || (client.format !== 'bytecode' && client.format !== 'ast') || typeof client.url !== 'string') {
+          throw new Error('Elpian manifest has no valid client target');
+        }
+        const res = await fetchOk(new URL(`${client.url}?v=${nonce}`, document.baseURI));
+        const bytes = new Uint8Array(await res.arrayBuffer());
+        if (!bytes.length) throw new Error('Elpian client artifact is empty');
+        const options = { machineId: 'elpian-dynamic-client', runtime: 'elpian' };
+        if (client.format === 'bytecode') options.bytecodeBase64 = base64(bytes);
+        else options.astJson = new TextDecoder().decode(bytes);
+        status(null);
+        session = await mountElpian(app, 'miniapp', options);
+      } catch (e) {
+        failure(String(e instanceof Error ? e.message : e));
+      }
+    }
+
+    start();
+  </script>
+</body>
+</html>
+"#;
+
 /// Where the built Flutter engine for `base` lives.
 ///
 /// Keyed by base path on purpose. `flutter build web` writes to `build/web`, so
@@ -747,18 +973,13 @@ fn package_web_export(
     artifacts: &[Artifact],
     out: &Path,
 ) -> Result<()> {
-    let base = normalize_base(&config.base_path);
-    let engine_project = config
-        .engine_project
-        .as_ref()
-        .map(|value| absolute(root, value))
-        .unwrap_or_else(|| cli_root().join("elpian_client"));
-    let engine = match config.engine_dir.as_ref() {
-        Some(value) => absolute(root, value),
-        None => ensure_engine(&engine_project, &base, false)?,
-    };
+    let engine = resolve_engine(root, config, false)?;
     if !engine.join("index.html").is_file() {
-        bail!("Flutter engine missing at {}", engine.display());
+        bail!(
+            "{} web host missing at {}",
+            renderer_name(config.renderer),
+            engine.display()
+        );
     }
     let web = out.join("web");
     if web.exists() {
@@ -785,16 +1006,12 @@ fn package_web_export(
 
 fn dev(root: &Path, config: Config, host: &str, port: u16, force_engine: bool) -> Result<()> {
     build_project(root, &config, false)?;
-    let base = normalize_base(&config.base_path);
-    let engine_project = config
-        .engine_project
-        .as_ref()
-        .map(|value| absolute(root, value))
-        .unwrap_or_else(|| cli_root().join("elpian_client"));
-    let engine = match config.engine_dir.as_ref() {
-        Some(value) => absolute(root, value),
-        None => ensure_engine(&engine_project, &base, force_engine)?,
-    };
+    let engine = resolve_engine(root, &config, force_engine)?;
+    println!(
+        "[elpian] {} renderer: {}",
+        renderer_name(config.renderer),
+        engine.display()
+    );
     let (tx, rx) = mpsc::channel();
     let mut watcher = notify::recommended_watcher(move |event| {
         if changed(&event) {
@@ -871,7 +1088,7 @@ fn dev(root: &Path, config: Config, host: &str, port: u16, force_engine: bool) -
     Ok(())
 }
 
-fn create_project(root: &Path, template: Template) -> Result<()> {
+fn create_project(root: &Path, template: Template, renderer: Renderer) -> Result<()> {
     if root.exists() {
         bail!("{} already exists", root.display());
     }
@@ -897,6 +1114,7 @@ fn create_project(root: &Path, template: Template) -> Result<()> {
         &root.join("elpian.config.json"),
         &json!({
             "outDir": "dist", "mode": "both", "basePath": "/",
+            "renderer": renderer_name(renderer),
             "client": client.then(|| json!({ "entry": "src/client.ts" })),
             // A mini app has no monolithic server entry: its server *is* the
             // per-function modules under `src/server/`, which `build_server_

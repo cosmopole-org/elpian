@@ -12,9 +12,9 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ["native/**", "rust/crates/elpian-ffi/**", "rust/crates/elpian-vm/**", "flutter/assets/web_runtime/**", ".github/workflows/native.yml"]
+    paths: ["native/**", "cli/**", "rust/crates/elpian-ffi/**", "rust/crates/elpian-vm/**", "flutter/assets/web_runtime/**", ".github/workflows/native.yml"]
   pull_request:
-    paths: ["native/**", "rust/crates/elpian-ffi/**", "rust/crates/elpian-vm/**", "flutter/assets/web_runtime/**", ".github/workflows/native.yml"]
+    paths: ["native/**", "cli/**", "rust/crates/elpian-ffi/**", "rust/crates/elpian-vm/**", "flutter/assets/web_runtime/**", ".github/workflows/native.yml"]
 
 permissions:
   contents: read
@@ -121,6 +121,33 @@ jobs:
           xcodebuild -scheme Elpian -destination 'generic/platform=iOS Simulator' \
             -skipPackagePluginValidation build | tail -50
           test "${PIPESTATUS[0]}" -eq 0
+
+  # ---------------------------------------------------------------------------
+  cli-native:
+    name: CLI — build an app for the native web renderer
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: native/package-lock.json
+      - name: Build the CLI
+        working-directory: cli
+        run: cargo build
+      - name: Create and build a client app with --renderer native
+        run: |
+          cd "$RUNNER_TEMP"
+          "$GITHUB_WORKSPACE/cli/target/debug/elpian" create app --renderer native
+          cd app
+          "$GITHUB_WORKSPACE/cli/target/debug/elpian" run install
+          "$GITHUB_WORKSPACE/cli/target/debug/elpian" run build
+          test -f dist/web/index.html
+          test -f dist/web/elpian-web.js
+          test -f dist/web/assets/runtime/wasm/elpian_vm/elpian_vm.js
+          test -f dist/web/__elpian/elpian.manifest.json
 
   # ---------------------------------------------------------------------------
   expo:

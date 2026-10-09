@@ -87,7 +87,7 @@ export async function mountElpian(element: HTMLElement, kind: string, options: J
   const reg = registry!;
   const surfaceId = `elpian-${nextSurface++}`;
   elements.set(surfaceId, element);
-  if (!element.style.position || element.style.position === 'static') element.style.position = 'relative';
+  if (getComputedStyle(element).position === 'static') element.style.position = 'relative';
   element.style.overflow = 'hidden';
   p.attachSurface(surfaceId, element, { emit: (event) => reg.dispatchViewEvent(surfaceId, event) });
   const resize = new ResizeObserver(() => reg.viewportChanged(surfaceId));
