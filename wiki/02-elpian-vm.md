@@ -218,18 +218,23 @@ isInstance isNull isNotEmpty compareTo tryNum method parentMethod superMethod ne
 
 | Surface | File | Target |
 |---|---|---|
-| Native FFI | `rust/crates/elpian-ffi/src/abi.rs` | Android, iOS, macOS, Linux, Windows (via `rust_builder/`) |
-| WASM | `rust/crates/elpian-wasm/src/lib.rs` | Web (`wasm-bindgen`) |
+| Native FFI | `rust/crates/elpian-ffi/src/abi.rs` | Flutter on Android, iOS, macOS, Linux, Windows (via `flutter/rust_builder/`); the native iOS host (`ElpianVM.xcframework`, `native/ios/scripts/build-rust.sh`) |
+| JNI | `rust/crates/elpian-ffi/src/jni.rs` (`--features jni`) | The native Android host (`libelpian_vm.so`, `native/android/scripts/build-rust.sh`) |
+| WASM | `rust/crates/elpian-wasm/src/lib.rs` | Web (`wasm-bindgen`) — Flutter web and `@elpian/web` |
 | HTTP host | `rust/crates/elpian-host/` (`elpiand`) | Server-side VMs, pooled and governed — see [21](21-hosting.md) |
 
 On the Flutter side these are selected by conditional import in
-`lib/elpian_ui.dart`:
+`flutter/lib/elpian_runtime.dart` (re-exported by `elpian_ui.dart`):
 
 ```dart
-export 'src/vm/frb_generated/api.dart'
-    if (dart.library.js_interop) 'src/vm/frb_generated/api_web.dart'
-    show ElpianVmApi;
+export 'src/vm/ffi/api.dart'
+    if (dart.library.js_interop) 'src/vm/ffi/api_web.dart' show ElpianVmApi;
 ```
+
+The native hosts bind the same surfaces directly: Kotlin over JNI, Swift over
+the C ABI (`rust/crates/elpian-ffi/include/elpian_vm.h`), TypeScript over the
+wasm-bindgen build — see [`23-native-hosts.md`](23-native-hosts.md). The VM's
+semantics, value envelope and host-call protocol are identical on all of them.
 
 ## Deeper reference
 

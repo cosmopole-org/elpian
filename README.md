@@ -1,7 +1,7 @@
 <p align="center">
   <h1 align="center">Elpian UI</h1>
   <p align="center">
-    <strong>A high-performance Flutter engine that renders HTML, CSS, Flutter DSL, Canvas 2D, and 3D scene graphs from JSON into native widgets.</strong>
+    <strong>Mini apps defined as JSON or produced by a sandboxed VM &mdash; HTML, CSS, Flutter DSL, Canvas 2D and embedded Godot 3D &mdash; rendered natively, by Flutter or by each platform's own UI toolkit.</strong>
   </p>
   <p align="center">
     <a href="#-quick-start">Quick Start</a> &bull;
@@ -14,7 +14,21 @@
 
 ---
 
-Define your entire UI in JSON. Render it natively in Flutter. Elpian bridges the gap between web-style markup and native mobile/desktop performance &mdash; supporting everything from simple layouts to full 3D scenes and scripted application logic.
+Define your entire UI in JSON, or emit it from a sandboxed Elpian VM, QuickJS or WASM program. Elpian bridges the gap between web-style markup and native performance &mdash; supporting everything from simple layouts to full 3D scenes and scripted application logic.
+
+The same mini apps run in two host modes:
+
+| Host mode | Where | Renders to | Embed with |
+|---|---|---|---|
+| **Flutter host** | [`flutter/`](flutter/) (`elpian_ui`) | Flutter widgets &mdash; Android, iOS, web, macOS, Linux, Windows | `ElpianEngine`, `ElpianVmWidget`, `NextjsServerWidget`, &hellip; |
+| **Native hosts** | [`native/`](native/) | Android Views (Kotlin), UIKit (Swift), the DOM (TypeScript), Expo / React Native | `ElpianHostView.open(kind, options)`, `mountElpian(el, kind, options)`, `<ElpianView>` |
+
+Both modes share the node format, the HTML and Flutter widget sets, CSS, canvas,
+`Scene3D`, the host-call API and the runtimes. The native engines are Kotlin,
+Swift and TypeScript ports of one engine, tested against it &mdash; see
+[wiki/23-native-hosts.md](wiki/23-native-hosts.md).
+
+Flutter host:
 
 ```dart
 final widget = ElpianEngine().renderFromJson({
@@ -26,15 +40,31 @@ final widget = ElpianEngine().renderFromJson({
 });
 ```
 
+Native host (web shown; Android and iOS open the same session kinds on an `ElpianHostView`):
+
+```js
+import { installElpian, mountElpian } from '@elpian/web';
+
+installElpian({ assetBase: '/node_modules/@elpian/web/assets/' });
+await mountElpian(document.getElementById('app'), 'json', {
+  view: {
+    type: 'div',
+    style: { padding: '24', backgroundColor: '#1E1E2E', borderRadius: 16 },
+    children: [{ type: 'h1', props: { text: 'Hello, Elpian' }, style: { color: '#CDD6F4', fontSize: 28 } }],
+  },
+});
+```
+
 ## At a Glance
 
 | | |
 |---|---|
-| **201** Dart source files | **17** Rust source files |
+| **230+** Dart files (Flutter host) | **130** Rust files (VM, compilers, server) |
+| **70+** TypeScript, **80+** Kotlin, **80+** Swift files (native hosts) | **4** native targets: Android, iOS, Web, Expo |
 | **60+** Flutter widgets | **70+** HTML5 elements |
 | **150+** CSS properties | **50+** Canvas 2D commands |
 | **40+** event types | **22** animation widgets |
-| **6** platforms supported | **13** example apps included |
+| **6** Flutter platforms | **12** Flutter example screens |
 
 ---
 
@@ -65,8 +95,9 @@ final widget = ElpianEngine().renderFromJson({
 | **CSS Engine** | 150+ CSS properties &mdash; flexbox, grid, transforms, animations, filters, variables |
 | **Canvas 2D** | Full 2D graphics API with paths, shapes, gradients, text, and transforms |
 | **3D Scenes** | An embedded **Godot 4** engine as a `Scene3D` widget, driven reflectively |
-| **Elpian VM** | Sandboxed Rust bytecode VM with FFI (native) and WASM (web) for scripting UI logic |
+| **Elpian VM** | Sandboxed Rust bytecode VM with FFI / JNI (native) and WASM (web) for scripting UI logic |
 | **Next.js Bridge** | Server-driven Next.js payloads (`component` + `stylesheet`) rendered natively by Elpian clients |
+| **Two host modes** | The Flutter host (`flutter/`) and native hosts (`native/`: Android Views, UIKit, DOM, Expo) for the same mini apps |
 
 ### &#x2699;&#xFE0F; Core Systems
 
@@ -74,35 +105,66 @@ final widget = ElpianEngine().renderFromJson({
 - **DOM API** &mdash; `getElementById`, `querySelector`, `appendChild`, style & class management, and more
 - **Event System** &mdash; 40+ event types with capturing, bubbling, delegation, debounce, and throttle
 - **Widget Registry** &mdash; 200+ pre-registered builders, plus custom widget registration
-- **QuickJS Runtime** &mdash; Embedded JavaScript engine for scripting alongside the Rust VM
+- **QuickJS Runtime** &mdash; Embedded JavaScript engine for scripting alongside the Rust VM (JavaScriptCore on the native iOS host)
+- **Sessions** &mdash; native hosts expose `json`, `miniapp`, `superapp`, `stream`, `nextjs` and `server` sessions with the same methods and events on every platform
 
 ---
 
 ## &#x1F680; Quick Start
 
-### Installation
+### A mini app project (CLI)
 
-Add Elpian to your `pubspec.yaml`:
+```bash
+elpian create my_app                       # Flutter web shell (default)
+elpian create my_app --renderer native     # or the @elpian/web DOM host
+cd my_app && elpian run install && elpian run dev
+```
+
+`elpian.config.json`'s `"renderer"` (`"flutter"` | `"native"`) picks what
+`elpian run build` writes to `dist/web`; `--renderer` overrides it per run. See
+[wiki/05-cli.md](wiki/05-cli.md).
+
+### Flutter host
+
+Add the package in [`flutter/`](flutter/) to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
   elpian_ui:
-    path: ./path/to/elpian
+    path: ./path/to/elpian/flutter
 ```
 
 ```bash
 flutter pub get
 ```
 
-### Run the demo
+Run the demo app:
 
 ```bash
-flutter run -t lib/example/landing_page_example.dart
+cd flutter/example
+flutter run -t lib/examples/landing_page_example.dart
 ```
+
+### Native hosts
+
+| Platform | Install | Embed |
+|---|---|---|
+| Android | `implementation("dev.elpian:elpian-android:1.0.0")` (+ core library desugaring) | `Elpian.install(context)`, then `ElpianHostView(context).open("miniapp", options)` |
+| iOS | Swift package `native/ios`, product `Elpian` | `Elpian.install()`, then `ElpianHostView(frame:).open(kind: "miniapp", options: ...)` |
+| Web | `@elpian/web` (`native/web`) | `installElpian(...)`, then `mountElpian(el, kind, options)` or `<elpian-view>` |
+| Expo / React Native | `@elpian/expo` (`native/expo`), config plugin `"@elpian/expo"` | `<ElpianView kind options onEvent />` |
+
+Full per-platform setup (Rust VM builds, Godot, assets) is in
+[wiki/23-native-hosts.md](wiki/23-native-hosts.md) and [native/README.md](native/README.md).
 
 ---
 
 ## &#x1F4BB; Code Examples
+
+The examples below use the Flutter host's Dart API. The JSON they render, the
+stylesheets and the VM programs are the same on the native hosts, which take
+them as session options (`view`, `stylesheet`, `code` / `astJson`) &mdash; see
+[wiki/23-native-hosts.md](wiki/23-native-hosts.md#sessions).
 
 
 ### Next.js Black-Box Client
@@ -115,6 +177,12 @@ const NextjsServerWidget(
 ```
 
 This mode uses your Next.js server as the UI source and fetches real Next.js routes by default (not only a single API endpoint), then renders returned Elpian components natively on the client with `NextjsLink` + server navigation commands. Routes can also return `jsCode` + `jsEntryFunction` (default `MainComponent`) and `vmAstJson`; scripts can call host `render` to push UI DSL from code. Server payloads may also use `type: "clientComp"` with inline `jsCode`.
+
+On the native hosts the same client is the `nextjs` session kind:
+
+```kotlin
+hostView.open("nextjs", mapOf("serverBaseUrl" to "https://mini.example.com", "route" to "/"))
+```
 
 ### Caspar point-signaling machine (Node.js + Docker example)
 
@@ -220,6 +288,9 @@ element?.addEventListener('click', () => print('Clicked!'));
 final node = element?.toElpianNode();
 ```
 
+`ElpianDOM` is the Flutter host's Dart API. Guests reach the same DOM on every
+host through the `dom.*` host calls ([wiki/12-host-apis.md](wiki/12-host-apis.md)).
+
 ### 3D Scenes — embedded Godot
 
 3D is a real **Godot 4** engine embedded as a `Scene3D` widget. Build the world
@@ -241,7 +312,8 @@ Coverage is complete by construction: the engine side runs a *reflective*
 interpreter addressing Godot by name through `ClassDB`, so every node class,
 method, property and signal is reachable — including ones added in future Godot
 versions. Where no Godot artifact is present, `Scene3D` renders a placeholder and
-the surrounding 2D app is unaffected.
+the surrounding 2D app is unaffected. The native hosts render the same `Scene3D`
+node and op protocol (Android Views, UIKit, the Godot web export on the DOM host).
 
 See [`wiki/11-canvas-and-3d.md`](wiki/11-canvas-and-3d.md).
 
@@ -346,6 +418,10 @@ engine.registerWidget('MyCustomCard', (node, children) {
 });
 ```
 
+`registerWidget` is Flutter-only. On the native hosts, register a platform view
+for a `native` node (or a server-component island) with `registerNativeComponent`
+(`@elpian/web`, Kotlin `dev.elpian.android.render`, Swift `Elpian.registerNativeComponent`).
+
 ---
 
 ## &#x1F9E9; Widget & Element Coverage
@@ -424,22 +500,30 @@ InkWell, GestureDetector, Tooltip, Dismissible, Draggable, DragTarget, Opacity, 
 
 ## &#x1F30D; Platform Support
 
-| Platform | 2D / HTML / CSS | Canvas 2D | 3D (embedded Godot) | VM |
-|:--------:|:---------------:|:---------:|:-------------------:|:--:|
+**Flutter host** (`flutter/`, `elpian_ui`):
+
+| Platform | 2D / HTML / CSS | Canvas 2D | 3D (embedded Godot) | Elpian VM |
+|:--------:|:---------------:|:---------:|:-------------------:|:---------:|
 | Android | &#x2705; | &#x2705; | &#x2705; platform view | &#x2705; FFI |
 | iOS | &#x2705; | &#x2705; | &#x2705; platform view | &#x2705; FFI |
-| Web | &#x2705; | &#x2705; | placeholder | &#x2705; WASM |
+| Web | &#x2705; | &#x2705; | Godot web export | &#x2705; WASM |
 | macOS | &#x2705; | &#x2705; | placeholder | &#x2705; FFI |
 | Linux | &#x2705; | &#x2705; | placeholder | &#x2705; FFI |
 | Windows | &#x2705; | &#x2705; | placeholder | &#x2705; FFI |
 
-3D needs the `godot/` plugin plus its binary artifacts; without them `Scene3D`
-degrades to a placeholder rather than failing.
+**Native hosts** (`native/`):
 
-Besides Flutter, the same mini apps run on **native hosts** (`native/`): a
-Kotlin engine rendering to Android Views, a Swift engine rendering to UIKit, a
-DOM host for the web, and an Expo / React Native module over all three — see
-[wiki/23-native-hosts.md](wiki/23-native-hosts.md).
+| Platform | Engine &rarr; toolkit | 3D (embedded Godot) | Runtimes |
+|:--------:|:---------------------|:-------------------:|:--------:|
+| Android | Kotlin (`elpian-core`) &rarr; Android Views | opt-in (`-Pelpian.godot=true`) | Elpian VM (JNI), QuickJS, WASM (Chicory) |
+| iOS | Swift (`ElpianCore`) &rarr; UIKit | a linked Godot runtime | Elpian VM (C ABI), JavaScriptCore, WASM (WasmKit) |
+| Web | TypeScript (`@elpian/web`) &rarr; the DOM | Godot web export | Elpian VM (wasm-bindgen), QuickJS, WebAssembly |
+| Expo / React Native | the three above, via `<ElpianView>` | as above | as above |
+
+3D needs the `godot/` engine artifacts; without them `Scene3D` degrades to a
+placeholder rather than failing. Where the platform toolkits differ (filters,
+backdrop blur on older Android, …) is listed in
+[wiki/23-native-hosts.md](wiki/23-native-hosts.md#differences-between-platforms).
 
 ---
 
@@ -465,7 +549,10 @@ elpian/
 ├── rust/                           # Rust VM workspace: VM, FFI (C ABI + JNI),
 │                                   #   js2elpian, dart2elpian, runtime, host
 ├── cli/                            # The `elpian` CLI + its Flutter web shell
-├── godot/                          # Embedded-Godot plugin (Android + iOS)
+├── godot/                          # Embedded Godot (Android, iOS, web glue)
+├── guest-sdk/                      # Guest-side SDKs (JS, Dart)
+├── fullstack/                      # Fullstack design plan and status
+├── samples/                        # Sample mini apps (closed-fullstack)
 ├── wiki/                           # All documentation
 └── .github/workflows/              # CI: verify, native hosts, WASM + Pages
 ```
@@ -499,6 +586,8 @@ folded in.
 | [`15-ast-reference.md`](wiki/15-ast-reference.md) | Look up an AST node or VM API |
 | [`16-widget-reference.md`](wiki/16-widget-reference.md) | Look up a widget prop or CSS property |
 | [`17-nextjs-integration.md`](wiki/17-nextjs-integration.md) | Render Next.js server payloads |
+| [`18-fullstack.md`](wiki/18-fullstack.md) &ndash; [`22-packaging.md`](wiki/22-packaging.md) | Fullstack apps, server functions, egress, hosting, packaging |
+| [`23-native-hosts.md`](wiki/23-native-hosts.md) | Host mini apps natively on Android, iOS, the web and Expo |
 
 ---
 
@@ -517,7 +606,11 @@ folded in.
 ## &#x1F3C3; Running Tests
 
 ```bash
-flutter test
+(cd flutter && flutter test)                                    # Flutter host
+(cd rust && cargo test --workspace)                             # VM, compilers, server
+(cd native && npm ci && npm test)                               # web host (Chromium)
+(cd native/android && gradle :elpian-core:test :elpian:testDebugUnitTest)
+(cd native/ios && swift test)                                   # ElpianCore
 ```
 
 ---

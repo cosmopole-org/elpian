@@ -289,6 +289,47 @@ class MyScreen extends StatelessWidget {
 }
 ```
 
+## 9b. Embedding a mini app in a native app (no Flutter)
+
+The same bytecode / AST, opened as a `miniapp` session on a native host (see
+[`23-native-hosts.md`](23-native-hosts.md) for setup):
+
+```kotlin
+// Android — Elpian.install(applicationContext) once, then:
+val view = ElpianHostView(context)
+view.on("println") { Log.i("guest", it.toString()) }
+view.open("miniapp", mapOf(
+    "machineId" to "feature-panel",
+    "runtime" to "elpian",
+    "bytecodeBase64" to bytecodeBase64,
+    "stylesheet" to designTokens,
+))
+```
+
+```swift
+// iOS — _ = Elpian.install() once, then:
+let view = ElpianHostView(frame: .zero)
+view.on("println") { print("[guest]", $0 ?? "") }
+view.open(kind: "miniapp", options: ["machineId": "feature-panel", "runtime": "elpian", "bytecodeBase64": bytecodeBase64])
+```
+
+```js
+// Web — installElpian({ assetBase }) once, then:
+const app = await mountElpian(el, 'miniapp', { machineId: 'feature-panel', runtime: 'elpian', bytecodeBase64 });
+app.on('println', (m) => console.log('[guest]', m));
+```
+
+```tsx
+// Expo / React Native
+<ElpianView style={{ flex: 1 }} kind="miniapp"
+  options={{ machineId: 'feature-panel', runtime: 'elpian', bytecodeBase64 }}
+  onEvent={({ event, payload }) => event === 'println' && console.log(payload)} />
+```
+
+Custom widgets and host handlers are engine-level on the native hosts
+(`registerNativeComponent`, the `hostHandlers` option of `MiniAppSession`) — see
+[`12-host-apis.md`](12-host-apis.md).
+
 ---
 
 ## 10. Sandboxing an untrusted child VM

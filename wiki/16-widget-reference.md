@@ -4,7 +4,7 @@
 > per-element detail, the CSS property reference and the widget summary
 > table. [`08-widgets.md`](08-widgets.md) is the catalogue with guidance;
 > this is the exhaustive listing.
-Complete reference for Elpian's 2D rendering engine. All UI is defined in JSON and rendered as native Flutter widgets. Elpian supports three rendering modes: **Flutter DSL widgets**, **HTML5 semantic elements**, and a **Canvas 2D drawing API**.
+Complete reference for Elpian's 2D rendering engine. All UI is defined in JSON and rendered as native Flutter widgets by the Flutter host, or as Android Views, UIKit views or DOM elements by the native hosts ([23](23-native-hosts.md)) — the tags, props and CSS below are the same on both. Elpian supports three rendering modes: **Flutter DSL widgets**, **HTML5 semantic elements**, and a **Canvas 2D drawing API**.
 
 ---
 
@@ -42,7 +42,7 @@ Elpian renders UI from JSON definitions. Each node has a `type` field that maps 
 }
 ```
 
-The `ElpianEngine` parses JSON nodes, resolves CSS styles (including JSON stylesheet rules), and builds Flutter widget trees.
+The `ElpianEngine` parses JSON nodes, resolves CSS styles (including JSON stylesheet rules), and builds Flutter widget trees (the native engines build widget descriptors that are laid out and composited into platform views).
 
 ### Node Structure
 
@@ -577,7 +577,7 @@ See [3D_GRAPHICS.md](3D_GRAPHICS.md) for the complete 3D scene format.
 
 ## 🌐 HTML5 Elements
 
-Elpian supports 76 HTML5 elements rendered as native Flutter widgets. All elements accept CSS styling.
+Elpian supports 76 HTML5 elements rendered as native Flutter widgets (or native views on the native hosts). All elements accept CSS styling.
 
 ### 🏛️ Structural Elements
 
@@ -1221,7 +1221,7 @@ easeInBack, easeOutBack, easeInOutBack
         { "type": "strong", "props": { "text": "high-performance UI engine" } },
         { "type": "span", "props": { "text": " that renders " } },
         { "type": "em", "props": { "text": "JSON definitions" } },
-        { "type": "span", "props": { "text": " as native Flutter widgets." } }
+        { "type": "span", "props": { "text": " as native Flutter widgets or platform views." } }
       ]
     },
     { "type": "h2", "props": { "text": "Features" } },

@@ -55,7 +55,7 @@ Source Code / AST JSON
    └──────────┘
 ```
 
-The VM compiles AST JSON into bytecode, then executes it. When the VM needs to communicate with the host (Flutter/Dart), it **pauses** execution and returns a host call request. The host processes it and calls `continue_execution` to resume the VM.
+The VM compiles AST JSON into bytecode, then executes it. When the VM needs to communicate with the host (the Flutter host in Dart, or a native host in Kotlin, Swift or TypeScript), it **pauses** execution and returns a host call request. The host processes it and calls `continue_execution` to resume the VM.
 
 ---
 
@@ -793,7 +793,7 @@ These are registered in the VM's `func_group` when creating a VM instance:
 |----------|---------|
 | `println` | Print a message to the console |
 | `stringify` | Convert a value to its string representation |
-| `render` | Render a UI view (sends JSON view tree to Flutter) |
+| `render` | Render a UI view (sends JSON view tree to the host) |
 | `updateApp` | Update the app state / trigger a re-render |
 
 ### Using `host_call` in AST
@@ -1619,7 +1619,7 @@ The Dart side can call `vm.callFunction("increment")` to trigger `increment`, wh
 
 ## 🧩 ElpianVmWidget
 
-`ElpianVmWidget` is a Flutter widget that runs a VM sandbox and renders the view tree it produces. It handles the full lifecycle: VM creation, host call routing, rendering, and disposal.
+`ElpianVmWidget` is a Flutter widget that runs a VM sandbox and renders the view tree it produces. It handles the full lifecycle: VM creation, host call routing, rendering, and disposal. On the native hosts the same lifecycle is a `miniapp` session ([23](23-native-hosts.md#sessions)).
 
 ### Properties
 
@@ -1686,7 +1686,7 @@ ElpianVmWidget(
 
 ## 🔗 Event Bridging: VM ↔ Flutter
 
-The VM and Flutter communicate events through two mechanisms:
+The VM and Flutter communicate events through two mechanisms (the native hosts use the same two, as the `callFunction` session method and the same host-call loop):
 
 ### 1. Dart → VM: `callFunction` / `callFunctionWithInput`
 

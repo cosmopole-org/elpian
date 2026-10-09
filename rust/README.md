@@ -6,7 +6,7 @@ package *and* the workspace root, which put the VM's own `src/` beside its
 member crates and read as though the VM contained them.
 
 `target/` stays here, shared by every crate, because the Flutter build wiring
-(`rust_builder/`'s CMake and podspecs) looks for
+(`flutter/rust_builder/`'s CMake and podspecs) looks for
 `rust/target/release/libelpian_vm.*`.
 
 ## Crates
@@ -19,7 +19,7 @@ member crates and read as though the VM contained them.
 | `dart2elpian` | Dart → the JS subset `js2elpian` compiles. |
 | `elpian-dart-runtime` | The `dart:*` host surface and the Flutter widget layer, plus a Dart-level capability/resource governor. Was named `dart`, which read as a language, a directory and a dependency at once. |
 | `elpian-runtime` | The host-neutral multi-VM manager: `vm.spawn`, the sandbox rules, aggregate budgets, per-VM callback namespacing. The embedder supplies the surface (Godot, Flutter, …) through the `HostSurface` trait. |
-| `elpian-ffi` | The C ABI Flutter links against. Produces `libelpian_vm.{so,dll,a}` — the artifact name the Dart bindings open — exporting the VM surface, the governance control plane, and the multi-VM manager. |
+| `elpian-ffi` | The C ABI the Flutter host links against (and the native iOS host, as `ElpianVM.xcframework`); with `--features jni`, the JNI exports the native Android host loads. Produces `libelpian_vm.{so,dll,a}` — the artifact name the Dart bindings open — exporting the VM surface, the governance control plane, and the multi-VM manager. |
 | `capi` (`elpian-godot-capi`) | The C ABI the Godot GDExtension embeds: `GodotSurface` plus the `elpian_godot_*` exports. |
 
 `cli/` is a separate Cargo project with its own lockfile; CI builds and tests it

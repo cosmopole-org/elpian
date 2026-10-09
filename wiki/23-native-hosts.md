@@ -60,11 +60,11 @@ Every host exposes the same session kinds through the core's
 | kind | what it hosts | main options |
 |---|---|---|
 | `json` | a static Elpian view tree | `view`, `stylesheet` |
-| `miniapp` | a sandboxed mini app | `runtime` (`elpian`, `quickjs`, `wasm`), `code` / `astJson` / `bytecodeBase64`, `entryFunction`, `entryInput`, `stylesheet` |
+| `miniapp` | a sandboxed mini app | `machineId`, `runtime` (`elpian`, `quickjs`, `wasm`), `code` / `astJson` / `bytecodeBase64`, `entryFunction`, `entryInput`, `stylesheet` |
 | `superapp` | a governed mini app with a manifest and grants | `manifest`, `grant`, `source` |
-| `stream` | NDJSON / SSE streamed UI | `url`, `method`, `headers`, `body` |
+| `stream` | NDJSON / SSE streamed UI | `request` (`{url, method, headers, body}`), `initialStylesheet`; or `push` commands |
 | `nextjs` | a Next.js server's Elpian payloads | `serverBaseUrl`, `route`, auth options |
-| `server` | Elpian server components with islands | `baseUrl`, `component`, `args` |
+| `server` | Elpian server components with islands | `baseUrl`, `appId`, `name`, `args`, `revalidateMs` |
 
 Session methods (`navigate`, `back`, `refresh`, `callFunction`, `push`,
 `patch`, `usage`, `state`, `pause`, `resume`, `terminate`, …) and events
@@ -128,6 +128,13 @@ app.on('println', console.log);
 or declaratively: `<elpian-view kind="nextjs" options='{"serverBaseUrl":"…","route":"/"}'></elpian-view>`.
 Every session event is also dispatched on the element as `elpian:<event>` and
 as `elpian:event` (`{event, payload}`).
+
+The `elpian` CLI can use this host for a project's web build instead of the
+Flutter shell: `"renderer": "native"` in `elpian.config.json`, `elpian create
+<dir> --renderer native`, or `elpian run build|dev --renderer native`. `dist/web`
+then holds an `index.html`, `elpian-web.js` and `assets/` that fetch the same
+`__elpian/elpian.manifest.json` and run the client as a `miniapp` session — see
+[05 — CLI](05-cli.md#renderers-flutter-or-native).
 
 ## Expo / React Native
 

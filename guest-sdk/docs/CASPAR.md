@@ -1,6 +1,6 @@
 # caspar.js — the Caspar protocol prelude
 
-`prelude/caspar.js` (composed on `import 'caspar.js';`) is a full client for
+`guest-sdk/js/caspar.js` (composed on `import 'caspar.js';`) is a full client for
 the [Caspar](https://github.com/cosmopole-org/caspar) node's signed binary
 action protocol, written in the guest-JS subset over the reflective bridge:
 

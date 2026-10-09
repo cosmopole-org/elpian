@@ -22,7 +22,7 @@ Verified from `upgrade/README.md` and the current tree:
 
 ### 2.1 The policy conformance corpus
 
-`test/fixtures/policy_corpus.json` — cases of `(manifest, grant) → expected
+`flutter/test/fixtures/policy_corpus.json` — cases of `(manifest, grant) → expected
 policy`, read by **both** `elpian-host`'s Rust tests and the Dart
 `mini_app_*_test.dart` suites.
 
