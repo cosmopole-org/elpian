@@ -2,3 +2,4 @@
 .swiftpm/
 *.xcodeproj/
 Package.resolved
+Frameworks/
