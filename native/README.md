@@ -6,8 +6,7 @@ platform's own UI toolkit:
 
 | Folder | What |
 |---|---|
-| `core/` | The TypeScript engine (web host only) |
-| `web/` | `@elpian/web`: the DOM host, Canvas2D painter, Godot web, runtimes |
+| `web/` | `@elpian/web`: the engine in TypeScript (`src/`) and its DOM host (`src/dom/`: renderer, Canvas2D painter, Godot web, runtimes) |
 | `android/` | `elpian-core` (Kotlin engine, pure JVM) and `elpian` (Android Views host, engines) |
 | `ios/` | `ElpianCore` (Swift engine) and `Elpian` (UIKit host, engines) |
 | `expo/` | `@elpian/expo`: `<ElpianView>` for Expo / React Native |
@@ -18,7 +17,7 @@ See [wiki/23-native-hosts.md](../wiki/23-native-hosts.md) for the architecture,
 the session kinds, per-platform usage and the platform differences.
 
 ```sh
-npm ci && npm test                         # core + web (Chromium)
+npm ci && npm test                         # web (Chromium)
 (cd android && gradle :elpian-core:test :elpian:testDebugUnitTest)
 (cd ios && swift test)
 ```

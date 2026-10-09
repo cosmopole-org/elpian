@@ -4,8 +4,8 @@ import PackageDescription
 
 /// The Elpian iOS engine.
 ///
-///  - `ElpianCore` is the pure-Swift port of the TypeScript core
-///    (native/core/src): Swift + Foundation only, so it builds and tests on
+///  - `ElpianCore` is the pure-Swift port of the TypeScript engine (native/web)
+///    (native/web/src): Swift + Foundation only, so it builds and tests on
 ///    Linux as well as on Apple platforms.
 ///  - `CElpianVM` is the C module for the Rust runtime's ABI
 ///    (rust/crates/elpian-ffi/include/elpian_vm.h, copied by

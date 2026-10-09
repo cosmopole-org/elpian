@@ -458,8 +458,7 @@ elpian/
 │   ├── assets/web_runtime/         # WASM loader, QuickJS web runtime
 │   └── test/                       # Unit & integration tests
 ├── native/                         # Native hosts of the same mini apps
-│   ├── core/                       #   TypeScript engine (web)
-│   ├── web/                        #   @elpian/web — DOM host
+│   ├── web/                        #   @elpian/web — TypeScript engine + DOM host
 │   ├── android/                    #   Kotlin engine + Android Views host
 │   ├── ios/                        #   Swift engine + UIKit host
 │   └── expo/                       #   @elpian/expo — Expo / React Native module

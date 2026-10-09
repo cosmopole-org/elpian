@@ -10,7 +10,7 @@
  * <textarea>, <select>, <progress>, <canvas>, <video>, <audio>, <iframe>, the
  * Godot export's canvas, and host-registered native components.
  */
-import { ROOT_VIEW_ID, toCssColor, type ViewEvent, type ViewKind, type ViewOp, type ViewProps } from '@elpian/native-core';
+import { ROOT_VIEW_ID, toCssColor, type ViewEvent, type ViewKind, type ViewOp, type ViewProps } from '../lib.js';
 import { CanvasPainter } from './canvas.js';
 import { applyBorder, blendCss, boxShadowCss, css, filterCss, fontFamilyCss, gradientCss, px, radiusCss, round, spanStyle } from './css.js';
 import { GestureRecognizer } from './gestures.js';

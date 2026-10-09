@@ -51,7 +51,7 @@ final class ReconcilerTests: XCTestCase {
     private func ins(_ t: Double, _ r: Double, _ b: Double, _ l: Double) -> EdgeInsets { EdgeInsets(top: t, right: r, bottom: b, left: l) }
 
     // Expected outputs below were produced by running the same trees through
-    // the TypeScript core (native/core/src) with the same fake measureText.
+    // the TypeScript engine (native/web) (native/web/src) with the same fake measureText.
 
     func testPaddingAndFlexRow() {
         let root = layoutTree(

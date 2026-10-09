@@ -5,7 +5,7 @@
 //     cd rust && cargo run --bin gen-host-api-catalog -- \
 //         ../native/android/elpian-core/src/main/kotlin/dev/elpian/core/vm/HostApiCatalog.kt
 //
-// The Kotlin twin of native/core/src/vm/host-api-catalog.ts;
+// The Kotlin twin of native/web/src/vm/host-api-catalog.ts;
 // `cargo test -p elpian-vm --test host_api_catalog` fails when it is stale.
 
 package dev.elpian.core.vm

@@ -1,7 +1,7 @@
 import Foundation
 
 /**
- * The two Promise idioms the TypeScript core uses without awaiting, mapped
+ * The two Promise idioms the TypeScript engine (native/web) uses without awaiting, mapped
  * onto the platform's main-thread scheduling:
  *
  *  - [scheduleMicrotask] — `queueMicrotask(fn)`: run after the current turn.

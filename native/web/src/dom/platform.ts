@@ -4,7 +4,7 @@
  * mode and locale), images, networking (with streaming), localStorage,
  * bundled assets, the Godot web transport and the three runtimes.
  */
-import type { FetchRequest, FetchResponse, Platform, Size, StreamHandlers, TextMetrics, TextSpec, ViewOp, Viewport } from '@elpian/native-core';
+import type { FetchRequest, FetchResponse, Platform, Size, StreamHandlers, TextMetrics, TextSpec, ViewOp, Viewport } from '../lib.js';
 import { WebGodotBinding } from './godot.js';
 import { DomRenderer, type RendererHooks } from './renderer.js';
 import { WebElpianVm, WebQuickJs, WebWasmEngine } from './runtimes.js';

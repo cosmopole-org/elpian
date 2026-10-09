@@ -5,7 +5,7 @@
 //     cd rust && cargo run --bin gen-host-api-catalog -- \
 //         ../native/ios/Sources/ElpianCore/VM/HostApiCatalog.swift
 //
-// The Swift twin of native/core/src/vm/host-api-catalog.ts;
+// The Swift twin of native/web/src/vm/host-api-catalog.ts;
 // `cargo test -p elpian-vm --test host_api_catalog` fails when it is stale.
 
 /// Every host API the Elpian VM forwards to the host, grouped the way the

@@ -1,7 +1,7 @@
 import XCTest
 @testable import ElpianCore
 
-/** Cascade results compared with the TypeScript core (`StylesheetManager.getComputedStyleMap`). */
+/** Cascade results compared with the TypeScript engine (native/web) (`StylesheetManager.getComputedStyleMap`). */
 final class StylesheetTests: XCTestCase {
     private let css = """
     :root { --main: #f00; }

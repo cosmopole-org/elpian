@@ -1,7 +1,7 @@
 import Foundation
 
 /**
- * UTF-8 and base64 helpers with exactly the TypeScript core's behaviour
+ * UTF-8 and base64 helpers with exactly the TypeScript engine (native/web)'s behaviour
  * (util/bytes.ts): lone surrogates encode as U+FFFD, malformed UTF-8 decodes
  * to U+FFFD (`allowMalformed`), base64 decoding accepts the URL-safe
  * alphabet and tolerates whitespace and padding.

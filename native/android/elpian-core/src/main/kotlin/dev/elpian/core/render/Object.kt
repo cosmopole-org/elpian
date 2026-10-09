@@ -4,7 +4,7 @@ import kotlin.math.max
 
 /**
  * The render-object tree: a port of Flutter's box protocol (render/object.ts
- * in the TypeScript core). Lowering turns Elpian nodes into widget
+ * in the TypeScript engine (native/web)). Lowering turns Elpian nodes into widget
  * descriptors ([W]); the reconciler keeps one [RenderObject] per descriptor
  * across renders; layout runs constraints-down / sizes-up; the compositor
  * turns painting objects into native views.
@@ -62,7 +62,7 @@ class W(
 fun w(t: String, p: Map<String, Any?> = emptyMap(), c: List<W>? = null, k: String? = null): W = W(t, LinkedHashMap(p), c, k)
 fun w(t: String, p: Map<String, Any?>, child: W?, k: String? = null): W = W(t, LinkedHashMap(p), child?.let { listOf(it) }, k)
 
-/** Property bag access with the TypeScript core's loose typing. */
+/** Property bag access with the TypeScript engine (native/web)'s loose typing. */
 typealias Props = MutableMap<String, Any?>
 
 fun Map<String, Any?>.d(key: String): Double? = (this[key] as? Number)?.toDouble()

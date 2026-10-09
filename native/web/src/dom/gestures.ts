@@ -6,7 +6,7 @@
  * reported as a swipe. Dismissible and Draggable gestures move the view (or a
  * floating copy of it) natively while they run.
  */
-import type { GestureKind, ViewEvent } from '@elpian/native-core';
+import type { GestureKind, ViewEvent } from '../lib.js';
 
 const SLOP = 18; // kTouchSlop
 const DOUBLE_TAP_TIMEOUT = 300; // kDoubleTapTimeout

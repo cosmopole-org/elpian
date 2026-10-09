@@ -3,7 +3,7 @@
 //   assets/fonts/MaterialIcons-Regular.ttf        (Icon widget font)
 //   assets/runtime/wasm/elpian_vm/…               (Elpian VM, wasm-bindgen)
 //   assets/runtime/vendor/quickjs-emscripten.*    (QuickJS guests)
-//   dist/elpian-web.js                            (core + web, one module)
+//   dist/elpian-web.js                            (engine + DOM host, one module)
 import { build } from 'esbuild';
 import { cpSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';

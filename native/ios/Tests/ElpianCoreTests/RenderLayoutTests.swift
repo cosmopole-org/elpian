@@ -4,7 +4,7 @@ import XCTest
 /**
  * Flex / wrap / grid / table / scroll layouts through the reconciler. Every
  * expected dump was produced by running the same tree through the
- * TypeScript core (native/core/src) with the same fake text measurement
+ * TypeScript engine (native/web/src) with the same fake text measurement
  * (see [TextFakePlatform]).
  */
 final class RenderLayoutTests: XCTestCase {

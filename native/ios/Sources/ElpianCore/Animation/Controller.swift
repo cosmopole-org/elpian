@@ -13,7 +13,7 @@ public enum AnimationStatus: String {
 }
 
 /**
- * The completion of one controller run — the TypeScript core's Promise.
+ * The completion of one controller run — the TypeScript engine (native/web)'s Promise.
  * Observe it with [then] or `await completion.wait()`.
  */
 public final class AnimationCompletion {

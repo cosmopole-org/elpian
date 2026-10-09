@@ -9,7 +9,7 @@ rendered with each platform's own UI toolkit:
 |---|---|---|---|
 | Android | Kotlin, `native/android/elpian-core` (pure JVM) | Android Views (`native/android/elpian`) | Elpian VM (Rust, JNI), QuickJS, WASM (Chicory), Godot |
 | iOS | Swift, `native/ios/Sources/ElpianCore` | UIKit (`native/ios/Sources/Elpian`) | Elpian VM (Rust, C ABI), JavaScriptCore, WASM (WasmKit), Godot |
-| Web | TypeScript, `native/core` | the DOM (`native/web`) | Elpian VM (wasm-bindgen), QuickJS (emscripten), WebAssembly, Godot web export |
+| Web | TypeScript, `native/web/src` | the DOM (`native/web/src/dom`) | Elpian VM (wasm-bindgen), QuickJS (emscripten), WebAssembly, Godot web export |
 | Expo / React Native | the three above | via `native/expo` | — |
 
 Android and iOS do **not** use JavaScript as glue: their cores are Kotlin and

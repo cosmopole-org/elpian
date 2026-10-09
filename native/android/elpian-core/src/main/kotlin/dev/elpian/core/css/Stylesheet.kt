@@ -6,7 +6,7 @@ import dev.elpian.core.util.parseFloatPrefix
 /**
  * Stylesheets and the cascade — a port of `CSSStylesheet`,
  * `GlobalStylesheetManager` and `JsonStylesheetParser` (css/stylesheet.ts in
- * the TypeScript core). Flutter's order (tag → class → id → @media → inline,
+ * the TypeScript engine (native/web)). Flutter's order (tag → class → id → @media → inline,
  * `!important` re-applied on top) is kept; the selector engine adds compound
  * selectors, lists, descendant / child combinators, attributes and `:root`
  * custom properties with `var()`.

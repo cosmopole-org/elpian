@@ -4,7 +4,7 @@ package dev.elpian.core.util
  * JSON values as plain Kotlin data, with JavaScript's number model: every
  * number is a [Double] (integers print without a fraction), objects are
  * insertion-ordered [MutableMap]s, arrays are [MutableList]s. This mirrors
- * the TypeScript core exactly, so the two engines read guest payloads alike.
+ * the TypeScript engine (native/web) exactly, so the two engines read guest payloads alike.
  */
 typealias JsonMap = MutableMap<String, Any?>
 

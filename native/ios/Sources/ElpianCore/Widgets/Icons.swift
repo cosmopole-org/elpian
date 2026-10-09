@@ -6,7 +6,7 @@ import Foundation
  * (Flutter `Icons.copy` is the content_copy glyph).
  * Generated from google/material-design-icons font/MaterialIcons-Regular.codepoints.
  *
- * GENERATED from native/core/src/widgets/icons.ts (2235 entries); do not edit by hand.
+ * GENERATED from native/web/src/widgets/icons.ts (2235 entries); do not edit by hand.
  * The table is stored as compact `name=hex` text (entries separated by commas
  * and newlines) in chunks of 500 entries and parsed on first use, which keeps
  * compile times flat (no giant dictionary literal for the type checker).

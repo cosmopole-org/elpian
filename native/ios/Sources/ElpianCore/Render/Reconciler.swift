@@ -144,7 +144,7 @@ public func propsEqual(_ a: JSONObject, _ b: JSONObject) -> Bool {
     return true
 }
 
-/** Create (and attach) the render object for [w]; traps on an unregistered type, as the TypeScript core throws. */
+/** Create (and attach) the render object for [w]; traps on an unregistered type, as the TypeScript engine (native/web) throws. */
 public func createRenderObject(_ w: W, _ owner: RenderOwner, _ parent: RenderObject?) -> RenderObject {
     guard let make = factory(w.t) else { fatalError(UnknownRenderObjectType(type: w.t).description) }
     let ro = make()

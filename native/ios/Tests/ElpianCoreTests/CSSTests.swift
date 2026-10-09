@@ -2,8 +2,8 @@ import XCTest
 @testable import ElpianCore
 
 /**
- * Parser results compared with the TypeScript core: each `expected` string is
- * `JSON.stringify(CSSParser.parse(input))` printed by native/core/src (the
+ * Parser results compared with the TypeScript engine (native/web): each `expected` string is
+ * `JSON.stringify(CSSParser.parse(input))` printed by native/web/src (the
  * default environment: 1280×800 viewport, 16px root font).
  */
 final class CSSTests: XCTestCase {

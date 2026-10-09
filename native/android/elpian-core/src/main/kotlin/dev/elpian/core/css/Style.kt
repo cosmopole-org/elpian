@@ -2,7 +2,7 @@ package dev.elpian.core.css
 
 /**
  * The resolved style of one element — the Kotlin twin of the Flutter
- * `CSSStyle` model (and of css/style.ts in the TypeScript core), produced by
+ * `CSSStyle` model (and of css/style.ts in the TypeScript engine (native/web)), produced by
  * [CSSParser.parse]. Durations are milliseconds.
  */
 class CSSStyle {

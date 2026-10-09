@@ -1,6 +1,6 @@
 package dev.elpian.core.css
 
-/** Flutter painting value types (see css/types.ts in the TypeScript core). */
+/** Flutter painting value types (see css/types.ts in the TypeScript engine (native/web)). */
 
 data class EdgeInsets(val top: Double = 0.0, val right: Double = 0.0, val bottom: Double = 0.0, val left: Double = 0.0) {
     val horizontal: Double get() = left + right

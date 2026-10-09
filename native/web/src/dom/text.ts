@@ -5,7 +5,7 @@
  * intrinsic width clamped to the constraint, height is the laid-out height,
  * baseline is the first line's alphabetic baseline).
  */
-import type { TextMetrics, TextSpec } from '@elpian/native-core';
+import type { TextMetrics, TextSpec } from '../lib.js';
 import { round, spanStyle } from './css.js';
 
 const ALIGN: Record<TextSpec['align'], string> = { left: 'left', right: 'right', center: 'center', justify: 'justify', start: 'start', end: 'end' };

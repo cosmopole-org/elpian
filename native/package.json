@@ -2,11 +2,14 @@
   "name": "elpian-native",
   "private": true,
   "description": "Native (Android, iOS, Web, Expo) bridges for Elpian mini apps",
-  "workspaces": ["core", "web", "expo"],
+  "workspaces": [
+    "web",
+    "expo"
+  ],
   "scripts": {
-    "build": "npm run build -w core && npm run build -w web",
-    "test": "npm run test -w core && npm run test -w web",
-    "typecheck": "tsc -b core web"
+    "build": "npm run build -w web",
+    "test": "npm run test -w web",
+    "typecheck": "tsc -b web expo"
   },
   "devDependencies": {
     "esbuild": "0.24.2",

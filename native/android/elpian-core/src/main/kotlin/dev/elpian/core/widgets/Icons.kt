@@ -6,7 +6,7 @@ package dev.elpian.core.widgets
  * (Flutter `Icons.copy` is the content_copy glyph).
  * Generated from google/material-design-icons font/MaterialIcons-Regular.codepoints.
  *
- * GENERATED from native/core/src/widgets/icons.ts (2235 entries); do not edit by hand.
+ * GENERATED from native/web/src/widgets/icons.ts (2235 entries); do not edit by hand.
  * The table is stored as compact `name=hex` strings in chunks of 500 entries,
  * so no single method or string constant hits the JVM's 64KB limits.
  * Iteration order is the JavaScript object's property order.

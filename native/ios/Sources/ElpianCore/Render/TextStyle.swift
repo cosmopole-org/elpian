@@ -144,7 +144,7 @@ public func resolveFontFamily(_ family: String?) -> String? {
     return nil
 }
 
-/** Text decoration bit flags (`Decoration` in the TypeScript core). */
+/** Text decoration bit flags (`Decoration` in the TypeScript engine (native/web)). */
 public enum Decoration {
     public static let underline = 1
     public static let overline = 2

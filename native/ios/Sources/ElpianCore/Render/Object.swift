@@ -195,7 +195,7 @@ open class RenderObject: CustomStringConvertible {
     // Lifecycle (driven by the reconciler)
     // ---------------------------------------------------------------------------
 
-    /** First configuration (`init` in the TypeScript core). */
+    /** First configuration (`init` in the TypeScript engine (native/web)). */
     open func initialize(_ props: Props) {
         self.props = props
     }

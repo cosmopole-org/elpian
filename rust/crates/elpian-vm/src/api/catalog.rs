@@ -182,7 +182,7 @@ pub fn dart_catalog() -> String {
 }
 
 /// The TypeScript twin of [dart_catalog] for the native hosts
-/// (`native/core/src/vm/host-api-catalog.ts`): the same sets, the same
+/// (`native/web/src/vm/host-api-catalog.ts`): the same sets, the same
 /// capability map, so the native `HostHandler` dispatches and gates exactly as
 /// the Flutter one does.
 pub fn ts_catalog() -> String {
@@ -205,7 +205,7 @@ pub fn ts_catalog() -> String {
          // Produced from the VM's own host-API list and capability mapping by:\n\
          //\n\
          //     cd rust && cargo run --bin gen-host-api-catalog -- \\\n\
-         //         ../native/core/src/vm/host-api-catalog.ts\n\
+         //         ../native/web/src/vm/host-api-catalog.ts\n\
          //\n\
          // The TypeScript twin of flutter/lib/src/vm/host_api_catalog.dart;\n\
          // `cargo test -p elpian-vm --test host_api_catalog` fails when it is stale.\n\n",
@@ -303,7 +303,7 @@ pub fn kotlin_catalog() -> String {
          //     cd rust && cargo run --bin gen-host-api-catalog -- \\\n\
          //         ../native/android/elpian-core/src/main/kotlin/dev/elpian/core/vm/HostApiCatalog.kt\n\
          //\n\
-         // The Kotlin twin of native/core/src/vm/host-api-catalog.ts;\n\
+         // The Kotlin twin of native/web/src/vm/host-api-catalog.ts;\n\
          // `cargo test -p elpian-vm --test host_api_catalog` fails when it is stale.\n\n\
          package dev.elpian.core.vm\n\n",
     );
@@ -358,7 +358,7 @@ pub fn swift_catalog() -> String {
          //     cd rust && cargo run --bin gen-host-api-catalog -- \\\n\
          //         ../native/ios/Sources/ElpianCore/VM/HostApiCatalog.swift\n\
          //\n\
-         // The Swift twin of native/core/src/vm/host-api-catalog.ts;\n\
+         // The Swift twin of native/web/src/vm/host-api-catalog.ts;\n\
          // `cargo test -p elpian-vm --test host_api_catalog` fails when it is stale.\n\n\
          /// Every host API the Elpian VM forwards to the host, grouped the way the\n\
          /// host handler dispatches them, plus the capability that gates each.\n\
