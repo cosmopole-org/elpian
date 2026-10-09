@@ -1,6 +1,7 @@
 import { mountElpian, type ElpianSession } from '@elpian/web';
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import { View } from 'react-native';
+import { ensureElpianWeb } from './config.web';
 import type { ElpianViewHandle, ElpianViewProps } from './types';
 
 /** Web: the DOM host (@elpian/web) mounted in the view's element. */
@@ -47,6 +48,7 @@ export const ElpianView = forwardRef<ElpianViewHandle, ElpianViewProps>(function
       deliver(event, payload);
     };
     element.addEventListener('elpian:event', onDom);
+    ensureElpianWeb();
     mountElpian(element, kind, JSON.parse(optionsJson))
       .then((s) => {
         if (cancelled) return void s.close();

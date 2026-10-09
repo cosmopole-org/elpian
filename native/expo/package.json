@@ -5,12 +5,16 @@
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "react-native": "src/index.ts",
+  "bin": {
+    "elpian-expo-web-assets": "scripts/copy-web-assets.mjs"
+  },
   "files": [
     "build",
     "src",
     "android",
     "ios",
     "app.plugin.js",
+    "scripts/copy-web-assets.mjs",
     "expo-module.config.json",
     "!android/build",
     "!ios/build"
