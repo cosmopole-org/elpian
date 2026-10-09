@@ -45,6 +45,12 @@ struct Config {
     data_root: Option<PathBuf>,
     web_root: Option<PathBuf>,
     artifact_root: Option<PathBuf>,
+    /// `{"<app>": {"<SECRET>": "value"}}` — the values of apps' declared
+    /// secrets (provider keys among them).
+    secrets: Option<PathBuf>,
+    /// Development: a declared secret the host holds no value for is read
+    /// from the environment (`elpian run dev` passes this).
+    dev: bool,
 }
 
 fn main() {
@@ -84,6 +90,24 @@ fn main() {
         }
     }
 
+    if let Some(path) = &config.secrets {
+        match load_secrets(path, &runtime) {
+            Ok(count) => println!("[elpian] {count} secret value(s) from {}", path.display()),
+            Err(message) => {
+                eprintln!("elpiand: {message}");
+                std::process::exit(1);
+            }
+        }
+    }
+    let settings = elpian_host::agents::AgentSettings::from_env(config.dev);
+    if let Some(provider) = &settings.provider_override {
+        println!("[elpian] agents run on the {provider} provider (ELPIAN_AGENT_PROVIDER)");
+    }
+    if config.dev {
+        println!("[elpian] development: declared secrets fall back to the environment");
+    }
+    runtime.set_agent_settings(settings);
+
     let listener = match std::net::TcpListener::bind((config.host.as_str(), config.port)) {
         Ok(listener) => listener,
         Err(error) => {
@@ -98,6 +122,11 @@ fn main() {
     println!("[elpian] host listening on http://{addr}");
     for id in runtime.app_ids() {
         println!("[elpian]   /apps/{id}/manifest.json");
+        if let Some(agents) = runtime.app_definition(&id).and_then(|a| a.agents) {
+            for name in agents.agents.keys() {
+                println!("[elpian]   POST /apps/{id}/agent/{name}");
+            }
+        }
     }
 
     let queue = config
@@ -152,7 +181,8 @@ fn main() {
 
 fn usage() -> String {
     "usage: elpiand --registry <dir> [--host H] [--port P] [--workers N] [--queue N]\n  \
-                [--data-root DIR] [--web-root DIR] [--artifact-root DIR]"
+                [--data-root DIR] [--web-root DIR] [--artifact-root DIR]\n  \
+                [--secrets FILE] [--dev]"
         .into()
 }
 
@@ -168,10 +198,17 @@ fn parse_args() -> Result<Config, String> {
         data_root: None,
         web_root: None,
         artifact_root: None,
+        secrets: None,
+        dev: false,
     };
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut i = 0;
     while i < args.len() {
+        if args[i] == "--dev" {
+            config.dev = true;
+            i += 1;
+            continue;
+        }
         let value = args
             .get(i + 1)
             .ok_or_else(|| format!("{} needs a value", args[i]))?;
@@ -194,6 +231,7 @@ fn parse_args() -> Result<Config, String> {
             "--data-root" => config.data_root = Some(PathBuf::from(value)),
             "--web-root" => config.web_root = Some(PathBuf::from(value)),
             "--artifact-root" => config.artifact_root = Some(PathBuf::from(value)),
+            "--secrets" => config.secrets = Some(PathBuf::from(value)),
             flag => return Err(format!("unknown flag {flag}")),
         }
         i += 2;
@@ -255,6 +293,16 @@ fn load_store(root: &Path, runtime: &Arc<AppRuntime>) -> Result<usize, String> {
 }
 
 fn load_plain_directory(root: &Path, runtime: &Arc<AppRuntime>) -> Result<usize, String> {
+    // A build output (`elpian run build` / `dev`) is itself one app: its
+    // manifest is `elpian.app.json` at the top.
+    if root.join("elpian.app.json").is_file() && !root.join("app.json").is_file() {
+        let app = load_app(root).map_err(|m| format!("{}: {m}", root.display()))?;
+        let id = app.id.clone();
+        if !runtime.register(app) {
+            return Err(format!("{id:?} is not a valid app id"));
+        }
+        return Ok(1);
+    }
     let mut loaded = 0;
     let entries = std::fs::read_dir(root).map_err(|e| format!("{}: {e}", root.display()))?;
     for entry in entries.flatten() {
@@ -281,7 +329,11 @@ fn load_plain_directory(root: &Path, runtime: &Arc<AppRuntime>) -> Result<usize,
 }
 
 fn load_app(dir: &Path) -> Result<AppDefinition, String> {
-    let manifest_path = dir.join("app.json");
+    let manifest_path = if dir.join("app.json").is_file() {
+        dir.join("app.json")
+    } else {
+        dir.join("elpian.app.json")
+    };
     let raw = std::fs::read_to_string(&manifest_path)
         .map_err(|e| format!("{}: {e}", manifest_path.display()))?;
     let manifest: serde_json::Value =
@@ -347,7 +399,36 @@ fn load_app(dir: &Path) -> Result<AppDefinition, String> {
         app = app.with_function(name, kind, bytecode);
     }
 
+    // Function metadata, and the agents with their `agents/**` files. A
+    // manifest error here skips the app like a missing module does.
+    let files = elpian_host::agents::read_agent_files(dir)?;
+    app = app.with_manifest(&manifest, files)?;
+
     Ok(app)
+}
+
+/// Load secret values: `{"<app>": {"<NAME>": "value"}}`. Only names an app
+/// declares are ever readable by it; the rest are held and never served.
+fn load_secrets(path: &Path, runtime: &Arc<AppRuntime>) -> Result<usize, String> {
+    let raw = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let value: serde_json::Value = serde_json::from_str(&raw)
+        .map_err(|e| format!("{}: not valid JSON: {e}", path.display()))?;
+    let apps = value.as_object().ok_or_else(|| {
+        format!(
+            "{}: expected {{\"<app>\": {{\"<NAME>\": \"value\"}}}}",
+            path.display()
+        )
+    })?;
+    let mut count = 0;
+    for (app, secrets) in apps {
+        for (name, secret) in secrets.as_object().into_iter().flatten() {
+            if let Some(secret) = secret.as_str() {
+                runtime.secrets().put(app, name, secret.to_string());
+                count += 1;
+            }
+        }
+    }
+    Ok(count)
 }
 
 fn parse_network(value: Option<&serde_json::Value>) -> NetworkMode {

@@ -14,7 +14,7 @@ use serde_json::Value;
 
 fn corpus() -> Value {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../test/fixtures/policy_corpus.json");
+        .join("../../../flutter/test/fixtures/policy_corpus.json");
     let raw = std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
     serde_json::from_str(&raw).expect("the corpus should be valid JSON")

@@ -52,6 +52,11 @@ pub struct FunctionDef {
     /// variable has a path by which one caller's data reaches another. Setting
     /// this is how such a function says so.
     pub stateless: bool,
+    /// What the manifest says the function does — offered to an agent that
+    /// may call it as a tool.
+    pub description: Option<String>,
+    /// JSON Schema of the function's arguments, from the manifest.
+    pub params: Option<serde_json::Value>,
 }
 
 /// Whether an app may reach anything beyond its own two halves.
@@ -107,6 +112,9 @@ pub struct AppDefinition {
     /// object: a version whose client and server halves could be registered
     /// independently could be served with the two out of step.
     pub client_bytecode: Option<Vec<u8>>,
+    /// The app's agents, built from the manifest's `agents` section and the
+    /// bundle's `agents/**` files. `None` for an app that declares none.
+    pub agents: Option<std::sync::Arc<elpian_agent::AppAgents>>,
 }
 
 /// Whether `id` is a name this host will accept for an app.
@@ -151,6 +159,7 @@ impl AppDefinition {
             declared_secrets: Vec::new(),
             network: NetworkMode::Closed,
             client_bytecode: None,
+            agents: None,
         }
     }
 
@@ -168,6 +177,8 @@ impl AppDefinition {
                 kind,
                 bytecode,
                 stateless: false,
+                description: None,
+                params: None,
             },
         );
         self
@@ -206,6 +217,62 @@ impl AppDefinition {
         self
     }
 
+    /// Apply what the manifest says beyond the function table: each declared
+    /// function's `description` and `params`, and the `agents` / `providers`
+    /// sections, whose files come from the bundle's `agents/**`.
+    ///
+    /// An error is a manifest error — the app must not be served: an agent
+    /// naming a tool the app does not have, a skill with no `SKILL.md`, or
+    /// instructions that are not in the bundle all promise something that does
+    /// not exist.
+    pub fn with_manifest(
+        mut self,
+        manifest: &serde_json::Value,
+        files: std::collections::BTreeMap<String, Vec<u8>>,
+    ) -> Result<Self, String> {
+        for entry in manifest
+            .get("functions")
+            .and_then(serde_json::Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            let Some(name) = entry.get("name").and_then(serde_json::Value::as_str) else {
+                continue;
+            };
+            if let Some(def) = self.functions.get_mut(name) {
+                def.description = entry
+                    .get("description")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string);
+                def.params = entry.get("params").filter(|p| !p.is_null()).cloned();
+                if entry.get("stateless") == Some(&serde_json::Value::Bool(true)) {
+                    def.stateless = true;
+                }
+            }
+        }
+
+        let names: Vec<String> = self.functions.keys().cloned().collect();
+        let config =
+            elpian_agent::manifest::parse(manifest, &names, &|path| files.contains_key(path))?;
+        if config.is_empty() {
+            self.agents = None;
+            return Ok(self);
+        }
+        let infos: Vec<elpian_agent::FunctionInfo> = self
+            .functions
+            .values()
+            .map(|f| elpian_agent::FunctionInfo {
+                name: f.name.clone(),
+                kind: f.kind.as_str().to_string(),
+                description: f.description.clone(),
+                params: f.params.clone(),
+            })
+            .collect();
+        let agents = elpian_agent::AppAgents::build(config, files, &infos)?;
+        self.agents = Some(std::sync::Arc::new(agents));
+        Ok(self)
+    }
+
     /// What a client is told about this app: where to fetch its bytecode, what
     /// it may call, and the network posture it must apply locally.
     ///
@@ -219,12 +286,18 @@ impl AppDefinition {
             .values()
             .map(|f| serde_json::json!({ "name": f.name, "kind": f.kind.as_str() }))
             .collect();
-        serde_json::json!({
+        let mut manifest = serde_json::json!({
             "app": self.id,
             "client": format!("/apps/{}/client.bc", self.id),
             "functions": functions,
             "network": self.network.as_str(),
-        })
+        });
+        // Agents by name and description only — never their instructions,
+        // skills, tools or provider configuration.
+        if let Some(agents) = &self.agents {
+            manifest["agents"] = agents.config.client_listing();
+        }
+        manifest
     }
 
     /// The capabilities an instance of this app actually receives.

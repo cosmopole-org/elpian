@@ -44,6 +44,13 @@ pub struct VersionRecord {
     pub limits: Value,
     /// When this version was installed, in milliseconds since the epoch.
     pub installed_at: u64,
+    /// Bundle files beyond bytecode (`agents/**`): bundle path → content
+    /// address.
+    pub files: BTreeMap<String, String>,
+    /// The app manifest as packaged, for what the fields above do not carry
+    /// (function descriptions and params, agents, providers). `Null` for a
+    /// version installed before manifests were recorded.
+    pub manifest: Value,
 }
 
 /// One app's entry.
@@ -78,6 +85,9 @@ pub enum RegistryError {
     },
     /// The index on disk is not something this host can read.
     MalformedIndex(String),
+    /// The version's manifest promises something its bundle does not have (an
+    /// agent's unknown tool or missing skill, …).
+    BadManifest(String),
 }
 
 impl RegistryError {
@@ -95,6 +105,7 @@ impl RegistryError {
                 format!("{app} is at {from}; refusing to deploy older {to}")
             }
             RegistryError::MalformedIndex(e) => format!("registry index is unreadable: {e}"),
+            RegistryError::BadManifest(e) => format!("manifest: {e}"),
         }
     }
 }
@@ -317,6 +328,8 @@ fn render_index(index: &BTreeMap<String, AppRecord>) -> String {
                         "network": v.network,
                         "limits": v.limits,
                         "installedAt": v.installed_at,
+                        "files": v.files,
+                        "manifest": v.manifest,
                     })
                 })
                 .collect();
@@ -387,6 +400,15 @@ fn parse_index(raw: &str) -> Result<BTreeMap<String, AppRecord>, RegistryError> 
                     network: v["network"].clone(),
                     limits: v["limits"].clone(),
                     installed_at: v["installedAt"].as_u64().unwrap_or(0),
+                    files: v["files"]
+                        .as_object()
+                        .map(|m| {
+                            m.iter()
+                                .filter_map(|(k, v)| Some((k.clone(), v.as_str()?.to_string())))
+                                .collect()
+                        })
+                        .unwrap_or_default(),
+                    manifest: v.get("manifest").cloned().unwrap_or(Value::Null),
                 },
             );
         }
@@ -474,6 +496,18 @@ pub fn definition_from(
 
     let _ = NetworkMode::Closed;
     let _: Option<ResourceLimits> = None;
+
+    // Function metadata and agents, from the manifest and the bundle files —
+    // both verified like every other blob.
+    let mut files = BTreeMap::new();
+    for (path, address) in &record.files {
+        files.insert(path.clone(), store.get_blob(address)?);
+    }
+    if !record.manifest.is_null() || !files.is_empty() {
+        app = app
+            .with_manifest(&record.manifest, files)
+            .map_err(RegistryError::BadManifest)?;
+    }
     Ok(app)
 }
 

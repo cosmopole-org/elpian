@@ -116,6 +116,11 @@ enum Template {
     /// a reason not to.
     ClosedFullstack,
     Showcase,
+    /// A fullstack mini app whose backend is partly an **agent**: declared in
+    /// the manifest with instructions, skills and the app's own server
+    /// function as a tool, producing A2UI that the client renders next to its
+    /// static UI. Runs offline with `ELPIAN_AGENT_PROVIDER=scripted`.
+    Agentic,
 }
 
 #[derive(Subcommand)]
@@ -563,6 +568,18 @@ fn build_server_functions(root: &Path, config: &Config, out: &Path) -> Result<()
         return Ok(()); // not a mini app
     }
     let manifest: serde_json::Value = read_json(&manifest_path)?;
+
+    // An agentic app's agents (instructions, skills, scripts) travel with the
+    // build output, which is the layout `elpian package` and the host read.
+    let agents_out = out.join("agents");
+    if agents_out.exists() {
+        fs::remove_dir_all(&agents_out)?;
+    }
+    if root.join("agents").is_dir() {
+        copy_tree(&root.join("agents"), &agents_out)?;
+    }
+    fs::copy(&manifest_path, out.join("elpian.app.json"))?;
+
     let declared: Vec<(String, String)> = manifest["functions"]
         .as_array()
         .map(|entries| {
@@ -1020,7 +1037,9 @@ fn dev(root: &Path, config: Config, host: &str, port: u16, force_engine: bool) -
     })?;
     for path in [
         root.join("src"),
+        root.join("agents"),
         root.join("packages"),
+        root.join("elpian.app.json"),
         root.join("elpian.json"),
         root.join("elpian.config.json"),
     ] {
@@ -1077,6 +1096,11 @@ fn dev(root: &Path, config: Config, host: &str, port: u16, force_engine: bool) -
     if out.join("elpian.app.json").is_file() || out.join("index.json").is_file() {
         command.arg("--registry").arg(&out);
     }
+    // Development: an app's declared secrets (ANTHROPIC_API_KEY,
+    // OPENAI_API_KEY, …) are read from this environment, which the host
+    // inherits — as are ELPIAN_AGENT_PROVIDER=scripted and
+    // ELPIAN_AGENT_SCRIPT for running agents offline.
+    command.arg("--dev");
     command
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
@@ -1099,7 +1123,8 @@ fn create_project(root: &Path, template: Template, renderer: Renderer) -> Result
         Template::Server | Template::Fullstack | Template::ClosedFullstack
     );
     let showcase = matches!(template, Template::Showcase);
-    let mini_app = matches!(template, Template::ClosedFullstack);
+    let agentic = matches!(template, Template::Agentic);
+    let mini_app = matches!(template, Template::ClosedFullstack | Template::Agentic);
     let name = root.file_name().unwrap().to_string_lossy();
     let dependencies = if client {
         json!({ "@elpian/sdk": { "path": "./packages/elpian-sdk" } })
@@ -1139,6 +1164,8 @@ fn create_project(root: &Path, template: Template, renderer: Renderer) -> Result
             root.join("src/client.ts"),
             if showcase {
                 SHOWCASE_TEMPLATE
+            } else if agentic {
+                AGENTIC_CLIENT_TEMPLATE
             } else {
                 CLIENT_TEMPLATE
             },
@@ -1154,10 +1181,21 @@ fn create_project(root: &Path, template: Template, renderer: Renderer) -> Result
     if server && !mini_app {
         fs::write(root.join("src/server.ts"), SERVER_TEMPLATE)?;
     }
-    if mini_app {
+    if agentic {
+        scaffold_agentic_app(root, &name)?;
+    } else if mini_app {
         scaffold_mini_app(root, &name)?;
     }
     println!("Created {}", root.display());
+    if agentic {
+        println!(
+            "  cd {} && elpian run install\n  \
+             ELPIAN_AGENT_PROVIDER=scripted elpian run dev     # offline, canned agent\n  \
+             ANTHROPIC_API_KEY=... elpian run dev              # the real agent",
+            root.display()
+        );
+        return Ok(());
+    }
     if mini_app {
         println!(
             "  elpian run build && elpian package && \\\n    elpian install <pkg> --registry ./registry --deploy && \\\n    elpian serve --registry ./registry"
@@ -1211,6 +1249,102 @@ fn scaffold_mini_app(root: &Path, name: &str) -> Result<()> {
     )?;
     fs::write(root.join("README.md"), mini_app_readme(name))?;
     Ok(())
+}
+
+/// The extra files an agentic mini app needs: a manifest declaring an agent,
+/// its instructions and skills, a server function it uses as a tool, and a
+/// script so it runs offline.
+fn scaffold_agentic_app(root: &Path, name: &str) -> Result<()> {
+    fs::create_dir_all(root.join("src/server/actions"))?;
+    fs::create_dir_all(root.join("agents/skills/catalog"))?;
+    fs::create_dir_all(root.join("agents/skills/ordering"))?;
+
+    write_json(
+        &root.join("elpian.app.json"),
+        &json!({
+            "id": name.to_lowercase().replace('_', "-"),
+            "version": "0.1.0",
+            // `render` and `server_call` for the client, `agents` for its
+            // A2UISurface, `state`/`logging` for the server function.
+            "capabilities": ["render", "server_call", "agents", "state", "logging"],
+            "network": "closed",
+            // The provider key is a declared secret: an operator supplies it
+            // (`elpiand --secrets`), and `elpian run dev` reads it from the
+            // environment. It is never sent to a client.
+            "secrets": ["ANTHROPIC_API_KEY"],
+            "limits": { "instructions": 50_000_000u64, "memoryBytes": 33_554_432u64 },
+            "functions": [
+                {
+                    "name": "listProducts",
+                    "kind": "action",
+                    "description": "List the shop's products, optionally filtered by category.",
+                    "params": {
+                        "type": "object",
+                        "properties": {
+                            "category": { "type": "string", "enum": ["tea", "coffee"] }
+                        },
+                        "additionalProperties": false
+                    }
+                }
+            ],
+            "agents": [
+                {
+                    "name": "assistant",
+                    "description": "Helps customers find and order products.",
+                    "instructions": "agents/assistant.md",
+                    "skills": ["catalog", "ordering"],
+                    "tools": ["listProducts"],
+                    "provider": "anthropic",
+                    "model": "claude-opus-5-5",
+                    "effort": "medium",
+                    "maxTurns": 12,
+                    "maxOutputTokens": 64000
+                }
+            ]
+        }),
+    )?;
+    fs::write(
+        root.join("src/server/actions/listProducts.ts"),
+        AGENTIC_ACTION,
+    )?;
+    fs::write(root.join("agents/assistant.md"), AGENTIC_INSTRUCTIONS)?;
+    fs::write(
+        root.join("agents/skills/catalog/SKILL.md"),
+        AGENTIC_SKILL_CATALOG,
+    )?;
+    fs::write(
+        root.join("agents/skills/ordering/SKILL.md"),
+        AGENTIC_SKILL_ORDERING,
+    )?;
+    fs::write(root.join("agents/scripted.json"), AGENTIC_SCRIPT)?;
+    fs::write(root.join("README.md"), agentic_readme(name))?;
+    Ok(())
+}
+
+fn agentic_readme(name: &str) -> String {
+    format!(
+        "# {name}\n\n\
+         A fullstack mini app whose backend is partly an **agent**. The client\n\
+         renders static Elpian UI and, next to it, an `A2UISurface` the agent\n\
+         fills with A2UI v0.9.1.\n\n\
+         ```text\n\
+         elpian.app.json                     id, grants, posture, functions, agents\n\
+         src/client.ts                       static UI + A2UISurface\n\
+         src/server/actions/listProducts.ts  a server function, also the agent's tool\n\
+         agents/assistant.md                 the agent's instructions\n\
+         agents/skills/*/SKILL.md            skills it loads on demand\n\
+         agents/scripted.json                canned turns for offline runs\n\
+         ```\n\n\
+         ## Run\n\n\
+         ```bash\n\
+         elpian run install\n\
+         ELPIAN_AGENT_PROVIDER=scripted elpian run dev   # offline\n\
+         ANTHROPIC_API_KEY=sk-... elpian run dev         # Claude\n\
+         ```\n\n\
+         The agent is served at `POST /apps/<id>/agent/assistant` as NDJSON. Its\n\
+         tools are the app's own functions, called with the caller's identity and\n\
+         counted against the app's quota. See `wiki/18-fullstack.md`.\n"
+    )
 }
 
 fn mini_app_readme(name: &str) -> String {
@@ -1537,6 +1671,53 @@ export function el(
 }
 
 declare function askHost(name: string, payload: unknown): unknown;
+
+// ---------------------------------------------------------------------------
+// Agents. An `A2UISurface` node renders what one of this app's agents sends;
+// `agentSend` talks to an agent from code. Both need the `agents` capability.
+// ---------------------------------------------------------------------------
+
+export type A2UISurfaceProps = {
+  /** The agent's name in elpian.app.json. */
+  agent: string;
+  /** Optional: another app's id (defaults to this app). */
+  app?: string;
+  /** Optional: the server (defaults to the session's). */
+  baseUrl?: string;
+  /** Widgets with the same key share one conversation. */
+  conversation?: string;
+  /** A first message, sent when the surface mounts. */
+  prompt?: string;
+  /** Render only this A2UI surface (default: all, in creation order). */
+  surfaceId?: string;
+  /** Render the agent's prose. */
+  showText?: boolean;
+  /** Add an input row for messaging the agent. */
+  chat?: boolean;
+  /** Static A2UI messages, rendered without an agent. */
+  messages?: unknown[];
+  [k: string]: unknown;
+};
+
+/** A node that renders an agent's A2UI surfaces next to static UI. */
+export function a2uiSurface(props: A2UISurfaceProps): ElpianNode {
+  return el('A2UISurface', props, []);
+}
+
+/** Send `message` to `agent`; returns `{ conversationId }`. */
+export function agentSend(agent: string, message: string, conversation?: string): unknown {
+  return askHost('agent.send', [{ agent: agent, conversation: conversation, message: message }]);
+}
+
+/** Send an A2UI action to `agent` as the next turn of `conversation`. */
+export function agentAction(agent: string, action: unknown, conversation?: string): unknown {
+  return askHost('agent.action', [{ agent: agent, conversation: conversation, action: action }]);
+}
+
+/** The current data model of one A2UI surface of a conversation. */
+export function a2uiDataModel(conversation: string, surfaceId: string): unknown {
+  return askHost('a2ui.dataModel', [{ conversation: conversation, surfaceId: surfaceId }]);
+}
 
 export function render(node: ElpianNode): void {
   askHost('render', JSON.stringify(node));
@@ -1890,6 +2071,145 @@ elpian run dev
 Without it `Scene3D` renders a placeholder and every 2D control still works —
 which is exactly what the web build shows.
 "##;
+
+const AGENTIC_CLIENT_TEMPLATE: &str = r##"import { el, render, a2uiSurface } from '@elpian/sdk';
+
+// Static UI and agent UI side by side. The header and the footer are ordinary
+// Elpian nodes; the A2UISurface in between renders whatever the `assistant`
+// agent sends (A2UI v0.9.1), and its `chat` row lets the user talk to it.
+
+let visits: number = 0;
+
+function view() {
+  return el('div', { style: { padding: '24', display: 'flex', flexDirection: 'column', gap: 16 } }, [
+    el('h1', { text: 'Tea & Coffee' }, []),
+    el('p', { text: 'Ask the assistant for something to drink.' }, []),
+
+    a2uiSurface({
+      agent: 'assistant',
+      prompt: 'Show me what you have.',
+      chat: true,
+      showText: true,
+    }),
+
+    el('button', {
+      key: 'visits',
+      text: 'Static UI still works: ' + visits,
+      onClick: () => { visits = visits + 1; render(view()); },
+    }, []),
+  ]);
+}
+
+render(view());
+"##;
+
+/// The agentic template's server function — also the agent's tool.
+const AGENTIC_ACTION: &str = r#"// An action the client may call, and the `assistant` agent calls as its
+// `fn_listProducts` tool — through the same path, as the same caller.
+
+function listProducts(args) {
+  var all = [
+    { id: "sencha", name: "Sencha", category: "tea", price: 6.5 },
+    { id: "assam", name: "Assam", category: "tea", price: 5.0 },
+    { id: "espresso", name: "Espresso blend", category: "coffee", price: 9.0 },
+    { id: "filter", name: "Filter roast", category: "coffee", price: 8.0 }
+  ];
+  if (args == null || args.category == null) {
+    return { products: all };
+  }
+  var out = [];
+  var i = 0;
+  while (i < all.length) {
+    if (all[i].category == args.category) {
+      out.push(all[i]);
+    }
+    i = i + 1;
+  }
+  return { products: out };
+}
+"#;
+
+const AGENTIC_INSTRUCTIONS: &str = r#"You are the shop assistant of a small tea and coffee shop.
+
+- Find products with the `fn_listProducts` tool; never invent products or prices.
+- Show products as UI, not prose: load the `catalog` skill before building a product list.
+- When the user wants to buy something, load the `ordering` skill.
+- Keep text short. The surface is where the information goes.
+"#;
+
+const AGENTIC_SKILL_CATALOG: &str = r#"---
+name: catalog
+description: Show products as a list with a name, a price and an Order button each.
+---
+
+Build one surface, `products`, with `sendDataModel: true`:
+
+- Put the products in the data model at `/products` (an array of `{id, name, price}`).
+- Root: a `Column` with a heading `Text` (variant `h3`) and a `List` whose `children` is a
+  template: `{"componentId": "product_row", "path": "/products"}`.
+- `product_row` is a `Card` whose child is a `Row` with a `Text` bound to `name` (relative path),
+  a `Text` with `{"call": "formatCurrency", "args": {"value": {"path": "price"}, "currency": "EUR"},
+  "returnType": "string"}`, and a `Button` whose action is
+  `{"event": {"name": "order", "context": {"id": {"path": "id"}, "name": {"path": "name"}}}}`.
+
+Update an existing surface with `updateDataModel` rather than recreating it.
+"#;
+
+const AGENTIC_SKILL_ORDERING: &str = r#"---
+name: ordering
+description: Handle an "order" action from a product list.
+---
+
+An `order` action arrives as `{"a2uiAction": {"name": "order", "context": {"id", "name"}}}`.
+
+Confirm in one short sentence, and show the confirmation in a surface `order` (create it the first
+time; afterwards update its data model): a `Card` with a `Text` "Ordered" heading and a `Text`
+bound to `/item`.
+"#;
+
+/// Canned turns for `ELPIAN_AGENT_PROVIDER=scripted`: the agent calls the
+/// server function, builds the product list, and answers `order` actions.
+const AGENTIC_SCRIPT: &str = r#"{
+  "exchanges": [
+    {
+      "when": { "action": "order" },
+      "turns": [
+        { "tools": [ { "name": "a2ui_send", "input": { "messages": [
+          { "version": "v0.9.1", "updateDataModel": { "surfaceId": "products", "path": "/ordered", "value": "{{action.context.name}}" } }
+        ] } } ] },
+        { "text": "Ordered {{action.context.name}} (scripted)." }
+      ]
+    },
+    {
+      "turns": [
+        { "text": "Let me look.", "tools": [ { "name": "fn_listProducts", "input": {} } ] },
+        { "tools": [ { "name": "a2ui_send", "input": { "messages": [
+          { "version": "v0.9.1", "createSurface": { "surfaceId": "products", "catalogId": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json", "sendDataModel": true, "theme": { "agentDisplayName": "Shop assistant" } } },
+          { "version": "v0.9.1", "updateComponents": { "surfaceId": "products", "components": [
+            { "id": "root", "component": "Column", "children": ["heading", "list", "ordered"] },
+            { "id": "heading", "component": "Text", "text": "Today's selection", "variant": "h3" },
+            { "id": "list", "component": "List", "children": { "componentId": "product_row", "path": "/products" } },
+            { "id": "product_row", "component": "Card", "child": "row" },
+            { "id": "row", "component": "Row", "justify": "spaceBetween", "align": "center", "children": ["name", "price", "order"] },
+            { "id": "name", "component": "Text", "text": { "path": "name" } },
+            { "id": "price", "component": "Text", "text": { "call": "formatCurrency", "args": { "value": { "path": "price" }, "currency": "EUR" }, "returnType": "string" } },
+            { "id": "order_label", "component": "Text", "text": "Order" },
+            { "id": "order", "component": "Button", "child": "order_label", "variant": "primary", "action": { "event": { "name": "order", "context": { "id": { "path": "id" }, "name": { "path": "name" } } } } },
+            { "id": "ordered", "component": "Text", "text": { "call": "formatString", "args": { "value": "Last order: ${/ordered}" }, "returnType": "string" }, "variant": "caption" }
+          ] } },
+          { "version": "v0.9.1", "updateDataModel": { "surfaceId": "products", "value": { "ordered": "nothing yet", "products": [
+            { "id": "sencha", "name": "Sencha", "price": 6.5 },
+            { "id": "assam", "name": "Assam", "price": 5.0 },
+            { "id": "espresso", "name": "Espresso blend", "price": 9.0 },
+            { "id": "filter", "name": "Filter roast", "price": 8.0 }
+          ] } } }
+        ] } } ] },
+        { "text": "Here is today's selection (scripted)." }
+      ]
+    }
+  ]
+}
+"#;
 
 /// A server action for the `closed-fullstack` template.
 const MINI_APP_ACTION: &str = r#"// An action: returns JSON, may write.

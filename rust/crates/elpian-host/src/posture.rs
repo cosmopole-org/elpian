@@ -97,6 +97,11 @@ pub const SERVER_DENIED: &[(Capability, &str)] = &[
          function talks to its caller through its return value",
     ),
     (
+        Capability::Agents,
+        "agent conversations are a client surface. A server function is what an \
+         agent calls, not something that starts conversations of its own",
+    ),
+    (
         Capability::Other,
         "the fail-safe gate. Granting it would let through every host API that \
          has not been classified yet — including ones added after this app was \

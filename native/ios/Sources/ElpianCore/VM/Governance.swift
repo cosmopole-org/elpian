@@ -191,6 +191,7 @@ public enum ElpianCapability: String, CaseIterable, CustomStringConvertible {
     case surface
     case serverCall = "server_call"
     case state
+    case agents
     case other
 
     public var wireName: String { rawValue }

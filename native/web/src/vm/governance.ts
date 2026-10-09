@@ -154,6 +154,7 @@ export const CAPABILITIES = [
   'surface',
   'server_call',
   'state',
+  'agents',
   'other',
 ] as const;
 export type ElpianCapability = (typeof CAPABILITIES)[number];

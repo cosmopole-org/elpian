@@ -77,6 +77,14 @@ pub enum Capability {
     /// filesystem: a server function is routinely given state without being
     /// given a filesystem.
     State,
+    /// Talking to this mini app's *own* agents from the client (`agent.*`)
+    /// and reading the A2UI surfaces they produced (`a2ui.*`).
+    ///
+    /// Its own gate because an agent request spends the app's model budget
+    /// and may run its server functions as tools: a host can let a mini app
+    /// call its functions (`server_call`) without letting it start agent
+    /// conversations, and the other way round.
+    Agents,
     /// Any host API not mapped to a more specific capability.
     Other,
 }
@@ -117,6 +125,7 @@ impl Capability {
                 Some("host") => Capability::HostMessaging,
                 Some("server") | Some("stream") => Capability::ServerCall,
                 Some("kv") | Some("secret") | Some("cache") | Some("ctx") => Capability::State,
+                Some("agent") | Some("a2ui") => Capability::Agents,
                 // `stringify` and anything the host adds without a family.
                 _ => Capability::Other,
             },
@@ -144,6 +153,7 @@ impl Capability {
             Capability::Surface => "surface",
             Capability::ServerCall => "server_call",
             Capability::State => "state",
+            Capability::Agents => "agents",
             Capability::Other => "other",
         }
     }
@@ -174,13 +184,14 @@ impl Capability {
             "surface" => Capability::Surface,
             "server_call" => Capability::ServerCall,
             "state" => Capability::State,
+            "agents" => Capability::Agents,
             "other" => Capability::Other,
             _ => return None,
         })
     }
 
     /// Every capability, for enumeration / bulk toggling.
-    pub fn all() -> [Capability; 19] {
+    pub fn all() -> [Capability; 20] {
         [
             Capability::Logging,
             Capability::Gpu,
@@ -200,6 +211,7 @@ impl Capability {
             Capability::Surface,
             Capability::ServerCall,
             Capability::State,
+            Capability::Agents,
             Capability::Other,
         ]
     }

@@ -174,6 +174,7 @@ enum class ElpianCapability(val wireName: String) {
     SURFACE("surface"),
     SERVER_CALL("server_call"),
     STATE("state"),
+    AGENTS("agents"),
     OTHER("other");
 
     override fun toString(): String = wireName

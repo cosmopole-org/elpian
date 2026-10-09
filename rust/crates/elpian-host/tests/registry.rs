@@ -26,6 +26,8 @@ fn version(v: &str, functions: &[(&str, &str)]) -> VersionRecord {
         network: json!("closed"),
         limits: json!({}),
         installed_at: now_millis(),
+        files: Default::default(),
+        manifest: serde_json::Value::Null,
     }
 }
 

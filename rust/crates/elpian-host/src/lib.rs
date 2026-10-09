@@ -39,7 +39,10 @@
 //!   lives.
 //! * [`identity`] — who is calling, who may operate the host, and the audit.
 //! * [`quota`] — acting on the meters: the throttle → strangle → drain ladder.
+//! * [`agents`] — an app's agents served over HTTP: provider and key
+//!   resolution, function tools through the ordinary invoke path.
 
+pub mod agents;
 pub mod app;
 pub mod appfs;
 pub mod component;
