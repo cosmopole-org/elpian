@@ -5,17 +5,17 @@
 device profiling before merge, per each workstream's Verification section.
 
 ## Applied
-- **E4 / F1 (frame blit)** — `lib/src/bevy/bevy_scene_widget.dart`
+- **E4 / F1 (frame blit)** — `flutter/lib/src/bevy/bevy_scene_widget.dart`
   `_BevyScenePainter` now reuses a single static `Paint` (no per-frame allocation)
   and drops `FilterQuality.medium` (mipmapped, costly) to `none` when blitting ~1:1
   and bilinear `low` only when scaling. `build()` already wraps in `RepaintBoundary`.
-- **C (Canvas 2D)** — `lib/src/canvas/canvas_api.dart`
+- **C (Canvas 2D)** — `flutter/lib/src/canvas/canvas_api.dart`
   - `clearRect`: replaced `saveLayer(... BlendMode.clear)` + `restore()` (offscreen
     layer) with a single `drawRect` using a static `BlendMode.clear` paint.
   - Font parsing: added a `_ParsedFont` cache so the `font` string is split/scanned
     once per distinct value instead of on every `fillText`/`strokeText`.
-- **D5 (image decode cache)** — `lib/src/html_widgets/html_img.dart`,
-  `lib/src/widgets/elpian_image.dart`: pass `cacheWidth`/`cacheHeight` derived from the
+- **D5 (image decode cache)** — `flutter/lib/src/html_widgets/html_img.dart`,
+  `flutter/lib/src/widgets/elpian_image.dart`: pass `cacheWidth`/`cacheHeight` derived from the
   styled width/height so large source images decode at display size, not native res.
 
 ## Deliberately NOT done here (need Flutter verification or are higher-risk)

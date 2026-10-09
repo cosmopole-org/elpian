@@ -11,7 +11,7 @@
 //! # The payload shape is not new
 //!
 //! It is the shape the Next.js bridge already parses
-//! (`lib/src/integrations/nextjs_bridge.dart`) — `component`, `stylesheet`,
+//! (`flutter/lib/src/integrations/nextjs_bridge.dart`) — `component`, `stylesheet`,
 //! `meta`, `navigation`, `clientComponents` — minus `jsCode`. One parser, one
 //! set of tests, and no third parallel format. `jsCode` is dropped deliberately:
 //! it ships source for the device to compile, which is a second compile path on

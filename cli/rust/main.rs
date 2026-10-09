@@ -1051,8 +1051,8 @@ fn runtime_stale(project: &Path, marker: &Path, base: &str) -> Result<bool> {
     let ui = ui_package(project).unwrap_or_else(|| project.join(".."));
     for source in [
         project.join("lib/main.dart"),
-        ui.join("lib/src/vm/elpian_vm_widget.dart"),
-        ui.join("lib/src/vm/frb_generated/api_web.dart"),
+        ui.join("flutter/lib/src/vm/elpian_vm_widget.dart"),
+        ui.join("flutter/lib/src/vm/frb_generated/api_web.dart"),
     ] {
         if source.is_file() && fs::metadata(source)?.modified()? > built {
             return Ok(true);

@@ -15,7 +15,7 @@ only to its own backend, under policy.
 The rule already exists, in Dart, with tests: a **manifest** is what the app
 asks for, a **grant** is what the host allows, and the **policy** is the
 intersection — narrowed by both, so an app gets neither more than it requested
-nor more than it was granted (`lib/src/superapp/mini_app.dart:235`,
+nor more than it was granted (`flutter/lib/src/superapp/mini_app.dart:235`,
 `MiniAppPolicy.resolve`). Limits intersect axis-by-axis via `tightest`
 (`mini_app.dart:269`).
 
@@ -189,7 +189,7 @@ compile.
 | `elpian-host/src/gateway/auth.rs` | **New** — `AuthProvider`, access rules |
 | `elpian-host/src/gateway/admin.rs` | **New** — the admin API |
 | `cli/elpian_client/lib/main.dart` | Manifest URL from the app path; verify artifact hash; configure net policy + server endpoint |
-| `lib/src/superapp/mini_app.dart` | Keep in lockstep with `policy.rs` via the corpus |
+| `flutter/lib/src/superapp/mini_app.dart` | Keep in lockstep with `policy.rs` via the corpus |
 | `test/fixtures/policy_corpus.json` | **New** — shared conformance cases (S8) |
 
 ## 8. Verification

@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>body{margin:0;font-family:sans-serif} .host{width:420px;height:640px;border:1px solid #ccc;display:inline-block;vertical-align:top}</style>
+</head>
+<body>
+<div id="json" class="host"></div>
+<div id="qjs" class="host"></div>
+<div id="vm" class="host"></div>
+<script type="module">
+import { installElpian, mountElpian } from '/dist/elpian-web.js';
+installElpian({ assetBase: '/assets/' });
+window.__elpian = { mountElpian };
+window.__ready = true;
+</script>
+</body>
+</html>

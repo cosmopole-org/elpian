@@ -141,7 +141,7 @@ Three pieces, all required:
    boots the engine on the first surface request, into the canvas Flutter put in
    the platform-view slot.
 3. **The binding** — resolved automatically by the conditional import in
-   `lib/src/godot/godot_binding.dart`; nothing has to be installed by hand.
+   `flutter/lib/src/godot/godot_binding.dart`; nothing has to be installed by hand.
 
 Presence of `window.__elpianGodotDrain` *is* the liveness signal that makes
 `Scene3D` swap its placeholder for a viewport, so the glue is only shipped when
@@ -158,6 +158,25 @@ Two limits worth knowing:
 
 The Dart↔page contract is covered by `test/godot_web_transport_test.dart`, which
 runs in a real browser with no engine present and is executed by CI.
+
+## Native Android (Kotlin core)
+
+`native/android`'s `:elpian` module reuses this package's engine-side sources
+(`OpQueue`, `ElpianGodotBridge`, `ElpianGodotFragment` — not the Flutter
+plugin) and speaks the same op protocol through
+`dev.elpian.android.godot.AndroidGodotBinding`. Godot is opt-in there too:
+
+```sh
+gradle :elpian:assembleDebug -Pelpian.godot=true
+```
+
+or put the engine AAR in `android/libs/` as above, which switches it on
+automatically. Either way the engine is resolved as
+`org.godotengine:godot:4.3.0.stable` and `godot/embed.pck` is taken from
+`android/src/main/assets`. Without it the module still builds;
+`AndroidGodotBinding.isLive` is false and `Scene3D` shows its placeholder. The
+host passes a `GodotSurfaceHost` (the view group laid out for each surface)
+and must run in a `FragmentActivity`.
 
 ## Status
 

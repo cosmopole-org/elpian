@@ -70,7 +70,7 @@ machinery gives, with no new code:
 *before* running the module's top-level program. The Dart mini-app host already
 gets this right and says why: *"the resolved policy is applied to the VM before
 the program runs, so a mini app is never briefly unrestricted at boot"*
-(`lib/src/superapp/mini_app_host.dart:104`). The server must match it.
+(`flutter/lib/src/superapp/mini_app_host.dart:104`). The server must match it.
 
 ## 3. Concurrency and queueing
 

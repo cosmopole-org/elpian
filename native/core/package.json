@@ -1,0 +1,14 @@
+{
+  "name": "@elpian/native-core",
+  "version": "1.0.0",
+  "description": "The TypeScript Elpian engine (CSS, layout, widgets, host APIs, runtimes, Godot) behind the web host",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "tsc -p tsconfig.json && node --test dist-test/"
+  },
+  "license": "MIT"
+}

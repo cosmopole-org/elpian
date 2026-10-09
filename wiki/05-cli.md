@@ -159,8 +159,8 @@ the declared bytecode or AST, and executes it in the Elpian WASM VM.
 The engine is rebuilt only when **stale**, determined by a marker file
 `<engine>/.elpian_runtime` holding the base path and a timestamp: it rebuilds if
 the marker is missing, if its `basePath=` line does not match, or if
-`lib/main.dart`, `elpian_ui`'s `lib/src/vm/elpian_vm_widget.dart`, or
-`lib/src/vm/frb_generated/api_web.dart` are newer than the marker.
+`lib/main.dart`, `elpian_ui`'s `flutter/lib/src/vm/elpian_vm_widget.dart`, or
+`flutter/lib/src/vm/frb_generated/api_web.dart` are newer than the marker.
 
 ## `elpian run dev`
 

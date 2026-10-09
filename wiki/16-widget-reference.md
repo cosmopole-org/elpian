@@ -522,7 +522,7 @@ Elevated content container.
 | `DecoratedBox` | CSS `backgroundColor`, `gradient`, `border`, `boxShadow` | Decorative wrapper |
 
 - Builder: `ElpianCard.build`
-- Source: `lib/src/widgets/elpian_card.dart`
+- Source: `flutter/lib/src/widgets/elpian_card.dart`
 - Widget-specific props used in implementation: `elevation`
 - Standard fields: `type`, `key`, `props`, `props.style`, `events`, `children`.
 
@@ -1118,7 +1118,7 @@ easeInBack, easeOutBack, easeInOutBack
 ```
 
 - Builder: `ElpianClipRRect.build`
-- Source: `lib/src/widgets/elpian_clip_rrect.dart`
+- Source: `flutter/lib/src/widgets/elpian_clip_rrect.dart`
 - Widget-specific props used in implementation: none (uses generic children/style behavior).
 - Standard fields: `type`, `key`, `props`, `props.style`, `events`, `children`.
 

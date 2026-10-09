@@ -41,13 +41,13 @@ final widget = ElpianEngine().renderFromJson({
 ## 🖼️ Demo Screenshots
 
 <p align="center">
-  <img src="example/IMG_20260226_161047_415.jpg" alt="Elpian landing page" width="31%" />
-  <img src="example/Screenshot_20260225_185558_Chrome.jpg" alt="QuickJS calculator demo" width="31%" />
-  <img src="example/Screenshot_20260225_185705_Chrome.jpg" alt="QuickJS whiteboard demo" width="31%" />
+  <img src="flutter/example/IMG_20260226_161047_415.jpg" alt="Elpian landing page" width="31%" />
+  <img src="flutter/example/Screenshot_20260225_185558_Chrome.jpg" alt="QuickJS calculator demo" width="31%" />
+  <img src="flutter/example/Screenshot_20260225_185705_Chrome.jpg" alt="QuickJS whiteboard demo" width="31%" />
 </p>
 
 <p align="center">
-  <img src="example/Screenshot_20260226_161118_Telegram.jpg" alt="3D scene demo" width="48%" />
+  <img src="flutter/example/Screenshot_20260226_161118_Telegram.jpg" alt="3D scene demo" width="48%" />
 </p>
 
 > These screenshots highlight real Elpian examples: landing UI rendering, QuickJS calculator + whiteboard, 3D scene graph rendering, and Canvas API primitives.
@@ -118,7 +118,7 @@ This mode uses your Next.js server as the UI source and fetches real Next.js rou
 
 ### Caspar point-signaling machine (Node.js + Docker example)
 
-A complete VM-oriented machine example is available at `example/caspar-node-machine/`. It demonstrates how a Caspar machine program can use host-imported point signaling APIs to broadcast Elpian runtime mode selection (`nextjs_server`, `streaming_server`, or `fully_client_side`), then push `ui.init` and incremental `ui.patch` packets without exposing its own HTTP/WebSocket transport.
+A complete VM-oriented machine example is available at `flutter/example/caspar-node-machine/`. It demonstrates how a Caspar machine program can use host-imported point signaling APIs to broadcast Elpian runtime mode selection (`nextjs_server`, `streaming_server`, or `fully_client_side`), then push `ui.init` and incremental `ui.patch` packets without exposing its own HTTP/WebSocket transport.
 
 ### Render UI from JSON
 
@@ -436,37 +436,39 @@ InkWell, GestureDetector, Tooltip, Dismissible, Draggable, DragTarget, Opacity, 
 3D needs the `godot/` plugin plus its binary artifacts; without them `Scene3D`
 degrades to a placeholder rather than failing.
 
+Besides Flutter, the same mini apps run on **native hosts** (`native/`): a
+Kotlin engine rendering to Android Views, a Swift engine rendering to UIKit, a
+DOM host for the web, and an Expo / React Native module over all three — see
+[wiki/23-native-hosts.md](wiki/23-native-hosts.md).
+
 ---
 
 ## &#x1F4C1; Project Structure
 
 ```
 elpian/
-├── lib/
-│   ├── elpian_ui.dart              # Main library export
-│   ├── src/
-│   │   ├── core/                   # Engine, widget registry, event system, DOM API
-│   │   ├── models/                 # ElpianNode, CSSStyle data models
-│   │   ├── parser/                 # JSON parser
-│   │   ├── css/                    # CSS parser, stylesheets, JSON stylesheet engine
-│   │   ├── canvas/                 # 2D Canvas API
-│   │   ├── widgets/                # 60+ Flutter widget builders
-│   │   ├── html_widgets/           # 70+ HTML element builders
-│   │   ├── godot/                  # Embedded Godot 3D: Scene3D + op protocol
-│   │   ├── scope/                  # Re-render boundaries
-│   │   ├── integrations/           # Next.js + server-driven rendering adapters
-│   │   └── vm/                     # Elpian VM + QuickJS integration
-│   └── example/                    # 13 demo applications
-├── rust/                           # Rust VM workspace: VM, js2elpian, dart2elpian,
-│                                   #   dart, capi, guest preludes
+├── flutter/                        # The Flutter package (elpian_ui)
+│   ├── lib/
+│   │   ├── elpian_ui.dart          # Main library export
+│   │   └── src/                    # Engine, widget registry, events, DOM API, CSS,
+│   │                               #   canvas, widgets, HTML elements, Godot,
+│   │                               #   scope, Next.js/server adapters, VM clients
+│   ├── example/                    # Demo applications
+│   ├── rust_builder/               # Flutter FFI plugin (all platforms)
+│   ├── assets/web_runtime/         # WASM loader, QuickJS web runtime
+│   └── test/                       # Unit & integration tests
+├── native/                         # Native hosts of the same mini apps
+│   ├── core/                       #   TypeScript engine (web)
+│   ├── web/                        #   @elpian/web — DOM host
+│   ├── android/                    #   Kotlin engine + Android Views host
+│   ├── ios/                        #   Swift engine + UIKit host
+│   └── expo/                       #   @elpian/expo — Expo / React Native module
+├── rust/                           # Rust VM workspace: VM, FFI (C ABI + JNI),
+│                                   #   js2elpian, dart2elpian, runtime, host
 ├── cli/                            # The `elpian` CLI + its Flutter web shell
 ├── godot/                          # Embedded-Godot plugin (Android + iOS)
 ├── wiki/                           # All documentation
-├── rust_builder/                   # Flutter FFI plugin (all platforms)
-├── test/                           # Unit & integration tests
-├── web/                            # Web assets, WASM loader, PWA manifest
-├── .github/workflows/              # CI/CD: build WASM + deploy to GitHub Pages
-└── pubspec.yaml
+└── .github/workflows/              # CI: verify, native hosts, WASM + Pages
 ```
 
 ---

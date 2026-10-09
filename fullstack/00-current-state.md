@@ -54,7 +54,7 @@ The guest SDK (`@elpian/sdk`, generated from `cli/rust/main.rs:854`) exports
 
 The VM advertises `net.*` (`api.rs:141`) but **nobody services it** on the
 Flutter side: `HostHandler` falls through to `_unserviced`
-(`lib/src/vm/host_handler.dart:124`), which returns a typed null. The only
+(`flutter/lib/src/vm/host_handler.dart:124`), which returns a typed null. The only
 working networking in the tree is `guest-sdk/js/net.js`, which is user-space
 guest JS over Godot's `HTTPRequest` node — unavailable in the Flutter/WASM
 client.
@@ -77,7 +77,7 @@ Everything needed to build that exists — but only on the client:
 | Lifecycle: pause / resume / terminate / `RunState` | `sdk/lifecycle.rs` | unused |
 | JSON control plane over all of the above | `api/govern.rs` | unused |
 | Multi-VM manager (host-neutral, `HostSurface` trait) | `elpian-runtime/src/manager.rs` | unused |
-| Mini-app identity: manifest ∩ grant → policy | `lib/src/superapp/mini_app.dart:235` | Dart only |
+| Mini-app identity: manifest ∩ grant → policy | `flutter/lib/src/superapp/mini_app.dart:235` | Dart only |
 | Signed code bundles, downgrade protection | `elpian-dart-runtime/src/bundle.rs` | unused |
 
 The plan is mostly **wiring existing, tested mechanisms into a server**, not
@@ -94,10 +94,10 @@ one requirement with no foundation to build on.
 ## 3. Server components: the precedent to follow
 
 There is no native mechanism, but the Next.js bridge is a working design for the
-same problem (`lib/src/integrations/`, `wiki/17-nextjs-integration.md`): the
+same problem (`flutter/lib/src/integrations/`, `wiki/17-nextjs-integration.md`): the
 server returns `{ component, stylesheet?, navigation?, jsCode?, vmAstJson? }`
 and the client renders it natively, with `clientComp` nodes carrying interactive
-subtrees. `ElpianStreamWidget` (`lib/src/stream/`) already consumes
+subtrees. `ElpianStreamWidget` (`flutter/lib/src/stream/`) already consumes
 `setView` / `patch` commands, which is progressive server rendering with the
 transport missing.
 
@@ -116,8 +116,8 @@ is pluggable, HMAC-SHA256 is the default, and the load path is
 
 1. **Capability drift.** Rust has 17 capabilities including `Surface`
    (`capabilities.rs`), and the generated catalog maps `godot.op` / `flutter.op`
-   to `"surface"` (`lib/src/vm/host_api_catalog.dart:353-364`). But
-   `ElpianCapability` (`lib/src/vm/governance/models.dart:215`) has no `surface`
+   to `"surface"` (`flutter/lib/src/vm/host_api_catalog.dart:353-364`). But
+   `ElpianCapability` (`flutter/lib/src/vm/governance/models.dart:215`) has no `surface`
    member. `fromWireName("surface")` returns null, so every Dart caller falls
    back to `ElpianCapability.other` (`host_side_governor.dart:90`,
    `mini_app_host.dart:200`). It fails *safe*, but it re-couples the drawing

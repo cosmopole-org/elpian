@@ -321,7 +321,7 @@ fn lock_tolerant<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 /// * `log` — diagnostics.
 ///
 /// This list is the documented host surface, and the source the Dart catalog
-/// (`lib/src/vm/host_api_catalog.dart`) is generated from by the
+/// (`flutter/lib/src/vm/host_api_catalog.dart`) is generated from by the
 /// `gen-host-api-catalog` binary — do not maintain a second copy by hand.
 ///
 /// It is **not** an allowlist. An `askHost` name absent from here still

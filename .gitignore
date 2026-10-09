@@ -24,11 +24,14 @@ migrate_working_dir/
 # Flutter/Dart/Pub related
 # Libraries should not include pubspec.lock, per https://dart.dev/guides/libraries/private-files#pubspeclock.
 /pubspec.lock
+flutter/pubspec.lock
 **/doc/api/
 .dart_tool/
 .flutter-plugins-dependencies
 /build/
+flutter/build/
 /coverage/
+flutter/coverage/
 
 # Generated benchmark run output (written by performance_benchmark_test.dart /
 # elpian_windows_benchmark_test.dart on every run). The committed baseline lives
@@ -51,3 +54,4 @@ target/
 
 # The old example APK was committed by the removed build_android_apk.yml.
 elpian_example.apk
+.claude/worktrees/

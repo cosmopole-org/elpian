@@ -1,0 +1,4 @@
+module CElpianVM {
+    header "elpian_vm.h"
+    export *
+}

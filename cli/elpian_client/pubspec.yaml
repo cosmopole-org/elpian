@@ -10,7 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   elpian_ui:
-    path: ../..
+    path: ../../flutter
   http: ^1.2.0
 
 dev_dependencies:

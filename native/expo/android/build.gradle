@@ -1,0 +1,40 @@
+// @elpian/expo on Android: an Expo view wrapping dev.elpian.android.ElpianHostView
+// (the Kotlin core rendering to native Views).
+//
+// The Elpian libraries come from the Maven repository this package ships in
+// android/maven (written by `npm run prepare-native`, which publishes
+// native/android). Inside the Elpian monorepo, native/android/build/repo is
+// used when present.
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'dev.elpian.expo'
+version = '1.0.0'
+
+def elpianRepos = [file("maven"), file("../../android/build/repo")]
+
+repositories {
+  elpianRepos.each { dir -> if (dir.exists()) maven { url dir.toURI() } }
+  google()
+  mavenCentral()
+}
+
+android {
+  namespace "dev.elpian.expo"
+  defaultConfig {
+    versionCode 1
+    versionName "1.0.0"
+  }
+  compileOptions {
+    // The WASM engine (Chicory) needs Java 11+ library APIs on minSdk < 26;
+    // the config plugin (app.plugin.js) enables desugaring in the app too.
+    coreLibraryDesugaringEnabled true
+  }
+}
+
+dependencies {
+  implementation "dev.elpian:elpian-android:1.0.0"
+  coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.3"
+}

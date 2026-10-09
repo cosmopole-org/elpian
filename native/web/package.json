@@ -1,0 +1,17 @@
+{
+  "name": "@elpian/web",
+  "version": "1.0.0",
+  "description": "Elpian mini apps on the web: DOM renderer, Canvas2D painter, Godot web surfaces, and the Elpian VM / QuickJS / WASM runtimes in the browser",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist", "assets"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/build.mjs",
+    "test": "npm run build && node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@elpian/native-core": "1.0.0"
+  },
+  "license": "MIT"
+}

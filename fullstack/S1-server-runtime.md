@@ -112,8 +112,8 @@ as a checklist item:
 2. `api.rs:89` `all_host_apis()`: the new names, so they appear in the
    generated catalog.
 3. `cargo run --bin gen-host-api-catalog` to regenerate
-   `lib/src/vm/host_api_catalog.dart`.
-4. `lib/src/vm/governance/models.dart:215`: the mirrored Dart enum members
+   `flutter/lib/src/vm/host_api_catalog.dart`.
+4. `flutter/lib/src/vm/governance/models.dart:215`: the mirrored Dart enum members
    (together with the `surface` fix from S0.5).
 
 ### New host APIs in P1
@@ -217,9 +217,9 @@ decorators to annotate with.
 | `rust/Cargo.toml` | Add the member (+ tokio/hyper/tungstenite) |
 | `rust/crates/elpian-vm/src/sdk/capabilities.rs` | `ServerCall`, `State`; `all()` array size |
 | `rust/crates/elpian-vm/src/api.rs:89` | New host API names |
-| `lib/src/vm/host_api_catalog.dart` | Regenerate |
-| `lib/src/vm/governance/models.dart` | Mirror the new capabilities |
-| `lib/src/vm/host_handler.dart` | Service `server.call` (client side) |
+| `flutter/lib/src/vm/host_api_catalog.dart` | Regenerate |
+| `flutter/lib/src/vm/governance/models.dart` | Mirror the new capabilities |
+| `flutter/lib/src/vm/host_handler.dart` | Service `server.call` (client side) |
 | `cli/rust/main.rs:271` | Per-function server modules + function table |
 | `rust/crates/elpian-vm/src/bin/elpian-server.rs` | Shim onto `elpian-host`; delete in S6 |
 

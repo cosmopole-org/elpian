@@ -1,7 +1,7 @@
 # 08 — The widget & element catalog
 
 `ElpianEngine` registers **161 tags** in `_registerDefaultWidgets()`
-(`lib/src/core/elpian_engine.dart`). A node's `type` must be one of them (or a
+(`flutter/lib/src/core/elpian_engine.dart`). A node's `type` must be one of them (or a
 tag you registered yourself). An unregistered type renders nothing.
 
 Two naming families coexist and are freely mixable in one tree:
@@ -184,7 +184,7 @@ built. `WidgetRegistry.unregister(type)` removes one.
 | An isolated update region | `Scope` |
 
 > Exhaustive per-widget prop lists are not duplicated here — they live in
-> `lib/src/widgets/*.dart` and `lib/src/html_widgets/*.dart`, one small file per
+> `flutter/lib/src/widgets/*.dart` and `flutter/lib/src/html_widgets/*.dart`, one small file per
 > tag. Each is a single `static Widget build(ElpianNode node, List<Widget> children)`
 > that reads `node.props[...]` and `node.style`; reading the file for the tag you
 > need takes seconds and is always current.

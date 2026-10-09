@@ -273,7 +273,7 @@ generics with runtime reification, named/optional parameters beyond the basics,
 
 ## The QuickJS escape hatch
 
-`ElpianRuntime.quickJs` (`lib/src/vm/quickjs_vm*.dart`) runs a real QuickJS
+`ElpianRuntime.quickJs` (`flutter/lib/src/vm/quickjs_vm*.dart`) runs a real QuickJS
 engine instead of the Elpian bytecode VM. Use it when you genuinely need JS
 semantics the subset does not cover.
 

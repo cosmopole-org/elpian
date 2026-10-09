@@ -16,7 +16,7 @@
 //!
 //! ```text
 //! cd rust && cargo run --bin gen-host-api-catalog -- \\
-//!     ../lib/src/vm/host_api_catalog.dart
+//!     ../flutter/lib/src/vm/host_api_catalog.dart
 //! ```
 
 use std::collections::BTreeMap;
@@ -112,7 +112,7 @@ fn render() -> String {
          // Produced from the VM's own host-API list and capability mapping by:\n\
          //\n\
          //     cd rust && cargo run --bin gen-host-api-catalog -- \\\n\
-         //         ../lib/src/vm/host_api_catalog.dart\n\
+         //         ../flutter/lib/src/vm/host_api_catalog.dart\n\
          //\n\
          // The Rust sources are `api::all_host_apis()` (which names the VM treats\n\
          // as native askHost targets) and `Capability::for_api` (which gate each\n\
@@ -179,4 +179,232 @@ fn render() -> String {
 /// `gen-host-api-catalog` binary writes it.
 pub fn dart_catalog() -> String {
     render()
+}
+
+/// The TypeScript twin of [dart_catalog] for the native hosts
+/// (`native/core/src/vm/host-api-catalog.ts`): the same sets, the same
+/// capability map, so the native `HostHandler` dispatches and gates exactly as
+/// the Flutter one does.
+pub fn ts_catalog() -> String {
+    let mut by_set: BTreeMap<&'static str, Vec<String>> = BTreeMap::new();
+    let mut capability_of: Vec<(String, &'static str)> = Vec::new();
+    for name in all_host_apis() {
+        let cap = Capability::for_api(&name);
+        by_set
+            .entry(dart_set_for(cap))
+            .or_default()
+            .push(name.clone());
+        capability_of.push((name, cap.as_str()));
+    }
+    capability_of.sort();
+
+    let mut out = String::new();
+    out.push_str(
+        "// GENERATED FILE — DO NOT EDIT BY HAND.\n\
+         //\n\
+         // Produced from the VM's own host-API list and capability mapping by:\n\
+         //\n\
+         //     cd rust && cargo run --bin gen-host-api-catalog -- \\\n\
+         //         ../native/core/src/vm/host-api-catalog.ts\n\
+         //\n\
+         // The TypeScript twin of flutter/lib/src/vm/host_api_catalog.dart;\n\
+         // `cargo test -p elpian-vm --test host_api_catalog` fails when it is stale.\n\n",
+    );
+    for (set_name, comment) in SET_ORDER {
+        let Some(names) = by_set.get(set_name) else {
+            continue;
+        };
+        let comment = comment.replace("\n  /// ", "\n * ");
+        out.push_str(&format!("/** {comment} */\n"));
+        out.push_str(&format!(
+            "export const {set_name}: ReadonlySet<string> = new Set([\n"
+        ));
+        for n in names {
+            out.push_str(&format!("  '{n}',\n"));
+        }
+        out.push_str("]);\n\n");
+    }
+    out.push_str("/** The complete advertised surface. */\n");
+    out.push_str("export const allHostApiNames: ReadonlySet<string> = new Set([\n");
+    for (set_name, _) in SET_ORDER {
+        if by_set.contains_key(set_name) {
+            out.push_str(&format!("  ...{set_name},\n"));
+        }
+    }
+    out.push_str("]);\n\n");
+    out.push_str(
+        "/** The capability that gates each API (`Capability::for_api`). */\n\
+         export const capabilityOf: Readonly<Record<string, string>> = {\n",
+    );
+    for (name, cap) in &capability_of {
+        out.push_str(&format!("  '{name}': '{cap}',\n"));
+    }
+    out.push_str("};\n\n");
+    out.push_str(
+        "/** The capability gating [apiName], or `'other'` for a name the VM does not\n\
+         \x20* advertise — the fail-safe gate, never a pass. */\n\
+         export function capabilityFor(apiName: string): string {\n\
+         \x20 return Object.prototype.hasOwnProperty.call(capabilityOf, apiName) ? capabilityOf[apiName] : 'other';\n\
+         }\n",
+    );
+    out
+}
+
+/// Host API names grouped by the set that declares them.
+type ApiSets = BTreeMap<&'static str, Vec<String>>;
+/// `(api name, capability)` pairs, sorted by name.
+type CapabilityMap = Vec<(String, &'static str)>;
+
+/// The sets and the sorted capability map every catalog renders from.
+fn grouped() -> (ApiSets, CapabilityMap) {
+    let mut by_set: BTreeMap<&'static str, Vec<String>> = BTreeMap::new();
+    let mut capability_of: Vec<(String, &'static str)> = Vec::new();
+    for name in all_host_apis() {
+        let cap = Capability::for_api(&name);
+        by_set
+            .entry(dart_set_for(cap))
+            .or_default()
+            .push(name.clone());
+        capability_of.push((name, cap.as_str()));
+    }
+    capability_of.sort();
+    (by_set, capability_of)
+}
+
+/// A Kotlin or Swift string literal for an API or capability name.
+fn quoted(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('"');
+    for c in s.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '$' => out.push_str("\\$"),
+            _ => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// The Kotlin twin of [ts_catalog] for the Android core
+/// (`native/android/elpian-core/src/main/kotlin/dev/elpian/core/vm/HostApiCatalog.kt`):
+/// the same sets, the same capability map and the same `capabilityFor`, as
+/// top-level declarations in package `dev.elpian.core.vm` so the port reads
+/// like the TypeScript module it mirrors.
+pub fn kotlin_catalog() -> String {
+    let (by_set, capability_of) = grouped();
+    let mut out = String::new();
+    out.push_str(
+        "// GENERATED FILE — DO NOT EDIT BY HAND.\n\
+         //\n\
+         // Produced from the VM's own host-API list and capability mapping by:\n\
+         //\n\
+         //     cd rust && cargo run --bin gen-host-api-catalog -- \\\n\
+         //         ../native/android/elpian-core/src/main/kotlin/dev/elpian/core/vm/HostApiCatalog.kt\n\
+         //\n\
+         // The Kotlin twin of native/core/src/vm/host-api-catalog.ts;\n\
+         // `cargo test -p elpian-vm --test host_api_catalog` fails when it is stale.\n\n\
+         package dev.elpian.core.vm\n\n",
+    );
+    for (set_name, comment) in SET_ORDER {
+        let Some(names) = by_set.get(set_name) else {
+            continue;
+        };
+        let comment = comment.replace("\n  /// ", "\n * ");
+        out.push_str(&format!("/** {comment} */\n"));
+        out.push_str(&format!("val {set_name}: Set<String> = linkedSetOf(\n"));
+        for n in names {
+            out.push_str(&format!("  {},\n", quoted(n)));
+        }
+        out.push_str(")\n\n");
+    }
+    out.push_str("/** The complete advertised surface. */\n");
+    out.push_str("val allHostApiNames: Set<String> = LinkedHashSet<String>().apply {\n");
+    for (set_name, _) in SET_ORDER {
+        if by_set.contains_key(set_name) {
+            out.push_str(&format!("  addAll({set_name})\n"));
+        }
+    }
+    out.push_str("}\n\n");
+    out.push_str(
+        "/** The capability that gates each API (`Capability::for_api`). */\n\
+         val capabilityOf: Map<String, String> = linkedMapOf(\n",
+    );
+    for (name, cap) in &capability_of {
+        out.push_str(&format!("  {} to {},\n", quoted(name), quoted(cap)));
+    }
+    out.push_str(")\n\n");
+    out.push_str(
+        "/** The capability gating [apiName], or `\"other\"` for a name the VM does not\n\
+         \x20* advertise — the fail-safe gate, never a pass. */\n\
+         fun capabilityFor(apiName: String): String = capabilityOf[apiName] ?: \"other\"\n",
+    );
+    out
+}
+
+/// The Swift twin of [ts_catalog] for the iOS core
+/// (`native/ios/Sources/ElpianCore/VM/HostApiCatalog.swift`): the same sets,
+/// the same capability map and the same `capabilityFor`, namespaced in a
+/// caseless `HostApiCatalog` enum.
+pub fn swift_catalog() -> String {
+    let (by_set, capability_of) = grouped();
+    let mut out = String::new();
+    out.push_str(
+        "// GENERATED FILE — DO NOT EDIT BY HAND.\n\
+         //\n\
+         // Produced from the VM's own host-API list and capability mapping by:\n\
+         //\n\
+         //     cd rust && cargo run --bin gen-host-api-catalog -- \\\n\
+         //         ../native/ios/Sources/ElpianCore/VM/HostApiCatalog.swift\n\
+         //\n\
+         // The Swift twin of native/core/src/vm/host-api-catalog.ts;\n\
+         // `cargo test -p elpian-vm --test host_api_catalog` fails when it is stale.\n\n\
+         /// Every host API the Elpian VM forwards to the host, grouped the way the\n\
+         /// host handler dispatches them, plus the capability that gates each.\n\
+         public enum HostApiCatalog {\n",
+    );
+    let mut first = true;
+    for (set_name, comment) in SET_ORDER {
+        let Some(names) = by_set.get(set_name) else {
+            continue;
+        };
+        if !first {
+            out.push('\n');
+        }
+        first = false;
+        let comment = comment.replace("\n  /// ", "\n    /// ");
+        out.push_str(&format!("    /// {comment}\n"));
+        out.push_str(&format!(
+            "    public static let {set_name}: Set<String> = [\n"
+        ));
+        for n in names {
+            out.push_str(&format!("        {},\n", quoted(n)));
+        }
+        out.push_str("    ]\n");
+    }
+    out.push_str("\n    /// The complete advertised surface.\n");
+    out.push_str("    public static let allHostApiNames: Set<String> = Set<String>()\n");
+    for (set_name, _) in SET_ORDER {
+        if by_set.contains_key(set_name) {
+            out.push_str(&format!("        .union({set_name})\n"));
+        }
+    }
+    out.push_str(
+        "\n    /// The capability that gates each API (`Capability::for_api`).\n\
+         \x20   public static let capabilityOf: [String: String] = [\n",
+    );
+    for (name, cap) in &capability_of {
+        out.push_str(&format!("        {}: {},\n", quoted(name), quoted(cap)));
+    }
+    out.push_str("    ]\n");
+    out.push_str(
+        "\n    /// The capability gating `apiName`, or `\"other\"` for a name the VM does\n\
+         \x20   /// not advertise — the fail-safe gate, never a pass.\n\
+         \x20   public static func capabilityFor(_ apiName: String) -> String {\n\
+         \x20       capabilityOf[apiName] ?? \"other\"\n\
+         \x20   }\n\
+         }\n",
+    );
+    out
 }
