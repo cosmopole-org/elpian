@@ -147,7 +147,10 @@ await ref.current?.call('callFunction', 'onTap', '{}');
 ```
 
 `ElpianView` is the native `ElpianHostView` on Android and iOS and the DOM host
-on web. The config plugin adds the package's Maven repository and core library
+on web. On Expo web, run `npx elpian-expo-web-assets` once to copy the
+web host's fonts and runtime files into `public/elpian` (or call
+`configureElpianWeb({ assetBase })` to serve them from elsewhere); plain JSON
+views render without them. The config plugin adds the package's Maven repository and core library
 desugaring to the Android app; `npm run prepare-native` (run on `prepack`)
 stages the Android libraries and the iOS sources into the package.
 
