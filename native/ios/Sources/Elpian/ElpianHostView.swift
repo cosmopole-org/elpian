@@ -73,7 +73,7 @@ public final class ElpianHostView: UIView {
         Task { @MainActor in
             var failure: Error?
             do {
-                if wasOpen { try? await Elpian.registry.close(id) }
+                if wasOpen { await Elpian.registry.close(id) }
                 try await Elpian.registry.open(kind, id, options)
             } catch {
                 self.deliver("error", JSONObject([("message", "\(error)")]))
@@ -128,7 +128,7 @@ public final class ElpianHostView: UIView {
         opened = false
         let id = surfaceId
         Task { @MainActor in
-            try? await Elpian.registry.close(id)
+            await Elpian.registry.close(id)
             done?()
         }
     }
@@ -214,7 +214,7 @@ public final class ElpianHostView: UIView {
         if wasOpen {
             // The registry outlives this view; finish the close there, then release the surface.
             Task { @MainActor in
-                try? await Elpian.registry.close(id)
+                await Elpian.registry.close(id)
                 platform.detachSurface(id)
                 Elpian.unregister(id)
             }
