@@ -19,6 +19,18 @@ export interface RuntimeAssets {
   quickJsWasm: string;
 }
 
+/**
+ * `import(url)` of a runtime module URL known only at run time. It is hidden
+ * from bundlers: Metro (Expo web) rejects `import()` with a non-literal
+ * argument, and webpack would try to resolve it. Created on first use, so
+ * pages whose CSP forbids `unsafe-eval` only lose the VM / QuickJS runtimes.
+ */
+let dynamicImport: ((url: string) => Promise<any>) | null = null;
+function importUrl(url: string): Promise<any> {
+  dynamicImport ??= new Function('url', 'return import(url)') as (url: string) => Promise<any>;
+  return dynamicImport(url);
+}
+
 // ---------------------------------------------------------------------------
 // Elpian VM
 // ---------------------------------------------------------------------------
@@ -43,7 +55,7 @@ export class WebElpianVm implements ElpianVmBinding {
   init(): Promise<void> {
     return (this.loading ??= (async () => {
       try {
-        const m = await import(/* @vite-ignore */ this.moduleUrl);
+        const m = await importUrl(this.moduleUrl);
         await m.default();
         m.elpian_wasm_init?.();
         this.mod = m;
@@ -117,7 +129,7 @@ export class WebQuickJs implements JsSandboxFactory {
 
   private load(): Promise<any> {
     return (this.module ??= (async () => {
-      const mod = await import(/* @vite-ignore */ this.moduleUrl);
+      const mod = await importUrl(this.moduleUrl);
       const res = await fetch(this.wasmUrl);
       if (!res.ok) throw new Error(`QuickJS wasm: HTTP ${res.status} from ${this.wasmUrl}`);
       const wasmBinary = await res.arrayBuffer();

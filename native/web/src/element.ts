@@ -66,7 +66,8 @@ function installFonts(assetBase: string): void {
   style.textContent = `@font-face{font-family:${ICON_FAMILY};font-style:normal;font-weight:400;font-display:block;src:url(${JSON.stringify(new URL('fonts/MaterialIcons-Regular.ttf', assetBase).toString())}) format('truetype');}`;
   document.head.appendChild(style);
   // Start the icon font immediately so first paints measure with it.
-  void document.fonts?.load?.(`24px ${ICON_FAMILY}`);
+  // A missing font file only loses icons; don't surface it as an unhandled rejection.
+  document.fonts?.load?.(`24px ${ICON_FAMILY}`)?.catch(() => {});
 }
 
 function watchDevicePixelRatio(onChange: () => void): void {
