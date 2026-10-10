@@ -14,6 +14,7 @@
 ///   elpian                 the A2UISurface widget, registry and host APIs
 library;
 
+export 'agent_view.dart';
 export 'errors.dart';
 export 'pointer.dart';
 export 'data_model.dart';
