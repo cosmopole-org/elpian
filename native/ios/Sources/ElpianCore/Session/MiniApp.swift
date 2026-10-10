@@ -188,7 +188,9 @@ public final class MiniAppSession {
             timers = t
 
             var handlers: [String: HostCallHandler] = [:]
-            for api in HostApiCatalog.allHostApiNames { handlers[api] = { name, payload in HostReply.of(handler.handleHostCall(name, payload)) } }
+            for api in HostApiCatalog.allHostApiNames { handlers[api] = { name, payload in handler.handleHostCallReply(name, payload) } }
+            // The agent APIs answer asynchronously (also when a catalog does not list them).
+            for api in AGENT_API_NAMES { handlers[api] = { name, payload in handler.handleHostCallReply(name, payload) } }
             for api in HostApiCatalog.timerApiNames { handlers[api] = { name, payload in HostReply.of(t.handle(name, payload)) } }
             if let extra = o.hostHandlers { for (k, v) in extra { handlers[k] = v } }
             vm.registerHostHandlers(handlers)

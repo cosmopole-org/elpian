@@ -233,6 +233,9 @@ public func reconcileChildren(_ parent: RenderObject, _ ws: [W], _ owner: Render
         result[newTop] = match != nil ? updateRenderObject(match!, w, owner) : createRenderObject(w, owner, parent)
         newTop += 1
     }
+    // The bottom run matched above, in order (after the middle, which may have
+    // shrunk or grown — so resume at the bottom run's first old object).
+    oldTop = oldBottom + 1
     newBottom = ws.count - 1
     oldBottom = old.count - 1
     while oldTop <= oldBottom && newTop <= newBottom {
