@@ -1,6 +1,11 @@
 package dev.elpian.core.bridge
 
+import dev.elpian.core.a2ui.A2UIConversation
+import dev.elpian.core.a2ui.A2UIDefaults
+import dev.elpian.core.a2ui.a2uiRegistry
+import dev.elpian.core.a2ui.isoTimestamp
 import dev.elpian.core.engine.EngineHost
+import dev.elpian.core.events.ElpianEvent
 import dev.elpian.core.fullstack.ElpianNetPolicy
 import dev.elpian.core.fullstack.ElpianServerClient
 import dev.elpian.core.fullstack.ServerComponentOptions
@@ -57,11 +62,13 @@ import kotlinx.coroutines.launch
  *   - `stream`    — a view driven by pushed / streamed commands.
  *   - `nextjs`    — a server-driven page (NextjsServerWidget).
  *   - `server`    — a server-rendered component (ServerComponent).
+ *   - `agent`     — a full-screen conversation with an app agent (A2UI surfaces,
+ *                   prose and a chat input); methods send / action / conversation.
  *
  * Events flow back through the `emit(surface, event, payload)` sink:
  *   ready, error, println, updateApp, routeChanged, scriptExecuted,
  *   scriptError, streamDone, command, sceneTap, callRefused, unservicedApi,
- *   navigate, result (async call results: `{requestId, ok, value | error}`,
+ *   navigate, a2uiText, a2uiAction, done (agent sessions), result (async call results: `{requestId, ok, value | error}`,
  *   from [callAsync]).
  *
  * Payloads are JSON values (maps, lists, strings, Doubles, Booleans, null).
@@ -166,6 +173,14 @@ class SessionRegistry(private val emit: EmitSink) {
                         surface = surfaceOpts,
                     ),
                 )
+                // Where this app's agents live: A2UISurface widgets and the agent.* host APIs default to it.
+                if (options["baseUrl"] is String || options["appId"] is String) {
+                    a2uiRegistry(session.surface.engine.services).defaults = A2UIDefaults(
+                        baseUrl = options["baseUrl"] as? String,
+                        appId = options["appId"] as? String,
+                        headers = headersOf(options["headers"]),
+                    )
+                }
                 entry = SessionEntry(
                     kind = kind,
                     surface = session.surface,
@@ -387,6 +402,59 @@ class SessionRegistry(private val emit: EmitSink) {
                     },
                 )
             }
+            "agent" -> {
+                val surface = ElpianSurface(surfaceId, SurfaceOptions(document = true, host = surfaceHost))
+                if (truthy(options["stylesheet"])) surface.engine.loadStylesheet(options["stylesheet"])
+                val agent = jsString(options["agent"] ?: "")
+                val registry = a2uiRegistry(surface.engine.services)
+                registry.defaults = A2UIDefaults(jsString(options["baseUrl"] ?: ""), jsString(options["appId"] ?: ""), headersOf(options["headers"]))
+                val conversation = registry.conversation("session") {
+                    A2UIConversation(endpoint = registry.endpoint(agent), conversationId = options["conversationId"] as? String)
+                }
+                surface.setContent(
+                    linkedMapOf(
+                        "type" to "A2UISurface",
+                        "props" to linkedMapOf<String, Any?>(
+                            "agent" to agent,
+                            "conversation" to "session",
+                            "prompt" to (options["prompt"] as? String),
+                            "chat" to (options["chat"] != false),
+                            "showText" to true,
+                            "style" to linkedMapOf<String, Any?>("padding" to 12.0),
+                        ),
+                        "events" to linkedMapOf<String, Any?>(
+                            "a2uiText" to { e: ElpianEvent -> emit("a2uiText", e.value) },
+                            "a2uiAction" to { e: ElpianEvent -> emit("a2uiAction", e.value) },
+                            "a2uiError" to { e: ElpianEvent -> emit("error", (e.value as? Map<*, *>)?.get("message") ?: "agent error") },
+                            "a2uiDone" to { e: ElpianEvent -> emit("done", e.value) },
+                        ),
+                    ),
+                )
+                entry = SessionEntry(
+                    kind = kind,
+                    surface = surface,
+                    dispose = {
+                        registry.dispose()
+                        surface.dispose()
+                    },
+                    viewportChanged = { surface.viewportChanged() },
+                    call = { method, args ->
+                        when (method) {
+                            "send" -> linkedMapOf("conversationId" to conversation.send(jsString(args.getOrNull(0) ?: "")).conversationId.await())
+                            "action" -> {
+                                val raw = args.getOrNull(0)
+                                val action = (if (raw is String) Json.parse(raw) else raw).asMap()
+                                if (action == null || action["name"] !is String) throw SessionException("action needs a \"name\"")
+                                val full: JsonMap = linkedMapOf("timestamp" to isoTimestamp(), "context" to LinkedHashMap<String, Any?>())
+                                full.putAll(action)
+                                linkedMapOf("conversationId" to conversation.sendAction(full).conversationId.await())
+                            }
+                            "conversation" -> conversation.describe()
+                            else -> throw SessionException("agent session has no method $method")
+                        }
+                    },
+                )
+            }
             else -> throw SessionException("unknown session kind \"$kind\"")
         }
         entries[surfaceId] = entry
@@ -520,3 +588,7 @@ fun fetchRequestOf(j: Map<String, Any?>): FetchRequest {
         timeoutMs = (j["timeoutMs"] as? Number)?.toLong(),
     )
 }
+
+/** String headers from a JSON object option. */
+internal fun headersOf(v: Any?): Map<String, String> =
+    if (isMap(v)) v.asMap()!!.entries.associate { (k, x) -> k to jsString(x) } else emptyMap()

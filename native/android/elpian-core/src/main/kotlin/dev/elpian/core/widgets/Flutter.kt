@@ -172,7 +172,7 @@ fun icon(name: String, size: Double = 24.0, color: Color? = null): W = iconGlyph
 
 private fun parseAlignmentProp(v: Any?, fallback: Alignment): Alignment = CSSParser.parseAlignment(v) ?: fallback
 
-private class TextValueState(var value: String)
+private class TextValueState(var value: String, var lastProp: String? = null)
 private class DismissState(var dismissed: Boolean)
 
 // ----------------------------------------------------------------------------
@@ -278,8 +278,9 @@ val flutterWidgets: Map<String, WidgetBuilder> = linkedMapOf(
 
     "ListView" to { node, children, ctx ->
         val scrollable = node.props["scrollable"] != false
-        val list = w("flex", mapOf("direction" to "column", "crossAxisAlignment" to "stretch", "mainAxisSize" to "min"), children)
-        val result = w("scroll", mapOf("axis" to (if (node.props["scrollDirection"] == "horizontal") "horizontal" else "vertical"), "enabled" to scrollable), list)
+        val horizontal = node.props["scrollDirection"] == "horizontal"
+        val list = w("flex", mapOf("direction" to (if (horizontal) "row" else "column"), "crossAxisAlignment" to (if (horizontal) "start" else "stretch"), "mainAxisSize" to "min"), children)
+        val result = w("scroll", mapOf("axis" to (if (horizontal) "horizontal" else "vertical"), "enabled" to scrollable), list)
         applyStyle(result, node.style, ApplyStyleOptions(), ctx)
     },
 
@@ -297,7 +298,13 @@ val flutterWidgets: Map<String, WidgetBuilder> = linkedMapOf(
     },
 
     "TextField" to { node, _, ctx ->
-        val state = ctx.engine.stateFor(ctx.elementId) { TextValueState(jsString(node.props["value"] ?: "")) }
+        val incoming = node.props["value"]?.let { jsString(it) }
+        val state = ctx.engine.stateFor(ctx.elementId) { TextValueState(incoming ?: "", incoming) }
+        // didUpdateWidget: a changed `value` prop (e.g. a bound model update) wins.
+        if (incoming != state.lastProp) {
+            if (incoming != null) state.value = incoming
+            state.lastProp = incoming
+        }
         val s = node.style
         val textStyle = TextStyle.BODY_LARGE.merge(createTextStyle(s))
         val lines = max(1.0, num(node.props["maxLines"]) ?: 1.0)
@@ -317,6 +324,8 @@ val flutterWidgets: Map<String, WidgetBuilder> = linkedMapOf(
                     "enabled" to (node.props["enabled"] != false),
                     "readOnly" to (node.props["readOnly"] == true),
                     "autofocus" to (node.props["autofocus"] == true),
+                    "min" to node.props["min"],
+                    "max" to node.props["max"],
                     "variant" to "underline",
                     "textStyle" to textStyle.toSpec(),
                     "hintStyle" to textStyle.copy(color = M3.onSurfaceVariant).toSpec(),

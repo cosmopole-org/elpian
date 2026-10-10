@@ -340,6 +340,104 @@ class SessionRegistryTest {
         assertEquals("no session on surface \"nowhere\"", results[2]["error"])
     }
 
+    private fun runTimers() {
+        repeat(10) {
+            val due = platform.timers.values.toList()
+            platform.timers.clear()
+            for (t in due) t()
+            platform.drain()
+        }
+    }
+
+    private val catalogId = "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json"
+
+    private fun agentReply(text: String): String =
+        "{\"type\":\"conversation\",\"conversationId\":\"c1\"}\n" +
+            "{\"version\":\"v0.9.1\",\"createSurface\":{\"surfaceId\":\"s\",\"catalogId\":\"$catalogId\"}}\n" +
+            "{\"version\":\"v0.9.1\",\"updateComponents\":{\"surfaceId\":\"s\",\"components\":[{\"id\":\"root\",\"component\":\"Text\",\"text\":\"$text\"}]}}\n" +
+            "{\"type\":\"text\",\"text\":\"prose\"}\n{\"type\":\"done\",\"stopReason\":\"end_turn\"}\n"
+
+    @Test
+    fun miniappSessionPointsA2uiSurfacesAtTheAppsAgents() {
+        // An agentic mini app: static UI next to an A2UISurface talking to the app's agent.
+        platform.sandboxScript = { code, host ->
+            if (code == "PROGRAM") {
+                host(
+                    "render",
+                    Json.stringify(
+                        json(
+                            """{"type": "Column", "children": [
+                                 {"type": "Text", "props": {"text": "Static UI"}},
+                                 {"type": "A2UISurface", "props": {"agent": "helper", "prompt": "hello"}}
+                               ]}""",
+                        ),
+                    ),
+                )
+            }
+            "undefined"
+        }
+        open("miniapp", "ma", mapOf("runtime" to "quickjs", "code" to "PROGRAM", "baseUrl" to "https://api.test/", "appId" to "demo", "headers" to mapOf("x-k" to "v")))
+        val defaults = dev.elpian.core.a2ui.a2uiRegistry(surfaceById("ma")!!.engine.services).defaults
+        assertEquals("https://api.test/", defaults.baseUrl)
+        assertEquals("demo", defaults.appId)
+        runTimers()
+        val request = assertNotNull(platform.streamRequest)
+        assertEquals("https://api.test/apps/demo/agent/helper", request.url)
+        assertEquals("v", request.headers["x-k"])
+        assertEquals("hello", (Json.parse(request.body!!) as Map<*, *>)["message"])
+        platform.streamHandlers!!.onChunk(agentReply("From the agent"))
+        platform.streamHandlers!!.onDone()
+        platform.drain()
+        val shown = texts("ma")
+        assertTrue(shown.contains("Static UI"), shown.toString())
+        assertTrue(shown.contains("From the agent"), shown.toString())
+        runBlocking { registry.close("ma") }
+    }
+
+    @Test
+    fun miniappSessionWithoutAgentDefaultsNeverCallsAnAgent() {
+        platform.sandboxScript = { code, host ->
+            if (code == "PROGRAM") host("render", Json.stringify(json("""{"type": "A2UISurface", "props": {"agent": "helper", "prompt": "hello"}}""")))
+            "undefined"
+        }
+        open("miniapp", "mb", mapOf("runtime" to "quickjs", "code" to "PROGRAM"))
+        runTimers()
+        assertNull(platform.streamRequest)
+        runBlocking { registry.close("mb") }
+    }
+
+    @Test
+    fun agentSessionConversesWithAnAgent() {
+        open("agent", "ag", mapOf("baseUrl" to "https://api.test", "appId" to "demo", "agent" to "helper", "prompt" to "start"))
+        runTimers()
+        val request = assertNotNull(platform.streamRequest)
+        assertEquals("https://api.test/apps/demo/agent/helper", request.url)
+        platform.streamHandlers!!.onChunk(agentReply("Agent UI"))
+        platform.streamHandlers!!.onDone()
+        platform.drain()
+        assertTrue(texts("ag").contains("Agent UI"), texts("ag").toString())
+        assertTrue(events.any { it.first == "ag" && it.second == "a2uiText" && (it.third as Map<*, *>)["text"] == "prose" })
+        assertTrue(events.any { it.first == "ag" && it.second == "done" })
+
+        registry.callAsync("ag", "send", listOf("more"), 1.0)
+        platform.drain()
+        val body = Json.parse(platform.streamRequest!!.body!!) as Map<*, *>
+        assertEquals("more", body["message"])
+        assertEquals("c1", body["conversationId"])
+        platform.streamHandlers!!.onChunk("{\"type\":\"conversation\",\"conversationId\":\"c1\"}\n{\"type\":\"done\",\"stopReason\":\"end_turn\"}\n")
+        platform.streamHandlers!!.onDone()
+        platform.drain()
+        val result = events.last { it.second == "result" }.third as Map<*, *>
+        assertEquals(true, result["ok"])
+        assertEquals("c1", (result["value"] as Map<*, *>)["conversationId"])
+
+        @Suppress("UNCHECKED_CAST")
+        val described = call("ag", "conversation") as Map<String, Any?>
+        assertEquals("c1", described["conversationId"])
+        assertEquals(3, (described["transcript"] as List<*>).size)
+        runBlocking { registry.close("ag") }
+    }
+
     @Test
     fun unknownKindFails() {
         val failure = runCatching { runBlocking { registry.open("bogus", "b", emptyMap()) } }.exceptionOrNull()

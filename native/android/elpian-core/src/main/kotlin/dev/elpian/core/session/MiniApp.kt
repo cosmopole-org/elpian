@@ -163,7 +163,7 @@ class MiniAppSession(surfaceId: String, val options: MiniAppOptions) {
             timers = t
 
             val handlers = LinkedHashMap<String, HostCallHandler>()
-            for (api in allHostApiNames) handlers[api] = { name, payload -> HostReply.of(handler.handleHostCall(name, payload)) }
+            for (api in allHostApiNames) handlers[api] = { name, payload -> handler.handleHostCallReply(name, payload) }
             for (api in timerApiNames) handlers[api] = { name, payload -> HostReply.of(t.handle(name, payload)) }
             o.hostHandlers?.let { handlers.putAll(it) }
             vm.registerHostHandlers(handlers)
