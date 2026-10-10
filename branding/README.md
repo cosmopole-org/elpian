@@ -5,6 +5,7 @@
 | `elpian-logo.png` | The logo, 1024×1024, transparent |
 | `elpian-logo-512.png` | The logo, 512×512, transparent (README header) |
 | `elpian-social-preview.png` | GitHub social preview, 1280×640 (Settings → General → Social preview) |
+| `elpian-avatar.png` | Square avatar on a solid background, 1024×1024 (organization or profile picture) |
 
 The logo is a real 3D render. It shows an isometric **E** built from three
 glass UI cards, each with a title line, text and a control: the layered widgets
