@@ -1,5 +1,7 @@
 package dev.elpian.core.host
 
+import dev.elpian.core.a2ui.AGENT_API_NAMES
+import dev.elpian.core.a2ui.handleAgentHostCall
 import dev.elpian.core.canvas.CanvasCommand
 import dev.elpian.core.canvas.commandFromJson
 import dev.elpian.core.canvas.isCanvasCommandType
@@ -51,15 +53,49 @@ class HostHandler(val services: ElpianServices, val options: HostHandlerOptions 
     }
 
     /** This handler as a runtime's synchronous [HostCallHandler]. */
-    fun asHostCallHandler(): HostCallHandler = { apiName, payload -> HostReply.of(handleHostCall(apiName, payload)) }
+    fun asHostCallHandler(): HostCallHandler = { apiName, payload -> handleHostCallReply(apiName, payload) }
 
-    fun handleHostCall(apiName: String, payload: String): String {
+    private fun authorized(apiName: String): Boolean {
         val onAuthorize = options.onAuthorize
         if (onAuthorize != null && !onAuthorize(apiName)) {
             options.onCallRefused?.invoke(apiName)
             log("HostHandler[${services.appId}]: $apiName refused by policy")
-            // The typed null the VM produces for a denied capability.
-            return Typed.NULL
+            return false
+        }
+        return true
+    }
+
+    /**
+     * Service one host call. Most APIs answer synchronously; the agent APIs
+     * (`agent.send`, `agent.action`, `a2ui.dataModel`) answer later — every
+     * runtime awaits a [HostReply.Later].
+     */
+    fun handleHostCallReply(apiName: String, payload: String): HostReply {
+        if (apiName !in AGENT_API_NAMES) return HostReply.of(handleHostCall(apiName, payload))
+        // The typed null the VM produces for a denied capability.
+        if (!authorized(apiName)) return HostReply.of(Typed.NULL)
+        return HostReply.of(handleAgentApi(apiName, payload))
+    }
+
+    /** `agent.send` / `agent.action` / `a2ui.dataModel` — conversations shared with `A2UISurface` widgets. */
+    fun handleAgentApi(apiName: String, payload: String): kotlinx.coroutines.Deferred<String> = try {
+        handleAgentHostCall(services, apiName, payload)
+    } catch (e: Exception) {
+        log("HostHandler: $apiName failed: $e")
+        kotlinx.coroutines.CompletableDeferred(Typed.response("object", linkedMapOf("error" to linkedMapOf("message" to (e.message ?: e.toString())))))
+    }
+
+    /**
+     * Service one host call synchronously. An agent API that has not answered
+     * yet reads as null here; use [handleHostCallReply] to await it.
+     */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    fun handleHostCall(apiName: String, payload: String): String {
+        // The typed null the VM produces for a denied capability.
+        if (!authorized(apiName)) return Typed.NULL
+        if (apiName in AGENT_API_NAMES) {
+            val reply = handleAgentApi(apiName, payload)
+            return if (reply.isCompleted) reply.getCompleted() else Typed.NULL
         }
         if (apiName in domApiNames) return handleDomApi(apiName, payload)
         if (apiName in canvasApiNames) return handleCanvasApi(apiName, payload)

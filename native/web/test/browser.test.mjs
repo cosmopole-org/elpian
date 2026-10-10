@@ -111,3 +111,57 @@ test('Elpian VM (wasm) mini app renders and handles taps', async () => {
   await page.waitForFunction(() => [...document.querySelectorAll('#vm span')].some((s) => /Count: 1/.test(s.textContent)), null, { timeout: 5000 });
   await page.locator('#vm').screenshot({ path: join(shots, 'vm.png') });
 });
+
+test('A2UI agent session: NDJSON stream, two-way binding, action POST, data model update', async () => {
+  await page.evaluate(async () => {
+    window.agentEvents = [];
+    const s = await window.__elpian.mountElpian(document.getElementById('agent'), 'agent', { baseUrl: location.origin, appId: 'demo', agent: 'assistant', prompt: 'start', chat: true });
+    for (const e of ['a2uiText', 'a2uiAction', 'error', 'done']) s.on(e, (p) => window.agentEvents.push([e, p]));
+    window.agentSession = s;
+  });
+  await page.waitForFunction(() => [...document.querySelectorAll('#agent span')].some((s) => s.textContent === 'Please fill in the form.'), null, { timeout: 10000 });
+  // The surface's field comes first; the chat input is last.
+  const input = page.locator('#agent input').first();
+  assert.ok(await page.locator('#agent span', { hasText: 'Sign up' }).count(), 'surface rendered');
+  assert.ok(await page.locator('#agent span', { hasText: 'Test Agent' }).count(), 'attribution header');
+  assert.ok(await page.locator('#agent span', { hasText: 'Please fill in the form.' }).count(), 'agent prose');
+  await input.fill('Ada Lovelace');
+  await settle();
+  const before = Date.now();
+  await page.locator('#agent span', { hasText: 'Submit' }).click();
+  await page.waitForFunction(() => [...document.querySelectorAll('#agent span')].some((s) => s.textContent.includes('Thanks, Ada Lovelace!')), null, { timeout: 10000 });
+  const requests = await (await fetch(`${url}/__agent/requests`)).json();
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0].message, 'start');
+  assert.deepEqual(requests[0].capabilities.supportedCatalogIds, ['https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json']);
+  const second = requests[1];
+  assert.equal(second.conversationId, 'conv-test');
+  assert.equal(second.action.name, 'submitForm');
+  assert.equal(second.action.surfaceId, 'form');
+  assert.equal(second.action.sourceComponentId, 'submit');
+  assert.deepEqual(second.action.context, { name: 'Ada Lovelace', plan: 'pro' });
+  const ts = Date.parse(second.action.timestamp);
+  assert.ok(Math.abs(ts - before) < 60000, second.action.timestamp);
+  assert.deepEqual(second.dataModel, { version: 'v0.9.1', surfaces: { form: { form: { name: 'Ada Lovelace' } } } });
+  const events = await page.evaluate(() => window.agentEvents);
+  assert.ok(events.some(([e, p]) => e === 'a2uiAction' && p.name === 'submitForm'), JSON.stringify(events));
+  assert.ok(events.some(([e, p]) => e === 'a2uiText' && p.text === 'Submitted.'), JSON.stringify(events));
+  assert.ok(events.filter(([e]) => e === 'done').length >= 2);
+  const inputs = await page.$$eval('#agent input', (els) => els.map((e) => [e.placeholder, JSON.stringify(e.getBoundingClientRect())]));
+  assert.equal(inputs.length, 2, JSON.stringify(inputs));
+  const conv = await page.evaluate(() => window.agentSession.call('conversation'));
+  assert.equal(conv.conversationId, 'conv-test');
+  await page.locator('#agent').screenshot({ path: join(shots, 'a2ui-agent.png') });
+});
+
+test('A2UISurface widget renders static messages', async () => {
+  const messages = JSON.parse(readFileSync(new URL('../../../a2ui/spec/catalogs/basic/examples/05_product-card.json', import.meta.url), 'utf8')).messages;
+  await page.evaluate(async (messages) => {
+    await window.__elpian.mountElpian(document.getElementById('static'), 'json', { view: { type: 'Column', children: [{ type: 'h3', props: { text: 'Static A2UI' } }, { type: 'a2ui-surface', props: { messages } }] } });
+  }, messages);
+  await settle();
+  const texts = await page.$$eval('#static span', (s) => s.map((e) => e.textContent));
+  assert.ok(texts.includes('Static A2UI'));
+  assert.ok(texts.length > 3, texts.join('|'));
+  await page.locator('#static').screenshot({ path: join(shots, 'a2ui-static.png') });
+});

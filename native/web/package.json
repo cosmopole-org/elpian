@@ -11,7 +11,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/build.mjs",
-    "test": "npm run build && node --test test/*.test.mjs"
+    "test": "npm run build && node --test test/a2ui/*.test.mjs test/*.test.mjs"
   },
   "license": "MIT"
 }

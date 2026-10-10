@@ -1,0 +1,12 @@
+[package]
+name = "elpian-agent"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Agents for Elpian mini apps: LLM providers, the tool loop, A2UI v0.9.1 validation, skills and conversations."
+
+[dependencies]
+serde_json = "1.0"
+jsonschema = { version = "0.58", default-features = false }
+ureq = { version = "3.4", default-features = false, features = ["rustls"] }
+getrandom = "0.2"

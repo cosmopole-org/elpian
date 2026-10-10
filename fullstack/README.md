@@ -16,7 +16,7 @@ session with `STATUS.md`, then `00-current-state.md`, then the workstream file.
 ```
    client device                      elpiand — the Elpian host server
  ┌────────────────────┐          ┌───────────────────────────────────────────────┐
- │  Flutter shell     │          │                                               │
+ │  Flutter or native │          │                                               │
  │ ┌────────────────┐ │  fetch   │  ┌──────────┐      ┌──────────────────────┐  │
  │ │ client Elpian  │◀┼──bytecode┼──│ Registry │      │ Supervisor VM (app)  │  │
  │ │      VM        │ │          │  │  apps ×  │      │ ┌────┐ ┌────┐ ┌────┐ │  │
@@ -35,6 +35,11 @@ session with `STATUS.md`, then `00-current-state.md`, then the workstream file.
                                                    outer world
                                           (allow / allowlist / denied)
 ```
+
+The client device is either host mode: the Flutter shell (`flutter/`,
+`cli/elpian_client`) or a native host (`native/`, whose `server` session and
+`ElpianServerClient` port in `native/web/src/fullstack/server.ts` speak the same
+protocol). See [`wiki/23-native-hosts.md`](../wiki/23-native-hosts.md).
 
 A mini app declared `network: "closed"` gets no egress on either side: the
 client VM's only reachable peer is its own server functions, and those functions

@@ -268,8 +268,9 @@ export const flutterWidgets: Record<string, WidgetBuilder> = {
 
   ListView(node, children, ctx) {
     const scrollable = node.props.scrollable !== false;
-    const list = w('flex', { direction: 'column', crossAxisAlignment: 'stretch', mainAxisSize: 'min' }, children);
-    const result = w('scroll', { axis: node.props.scrollDirection === 'horizontal' ? 'horizontal' : 'vertical', enabled: scrollable }, list);
+    const horizontal = node.props.scrollDirection === 'horizontal';
+    const list = w('flex', { direction: horizontal ? 'row' : 'column', crossAxisAlignment: horizontal ? 'start' : 'stretch', mainAxisSize: 'min' }, children);
+    const result = w('scroll', { axis: horizontal ? 'horizontal' : 'vertical', enabled: scrollable }, list);
     return applyStyle(result, node.style, {}, ctx);
   },
 
@@ -287,7 +288,13 @@ export const flutterWidgets: Record<string, WidgetBuilder> = {
   },
 
   TextField(node, _children, ctx) {
-    const state = ctx.engine.stateFor(ctx.elementId, () => ({ value: String(node.props.value ?? '') }));
+    const incoming = node.props.value != null ? String(node.props.value) : null;
+    const state = ctx.engine.stateFor(ctx.elementId, () => ({ value: incoming ?? '', lastProp: incoming }));
+    // didUpdateWidget: a changed `value` prop (e.g. a bound model update) wins.
+    if (incoming !== state.lastProp) {
+      if (incoming != null) state.value = incoming;
+      state.lastProp = incoming;
+    }
     const s = node.style;
     const textStyle: TextStyle = { ...BODY_LARGE, ...(createTextStyle(s) ?? {}) };
     const lines = Math.max(1, num(node.props.maxLines) ?? 1);
@@ -305,6 +312,8 @@ export const flutterWidgets: Record<string, WidgetBuilder> = {
         enabled: node.props.enabled !== false,
         readOnly: node.props.readOnly === true,
         autofocus: node.props.autofocus === true,
+        min: node.props.min ?? undefined,
+        max: node.props.max ?? undefined,
         variant: 'underline',
         textStyle: toSpec(textStyle),
         hintStyle: toSpec({ ...textStyle, color: M3.onSurfaceVariant }),

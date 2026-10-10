@@ -8,7 +8,12 @@ declare function askHost(name: string, payload: unknown): unknown;
 ```
 
 The allowlist lives in `flutter/lib/src/vm/host_api_catalog.dart` — **107 names** across
-four families. An API name not registered leaves the VM suspended.
+four families. An API name not registered leaves the VM suspended. The catalog
+is generated from the VM (`cargo run --bin gen-host-api-catalog`), and the
+native hosts carry the same list (`native/web/src/vm/host-api-catalog.ts` and
+its Kotlin / Swift copies) behind a port of the same `HostHandler`
+(`native/web/src/host/host-handler.ts`), so everything below behaves the same
+on both host modes.
 
 ---
 
@@ -169,6 +174,14 @@ final hostHandlers = <String, HostCallHandler>{
 runtimeVm.registerHostHandlers(hostHandlers);
 ```
 
+On the native hosts the same map is the `hostHandlers` option of the engine's
+`MiniAppSession` (`native/web/src/session/miniapp.ts`; Kotlin
+`dev.elpian.core.session`, Swift `ElpianCore`), merged after the built-ins in
+the same way. A `HostCallHandler` there is `(apiName, payload) => string |
+Promise<string>` on the web and returns a `HostReply` (`Now` / `Later`) in
+Kotlin and Swift. The `open(kind, options)` / `mountElpian` session API takes
+JSON options only, so custom handlers need the engine-level session.
+
 Call it from the guest:
 
 ```ts
@@ -196,7 +209,8 @@ const data = JSON.parse(body as string);
 ## The host environment (`env.get`)
 
 The host publishes an environment object the guest can read: viewport size,
-platform, base URL, media-query state. `ElpianVmWidget` keeps it in sync —
+platform, base URL, media-query state. `ElpianVmWidget` (and the native
+`miniapp` session, which also merges a `hostEnvironment` option) keeps it in sync —
 `_updateHostEnvironmentCache` recomputes it on `didChangeDependencies` and
 pushes it to the runtime when its digest changes, so a rotation or resize is
 visible to the guest without a re-render.
@@ -207,12 +221,21 @@ const env = askHost('env.get', []);
 
 ---
 
-## Driving the VM from Dart
+## Driving the VM from the host
 
-The other direction — the host calling into the guest:
+The other direction — the host calling into the guest. On Flutter:
 
 ```dart
 Future<String> callVmFunction(String funcName, {String? input});
+```
+
+On the native hosts, the session method `callFunction`:
+
+```kotlin
+view.call("callFunction", "onTap", "{}")                         // Android (suspend)
+```
+```swift
+_ = try await view.call("callFunction", args: ["onTap", "{}"])   // iOS
 ```
 
 and, at the Rust level:
@@ -233,11 +256,12 @@ The embedder's loop is always: **execute → if `has_host_call`, service it →
 ## Integrations
 
 `flutter/lib/src/integrations/` contains two prebuilt embeddings worth reading as
-worked examples of the host side:
+worked examples of the host side (natively: `native/web/src/session/nextjs.ts`
+and its ports, the `nextjs` session kind):
 
 - **`nextjs_bridge.dart` / `nextjs_server_widget.dart`** — server-driven
   rendering with the same scope-patch model as the VM widget. See
-  `NEXTJS_INTEGRATION.md`.
+  [`17-nextjs-integration.md`](17-nextjs-integration.md).
 - **`client_comp_routing.dart`** — client component routing, and a second
   place where `node['events']` is read.
 

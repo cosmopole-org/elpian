@@ -320,6 +320,11 @@ instructions, compute ms, peak memory, storage) and acts on them through a
 runs. See [21 — Running a host](21-hosting.md) §5.
 
 On a **client** super app the position is unchanged: read `usage` /
-`subtree_usage` on a timer and aggregate outside the VM. There is still no
+`subtree_usage` on a timer and aggregate outside the VM. (On the native hosts
+these controls are session methods: `miniapp` has `usage`, `state`, `pause`,
+`resume`, `terminate`, `setLimits`, `sandbox`; `superapp` has `usage`,
+`branchUsage`, `pressure`, `policy`, `spawnChild`, `pause`, `resume`,
+`terminate` — see
+[23 — Native hosts](23-native-hosts.md#sessions).) There is still no
 per-tenant billing, and no monetary anything anywhere — the meters count
 resources, and turning resources into money is the operator's business.

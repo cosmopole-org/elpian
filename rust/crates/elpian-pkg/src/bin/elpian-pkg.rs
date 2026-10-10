@@ -17,6 +17,7 @@
 //! elpian.app.json         id, version, capabilities, network, functions
 //! build/client.bc
 //! build/fn/<name>.bc
+//! build/agents/**         agent instructions, skills, scripts (optional)
 //! ```
 
 use std::path::{Path, PathBuf};
@@ -275,6 +276,39 @@ fn cmd_package(args: &[String]) -> Result<(), String> {
         }
     }
 
+    // The agents' files: from the build output, or the project itself when
+    // the build did not copy them.
+    let agents_root = if build.join("agents").is_dir() {
+        build.clone()
+    } else {
+        project.to_path_buf()
+    };
+    let files = elpian_host::agents::read_agent_files(&agents_root)?;
+
+    // The manifest's agents must be satisfiable by what is packaged: an
+    // unknown tool, a missing skill or instructions file is an error now,
+    // not when a host tries to load it.
+    let mut probe = elpian_host::app::AppDefinition::new(id);
+    for name in &declared_names {
+        let kind = declared
+            .iter()
+            .find(|e| e["name"].as_str() == Some(name))
+            .and_then(|e| e["kind"].as_str())
+            .unwrap_or("action");
+        let kind = if kind == "component" {
+            elpian_host::app::FunctionKind::Component
+        } else {
+            elpian_host::app::FunctionKind::Action
+        };
+        probe = probe.with_function(name, kind, Vec::new());
+    }
+    probe
+        .with_manifest(&manifest, files.clone())
+        .map_err(|e| format!("elpian.app.json: {e}"))?;
+    for (path, data) in files {
+        entries.push(Entry { name: path, data });
+    }
+
     let package = Package { manifest, entries };
     let bytes = package.write(&key_for_signing(&flags));
     std::fs::write(out, &bytes).map_err(|e| format!("{out}: {e}"))?;
@@ -362,6 +396,7 @@ fn cmd_install(args: &[String]) -> Result<(), String> {
     let store = RegistryStore::open(&registry).map_err(|e| e.message())?;
 
     let mut client = None;
+    let mut files = std::collections::BTreeMap::new();
     let mut functions = std::collections::BTreeMap::new();
     let declared_kinds: std::collections::BTreeMap<String, String> = package.manifest["functions"]
         .as_array()
@@ -388,6 +423,9 @@ fn cmd_install(args: &[String]) -> Result<(), String> {
                 functions.insert(name.to_string(), (kind, address));
             }
             None if entry.name == "client" => client = Some(address),
+            None if entry.name.starts_with("agents/") => {
+                files.insert(entry.name.clone(), address);
+            }
             None => {}
         }
     }
@@ -401,6 +439,8 @@ fn cmd_install(args: &[String]) -> Result<(), String> {
         network: package.manifest["network"].clone(),
         limits: package.manifest["limits"].clone(),
         installed_at: now_millis(),
+        files,
+        manifest: package.manifest.clone(),
     };
     store.install(&id, record).map_err(|e| e.message())?;
 

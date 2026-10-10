@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
@@ -6,6 +7,7 @@ import '../canvas/canvas_context_store.dart';
 import '../core/dom_api.dart';
 import '../core/elpian_services.dart';
 import 'host_api_catalog.dart';
+import '../a2ui/elpian.dart';
 
 typedef RenderHostCallback = void Function(
   Map<String, dynamic> viewJson,
@@ -72,6 +74,28 @@ class HostHandler {
   /// switch. Left null, every call the handler implements is serviced.
   final bool Function(String apiName)? onAuthorize;
 
+  /// Service a host call, asynchronously where the API is: `agent.send` and
+  /// `agent.action` answer once the agent has named the conversation. Register
+  /// this (rather than [handleHostCall]) with a VM client — its handlers may
+  /// return a `Future`.
+  FutureOr<String> dispatch(String apiName, String payload) {
+    if (VmHostApiCatalog.agentApiNames.contains(apiName)) {
+      if (!_authorized(apiName)) return _nullResponse();
+      return handleAgentHostCall(services, apiName, payload);
+    }
+    return handleHostCall(apiName, payload);
+  }
+
+  bool _authorized(String apiName) {
+    if (onAuthorize == null || onAuthorize!(apiName)) return true;
+    onCallRefused?.call(apiName);
+    assert(() {
+      debugPrint('HostHandler[${services.appId}]: $apiName refused by policy');
+      return true;
+    }());
+    return false;
+  }
+
   String handleHostCall(String apiName, String payload) {
     if (onAuthorize != null && !onAuthorize!(apiName)) {
       onCallRefused?.call(apiName);
@@ -91,6 +115,9 @@ class HostHandler {
     if (VmHostApiCatalog.canvasApiNames.contains(apiName)) {
       return _handleCanvasApi(apiName, payload);
     }
+    if (VmHostApiCatalog.agentApiNames.contains(apiName)) {
+      return _handleAgentApiSync(apiName, payload);
+    }
 
     switch (apiName) {
       case 'render':
@@ -106,6 +133,33 @@ class HostHandler {
       default:
         return _unserviced(apiName);
     }
+  }
+
+  /// The synchronous form of the agent APIs, for callers that cannot await
+  /// ([dispatch] is preferred): `a2ui.dataModel` answers as usual; a turn is
+  /// started and the reply carries the conversation id known so far.
+  String _handleAgentApiSync(String apiName, String payload) {
+    if (apiName == 'a2ui.dataModel') {
+      final args = agentCallArgs(payload);
+      final key = args['conversation'] is String &&
+              (args['conversation'] as String).isNotEmpty
+          ? args['conversation'] as String
+          : 'agent:${args['agent'] ?? ''}';
+      final surfaceId = args['surfaceId'];
+      final conversation = a2uiRegistry(services)[key];
+      if (conversation == null || surfaceId is! String) return _nullResponse();
+      return valueResponse(conversation.dataModel(surfaceId));
+    }
+    unawaited(handleAgentHostCall(services, apiName, payload));
+    final args = agentCallArgs(payload);
+    final key = args['conversation'] is String &&
+            (args['conversation'] as String).isNotEmpty
+        ? args['conversation'] as String
+        : 'agent:${args['agent'] ?? ''}';
+    return _makeResponse('object', {
+      'conversationId': a2uiRegistry(services)[key]?.conversationId,
+      'conversation': key,
+    });
   }
 
   /// The reply for a host API this handler does not implement.

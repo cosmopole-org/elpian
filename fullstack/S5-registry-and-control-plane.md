@@ -190,7 +190,7 @@ compile.
 | `elpian-host/src/gateway/admin.rs` | **New** — the admin API |
 | `cli/elpian_client/lib/main.dart` | Manifest URL from the app path; verify artifact hash; configure net policy + server endpoint |
 | `flutter/lib/src/superapp/mini_app.dart` | Keep in lockstep with `policy.rs` via the corpus |
-| `test/fixtures/policy_corpus.json` | **New** — shared conformance cases (S8) |
+| `flutter/test/fixtures/policy_corpus.json` | **New** — shared conformance cases (S8) |
 
 ## 8. Verification
 

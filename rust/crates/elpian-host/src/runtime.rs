@@ -113,6 +113,9 @@ pub struct AppRuntime {
     cache: RenderCache,
     pool: Arc<InstancePool>,
     quotas: QuotaEnforcer,
+    /// Agent conversations, per (app, agent, user, id).
+    conversations: elpian_agent::ConversationStore,
+    agent_settings: RwLock<crate::agents::AgentSettings>,
 }
 
 impl AppRuntime {
@@ -126,6 +129,8 @@ impl AppRuntime {
             cache: RenderCache::new(DEFAULT_RENDER_CACHE_ENTRIES),
             pool: InstancePool::new(PoolConfig::default()),
             quotas: QuotaEnforcer::new(),
+            conversations: elpian_agent::ConversationStore::default(),
+            agent_settings: RwLock::new(crate::agents::AgentSettings::default()),
         })
     }
 
@@ -144,6 +149,8 @@ impl AppRuntime {
             cache: RenderCache::new(DEFAULT_RENDER_CACHE_ENTRIES),
             pool: InstancePool::with_meters(PoolConfig::default(), meters),
             quotas: QuotaEnforcer::new(),
+            conversations: elpian_agent::ConversationStore::default(),
+            agent_settings: RwLock::new(crate::agents::AgentSettings::default()),
         })
     }
 
@@ -207,8 +214,31 @@ impl AppRuntime {
         if !valid_app_id(&app.id) {
             return false;
         }
+        // A new version's agents start new conversations: the old histories
+        // were made with other instructions and tools.
+        self.conversations.clear_app(&app.id);
         self.write_apps().insert(app.id.clone(), app);
         true
+    }
+
+    /// Agent conversations on this host.
+    pub fn conversations(&self) -> &elpian_agent::ConversationStore {
+        &self.conversations
+    }
+
+    /// How agents pick their provider and find their keys.
+    pub fn set_agent_settings(&self, settings: crate::agents::AgentSettings) {
+        *self
+            .agent_settings
+            .write()
+            .unwrap_or_else(|p| p.into_inner()) = settings;
+    }
+
+    pub fn agent_settings(&self) -> crate::agents::AgentSettings {
+        self.agent_settings
+            .read()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone()
     }
 
     pub fn unregister(&self, app_id: &str) -> bool {

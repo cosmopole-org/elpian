@@ -222,6 +222,9 @@ fun reconcileChildren(parent: RenderObject, ws: List<W>, owner: RenderOwner) {
         result[newTop] = if (match != null) updateRenderObject(match, w, owner) else createRenderObject(w, owner, parent)
         newTop++
     }
+    // The bottom run matched above, in order (after the middle, which may have
+    // shrunk or grown — so resume at the bottom run's first old object).
+    oldTop = oldBottom + 1
     newBottom = ws.size - 1
     oldBottom = old.size - 1
     while (oldTop <= oldBottom && newTop <= newBottom) {

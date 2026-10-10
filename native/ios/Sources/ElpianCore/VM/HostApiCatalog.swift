@@ -226,6 +226,14 @@ public enum HostApiCatalog {
         "ctx.user",
     ]
 
+    /// A mini app talking to its own agents, and reading the A2UI surfaces
+    /// they produced.
+    public static let agentApiNames: Set<String> = [
+        "agent.send",
+        "agent.action",
+        "a2ui.dataModel",
+    ]
+
     /// Module import and management of other VM instances.
     public static let vmApiNames: Set<String> = [
         "vm.import",
@@ -262,10 +270,14 @@ public enum HostApiCatalog {
         .union(surfaceApiNames)
         .union(serverApiNames)
         .union(stateApiNames)
+        .union(agentApiNames)
         .union(vmApiNames)
 
     /// The capability that gates each API (`Capability::for_api`).
     public static let capabilityOf: [String: String] = [
+        "a2ui.dataModel": "agents",
+        "agent.action": "agents",
+        "agent.send": "agents",
         "cache.revalidate": "state",
         "canvas.addColorStop": "canvas",
         "canvas.addCommand": "canvas",

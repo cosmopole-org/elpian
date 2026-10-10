@@ -17,20 +17,27 @@ class EventEnabledWidget extends StatefulWidget {
   /// dispatch, and pointer, hover and keyboard events are still wired.
   final bool handleGestures;
 
-  const EventEnabledWidget({
+  /// The dispatcher of the mini app being rendered. Captured when the widget
+  /// is built — inside the engine's service scope — because the state mounts
+  /// later, outside it, where `ElpianServices.current` is the shared set.
+  final EventDispatcher dispatcher;
+
+  EventEnabledWidget({
     Key? key,
     required this.child,
     required this.node,
     this.parentId,
     this.handleGestures = true,
-  }) : super(key: key);
+    EventDispatcher? dispatcher,
+  })  : dispatcher = dispatcher ?? ElpianServices.current.events,
+        super(key: key);
 
   @override
   State<EventEnabledWidget> createState() => _EventEnabledWidgetState();
 }
 
 class _EventEnabledWidgetState extends State<EventEnabledWidget> {
-  final EventDispatcher _dispatcher = ElpianServices.current.events;
+  late final EventDispatcher _dispatcher = widget.dispatcher;
   late String _elementId;
   final FocusNode _focusNode = FocusNode();
 

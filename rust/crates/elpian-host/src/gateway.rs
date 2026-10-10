@@ -7,6 +7,7 @@
 //! GET  /apps/<app>/client.bc       the client half's bytecode
 //! POST /apps/<app>/fn/<name>       invoke an action
 //! POST /apps/<app>/render/<name>   invoke a server component
+//! POST /apps/<app>/agent/<agent>   one turn of an agent conversation (NDJSON)
 //! ```
 //!
 //! The app id comes from the **path**, which the gateway parsed, and is handed
@@ -106,6 +107,12 @@ fn route(gateway: &Arc<Gateway>, request: &Request) -> Reply {
             return stream_route(gateway, app, function, request);
         }
         return Response::error(405, "use POST to invoke a function").into();
+    }
+    if let ["apps", app, "agent", agent] = segments.as_slice() {
+        if request.method == "POST" {
+            return agent_route(gateway, app, agent, request);
+        }
+        return Response::error(405, "use POST to talk to an agent").into();
     }
     route_whole(gateway, request).into()
 }
@@ -352,6 +359,58 @@ fn stream_route(gateway: &Arc<Gateway>, app_id: &str, function: &str, request: &
             let _ = socket.write_all(format!("{line}\n").as_bytes());
             let _ = socket.flush();
         }
+    }))
+}
+
+/// One turn of an agent conversation, streamed as NDJSON.
+///
+/// Every line is one JSON object, in this order: `{"type":"conversation",
+/// "conversationId"}` first; then A2UI messages verbatim (no `type` key — a
+/// reader detects them by their `createSurface` / `updateComponents` /
+/// `updateDataModel` / `deleteSurface` key), `{"type":"text","text"}`,
+/// `{"type":"status","state":"working"|"tool","tool"?}` and
+/// `{"type":"error","message"}` as they happen; `{"type":"done","stopReason"}`
+/// last. Refusals that happen before the stream starts are ordinary statuses:
+/// 400 bad body, 404 unknown app or agent, 409 conversation busy, 429 over
+/// quota, 503 provider not configured.
+fn agent_route(gateway: &Arc<Gateway>, app_id: &str, agent: &str, request: &Request) -> Reply {
+    let body: Value = if request.body.is_empty() {
+        Value::Null
+    } else {
+        match serde_json::from_slice(&request.body) {
+            Ok(value) => value,
+            Err(e) => return Response::error(400, &format!("body is not valid JSON: {e}")).into(),
+        }
+    };
+    let user = gateway.auth.verify(request.header("authorization"));
+    let turn = match gateway
+        .runtime
+        .prepare_agent_turn(app_id, agent, &body, user)
+    {
+        Ok(turn) => turn,
+        Err(error) => {
+            match &error {
+                crate::agents::AgentError::Unavailable(detail) => {
+                    eprintln!("[elpian] {app_id}/agent/{agent} unavailable: {detail}")
+                }
+                crate::agents::AgentError::OverQuota { stage, axis } => {
+                    eprintln!("[elpian] {app_id}/agent/{agent} refused: {stage} on {axis}")
+                }
+                _ => {}
+            }
+            return Response::error(error.status(), &error.client_message()).into();
+        }
+    };
+
+    Reply::Stream(Box::new(move |socket| {
+        if begin_stream(socket, "application/x-ndjson").is_err() {
+            return;
+        }
+        turn.run(&mut |frame| {
+            let mut line = frame.to_string();
+            line.push('\n');
+            socket.write_all(line.as_bytes()).is_ok() && socket.flush().is_ok()
+        });
     }))
 }
 

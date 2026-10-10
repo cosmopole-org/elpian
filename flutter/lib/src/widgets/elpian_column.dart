@@ -25,14 +25,25 @@ class ElpianColumn {
         children: children,
       );
     } else {
-      result = Column(
-        mainAxisAlignment:
-            CSSProperties.getMainAxisAlignment(style?.justifyContent),
-        crossAxisAlignment:
-            CSSProperties.getCrossAxisAlignment(style?.alignItems),
-        mainAxisSize: MainAxisSize.max,
-        children: _addGap(children, gap),
-      );
+      final cross = CSSProperties.getCrossAxisAlignment(style?.alignItems);
+      Column flex(CrossAxisAlignment crossAxisAlignment) => Column(
+            mainAxisAlignment:
+                CSSProperties.getMainAxisAlignment(style?.justifyContent),
+            crossAxisAlignment: crossAxisAlignment,
+            mainAxisSize: MainAxisSize.max,
+            children: _addGap(children, gap),
+          );
+      // `stretch` needs a bounded cross axis — Flutter throws on an unbounded
+      // one (a column inside a row). There CSS stretch has
+      // nothing to fill, so fall back to start alignment instead.
+      result = cross == CrossAxisAlignment.stretch
+          ? LayoutBuilder(
+              builder: (context, constraints) => flex(
+                  constraints.maxWidth.isFinite
+                      ? CrossAxisAlignment.stretch
+                      : CrossAxisAlignment.start),
+            )
+          : flex(cross);
     }
 
     if (style != null) {

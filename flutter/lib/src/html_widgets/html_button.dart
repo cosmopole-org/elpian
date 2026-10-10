@@ -5,6 +5,9 @@ import '../core/event_system.dart';
 
 class HtmlButton {
   static Widget build(ElpianNode node, List<Widget> children) {
+    // Captured while the engine's service scope is active: the handlers
+    // run later, outside it.
+    final dispatcher = ElpianServices.current.events;
     final text = node.props['text'] as String? ?? 'Button';
     final textColor = node.style?.color ?? Colors.white;
     final child = children.isNotEmpty
@@ -15,7 +18,6 @@ class HtmlButton {
 
     Widget result = ElevatedButton(
       onPressed: () {
-        final dispatcher = ElpianServices.current.events;
         // Dispatch both 'click' and 'tap' so that handlers registered
         // under either name are triggered (e.g. QuickJS events: { tap: fn }).
         dispatcher.dispatchClick(elementId);

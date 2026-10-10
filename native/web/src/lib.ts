@@ -55,5 +55,8 @@ export * from './session/nextjs.js';
 export * from './fullstack/server.js';
 export * from './superapp/superapp.js';
 
+// Agentic UI (A2UI)
+export * from './a2ui/index.js';
+
 // Bridges
 export * from './bridge/sessions.js';

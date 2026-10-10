@@ -225,6 +225,14 @@ val stateApiNames: Set<String> = linkedSetOf(
   "ctx.user",
 )
 
+/** A mini app talking to its own agents, and reading the A2UI surfaces
+ * they produced. */
+val agentApiNames: Set<String> = linkedSetOf(
+  "agent.send",
+  "agent.action",
+  "a2ui.dataModel",
+)
+
 /** Module import and management of other VM instances. */
 val vmApiNames: Set<String> = linkedSetOf(
   "vm.import",
@@ -261,11 +269,15 @@ val allHostApiNames: Set<String> = LinkedHashSet<String>().apply {
   addAll(surfaceApiNames)
   addAll(serverApiNames)
   addAll(stateApiNames)
+  addAll(agentApiNames)
   addAll(vmApiNames)
 }
 
 /** The capability that gates each API (`Capability::for_api`). */
 val capabilityOf: Map<String, String> = linkedMapOf(
+  "a2ui.dataModel" to "agents",
+  "agent.action" to "agents",
+  "agent.send" to "agents",
   "cache.revalidate" to "state",
   "canvas.addColorStop" to "canvas",
   "canvas.addCommand" to "canvas",

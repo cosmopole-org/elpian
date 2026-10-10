@@ -1,7 +1,10 @@
 # 11 — Canvas 2D and the embedded Godot `Scene3D`
 
-Elpian has two rendering surfaces beyond the widget tree: a 2D canvas drawn by
-Flutter's own engine, and **`Scene3D`, an embedded Godot 4 engine**.
+Elpian has two rendering surfaces beyond the widget tree: a 2D canvas, and
+**`Scene3D`, an embedded Godot 4 engine**. Both work on both host modes: the
+Flutter host draws the canvas with Flutter's engine, the native hosts with the
+platform's own 2D API (Canvas2D on the web, `android.graphics` on Android,
+CoreGraphics on iOS), and all of them drive the same Godot op protocol.
 
 > **This chapter changed.** Elpian previously had two in-house 3D renderers — a
 > Bevy (Rust/GPU) bridge and a pure-Dart software renderer, reached through
@@ -13,8 +16,11 @@ Flutter's own engine, and **`Scene3D`, an embedded Godot 4 engine**.
 
 # Canvas 2D
 
-An HTML5-Canvas-shaped API over Flutter's Skia engine. Two ways to drive it: a
-command list in a node, or imperative host calls.
+An HTML5-Canvas-shaped API over Flutter's Skia engine (Flutter host) or the
+platform's 2D API (native hosts: `native/web/src/dom/canvas.ts` and its Android /
+iOS `CanvasPainter`s, fed by the shared command store in
+`native/web/src/canvas/`). Two ways to drive it: a command list in a node, or
+imperative host calls.
 
 ## As a node
 
@@ -81,7 +87,8 @@ and constant, including ones added in future Godot versions — and the Dart sid
 only transports ops and marshals values.
 
 The op vocabulary is identical to Victor's, so the C++ interpreter is reused
-verbatim; only the transport differs (Flutter platform channels here, JSI there).
+verbatim; only the transport differs (Flutter platform channels here, JSI there,
+and the native hosts' own bindings — see [Native hosts](#native-hosts) below).
 
 ```
 Dart                                  │ Kotlin                │ Godot 4
@@ -251,6 +258,21 @@ it behaves exactly like the mock. See [`godot/README.md`](../godot/README.md) fo
 the wiring, and note the platform limit: **one `Scene3D` per page on the web**,
 because a Godot web export drives a single canvas.
 
+### Native hosts
+
+The native engines port `GodotController` and the scene DSL
+(`native/web/src/godot/`, and the Kotlin / Swift ports) and render `Scene3D` as
+a `scene3d` platform view, with one binding per platform:
+
+| Host | Binding | Engine |
+|---|---|---|
+| Android (`native/android`) | `AndroidGodotBinding` | the `godot/` engine-side Kotlin, opt-in with `-Pelpian.godot=true` |
+| iOS (`native/ios`) | `IOSGodotBinding` | a linked Godot runtime plugged into the `ElpianGodotRuntime` hooks |
+| Web (`@elpian/web`) | `WebGodotBinding` (`native/web/src/dom/godot.ts`) | the same Godot HTML5 export and `window` protocol as Flutter web |
+
+Without an engine, each reports not live and `Scene3D` shows its placeholder,
+exactly as on Flutter.
+
 ## Layout interaction
 
 A subtree containing `Scene3D` / `scene3d` makes its root **viewport-locked**: it
@@ -281,14 +303,17 @@ el('Scene3D', {
 
 ## Getting a real engine
 
-`elpian_ui` ships the Dart side only. The engine lives in the **`elpian_godot`**
-package at the repo root; depend on it from your app:
+On the Flutter host, `elpian_ui` ships the Dart side only. The engine lives in
+the **`elpian_godot`** package (`godot/`); depend on it from your app:
 
 ```yaml
 dependencies:
-  elpian_ui:    { path: ../ }
-  elpian_godot: { path: ../godot }   # ← turns the placeholder into a viewport
+  elpian_ui:    { path: ../elpian/flutter }
+  elpian_godot: { path: ../elpian/godot }   # ← turns the placeholder into a viewport
 ```
+
+(Native hosts: see the table above and
+[`23-native-hosts.md`](23-native-hosts.md).)
 
 It is deliberately *not* a dependency of `elpian_ui`: the Godot library AAR is
 ~21 MB and an app with no 3D should not pay for it. The example app depends on
@@ -305,5 +330,5 @@ See the plugin's README for the by-hand recipe and for the
 `FlutterFragmentActivity` requirement.
 
 **Status:** the Dart side is complete and tested; the native side of
-`elpian_godot` has not yet been compiled. iOS is not implemented — `Scene3D`
-returns its placeholder there.
+`elpian_godot` (Android, iOS) has not yet been compiled — see the status in
+[`godot/README.md`](../godot/README.md).

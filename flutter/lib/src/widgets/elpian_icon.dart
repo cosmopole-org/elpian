@@ -1,12 +1,30 @@
 import 'package:flutter/material.dart';
 import '../models/elpian_node.dart';
 import '../css/css_properties.dart';
+import 'svg_path.dart';
 
 class ElpianIcon {
   static Widget build(ElpianNode node, List<Widget> children) {
     final iconName = node.props['icon'] as String? ?? 'star';
     final size = node.style?.fontSize ?? node.props['size'] as double? ?? 24.0;
     final color = node.style?.color;
+
+    // `svgPath`: an SVG path in a 24x24 viewBox (A2UI's custom icons), painted
+    // directly — there is no SVG decoder to hand it to.
+    final svgPath = node.props['svgPath'];
+    if (svgPath is String && svgPath.isNotEmpty) {
+      final label = node.props['semanticLabel'] as String?;
+      Widget icon = SvgPathIcon(
+        path: svgPath,
+        size: size,
+        color: color,
+      );
+      if (label != null && label.isNotEmpty) {
+        icon = Semantics(label: label, image: true, child: icon);
+      }
+      if (node.style != null) icon = CSSProperties.applyStyle(icon, node.style);
+      return icon;
+    }
 
     Widget result = Icon(
       _getIcon(iconName),
@@ -20,6 +38,9 @@ class ElpianIcon {
 
     return result;
   }
+
+  /// Whether [name] names a known icon (others render as a star).
+  static bool hasIcon(String name) => _iconMap.containsKey(name.toLowerCase());
 
   static IconData _getIcon(String name) {
     return _iconMap[name.toLowerCase()] ?? Icons.star;
@@ -71,6 +92,19 @@ class ElpianIcon {
     'upload': Icons.upload,
     'refresh': Icons.refresh,
     'sync': Icons.sync,
+    // A2UI basic-catalog icons
+    'account_circle': Icons.account_circle,
+    'call': Icons.call,
+    'event': Icons.event,
+    'fast_forward': Icons.fast_forward,
+    'fast_rewind': Icons.fast_rewind,
+    'mail': Icons.mail,
+    'notifications_off': Icons.notifications_off,
+    'print': Icons.print,
+    'skip_next': Icons.skip_next,
+    'skip_previous': Icons.skip_previous,
+    'volume_down': Icons.volume_down,
+    'volume_mute': Icons.volume_mute,
     // Communication
     'email': Icons.email,
     'phone': Icons.phone,

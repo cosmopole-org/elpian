@@ -1,8 +1,10 @@
 # 07 — The UI model: nodes, props, events, rendering
 
-The VM has no widget concept. A guest produces **JSON**, and the Flutter host
-(`ElpianEngine`) turns it into a real widget tree. This chapter is the contract
-between the two. Get it right and everything else follows.
+The VM has no widget concept. A guest produces **JSON**, and the host turns it
+into a real UI: the Flutter host (`ElpianEngine`) into a Flutter widget tree,
+the native hosts (`native/`) into Android Views, UIKit views or DOM elements.
+This chapter is the contract between guest and host; it is the same on both
+host modes. Get it right and everything else follows.
 
 ## The node shape
 
@@ -26,7 +28,8 @@ between the two. Get it right and everything else follows.
 | `children` | array | Child nodes, recursively |
 | `key` | string | Stable identity; also used as the CSS `#id` selector |
 
-`ElpianNode.fromJson` (`flutter/lib/src/models/elpian_node.dart`) parses exactly this.
+`ElpianNode.fromJson` (`flutter/lib/src/models/elpian_node.dart`; natively
+`native/web/src/model/` and its Kotlin / Swift ports) parses exactly this.
 A top-level `style` is folded into `props['style']` if props does not already
 have one, so both spellings work for styling.
 
@@ -126,8 +129,9 @@ The event object's shape is in [`10-events.md`](10-events.md).
 ## Scoped rendering — partial updates
 
 Re-emitting the whole tree on every keystroke is wasteful. `Scope` nodes create
-**independent re-render boundaries** (`flutter/lib/src/vm/scoped_components.dart`,
-`flutter/lib/src/vm/scope_patch.dart`).
+**independent re-render boundaries** (`flutter/lib/src/scope/scoped_components.dart`,
+`flutter/lib/src/scope/scope_patch.dart`; natively `native/web/src/scope/scope.ts`
+and its ports).
 
 ```dart
 Map<String, dynamic> scopedComponent(String key, Map<String, dynamic> component)
@@ -196,11 +200,12 @@ stage, never a scrolling document — scenes cannot be measured for intrinsic
 height, so document-scrolling one would break its `flex`/`100%` fill.
 
 Otherwise the root is wrapped in a `SingleChildScrollView` + `ConstrainedBox`
-with `minHeight` from the incoming constraints.
+with `minHeight` from the incoming constraints (the native hosts port this as
+`wrapAsDocument`: a scroll view whose content is at least the viewport tall).
 
 ---
 
-## Embedding: `ElpianVmWidget`
+## Embedding: `ElpianVmWidget` (Flutter) and `miniapp` sessions (native)
 
 The Flutter side of the contract (`flutter/lib/src/vm/elpian_vm_widget.dart`):
 
@@ -239,6 +244,23 @@ Driving the VM from Dart:
 ```dart
 Future<String> callVmFunction(String funcName, {String? input});
 ```
+
+On the native hosts the same parameters are the options of a `miniapp`
+session — `machineId`, `runtime` (`elpian` / `quickjs` / `wasm`), `code` /
+`astJson` / `bytecodeBase64`, `stylesheet`, `entryFunction`, `entryInput` — and
+`println` / `updateApp` arrive as session events:
+
+```kotlin
+view.open("miniapp", mapOf("runtime" to "elpian", "astJson" to astJson, "entryFunction" to "main"))
+view.on("println") { Log.i("app", it.toString()) }
+view.call("callFunction", "onTap", "{}")          // suspend; from a coroutine
+```
+
+```js
+const app = await mountElpian(el, 'miniapp', { runtime: 'elpian', bytecodeBase64, entryFunction: 'main' });
+```
+
+See [`23-native-hosts.md`](23-native-hosts.md#sessions) for every session kind.
 
 ---
 

@@ -3,7 +3,12 @@
 40+ event types, three propagation phases, tree-aware dispatch, and a bridge
 that turns a tap into a VM function call. Sources: `flutter/lib/src/core/event_system.dart`,
 `event_dispatcher.dart`, `event_enabled_widget.dart`, and the routing in
-`flutter/lib/src/vm/elpian_vm_widget.dart`. Narrative reference: `EVENT_SYSTEM.md`.
+`flutter/lib/src/vm/elpian_vm_widget.dart`. The native hosts port the same
+system (`native/web/src/events/events.ts`, routed by
+`native/web/src/session/miniapp.ts`, and the Kotlin / Swift ports): platform
+views report raw events (`tap`, drags, scroll, input, …), the engine routes them
+through the same capture / target / bubble phases, and the guest sees the same
+event names and objects on both host modes.
 
 ## Declaring a handler
 
@@ -235,7 +240,8 @@ Beyond node-attached handlers, the system provides:
 ## Timers, not `async`
 
 There is no `async`/`await` in the guest. Deferred work uses the timer host APIs
-(`flutter/lib/src/vm/timer_host_api.dart`), which call back into the VM by function name:
+(`flutter/lib/src/vm/timer_host_api.dart`; natively `native/web/src/host/timers.ts`
+and its ports), which call back into the VM by function name:
 
 ```ts
 askHost('setTimeout', ['tick', 1000]);
@@ -269,7 +275,8 @@ See [`12-host-apis.md`](12-host-apis.md).
    next line after the render that drew it.
 5. **A handler that throws is retried without arguments**, then swallowed with a
    `debugPrint`. If nothing happens and no error surfaces, check the Flutter
-   console for `ElpianVmWidget: Error calling event handler "…"`.
+   console for `ElpianVmWidget: Error calling event handler "…"` (native hosts
+   log `ElpianMiniApp: Error calling event handler "…"` as a warning).
 
 ---
 

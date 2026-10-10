@@ -911,7 +911,7 @@ class NextjsSession(surfaceId: String, val options: NextjsSessionOptions) {
 
     private fun hostHandlers(handler: HostHandler, timers: VmTimerHostApi, vm: () -> VmRuntimeClient?): Map<String, HostCallHandler> {
         val out = LinkedHashMap<String, HostCallHandler>()
-        for (api in allHostApiNames) out[api] = { n, p -> HostReply.of(handler.handleHostCall(n, p)) }
+        for (api in allHostApiNames) out[api] = { n, p -> handler.handleHostCallReply(n, p) }
         for (api in timerApiNames) out[api] = { n, p -> HostReply.of(timers.handle(n, p)) }
         // Async work is started and acknowledged at once: guests call askHost
         // synchronously and receive results through their onData/onResult callbacks.

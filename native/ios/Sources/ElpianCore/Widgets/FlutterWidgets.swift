@@ -161,7 +161,12 @@ private func parseAlignmentProp(_ v: Any?, _ fallback: Alignment) -> Alignment {
 
 private final class TextValueState {
     var value: String
-    init(_ value: String) { self.value = value }
+    /** The `value` prop last seen (nil when absent) — a change of it wins over local edits. */
+    var lastProp: String?
+    init(_ value: String, _ lastProp: String? = nil) {
+        self.value = value
+        self.lastProp = lastProp
+    }
 }
 
 private final class DismissState {
@@ -251,8 +256,9 @@ private func buildPositioned(_ node: ElpianNode, _ children: [W], _ ctx: BuildCo
 
 private func buildListView(_ node: ElpianNode, _ children: [W], _ ctx: BuildContext) -> W {
     let scrollable = !node.props.isFalse("scrollable")
-    let list = w("flex", ["direction": "column", "crossAxisAlignment": "stretch", "mainAxisSize": "min"], children)
-    let result = w("scroll", ["axis": node.props.s("scrollDirection") == "horizontal" ? "horizontal" : "vertical", "enabled": scrollable], child: list)
+    let horizontal = node.props.s("scrollDirection") == "horizontal"
+    let list = w("flex", ["direction": horizontal ? "row" : "column", "crossAxisAlignment": horizontal ? "start" : "stretch", "mainAxisSize": "min"], children)
+    let result = w("scroll", ["axis": horizontal ? "horizontal" : "vertical", "enabled": scrollable], child: list)
     return applyStyle(result, node.style, ApplyStyleOptions(), ctx)
 }
 
@@ -270,7 +276,13 @@ private func buildGridView(_ node: ElpianNode, _ children: [W], _ ctx: BuildCont
 }
 
 private func buildTextField(_ node: ElpianNode, _ children: [W], _ ctx: BuildContext) -> W {
-    let state = ctx.engine.stateFor(ctx.elementId) { TextValueState(jsString(node.props["value"] ?? "")) }
+    let incoming: String? = node.props["value"] != nil ? jsString(node.props["value"]) : nil
+    let state = ctx.engine.stateFor(ctx.elementId) { TextValueState(incoming ?? "", incoming) }
+    // didUpdateWidget: a changed `value` prop (e.g. a bound model update) wins.
+    if incoming != state.lastProp {
+        if let incoming = incoming { state.value = incoming }
+        state.lastProp = incoming
+    }
     let s = node.style
     let textStyle = TextStyle.BODY_LARGE.merge(createTextStyle(s))
     let lines = max(1, num(node.props["maxLines"]) ?? 1)
@@ -291,6 +303,8 @@ private func buildTextField(_ node: ElpianNode, _ children: [W], _ ctx: BuildCon
                 "enabled": !p.isFalse("enabled"),
                 "readOnly": p.b("readOnly"),
                 "autofocus": p.b("autofocus"),
+                "min": p["min"],
+                "max": p["max"],
                 "variant": "underline",
                 "textStyle": textStyle.toSpec(),
                 "hintStyle": textStyle.with { $0.color = M3.onSurfaceVariant }.toSpec(),

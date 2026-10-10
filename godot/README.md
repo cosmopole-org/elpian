@@ -9,6 +9,10 @@ is present. Adding *this* package to an app supplies the engine.
 It is a separate package on purpose: the Godot library AAR is ~21 MB, and an app
 with no 3D should not pay for it.
 
+This package is the Flutter host's Godot plugin. The native hosts (`native/`)
+use the same engine artifacts and op protocol without Flutter — see
+[Native hosts](#native-hosts) below.
+
 ## Architecture
 
 ```
@@ -156,10 +160,12 @@ Two limits worth knowing:
   so this is a non-issue in practice, but an engine that arrives *after* the
   first `Scene3D` builds will not light it up until something else rebuilds it.
 
-The Dart↔page contract is covered by `test/godot_web_transport_test.dart`, which
+The Dart↔page contract is covered by `flutter/test/godot_web_transport_test.dart`, which
 runs in a real browser with no engine present and is executed by CI.
 
-## Native Android (Kotlin core)
+## Native hosts
+
+### Android (Kotlin core)
 
 `native/android`'s `:elpian` module reuses this package's engine-side sources
 (`OpQueue`, `ElpianGodotBridge`, `ElpianGodotFragment` — not the Flutter
@@ -177,6 +183,23 @@ automatically. Either way the engine is resolved as
 `AndroidGodotBinding.isLive` is false and `Scene3D` shows its placeholder. The
 host passes a `GodotSurfaceHost` (the view group laid out for each surface)
 and must run in a `FragmentActivity`.
+
+### iOS (Swift core)
+
+`native/ios`'s `Elpian` module exposes the same plain function hooks as this
+package's `GodotRuntimeHost`, as `ElpianGodotRuntime` (`attach`, `opSink`,
+`release`, plus `reply` / `signal` back), driven by `IOSGodotBinding`
+(`native/ios/Sources/Elpian/Godot/`). A runtime written for one serves both;
+without one, `Scene3D` shows its placeholder.
+
+### Web (`@elpian/web`)
+
+`native/web/src/dom/godot.ts` (`WebGodotBinding`) speaks the same `window`
+protocol as the Flutter web binding above, so the same export and the same
+[`web/elpian_godot_web.js`](web/elpian_godot_web.js) glue light it up; the
+glue's `__elpianGodotSurface(id)` hands the DOM host the element hosting the
+engine canvas. The same limits
+apply (one `Scene3D` per page; liveness is `window.__elpianGodotDrain`).
 
 ## Status
 

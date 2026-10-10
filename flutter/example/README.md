@@ -1,16 +1,14 @@
 # elpian_ui_example
 
-A new Flutter project.
+The Flutter host's demo app: one screen per example in `lib/examples/`
+(landing page, canvas, JSON stylesheets, QuickJS calculator and whiteboard,
+`Scene3D`, the VM, the showcase, …).
 
-## Getting Started
+```sh
+flutter run -d chrome                                    # lib/main.dart: the 2D example picker on web
+flutter run -t lib/examples/landing_page_example.dart    # one example directly
+```
 
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+The same mini apps run without Flutter on the native hosts in
+[`../../native/`](../../native/) — see
+[`../../wiki/23-native-hosts.md`](../../wiki/23-native-hosts.md).

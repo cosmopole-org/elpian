@@ -65,7 +65,24 @@ public final class HostHandler {
 
     /** This handler as a runtime's synchronous [HostCallHandler]. */
     public func asHostCallHandler() -> HostCallHandler {
-        return { [self] apiName, payload in HostReply.of(self.handleHostCall(apiName, payload)) }
+        return { [self] apiName, payload in self.handleHostCallReply(apiName, payload) }
+    }
+
+    /**
+     * Service one host call as a runtime reply. Most APIs answer synchronously;
+     * the agent APIs (`agent.send`, `agent.action`, `a2ui.dataModel`) answer
+     * later, once the agent named the conversation (the TypeScript handler's
+     * Promise).
+     */
+    public func handleHostCallReply(_ apiName: String, _ payload: String) -> HostReply {
+        guard AGENT_API_NAMES.contains(apiName) else { return .now(handleHostCall(apiName, payload)) }
+        if let onAuthorize = options.onAuthorize, !onAuthorize(apiName) {
+            options.onCallRefused?(apiName)
+            log("HostHandler[\(services.appId)]: \(apiName) refused by policy")
+            return .now(Typed.NULL_RESPONSE)
+        }
+        let services = self.services
+        return HostReply.deferred { await handleAgentHostCall(services, apiName, payload) }
     }
 
     public func handleHostCall(_ apiName: String, _ payload: String) -> String {
@@ -75,6 +92,8 @@ public final class HostHandler {
             // The typed null the VM produces for a denied capability.
             return Typed.NULL_RESPONSE
         }
+        // Synchronous callers: the turn starts and the answer carries what is known now (see handleHostCallReply).
+        if AGENT_API_NAMES.contains(apiName) { return handleAgentHostCallNow(services, apiName, payload) }
         if HostApiCatalog.domApiNames.contains(apiName) { return handleDomApi(apiName, payload) }
         if HostApiCatalog.canvasApiNames.contains(apiName) { return handleCanvasApi(apiName, payload) }
         switch apiName {

@@ -4,6 +4,7 @@
  * WASM) funnels `askHost(api, payload)` here; replies are typed JSON
  * envelopes (`{"type", "data": {"value"}}`).
  */
+import { AGENT_API_NAMES, handleAgentHostCall } from '../a2ui/elpian.js';
 import { commandFromJson, isCanvasCommandType, type CanvasCommand } from '../canvas/store.js';
 import type { ElpianServices } from '../engine/engine.js';
 import { asHostArgs, coerceJsonMap, isMap, normalizedArgs, parseVmPayload, toNumber, unwrapHostArgs, type JsonMap } from '../util/json.js';
@@ -45,7 +46,12 @@ export class HostHandler {
     this.options.log?.(message);
   }
 
-  handleHostCall(apiName: string, payload: string): string {
+  /**
+   * Service one host call. Most APIs answer synchronously; the agent APIs
+   * (`agent.send`, `agent.action`, `a2ui.dataModel`) answer with a promise —
+   * every runtime awaits host handlers.
+   */
+  handleHostCall(apiName: string, payload: string): string | Promise<string> {
     const { onAuthorize, onCallRefused } = this.options;
     if (onAuthorize && !onAuthorize(apiName)) {
       onCallRefused?.(apiName);
@@ -53,6 +59,7 @@ export class HostHandler {
       // The typed null the VM produces for a denied capability.
       return NULL_RESPONSE;
     }
+    if (AGENT_API_NAMES.has(apiName)) return this.handleAgentApi(apiName, payload);
     if (domApiNames.has(apiName)) return this.handleDomApi(apiName, payload);
     if (canvasApiNames.has(apiName)) return this.handleCanvasApi(apiName, payload);
     switch (apiName) {
@@ -80,6 +87,16 @@ export class HostHandler {
         : `HostHandler: unknown host API ${apiName}; returning null`,
     );
     return NULL_RESPONSE;
+  }
+
+  /** `agent.send` / `agent.action` / `a2ui.dataModel` — conversations shared with `A2UISurface` widgets. */
+  async handleAgentApi(apiName: string, payload: string): Promise<string> {
+    try {
+      return await handleAgentHostCall(this.services, apiName, payload);
+    } catch (e) {
+      this.log(`HostHandler: ${apiName} failed: ${e}`);
+      return makeResponse('object', { error: { message: String(e instanceof Error ? e.message : e) } });
+    }
   }
 
   handleRender(payload: string): string {

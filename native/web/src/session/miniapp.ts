@@ -8,6 +8,7 @@
  * node's `events`, applies bounded scope patches, and keeps the guest's host
  * environment (viewport, safe area, page, platform) in sync.
  */
+import { AGENT_API_NAMES } from '../a2ui/elpian.js';
 import type { ElpianEngine } from '../engine/engine.js';
 import { eventToJson, type ElpianEvent } from '../events/events.js';
 import { HostHandler } from '../host/host-handler.js';
@@ -151,6 +152,8 @@ export class MiniAppSession {
 
       const handlers: Record<string, HostCallHandler> = {};
       for (const api of allHostApiNames) handlers[api] = (name, payload) => handler.handleHostCall(name, payload);
+      // The agent APIs, also while the generated catalog does not list them yet.
+      for (const api of AGENT_API_NAMES) handlers[api] = (name, payload) => handler.handleHostCall(name, payload);
       for (const api of timerApiNames) handlers[api] = (name, payload) => this.timers!.handle(name, payload);
       Object.assign(handlers, o.hostHandlers ?? {});
       vm.registerHostHandlers(handlers);

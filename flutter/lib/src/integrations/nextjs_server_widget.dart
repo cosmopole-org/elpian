@@ -642,7 +642,7 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
 
     final handlers = <String, HostCallHandler>{
       for (final apiName in VmHostApiCatalog.allHostApiNames)
-        apiName: (name, payload) => hostHandler.handleHostCall(name, payload),
+        apiName: (name, payload) => hostHandler.dispatch(name, payload),
       for (final apiName in VmHostApiCatalog.timerApiNames)
         apiName: (name, payload) => record.timer!.handle(name, payload),
       // Let a client component fetch a fragment route and receive the decoded
@@ -1307,7 +1307,7 @@ class _NextjsServerWidgetState extends State<NextjsServerWidget> {
 
     final handlers = <String, HostCallHandler>{
       for (final apiName in VmHostApiCatalog.allHostApiNames)
-        apiName: (name, payload) => hostHandler.handleHostCall(name, payload),
+        apiName: (name, payload) => hostHandler.dispatch(name, payload),
       for (final apiName in VmHostApiCatalog.timerApiNames)
         apiName: (name, payload) => _pageTimerApi!.handle(name, payload),
       'fetch': (name, payload) => _hostFetch(payload),

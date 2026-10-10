@@ -12,12 +12,14 @@ import Foundation
  *   - `stream`    — a view driven by pushed / streamed commands.
  *   - `nextjs`    — a server-driven page (NextjsServerWidget).
  *   - `server`    — a server-rendered component (ServerComponent).
+ *   - `agent`     — a full-screen conversation with an app agent (A2UI surfaces,
+ *                   prose and a chat input); methods send / action / conversation.
  *
  * Events flow back through the `emit(surface, event, payload)` sink:
  *   ready, error, println, updateApp, routeChanged, scriptExecuted,
  *   scriptError, streamDone, command, sceneTap, callRefused, unservicedApi,
  *   navigate, result (async call results: `{requestId, ok, value | error}`,
- *   from [callAsync]).
+ *   from [callAsync]), a2uiText, a2uiAction, done (agent sessions).
  *
  * Payloads are JSON values ([JSONObject]s, arrays, strings, Doubles, Bools, nil).
  */
@@ -138,6 +140,14 @@ public final class SessionRegistry {
                     surface: surfaceOpts
                 )
             )
+            // Where this app's agents live: A2UISurface widgets and the agent.* host APIs default to it.
+            if options["baseUrl"] is String || options["appId"] is String {
+                a2uiRegistry(session.surface.engine.services).defaults = A2UIDefaults(
+                    baseUrl: options["baseUrl"] as? String,
+                    appId: options["appId"] as? String,
+                    headers: stringMap(options["headers"])
+                )
+            }
             entry = SessionEntry(
                 kind: kind,
                 surface: session.surface,
@@ -366,6 +376,64 @@ public final class SessionRegistry {
                     }
                 },
                 viewportChanged: { session.surface.viewportChanged() }
+            )
+        case "agent":
+            var agentSurfaceOpts = surfaceOpts
+            agentSurfaceOpts.document = true
+            let surface = ElpianSurface(surfaceId, agentSurfaceOpts)
+            if jsTruthy(options["stylesheet"]) { surface.engine.loadStylesheet(options["stylesheet"]) }
+            let agent = jsString(options["agent"] ?? "")
+            let registry = a2uiRegistry(surface.engine.services)
+            registry.defaults = A2UIDefaults(
+                baseUrl: jsString(options["baseUrl"] ?? ""),
+                appId: jsString(options["appId"] ?? ""),
+                headers: stringMap(options["headers"])
+            )
+            let conversation = registry.conversation("session") {
+                A2UIConversation(A2UIConversationOptions(endpoint: registry.endpoint(agent), conversationId: options["conversationId"] as? String))
+            }
+            let on: (String, @escaping (ElpianEvent) -> Void) -> (String, ElpianEventListener) = { name, fn in (name, fn) }
+            let events: [(String, ElpianEventListener)] = [
+                on("a2uiText") { e in emit("a2uiText", e.value) },
+                on("a2uiAction") { e in emit("a2uiAction", e.value) },
+                on("a2uiError") { e in emit("error", (asMap(e.value)?["message"] as? String) ?? "agent error") },
+                on("a2uiDone") { e in emit("done", e.value) },
+            ]
+            surface.setContent(a2uiElement("A2UISurface", JSONObject([
+                ("agent", agent),
+                ("conversation", "session"),
+                ("prompt", options["prompt"] as? String),
+                ("chat", jsBool(options["chat"]) != false),
+                ("showText", true),
+                ("style", JSONObject([("padding", 12.0)])),
+            ]), events: events))
+            entry = SessionEntry(
+                kind: kind,
+                surface: surface,
+                dispose: {
+                    registry.dispose()
+                    surface.dispose()
+                },
+                call: { method, args in
+                    switch method {
+                    case "send":
+                        let id = await conversation.send(jsString(arg(args, 0) ?? "")).conversationId.value()
+                        return JSONObject([("conversationId", id)])
+                    case "action":
+                        let raw = arg(args, 0)
+                        let parsed: Any? = (raw as? String).map { JSON.parseOrNil($0) } ?? raw
+                        guard let given = asMap(parsed), given["name"] is String else { throw SessionException("action needs a \"name\"") }
+                        let action = JSONObject([("timestamp", isoTimestamp(Date().timeIntervalSince1970 * 1000)), ("context", JSONObject())])
+                        action.assign(given)
+                        let id = await conversation.sendAction(action).conversationId.value()
+                        return JSONObject([("conversationId", id)])
+                    case "conversation":
+                        return conversation.describe()
+                    default:
+                        throw SessionException("agent session has no method \(method)")
+                    }
+                },
+                viewportChanged: { surface.viewportChanged() }
             )
         default:
             throw SessionException("unknown session kind \"\(kind)\"")

@@ -223,6 +223,14 @@ export const stateApiNames: ReadonlySet<string> = new Set([
   'ctx.user',
 ]);
 
+/** A mini app talking to its own agents, and reading the A2UI surfaces
+ * they produced. */
+export const agentApiNames: ReadonlySet<string> = new Set([
+  'agent.send',
+  'agent.action',
+  'a2ui.dataModel',
+]);
+
 /** Module import and management of other VM instances. */
 export const vmApiNames: ReadonlySet<string> = new Set([
   'vm.import',
@@ -259,11 +267,15 @@ export const allHostApiNames: ReadonlySet<string> = new Set([
   ...surfaceApiNames,
   ...serverApiNames,
   ...stateApiNames,
+  ...agentApiNames,
   ...vmApiNames,
 ]);
 
 /** The capability that gates each API (`Capability::for_api`). */
 export const capabilityOf: Readonly<Record<string, string>> = {
+  'a2ui.dataModel': 'agents',
+  'agent.action': 'agents',
+  'agent.send': 'agents',
   'cache.revalidate': 'state',
   'canvas.addColorStop': 'canvas',
   'canvas.addCommand': 'canvas',

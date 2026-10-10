@@ -10,12 +10,17 @@
  *   - `stream`    — a view driven by pushed / streamed commands.
  *   - `nextjs`    — a server-driven page (NextjsServerWidget).
  *   - `server`    — a server-rendered component (ServerComponent).
+ *   - `agent`     — a full-screen conversation with an app agent (A2UI surfaces,
+ *                   prose and a chat input); methods send / action / conversation.
  *
  * Events flow back through the `emit(surface, event, payload)` sink:
  *   ready, error, println, updateApp, routeChanged, scriptExecuted,
  *   scriptError, streamDone, command, sceneTap, callRefused, unservicedApi,
- *   result (async call results: `{requestId, ok, value | error}`).
+ *   result (async call results: `{requestId, ok, value | error}`),
+ *   a2uiText, a2uiAction, done (agent sessions).
  */
+import { A2UIConversation } from '../a2ui/conversation.js';
+import { a2uiRegistry } from '../a2ui/elpian.js';
 import { ElpianServerClient, ElpianNetPolicy, ServerComponentSession } from '../fullstack/server.js';
 import { platform } from '../platform/platform.js';
 import { ScopePatch } from '../scope/scope.js';
@@ -124,6 +129,14 @@ export class SessionRegistry {
           onUnservicedApi: (api, advertised) => emit('unservicedApi', { api, advertised }),
           surface: surfaceOpts,
         });
+        // Where this app's agents live: A2UISurface widgets and the agent.* host APIs default to it.
+        if (typeof options.baseUrl === 'string' || typeof options.appId === 'string') {
+          a2uiRegistry(session.surface.engine.services).defaults = {
+            baseUrl: typeof options.baseUrl === 'string' ? options.baseUrl : null,
+            appId: typeof options.appId === 'string' ? options.appId : null,
+            headers: isMap(options.headers) ? (options.headers as Record<string, string>) : undefined,
+          };
+        }
         entry = {
           kind,
           surface: session.surface,
@@ -331,6 +344,53 @@ export class SessionRegistry {
                 return session.unresolvedIslands();
             }
             throw new Error(`server session has no method ${method}`);
+          },
+        };
+        break;
+      }
+      case 'agent': {
+        const surface = new ElpianSurface(surfaceId, { ...surfaceOpts, document: true });
+        if (options.stylesheet) surface.engine.loadStylesheet(options.stylesheet);
+        const baseUrl = String(options.baseUrl ?? '');
+        const appId = String(options.appId ?? '');
+        const agent = String(options.agent ?? '');
+        const registry = a2uiRegistry(surface.engine.services);
+        registry.defaults = { baseUrl, appId, headers: isMap(options.headers) ? (options.headers as Record<string, string>) : undefined };
+        const conversation = registry.conversation(
+          'session',
+          () => new A2UIConversation({ endpoint: registry.endpoint(agent), conversationId: typeof options.conversationId === 'string' ? options.conversationId : null }),
+        );
+        surface.setContent({
+          type: 'A2UISurface',
+          props: { agent, conversation: 'session', prompt: typeof options.prompt === 'string' ? options.prompt : null, chat: options.chat !== false, showText: true, style: { padding: 12 } },
+          events: {
+            a2uiText: (e: any) => emit('a2uiText', e.value),
+            a2uiAction: (e: any) => emit('a2uiAction', e.value),
+            a2uiError: (e: any) => emit('error', e.value?.message ?? 'agent error'),
+            a2uiDone: (e: any) => emit('done', e.value),
+          },
+        });
+        entry = {
+          kind,
+          surface,
+          dispose: () => {
+            registry.dispose();
+            surface.dispose();
+          },
+          viewportChanged: () => surface.viewportChanged(),
+          call: async (method, args) => {
+            switch (method) {
+              case 'send':
+                return { conversationId: await conversation.send(String(args[0] ?? '')).conversationId };
+              case 'action': {
+                const action = typeof args[0] === 'string' ? JSON.parse(args[0]) : args[0];
+                if (!isMap(action) || typeof action.name !== 'string') throw new Error('action needs a "name"');
+                return { conversationId: await conversation.sendAction({ timestamp: new Date().toISOString(), context: {}, ...action }).conversationId };
+              }
+              case 'conversation':
+                return conversation.describe();
+            }
+            throw new Error(`agent session has no method ${method}`);
           },
         };
         break;

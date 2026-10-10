@@ -28,7 +28,7 @@ denied API short-circuits to a typed null without any host code running.
 
 | | Client VM | Server function VM |
 |---|---|---|
-| Where | the device | the host |
+| Where | the device (Flutter host or a native host) | the host |
 | Lives for | as long as the app is open | one invocation, or a pooled reuse |
 | Draws | yes (`render`, `flutter.*`) | **no** |
 | Holds state | in memory, lost on close | `kv.*`, durable |
@@ -131,6 +131,16 @@ ServerComponent(
   pending: const CircularProgressIndicator(),
   revalidate: const Duration(seconds: 30),
 )
+```
+
+On the native hosts the same component is a `server` session —
+`baseUrl`, `appId`, `name`, `args`, plus `revalidateMs`, `netPolicy`,
+`authorization` and `nativeIslands` (implemented in
+`native/web/src/fullstack/server.ts` and its Kotlin / Swift ports):
+
+```ts
+// host code (@elpian/web), not guest code
+await mountElpian(el, 'server', { baseUrl: host, appId: 'notes', name: 'NoteList', args: { page: 1 }, revalidateMs: 30000 });
 ```
 
 Two behaviours that are decisions rather than details:

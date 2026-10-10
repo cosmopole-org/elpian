@@ -43,6 +43,13 @@ standalone Flutter shell at `cli/elpian_client`. That shell:
 
 The shell imports no example application — it is a generic host.
 
+With `"renderer": "native"` (`elpian create <dir> --renderer native`) the same
+steps run in the `@elpian/web` DOM host instead: its page fetches the same
+manifest and artifact and mounts it with
+`mountElpian(app, 'miniapp', { runtime: 'elpian', bytecodeBase64 | astJson })`,
+and `render` calls become DOM views. Guest code is identical — see
+[`05-cli.md`](05-cli.md#renderers-flutter-or-native).
+
 ### `src/client.ts` as generated
 
 ```ts
@@ -114,10 +121,17 @@ not at the domain root, set `basePath` first and rebuild.
 
 ### What runs where
 
-`elpian-server` (native Rust) exposes every exported function in
+> **Historical.** This section describes the original `elpian-server`, which
+> has been deleted. Server functions are now hosted by `elpiand`
+> (`rust/crates/elpian-host`), which services host calls (`log`, `kv*`,
+> `secret`, …), can keep warm instances and governs what a function may reach —
+> see [`19-server-functions.md`](19-server-functions.md) and
+> [`21-hosting.md`](21-hosting.md) for the current behaviour.
+
+`elpian-server` (native Rust) exposed every exported function in
 `server.elpian.bc` at `POST /__elpian/api/<functionName>`.
 
-**Per request** (`run_api` in `rust/crates/elpian-vm/src/bin/elpian-server.rs`):
+**Per request** (`run_api` in the former `elpian-server.rs`):
 
 ```rust
 let id = format!("elpian-http-{}", REQUEST_ID.fetch_add(1, Ordering::Relaxed));
@@ -205,9 +219,9 @@ The client VM cannot make network calls on its own — there is no `fetch` in th
 subset. Two routes:
 
 1. **A host API.** Register a custom handler (e.g. `app.fetch`) in the embedding
-   Flutter app and call `askHost('app.fetch', …)`. See
+   app (Flutter or native) and call `askHost('app.fetch', …)`. See
    [`12-host-apis.md`](12-host-apis.md).
-2. **The host does it.** Have the Flutter shell fetch and deliver the result
+2. **The host does it.** Have the web shell fetch and deliver the result
    into the VM with `deliver_host_message` or a named entry function.
 
 The manifest's `server.endpoint` (`__elpian/api`) is the path the client side

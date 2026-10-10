@@ -5,6 +5,9 @@ import '../core/event_system.dart';
 
 class ElpianButton {
   static Widget build(ElpianNode node, List<Widget> children) {
+    // Captured while the engine's service scope is active: the handlers
+    // run later, outside it.
+    final dispatcher = ElpianServices.current.events;
     final text = node.props['text'] as String? ?? 'Button';
     final textColor = node.style?.color ?? Colors.white;
     final child = children.isNotEmpty
@@ -13,21 +16,24 @@ class ElpianButton {
 
     final elementId = node.key ?? 'element_${node.hashCode}';
 
+    final disabled = node.props['disabled'] == true;
+
     Widget result = ElevatedButton(
-      onPressed: () {
-        final dispatcher = ElpianServices.current.events;
-        // Dispatch both 'click' and 'tap' so that handlers registered
-        // under either name are triggered (e.g. QuickJS events: { tap: fn }).
-        dispatcher.dispatchClick(elementId);
-        dispatcher.dispatchEvent(
-          ElpianEvent(
-            type: 'tap',
-            eventType: ElpianEventType.tap,
-            target: elementId,
-          ),
-          elementId,
-        );
-      },
+      onPressed: disabled
+          ? null
+          : () {
+              // Dispatch both 'click' and 'tap' so that handlers registered
+              // under either name are triggered (e.g. QuickJS events: { tap: fn }).
+              dispatcher.dispatchClick(elementId);
+              dispatcher.dispatchEvent(
+                ElpianEvent(
+                  type: 'tap',
+                  eventType: ElpianEventType.tap,
+                  target: elementId,
+                ),
+                elementId,
+              );
+            },
       style: ButtonStyle(
         backgroundColor: node.style?.backgroundColor != null
             ? WidgetStateProperty.all(node.style!.backgroundColor)

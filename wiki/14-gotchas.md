@@ -217,14 +217,16 @@ Serving under `/myapp/` requires `"basePath": "/myapp/"` **and a rebuild** —
 `index.html` bakes in `<base href="…">`. Get it wrong and the browser requests
 `/main.dart.js` at the domain root and 404s, with no error in the app itself.
 
-### 18. Deploy `dist/web`, not the Flutter project's `build/web`
+### 18. Deploy `dist/web`, not the web host's own build
 
-`dist/web` is the engine *plus* `__elpian/` (manifest + VM artifacts). The raw
-Flutter output has no application in it.
+`dist/web` is the web host *plus* `__elpian/` (manifest + VM artifacts). The raw
+Flutter output (or, with `"renderer": "native"`, the `@elpian/web` bundle) has
+no application in it.
 
 ### 19. `elpian run dev` serves the engine directory, not your `dist/web`
 
-It serves `cli/elpian_client/build/elpian-engine/<base>/`. Engines are keyed by
+It serves `cli/elpian_client/build/elpian-engine/<base>/` (with the native
+renderer, `native/web/build/elpian-engine/<base>/`). Engines are keyed by
 **base path**, so two projects with different `basePath`s coexist and switching
 between them is a cache hit rather than a rebuild.
 
@@ -235,6 +237,8 @@ between them is a cache hit rather than a rebuild.
 > `base href` in the served `index.html` first.
 
 ### 19b. A stale Flutter build cache silently drops package assets
+
+*(Flutter renderer only.)*
 
 After moving or renaming a checkout, `flutter build web` can emit a bundle with
 **none** of `elpian_ui`'s declared assets — no `elpian_wasm_loader.js`, no
@@ -318,6 +322,27 @@ means forgetting to grant explicitly gives a child *everything the parent has*.
 `ElpianRuntime.quickJs` is a real JS engine, not the Elpian bytecode VM.
 Capabilities, resource meters and the VM tree do not apply. Never use it for
 untrusted code.
+
+---
+
+## Native hosts
+
+### 29. The same app, a different toolkit — a few effects differ
+
+The native engines are tested against the TypeScript engine, so layout and
+semantics match, but what the platform can draw differs: on Android CSS
+`filter: blur()` / drop shadows need API 31+, `backdrop-filter` is a software
+blur of a reduced-resolution snapshot, word spacing needs API 29+ and font
+weights other than regular / bold API 28+. QuickJS on Android reads a `null`
+completion value as `undefined`. The full list is in
+[`23-native-hosts.md`](23-native-hosts.md#differences-between-platforms).
+
+### 30. `open()` takes JSON options — Dart-style callbacks are not options
+
+`ElpianHostView.open(kind, options)` / `mountElpian(el, kind, options)` take
+plain JSON-shaped options. Listen with `on(event, …)` (`println`, `updateApp`,
+`error`, `ready`, …) rather than passing `onPrintln`; custom host handlers and
+native components are registered on the engine, not passed to `open()`.
 
 ---
 

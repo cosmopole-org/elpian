@@ -5,6 +5,9 @@ import '../css/css_properties.dart';
 
 class HtmlTextarea {
   static Widget build(ElpianNode node, List<Widget> children) {
+    // Captured while the engine's service scope is active: the handlers
+    // run later, outside it.
+    final dispatcher = ElpianServices.current.events;
     final placeholder = node.props['placeholder'] as String? ?? '';
     final elementId = node.key ?? 'element_${node.hashCode}';
 
@@ -15,11 +18,9 @@ class HtmlTextarea {
         border: const OutlineInputBorder(),
       ),
       onChanged: (value) {
-        final dispatcher = ElpianServices.current.events;
         dispatcher.dispatchInput(elementId, value);
       },
       onSubmitted: (value) {
-        final dispatcher = ElpianServices.current.events;
         dispatcher.dispatchSubmit(elementId);
       },
     );

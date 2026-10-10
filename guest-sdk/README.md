@@ -3,7 +3,11 @@
 The libraries a **mini app** is written against.
 
 This is the public authoring surface of the platform: what someone building a
-mini app imports, not what the runtime is built from. It used to live inside
+mini app imports, not what the runtime is built from. It is independent of the
+host mode: the same guest runs on the Flutter host (`flutter/`) and on the
+native hosts (`native/`). (`FL` and the Dart widget layer below are guest-side
+libraries — `FL` speaks the `flutter.*` op protocol — not the Flutter host
+package.) It used to live inside
 `rust/prelude/` and `rust/dart/flutter/` — invisible in the repository layout,
 and picked up by the Flutter analyzer as if it were host code, which produced
 361 unfixable diagnostics and drowned out real findings.
@@ -29,7 +33,8 @@ dart/   Dart preludes, compiled by dart2elpian
                    surface), the Flutter-shaped widget library, the unified
                    Color, Canvas + CanvasController, Scene3DController, the
                    theme tokens and the GUI namespace. One import.
-  demo_app.dart    a worked example, exercised by tests/flutter_app.rs
+  demo_app.dart    a worked example, exercised by
+                   rust/crates/elpian-dart-runtime/tests/flutter_app.rs
 
 docs/   Design notes for the larger preludes
 ```
@@ -72,7 +77,7 @@ checked by the front-end compilers' own test suites instead:
 cd rust
 cargo test -p dart2elpian     # dart/ preludes
 cargo test -p js2elpian       # js/ preludes
-cargo test -p dart            # the Flutter widget layer end to end
+cargo test -p elpian-dart-runtime   # the Flutter widget layer end to end
 ```
 
 ## gui.js and what it replaced
@@ -153,6 +158,7 @@ to simplify this away.
 The preludes are embedded at compile time with `include_str!`, so a change here
 needs a Rust rebuild to take effect:
 
-- `js/*` (including `gui.js`) and `dart/godot.dart` → `rust/crates/capi/src/lib.rs`
-- `dart/flutter.dart` → `rust/dart/src/widgets.rs`
-- `dart/demo_app.dart` → `rust/dart/tests/flutter_app.rs`
+- `js/*` (including `gui.js`) and `dart/gui.dart` → `rust/crates/capi/src/lib.rs`
+- `dart/gui.dart` → `rust/crates/elpian-dart-runtime/src/widgets.rs` (and
+  `rust/crates/dart2elpian/tests/getter_shadowing.rs`)
+- `dart/demo_app.dart` → `rust/crates/elpian-dart-runtime/tests/flutter_app.rs`

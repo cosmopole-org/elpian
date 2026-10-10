@@ -1,7 +1,8 @@
 # Elpian Scene3D GDExtension
 
 This directory owns the native Godot half of Elpian's `Scene3D` widget. It is
-deliberately small: Godot receives scene operations from Flutter and executes
+deliberately small: Godot receives scene operations from the host (the Flutter host or a
+native host) and executes
 them through `ElpianScene3D` and the reflective `GodotController`.
 
 The extension does **not** embed another Elpian VM or a Flutter engine. The app

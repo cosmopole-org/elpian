@@ -1,9 +1,14 @@
 # 09 — The styling system
 
-Elpian ships a real CSS engine in Dart: **201 style properties** on `CSSStyle`
+Elpian ships a real CSS engine: **201 style properties** on `CSSStyle`
 (`flutter/lib/src/models/css_style.dart`), a parser (`flutter/lib/src/css/css_parser.dart`,
 1200 lines), a stylesheet manager with cascade and `!important`, JSON
-stylesheets, CSS variables, media queries and keyframes.
+stylesheets, CSS variables, media queries and keyframes. The native hosts carry
+a port of the same engine (`native/web/src/css/` — `parser.ts`, `style.ts`,
+`stylesheet.ts` — and its Kotlin / Swift counterparts), so everything in this
+chapter applies to both host modes; where a platform cannot draw an effect
+(e.g. CSS filters before Android API 31) see
+[`23-native-hosts.md`](23-native-hosts.md#differences-between-platforms).
 
 ## Three ways to apply style, in cascade order
 
@@ -147,7 +152,10 @@ controller.
 ## JSON stylesheets
 
 A complete stylesheet is expressible as JSON — rules, media queries, variables
-and keyframes (`flutter/lib/src/css/json_stylesheet_parser.dart`, `JSON_STYLESHEET.md`).
+and keyframes (`flutter/lib/src/css/json_stylesheet_parser.dart`; natively
+`native/web/src/css/stylesheet.ts`). On the Flutter host it is loaded with
+`engine.loadStylesheet(...)` or `ElpianVmWidget(stylesheet:)`; on the native
+hosts it is the `stylesheet` option of a `json` or `miniapp` session.
 
 ```json
 {

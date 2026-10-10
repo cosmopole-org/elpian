@@ -61,9 +61,10 @@ treated as requesting everything it was granted.** Otherwise an app that simply
 omitted the field would launch with no capabilities and fail confusingly. Least
 privilege applies to what an app *states*, not to what it forgot to state.
 
-The same model runs on the device (`MiniAppPolicy.resolve`) and on the host, and
-`test/fixtures/policy_corpus.json` is read by both test suites. They must not
-drift: an app holding different capabilities on a phone than on the host would
+The same model runs on the device (`MiniAppPolicy.resolve` — in the Flutter host
+and ported to each native engine, e.g. `native/web/src/superapp/superapp.ts`)
+and on the host, and `flutter/test/fixtures/policy_corpus.json` is read by the
+Dart and Rust test suites. They must not drift: an app holding different capabilities on a phone than on the host would
 surface only as a bug in whichever direction was more permissive.
 
 ## 4. The instance pool

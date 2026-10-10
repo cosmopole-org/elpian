@@ -97,6 +97,10 @@ struct ServeArgs {
 #[derive(Args)]
 struct CreateArgs {
     directory: PathBuf,
+    /// Which host renders the app on the web: the Flutter engine or the
+    /// native DOM host (@elpian/web). Recorded in `elpian.config.json`.
+    #[arg(long, value_enum, default_value_t = Renderer::Flutter)]
+    renderer: Renderer,
     #[arg(short, long, value_enum, default_value_t = Template::Client)]
     template: Template,
 }
@@ -112,6 +116,11 @@ enum Template {
     /// a reason not to.
     ClosedFullstack,
     Showcase,
+    /// A fullstack mini app whose backend is partly an **agent**: declared in
+    /// the manifest with instructions, skills and the app's own server
+    /// function as a tool, producing A2UI that the client renders next to its
+    /// static UI. Runs offline with `ELPIAN_AGENT_PROVIDER=scripted`.
+    Agentic,
 }
 
 #[derive(Subcommand)]
@@ -120,6 +129,9 @@ enum RunTask {
     Build {
         #[arg(short, long, value_enum)]
         mode: Option<Mode>,
+        /// Override `renderer` from `elpian.config.json`.
+        #[arg(long, value_enum)]
+        renderer: Option<Renderer>,
     },
     Dev {
         #[arg(short = 'H', long, default_value = "127.0.0.1")]
@@ -130,7 +142,23 @@ enum RunTask {
         mode: Option<Mode>,
         #[arg(long)]
         build_engine: bool,
+        /// Override `renderer` from `elpian.config.json`.
+        #[arg(long, value_enum)]
+        renderer: Option<Renderer>,
     },
+}
+
+/// The web host a project's client runs in. Both run the same `__elpian/`
+/// manifest and the same client AST / bytecode on the Elpian VM; they differ
+/// in what draws the UI.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, ValueEnum, PartialEq)]
+#[serde(rename_all = "lowercase")]
+enum Renderer {
+    /// The Flutter web engine (`cli/elpian_client`, built with `flutter build web`).
+    #[default]
+    Flutter,
+    /// The native DOM host (`native/web`, `@elpian/web`), built with npm.
+    Native,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, ValueEnum, PartialEq)]
@@ -148,6 +176,8 @@ struct Config {
     out_dir: PathBuf,
     #[serde(default = "default_mode")]
     mode: Mode,
+    #[serde(default)]
+    renderer: Renderer,
     engine_dir: Option<PathBuf>,
     engine_project: Option<PathBuf>,
     #[serde(default = "default_base")]
@@ -212,6 +242,7 @@ fn real_main() -> Result<()> {
         CommandName::Create(args) => create_project(
             &absolute(&env::current_dir()?, &args.directory),
             args.template,
+            args.renderer,
         ),
         CommandName::Run { task } => {
             let root = env::current_dir()?;
@@ -220,10 +251,13 @@ fn real_main() -> Result<()> {
                     println!("Installed {} Elpian package(s)", install(&root)?);
                     Ok(())
                 }
-                RunTask::Build { mode } => {
+                RunTask::Build { mode, renderer } => {
                     let mut config = load_config(&root)?;
                     if let Some(mode) = mode {
                         config.mode = mode;
+                    }
+                    if let Some(renderer) = renderer {
+                        config.renderer = renderer;
                     }
                     for artifact in build_project(&root, &config, true)? {
                         println!(
@@ -237,7 +271,11 @@ fn real_main() -> Result<()> {
                         );
                     }
                     if config.client.is_some() {
-                        println!("Deployable web app: {}/web", config.out_dir.display());
+                        println!(
+                            "Deployable web app ({} renderer): {}/web",
+                            renderer_name(config.renderer),
+                            config.out_dir.display()
+                        );
                     }
                     Ok(())
                 }
@@ -246,10 +284,14 @@ fn real_main() -> Result<()> {
                     port,
                     mode,
                     build_engine,
+                    renderer,
                 } => {
                     let mut config = load_config(&root)?;
                     if let Some(mode) = mode {
                         config.mode = mode;
+                    }
+                    if let Some(renderer) = renderer {
+                        config.renderer = renderer;
                     }
                     dev(&root, config, &host, port, build_engine)
                 }
@@ -495,7 +537,10 @@ fn build_project(root: &Path, config: &Config, package_web: bool) -> Result<Vec<
             "url": format!("__elpian/{}", item.bytecode.as_ref().unwrap_or(&item.ast).file_name().unwrap().to_string_lossy()),
             "sourceUrl": format!("__elpian/{}", item.js.file_name().unwrap().to_string_lossy())
         })),
-        "server": config.server.as_ref().map(|_| json!({ "endpoint": "__elpian/api" }))
+        "server": config.server.as_ref().map(|_| json!({ "endpoint": "__elpian/api" })),
+        // A mini app's id: the client addresses its agents (and server functions)
+        // under `/apps/<app>/…` on the same origin.
+        "app": app_id(root)
     });
     write_json(&out.join("elpian.manifest.json"), &manifest)?;
 
@@ -506,6 +551,12 @@ fn build_project(root: &Path, config: &Config, package_web: bool) -> Result<Vec<
         package_web_export(root, config, &artifacts, &out)?;
     }
     Ok(artifacts)
+}
+
+/// The mini app id from `elpian.app.json`, when the project is a mini app.
+fn app_id(root: &Path) -> Option<String> {
+    let manifest: serde_json::Value = read_json(&root.join("elpian.app.json")).ok()?;
+    manifest["id"].as_str().map(str::to_string)
 }
 
 /// Compile `src/server/{actions,components}/*` into `build/fn/<name>.bc`.
@@ -526,6 +577,18 @@ fn build_server_functions(root: &Path, config: &Config, out: &Path) -> Result<()
         return Ok(()); // not a mini app
     }
     let manifest: serde_json::Value = read_json(&manifest_path)?;
+
+    // An agentic app's agents (instructions, skills, scripts) travel with the
+    // build output, which is the layout `elpian package` and the host read.
+    let agents_out = out.join("agents");
+    if agents_out.exists() {
+        fs::remove_dir_all(&agents_out)?;
+    }
+    if root.join("agents").is_dir() {
+        copy_tree(&root.join("agents"), &agents_out)?;
+    }
+    fs::copy(&manifest_path, out.join("elpian.app.json"))?;
+
     let declared: Vec<(String, String)> = manifest["functions"]
         .as_array()
         .map(|entries| {
@@ -697,6 +760,200 @@ fn resolve_source(path: &Path) -> Result<PathBuf> {
         .ok_or_else(|| anyhow!("source file not found: {}", path.display()))
 }
 
+fn renderer_name(renderer: Renderer) -> &'static str {
+    match renderer {
+        Renderer::Flutter => "flutter",
+        Renderer::Native => "native",
+    }
+}
+
+/// The web root the project's client is served from: `engineDir` when set,
+/// otherwise the configured renderer's host, built (or refreshed) for the
+/// project's base path.
+fn resolve_engine(root: &Path, config: &Config, force: bool) -> Result<PathBuf> {
+    if let Some(dir) = config.engine_dir.as_ref() {
+        return Ok(absolute(root, dir));
+    }
+    let base = normalize_base(&config.base_path);
+    match config.renderer {
+        Renderer::Flutter => {
+            let engine_project = config
+                .engine_project
+                .as_ref()
+                .map(|value| absolute(root, value))
+                .unwrap_or_else(|| cli_root().join("elpian_client"));
+            ensure_engine(&engine_project, &base, force)
+        }
+        Renderer::Native => ensure_native_engine(&base, force),
+    }
+}
+
+/// Stage the native DOM host (`native/web`) as a web root for `base`.
+///
+/// `@elpian/web` is built once with npm (`npm ci` in `native/`, then the
+/// package's build, which bundles `dist/elpian-web.js` and copies the fonts and
+/// the Elpian VM / QuickJS runtime files into `assets/`). The staged root adds
+/// an `index.html` that fetches the same `__elpian/elpian.manifest.json` the
+/// Flutter shell reads and mounts the client as a `miniapp` session on the
+/// Elpian VM. Like the Flutter engine it is keyed by base path.
+fn ensure_native_engine(base: &str, force: bool) -> Result<PathBuf> {
+    let native = workspace().join("native");
+    let web = native.join("web");
+    if !web.join("package.json").is_file() {
+        bail!("the native web host is missing at {}", web.display());
+    }
+    let bundle = web.join("dist/elpian-web.js");
+    if force
+        || !bundle.is_file()
+        || !web.join("assets/runtime").is_dir()
+        || native_host_stale(&web, &bundle)?
+    {
+        if !native.join("node_modules").is_dir() {
+            run_checked(Command::new(npm()).current_dir(&native).args([
+                "ci",
+                "--no-audit",
+                "--no-fund",
+            ]))
+            .context("installing the native web host's npm dependencies")?;
+        }
+        run_checked(Command::new(npm()).current_dir(&web).args(["run", "build"]))
+            .context("building the native web host (@elpian/web)")?;
+    }
+    let slug: String = base
+        .trim_matches('/')
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    let engine = web.join("build/elpian-engine").join(if slug.is_empty() {
+        "root".to_string()
+    } else {
+        slug
+    });
+    if engine.exists() {
+        fs::remove_dir_all(&engine)?;
+    }
+    fs::create_dir_all(&engine)?;
+    for file in ["elpian-web.js", "elpian-web.js.map"] {
+        let source = web.join("dist").join(file);
+        if source.is_file() {
+            fs::copy(&source, engine.join(file))?;
+        }
+    }
+    copy_tree(&web.join("assets"), &engine.join("assets"))?;
+    fs::write(
+        engine.join("index.html"),
+        NATIVE_INDEX_HTML.replace("{{BASE}}", base),
+    )?;
+    Ok(engine)
+}
+
+/// Whether any `native/web/src` file is newer than the built bundle.
+fn native_host_stale(web: &Path, bundle: &Path) -> Result<bool> {
+    let built = fs::metadata(bundle)?.modified()?;
+    for entry in WalkDir::new(web.join("src")) {
+        let entry = entry?;
+        if entry.file_type().is_file() && entry.metadata()?.modified()? > built {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn npm() -> &'static str {
+    if cfg!(windows) { "npm.cmd" } else { "npm" }
+}
+
+/// The native renderer's page: the counterpart of `cli/elpian_client`'s
+/// `main.dart` — fetch the manifest, download the client AST / bytecode and
+/// run it on the Elpian VM, rendered by the DOM host.
+const NATIVE_INDEX_HTML: &str = r#"<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <base href="{{BASE}}">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Elpian</title>
+  <style>
+    /* The host follows the system light/dark preference (its viewport's darkMode); the page does too. */
+    :root { color-scheme: light dark; }
+    html, body { margin: 0; height: 100%; background: Canvas; color: CanvasText; font-family: system-ui, sans-serif; }
+    #app { position: fixed; inset: 0; }
+    .elpian-status { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 32px; box-sizing: border-box; }
+    .elpian-status h1 { font-size: 24px; margin: 0 0 12px; }
+    .elpian-status pre { white-space: pre-wrap; max-width: 720px; margin: 0 auto 24px; user-select: text; }
+    .elpian-status button { font: inherit; padding: 10px 24px; border-radius: 20px; border: 0; background: #6750a4; color: #fff; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module">
+    import { installElpian, mountElpian } from './elpian-web.js';
+
+    installElpian({ assetBase: new URL('assets/', document.baseURI).href });
+    const app = document.getElementById('app');
+    let session = null;
+
+    function status(html) {
+      let el = document.querySelector('.elpian-status');
+      if (!html) { el?.remove(); return; }
+      if (!el) { el = document.createElement('div'); el.className = 'elpian-status'; document.body.appendChild(el); }
+      el.innerHTML = html;
+      return el;
+    }
+
+    function failure(message) {
+      const el = status('<div><h1>Elpian client could not start</h1><pre></pre><button>Retry</button></div>');
+      el.querySelector('pre').textContent = message;
+      el.querySelector('button').onclick = start;
+    }
+
+    async function fetchOk(url) {
+      const res = await fetch(url, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`GET ${url} returned HTTP ${res.status}`);
+      return res;
+    }
+
+    function base64(bytes) {
+      let bin = '';
+      for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+      return btoa(bin);
+    }
+
+    async function start() {
+      status('<div>Loading…</div>');
+      try {
+        await session?.close();
+        session = null;
+        const nonce = Date.now();
+        const manifest = await (await fetchOk(new URL(`__elpian/elpian.manifest.json?v=${nonce}`, document.baseURI))).json();
+        const client = manifest?.client;
+        if (!client || (client.format !== 'bytecode' && client.format !== 'ast') || typeof client.url !== 'string') {
+          throw new Error('Elpian manifest has no valid client target');
+        }
+        const res = await fetchOk(new URL(`${client.url}?v=${nonce}`, document.baseURI));
+        const bytes = new Uint8Array(await res.arrayBuffer());
+        if (!bytes.length) throw new Error('Elpian client artifact is empty');
+        const options = { machineId: 'elpian-dynamic-client', runtime: 'elpian' };
+        // A mini app's agents and functions are served by the same host, under /apps/<id>/.
+        if (typeof manifest.app === 'string') {
+          options.appId = manifest.app;
+          options.baseUrl = new URL('.', document.baseURI).href;
+        }
+        if (client.format === 'bytecode') options.bytecodeBase64 = base64(bytes);
+        else options.astJson = new TextDecoder().decode(bytes);
+        status(null);
+        session = await mountElpian(app, 'miniapp', options);
+      } catch (e) {
+        failure(String(e instanceof Error ? e.message : e));
+      }
+    }
+
+    start();
+  </script>
+</body>
+</html>
+"#;
+
 /// Where the built Flutter engine for `base` lives.
 ///
 /// Keyed by base path on purpose. `flutter build web` writes to `build/web`, so
@@ -747,18 +1004,13 @@ fn package_web_export(
     artifacts: &[Artifact],
     out: &Path,
 ) -> Result<()> {
-    let base = normalize_base(&config.base_path);
-    let engine_project = config
-        .engine_project
-        .as_ref()
-        .map(|value| absolute(root, value))
-        .unwrap_or_else(|| cli_root().join("elpian_client"));
-    let engine = match config.engine_dir.as_ref() {
-        Some(value) => absolute(root, value),
-        None => ensure_engine(&engine_project, &base, false)?,
-    };
+    let engine = resolve_engine(root, config, false)?;
     if !engine.join("index.html").is_file() {
-        bail!("Flutter engine missing at {}", engine.display());
+        bail!(
+            "{} web host missing at {}",
+            renderer_name(config.renderer),
+            engine.display()
+        );
     }
     let web = out.join("web");
     if web.exists() {
@@ -785,16 +1037,12 @@ fn package_web_export(
 
 fn dev(root: &Path, config: Config, host: &str, port: u16, force_engine: bool) -> Result<()> {
     build_project(root, &config, false)?;
-    let base = normalize_base(&config.base_path);
-    let engine_project = config
-        .engine_project
-        .as_ref()
-        .map(|value| absolute(root, value))
-        .unwrap_or_else(|| cli_root().join("elpian_client"));
-    let engine = match config.engine_dir.as_ref() {
-        Some(value) => absolute(root, value),
-        None => ensure_engine(&engine_project, &base, force_engine)?,
-    };
+    let engine = resolve_engine(root, &config, force_engine)?;
+    println!(
+        "[elpian] {} renderer: {}",
+        renderer_name(config.renderer),
+        engine.display()
+    );
     let (tx, rx) = mpsc::channel();
     let mut watcher = notify::recommended_watcher(move |event| {
         if changed(&event) {
@@ -803,7 +1051,9 @@ fn dev(root: &Path, config: Config, host: &str, port: u16, force_engine: bool) -
     })?;
     for path in [
         root.join("src"),
+        root.join("agents"),
         root.join("packages"),
+        root.join("elpian.app.json"),
         root.join("elpian.json"),
         root.join("elpian.config.json"),
     ] {
@@ -860,6 +1110,11 @@ fn dev(root: &Path, config: Config, host: &str, port: u16, force_engine: bool) -
     if out.join("elpian.app.json").is_file() || out.join("index.json").is_file() {
         command.arg("--registry").arg(&out);
     }
+    // Development: an app's declared secrets (ANTHROPIC_API_KEY,
+    // OPENAI_API_KEY, …) are read from this environment, which the host
+    // inherits — as are ELPIAN_AGENT_PROVIDER=scripted and
+    // ELPIAN_AGENT_SCRIPT for running agents offline.
+    command.arg("--dev");
     command
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
@@ -871,7 +1126,7 @@ fn dev(root: &Path, config: Config, host: &str, port: u16, force_engine: bool) -
     Ok(())
 }
 
-fn create_project(root: &Path, template: Template) -> Result<()> {
+fn create_project(root: &Path, template: Template, renderer: Renderer) -> Result<()> {
     if root.exists() {
         bail!("{} already exists", root.display());
     }
@@ -882,7 +1137,8 @@ fn create_project(root: &Path, template: Template) -> Result<()> {
         Template::Server | Template::Fullstack | Template::ClosedFullstack
     );
     let showcase = matches!(template, Template::Showcase);
-    let mini_app = matches!(template, Template::ClosedFullstack);
+    let agentic = matches!(template, Template::Agentic);
+    let mini_app = matches!(template, Template::ClosedFullstack | Template::Agentic);
     let name = root.file_name().unwrap().to_string_lossy();
     let dependencies = if client {
         json!({ "@elpian/sdk": { "path": "./packages/elpian-sdk" } })
@@ -897,6 +1153,7 @@ fn create_project(root: &Path, template: Template) -> Result<()> {
         &root.join("elpian.config.json"),
         &json!({
             "outDir": "dist", "mode": "both", "basePath": "/",
+            "renderer": renderer_name(renderer),
             "client": client.then(|| json!({ "entry": "src/client.ts" })),
             // A mini app has no monolithic server entry: its server *is* the
             // per-function modules under `src/server/`, which `build_server_
@@ -921,6 +1178,8 @@ fn create_project(root: &Path, template: Template) -> Result<()> {
             root.join("src/client.ts"),
             if showcase {
                 SHOWCASE_TEMPLATE
+            } else if agentic {
+                AGENTIC_CLIENT_TEMPLATE
             } else {
                 CLIENT_TEMPLATE
             },
@@ -936,10 +1195,21 @@ fn create_project(root: &Path, template: Template) -> Result<()> {
     if server && !mini_app {
         fs::write(root.join("src/server.ts"), SERVER_TEMPLATE)?;
     }
-    if mini_app {
+    if agentic {
+        scaffold_agentic_app(root, &name)?;
+    } else if mini_app {
         scaffold_mini_app(root, &name)?;
     }
     println!("Created {}", root.display());
+    if agentic {
+        println!(
+            "  cd {} && elpian run install\n  \
+             ELPIAN_AGENT_PROVIDER=scripted elpian run dev     # offline, canned agent\n  \
+             ANTHROPIC_API_KEY=... elpian run dev              # the real agent",
+            root.display()
+        );
+        return Ok(());
+    }
     if mini_app {
         println!(
             "  elpian run build && elpian package && \\\n    elpian install <pkg> --registry ./registry --deploy && \\\n    elpian serve --registry ./registry"
@@ -993,6 +1263,102 @@ fn scaffold_mini_app(root: &Path, name: &str) -> Result<()> {
     )?;
     fs::write(root.join("README.md"), mini_app_readme(name))?;
     Ok(())
+}
+
+/// The extra files an agentic mini app needs: a manifest declaring an agent,
+/// its instructions and skills, a server function it uses as a tool, and a
+/// script so it runs offline.
+fn scaffold_agentic_app(root: &Path, name: &str) -> Result<()> {
+    fs::create_dir_all(root.join("src/server/actions"))?;
+    fs::create_dir_all(root.join("agents/skills/catalog"))?;
+    fs::create_dir_all(root.join("agents/skills/ordering"))?;
+
+    write_json(
+        &root.join("elpian.app.json"),
+        &json!({
+            "id": name.to_lowercase().replace('_', "-"),
+            "version": "0.1.0",
+            // `render` and `server_call` for the client, `agents` for its
+            // A2UISurface, `state`/`logging` for the server function.
+            "capabilities": ["render", "server_call", "agents", "state", "logging"],
+            "network": "closed",
+            // The provider key is a declared secret: an operator supplies it
+            // (`elpiand --secrets`), and `elpian run dev` reads it from the
+            // environment. It is never sent to a client.
+            "secrets": ["ANTHROPIC_API_KEY"],
+            "limits": { "instructions": 50_000_000u64, "memoryBytes": 33_554_432u64 },
+            "functions": [
+                {
+                    "name": "listProducts",
+                    "kind": "action",
+                    "description": "List the shop's products, optionally filtered by category.",
+                    "params": {
+                        "type": "object",
+                        "properties": {
+                            "category": { "type": "string", "enum": ["tea", "coffee"] }
+                        },
+                        "additionalProperties": false
+                    }
+                }
+            ],
+            "agents": [
+                {
+                    "name": "assistant",
+                    "description": "Helps customers find and order products.",
+                    "instructions": "agents/assistant.md",
+                    "skills": ["catalog", "ordering"],
+                    "tools": ["listProducts"],
+                    "provider": "anthropic",
+                    "model": "claude-opus-5-5",
+                    "effort": "medium",
+                    "maxTurns": 12,
+                    "maxOutputTokens": 64000
+                }
+            ]
+        }),
+    )?;
+    fs::write(
+        root.join("src/server/actions/listProducts.ts"),
+        AGENTIC_ACTION,
+    )?;
+    fs::write(root.join("agents/assistant.md"), AGENTIC_INSTRUCTIONS)?;
+    fs::write(
+        root.join("agents/skills/catalog/SKILL.md"),
+        AGENTIC_SKILL_CATALOG,
+    )?;
+    fs::write(
+        root.join("agents/skills/ordering/SKILL.md"),
+        AGENTIC_SKILL_ORDERING,
+    )?;
+    fs::write(root.join("agents/scripted.json"), AGENTIC_SCRIPT)?;
+    fs::write(root.join("README.md"), agentic_readme(name))?;
+    Ok(())
+}
+
+fn agentic_readme(name: &str) -> String {
+    format!(
+        "# {name}\n\n\
+         A fullstack mini app whose backend is partly an **agent**. The client\n\
+         renders static Elpian UI and, next to it, an `A2UISurface` the agent\n\
+         fills with A2UI v0.9.1.\n\n\
+         ```text\n\
+         elpian.app.json                     id, grants, posture, functions, agents\n\
+         src/client.ts                       static UI + A2UISurface\n\
+         src/server/actions/listProducts.ts  a server function, also the agent's tool\n\
+         agents/assistant.md                 the agent's instructions\n\
+         agents/skills/*/SKILL.md            skills it loads on demand\n\
+         agents/scripted.json                canned turns for offline runs\n\
+         ```\n\n\
+         ## Run\n\n\
+         ```bash\n\
+         elpian run install\n\
+         ELPIAN_AGENT_PROVIDER=scripted elpian run dev   # offline\n\
+         ANTHROPIC_API_KEY=sk-... elpian run dev         # Claude\n\
+         ```\n\n\
+         The agent is served at `POST /apps/<id>/agent/assistant` as NDJSON. Its\n\
+         tools are the app's own functions, called with the caller's identity and\n\
+         counted against the app's quota. See `wiki/18-fullstack.md`.\n"
+    )
 }
 
 fn mini_app_readme(name: &str) -> String {
@@ -1051,8 +1417,9 @@ fn runtime_stale(project: &Path, marker: &Path, base: &str) -> Result<bool> {
     let ui = ui_package(project).unwrap_or_else(|| project.join(".."));
     for source in [
         project.join("lib/main.dart"),
-        ui.join("flutter/lib/src/vm/elpian_vm_widget.dart"),
-        ui.join("flutter/lib/src/vm/frb_generated/api_web.dart"),
+        ui.join("lib/src/vm/elpian_vm_widget.dart"),
+        ui.join("lib/src/vm/elpian_vm.dart"),
+        ui.join("lib/src/vm/wasm_vm.dart"),
     ] {
         if source.is_file() && fs::metadata(source)?.modified()? > built {
             return Ok(true);
@@ -1318,6 +1685,53 @@ export function el(
 }
 
 declare function askHost(name: string, payload: unknown): unknown;
+
+// ---------------------------------------------------------------------------
+// Agents. An `A2UISurface` node renders what one of this app's agents sends;
+// `agentSend` talks to an agent from code. Both need the `agents` capability.
+// ---------------------------------------------------------------------------
+
+export type A2UISurfaceProps = {
+  /** The agent's name in elpian.app.json. */
+  agent: string;
+  /** Optional: another app's id (defaults to this app). */
+  app?: string;
+  /** Optional: the server (defaults to the session's). */
+  baseUrl?: string;
+  /** Widgets with the same key share one conversation. */
+  conversation?: string;
+  /** A first message, sent when the surface mounts. */
+  prompt?: string;
+  /** Render only this A2UI surface (default: all, in creation order). */
+  surfaceId?: string;
+  /** Render the agent's prose. */
+  showText?: boolean;
+  /** Add an input row for messaging the agent. */
+  chat?: boolean;
+  /** Static A2UI messages, rendered without an agent. */
+  messages?: unknown[];
+  [k: string]: unknown;
+};
+
+/** A node that renders an agent's A2UI surfaces next to static UI. */
+export function a2uiSurface(props: A2UISurfaceProps): ElpianNode {
+  return el('A2UISurface', props, []);
+}
+
+/** Send `message` to `agent`; returns `{ conversationId }`. */
+export function agentSend(agent: string, message: string, conversation?: string): unknown {
+  return askHost('agent.send', [{ agent: agent, conversation: conversation, message: message }]);
+}
+
+/** Send an A2UI action to `agent` as the next turn of `conversation`. */
+export function agentAction(agent: string, action: unknown, conversation?: string): unknown {
+  return askHost('agent.action', [{ agent: agent, conversation: conversation, action: action }]);
+}
+
+/** The current data model of one A2UI surface of a conversation. */
+export function a2uiDataModel(conversation: string, surfaceId: string): unknown {
+  return askHost('a2ui.dataModel', [{ conversation: conversation, surfaceId: surfaceId }]);
+}
 
 export function render(node: ElpianNode): void {
   askHost('render', JSON.stringify(node));
@@ -1671,6 +2085,145 @@ elpian run dev
 Without it `Scene3D` renders a placeholder and every 2D control still works —
 which is exactly what the web build shows.
 "##;
+
+const AGENTIC_CLIENT_TEMPLATE: &str = r##"import { el, render, a2uiSurface } from '@elpian/sdk';
+
+// Static UI and agent UI side by side. The header and the footer are ordinary
+// Elpian nodes; the A2UISurface in between renders whatever the `assistant`
+// agent sends (A2UI v0.9.1), and its `chat` row lets the user talk to it.
+
+let visits: number = 0;
+
+function view() {
+  return el('div', { style: { padding: '24', display: 'flex', flexDirection: 'column', gap: 16 } }, [
+    el('h1', { text: 'Tea & Coffee' }, []),
+    el('p', { text: 'Ask the assistant for something to drink.' }, []),
+
+    a2uiSurface({
+      agent: 'assistant',
+      prompt: 'Show me what you have.',
+      chat: true,
+      showText: true,
+    }),
+
+    el('button', {
+      key: 'visits',
+      text: 'Static UI still works: ' + visits,
+      onClick: () => { visits = visits + 1; render(view()); },
+    }, []),
+  ]);
+}
+
+render(view());
+"##;
+
+/// The agentic template's server function — also the agent's tool.
+const AGENTIC_ACTION: &str = r#"// An action the client may call, and the `assistant` agent calls as its
+// `fn_listProducts` tool — through the same path, as the same caller.
+
+function listProducts(args) {
+  var all = [
+    { id: "sencha", name: "Sencha", category: "tea", price: 6.5 },
+    { id: "assam", name: "Assam", category: "tea", price: 5.0 },
+    { id: "espresso", name: "Espresso blend", category: "coffee", price: 9.0 },
+    { id: "filter", name: "Filter roast", category: "coffee", price: 8.0 }
+  ];
+  if (args == null || args.category == null) {
+    return { products: all };
+  }
+  var out = [];
+  var i = 0;
+  while (i < all.length) {
+    if (all[i].category == args.category) {
+      out.push(all[i]);
+    }
+    i = i + 1;
+  }
+  return { products: out };
+}
+"#;
+
+const AGENTIC_INSTRUCTIONS: &str = r#"You are the shop assistant of a small tea and coffee shop.
+
+- Find products with the `fn_listProducts` tool; never invent products or prices.
+- Show products as UI, not prose: load the `catalog` skill before building a product list.
+- When the user wants to buy something, load the `ordering` skill.
+- Keep text short. The surface is where the information goes.
+"#;
+
+const AGENTIC_SKILL_CATALOG: &str = r#"---
+name: catalog
+description: Show products as a list with a name, a price and an Order button each.
+---
+
+Build one surface, `products`, with `sendDataModel: true`:
+
+- Put the products in the data model at `/products` (an array of `{id, name, price}`).
+- Root: a `Column` with a heading `Text` (variant `h3`) and a `List` whose `children` is a
+  template: `{"componentId": "product_row", "path": "/products"}`.
+- `product_row` is a `Card` whose child is a `Row` with a `Text` bound to `name` (relative path),
+  a `Text` with `{"call": "formatCurrency", "args": {"value": {"path": "price"}, "currency": "EUR"},
+  "returnType": "string"}`, and a `Button` whose action is
+  `{"event": {"name": "order", "context": {"id": {"path": "id"}, "name": {"path": "name"}}}}`.
+
+Update an existing surface with `updateDataModel` rather than recreating it.
+"#;
+
+const AGENTIC_SKILL_ORDERING: &str = r#"---
+name: ordering
+description: Handle an "order" action from a product list.
+---
+
+An `order` action arrives as `{"a2uiAction": {"name": "order", "context": {"id", "name"}}}`.
+
+Confirm in one short sentence, and show the confirmation in a surface `order` (create it the first
+time; afterwards update its data model): a `Card` with a `Text` "Ordered" heading and a `Text`
+bound to `/item`.
+"#;
+
+/// Canned turns for `ELPIAN_AGENT_PROVIDER=scripted`: the agent calls the
+/// server function, builds the product list, and answers `order` actions.
+const AGENTIC_SCRIPT: &str = r#"{
+  "exchanges": [
+    {
+      "when": { "action": "order" },
+      "turns": [
+        { "tools": [ { "name": "a2ui_send", "input": { "messages": [
+          { "version": "v0.9.1", "updateDataModel": { "surfaceId": "products", "path": "/ordered", "value": "{{action.context.name}}" } }
+        ] } } ] },
+        { "text": "Ordered {{action.context.name}} (scripted)." }
+      ]
+    },
+    {
+      "turns": [
+        { "text": "Let me look.", "tools": [ { "name": "fn_listProducts", "input": {} } ] },
+        { "tools": [ { "name": "a2ui_send", "input": { "messages": [
+          { "version": "v0.9.1", "createSurface": { "surfaceId": "products", "catalogId": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json", "sendDataModel": true, "theme": { "agentDisplayName": "Shop assistant" } } },
+          { "version": "v0.9.1", "updateComponents": { "surfaceId": "products", "components": [
+            { "id": "root", "component": "Column", "children": ["heading", "list", "ordered"] },
+            { "id": "heading", "component": "Text", "text": "Today's selection", "variant": "h3" },
+            { "id": "list", "component": "List", "children": { "componentId": "product_row", "path": "/products" } },
+            { "id": "product_row", "component": "Card", "child": "row" },
+            { "id": "row", "component": "Row", "justify": "spaceBetween", "align": "center", "children": ["name", "price", "order"] },
+            { "id": "name", "component": "Text", "text": { "path": "name" } },
+            { "id": "price", "component": "Text", "text": { "call": "formatCurrency", "args": { "value": { "path": "price" }, "currency": "EUR" }, "returnType": "string" } },
+            { "id": "order_label", "component": "Text", "text": "Order" },
+            { "id": "order", "component": "Button", "child": "order_label", "variant": "primary", "action": { "event": { "name": "order", "context": { "id": { "path": "id" }, "name": { "path": "name" } } } } },
+            { "id": "ordered", "component": "Text", "text": { "call": "formatString", "args": { "value": "Last order: ${/ordered}" }, "returnType": "string" }, "variant": "caption" }
+          ] } },
+          { "version": "v0.9.1", "updateDataModel": { "surfaceId": "products", "value": { "ordered": "nothing yet", "products": [
+            { "id": "sencha", "name": "Sencha", "price": 6.5 },
+            { "id": "assam", "name": "Assam", "price": 5.0 },
+            { "id": "espresso", "name": "Espresso blend", "price": 9.0 },
+            { "id": "filter", "name": "Filter roast", "price": 8.0 }
+          ] } } }
+        ] } } ] },
+        { "text": "Here is today's selection (scripted)." }
+      ]
+    }
+  ]
+}
+"#;
 
 /// A server action for the `closed-fullstack` template.
 const MINI_APP_ACTION: &str = r#"// An action: returns JSON, may write.

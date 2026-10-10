@@ -13,27 +13,32 @@ Source: `cli/rust/main.rs` (the whole CLI is one file).
 cargo install --path cli
 ```
 
-The binary is named `elpian` (`[[bin]] name = "elpian"`). It depends on
+The binary is named `elpian` (`[[bin]] name = "elpian"`). Compiling a project
+never needs Node.js; the `native` renderer needs `npm` once, to build the
+`@elpian/web` host (see [Renderers](#renderers-flutter-or-native)). It depends on
 `js2elpian` at `../rust/crates/js2elpian`, which is vendored in this repository — no
 sibling checkout is needed.
 
 ## The whole surface
 
 ```
-elpian create <DIRECTORY> [--template client|server|fullstack|showcase]
+elpian create <DIRECTORY> [--template client|server|fullstack|closed-fullstack|agentic|showcase]
+                          [--renderer flutter|native]
 
 elpian run install
-elpian run build [--mode js|bytecode|both]
+elpian run build [--mode js|bytecode|both] [--renderer flutter|native]
 elpian run dev   [--host <HOST>] [--port <PORT>] [--mode <MODE>] [--build-engine]
+                 [--renderer flutter|native]
 ```
 
 | Flag | Short | Default |
 |---|---|---|
-| `--template` | `-t` | `client` (also `server`, `fullstack`, `showcase`) |
+| `--template` | `-t` | `client` (also `server`, `fullstack`, `closed-fullstack`, `agentic`, `showcase`) |
 | `--mode` | `-m` | from `elpian.config.json` (`both`) |
 | `--host` | `-H` | `127.0.0.1` |
 | `--port` | `-p` | `4173` |
-| `--build-engine` | — | off — force a Flutter engine rebuild |
+| `--renderer` | — | `create`: `flutter`, recorded in `elpian.config.json`; `run`: from the config |
+| `--build-engine` | — | off — force a rebuild of the renderer's web host |
 
 ## The five-minute path
 
@@ -67,6 +72,12 @@ my-app/
         ├── elpian.package.json
         └── index.ts         # the `el` / `render` SDK
 ```
+
+`--template agentic` adds an agent-backed mini app: `elpian.app.json` with an
+`agents` section, `agents/assistant.md` (instructions), `agents/skills/*/SKILL.md`,
+`agents/scripted.json` (an offline script for `ELPIAN_AGENT_PROVIDER=scripted`),
+a server function the agent uses as a tool, and a client that places an
+`A2UISurface` beside static UI. See [`24-agentic-ui.md`](24-agentic-ui.md).
 
 ## `elpian run install`
 
@@ -127,15 +138,31 @@ Deployable web app: dist/web
 ```
 
 `format` is `"bytecode"` when a `.bc` was produced, else `"ast"` and `url` points
-at the AST JSON. The Flutter shell fetches this first, then the artifact it
-names.
+at the AST JSON. The web host (the Flutter shell or the native DOM host)
+fetches this first, then the artifact it names.
+
+### Renderers: Flutter or native
+
+`elpian.config.json`'s `"renderer"` picks the web host the client runs in;
+`--renderer` overrides it for one `run build` / `run dev`:
+
+| `renderer` | Web host | `dist/web` holds |
+|---|---|---|
+| `"flutter"` (default) | the Flutter web shell `cli/elpian_client` (`elpian_ui`), built with `flutter build web` | `index.html`, `main.dart.js`, `flutter_bootstrap.js`, `canvaskit/`, `assets/` |
+| `"native"` | the DOM host `@elpian/web` (`native/web`), built with `npm ci` + `npm run build` | `index.html`, `elpian-web.js`, `assets/` (fonts, VM / QuickJS runtime files) |
+
+Both read the same `__elpian/elpian.manifest.json` and run the same client
+AST / bytecode on the Elpian VM (the native page mounts it as a `miniapp`
+session); they differ only in what draws the UI. The native host is rebuilt
+when any `native/web/src` file is newer than its bundle, and staged per base
+path under `native/web/build/elpian-engine/<base>`.
 
 ### The web export
 
-`dist/web` is a **self-contained static deployment**: the Flutter engine build
+`dist/web` is a **self-contained static deployment**: the renderer's web host
 plus the application manifest and VM artifacts under `dist/web/__elpian/`.
 
-> Deploy `dist/web` — **not** the Flutter engine's original `build/web`.
+> Deploy `dist/web` — **not** a host's own build directory.
 
 Packaging also **disables the service worker**: `flutter_bootstrap.js` has its
 `_flutter.loader.load({serviceWorkerSettings: …})` call rewritten to
@@ -143,16 +170,17 @@ Packaging also **disables the service worker**: `flutter_bootstrap.js` has its
 
 ### Engine resolution
 
-The client needs a Flutter web engine. Two config keys control where it comes
-from:
+With the `flutter` renderer the client needs a Flutter web engine. Two config
+keys control where it comes from (`engineDir` also overrides the `native`
+host):
 
 | Key | Meaning |
 |---|---|
 | `engineProject` | A Flutter **project** the CLI may build (`flutter build web --base-href <basePath>`) |
 | `engineDir` | An **already-built** Flutter web export — the CLI will not build it |
 
-Defaults to the standalone project at `cli/elpian_client`, whose build
-output is `<engineProject>/build/web`. That shell imports no example
+Defaults to the standalone project at `cli/elpian_client`, built per base path
+into `<engineProject>/build/elpian-engine/<base>`. That shell imports no example
 application: at runtime it fetches `/__elpian/elpian.manifest.json`, downloads
 the declared bytecode or AST, and executes it in the Elpian WASM VM.
 
@@ -165,7 +193,8 @@ the marker is missing, if its `basePath=` line does not match, or if
 ## `elpian run dev`
 
 1. Builds the project (without packaging the web export).
-2. Builds the Flutter engine if stale, or if `--build-engine` was passed.
+2. Builds the renderer's web host (the Flutter engine or `@elpian/web`) if
+   stale, or if `--build-engine` was passed.
 3. Starts a filesystem watcher on `src/`, `packages/`, `elpian.json` and
    `elpian.config.json`; every change triggers a rebuild and prints
    `[elpian] rebuilt`.
@@ -180,10 +209,9 @@ the marker is missing, if its `basePath=` line does not match, or if
 ```
 
 > **The dev server serves the shared engine directory**
-> (`cli/elpian_client/build/web`), not the project's `dist/web`. Building
-> a *different* project with a different `basePath` re-bases that shared
-> directory out from under a running server. Give each project an explicit
-> `engineProject` if you run more than one.
+> (`cli/elpian_client/build/elpian-engine/<base>`, or
+> `native/web/build/elpian-engine/<base>` with the native renderer), not the
+> project's `dist/web`. Projects with the same `basePath` share it.
 
 ## Configuration: `elpian.config.json`
 
@@ -193,6 +221,7 @@ the marker is missing, if its `basePath=` line does not match, or if
   "client": { "entry": "src/client.ts" },
   "server": { "entry": "src/server.ts" },
   "mode": "both",
+  "renderer": "flutter",
   "outDir": "dist",
   "engineDir": null,
   "engineProject": null
@@ -203,6 +232,7 @@ the marker is missing, if its `basePath=` line does not match, or if
 |---|---|---|---|
 | `outDir` | path | `"dist"` | Build output directory |
 | `mode` | `js` \| `bytecode` \| `both` | `"both"` | Which artifacts to emit |
+| `renderer` | `flutter` \| `native` | `"flutter"` | Which web host runs the client — see [Renderers](#renderers-flutter-or-native) |
 | `basePath` | string | `"/"` | Subpath deployment, e.g. `"/myapp/"` |
 | `engineDir` | path? | `null` | Prebuilt Flutter web export |
 | `engineProject` | path? | `null` | Flutter project the CLI may build |
@@ -214,7 +244,8 @@ Keys are **camelCase** in JSON. Relative paths resolve against the project root.
 ### `basePath` and subpath deployment
 
 `normalize_base` coerces the value to `/<trimmed>/`. It is passed to Flutter as
-`--base-href`, so `index.html` carries `<base href="/myapp/">` and every asset
+`--base-href` (and written into the native host's page), so `index.html`
+carries `<base href="/myapp/">` and every asset
 URL resolves under that prefix. **If you serve the app under a subpath, you must
 set `basePath` and rebuild** — otherwise the page requests `/main.dart.js` at the
 domain root and 404s.
@@ -254,12 +285,14 @@ my-app/
     ├── elpian.manifest.json
     └── web/                      # ← deploy this
         ├── index.html  main.dart.js  flutter_bootstrap.js  canvaskit/  assets/
+        │                         #   (native renderer: index.html  elpian-web.js  assets/)
         └── __elpian/             # manifest + VM artifacts
 ```
 
 ## The dev/prod HTTP surface
 
-Served by `elpian-server` (`elpian/rust/crates/elpian-vm/src/bin/elpian-server.rs`):
+Served by `elpiand` (`rust/crates/elpian-host`, which replaced the old
+`elpian-server`):
 
 | Route | Behaviour |
 |---|---|
@@ -278,6 +311,6 @@ components). `HEAD` is supported. Every connection is handled on its own thread.
 | `TypeScript parse failed in <file>` | Syntax error; the diagnostic includes the source snippet |
 | `cannot resolve Elpian package X; run 'elpian run install'` | Missing `.elpian/packages` link |
 | `source file not found` | Entry path wrong, or the extension is not `.ts/.tsx/.js` and not a directory with `index.ts` |
-| `Flutter engine missing at <path>` | `engineDir` points somewhere without `index.html` |
+| `flutter web host missing at <path>` / `native web host missing at <path>` | `engineDir` points somewhere without `index.html` |
 | Assets 404 at the domain root | `basePath` does not match where you serve it — set it and rebuild |
 | `Address already in use` | Another dev server holds the port; pass `--port` |

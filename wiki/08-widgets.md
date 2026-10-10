@@ -4,13 +4,20 @@
 (`flutter/lib/src/core/elpian_engine.dart`). A node's `type` must be one of them (or a
 tag you registered yourself). An unregistered type renders nothing.
 
+The native hosts register the same widget sets in their engines —
+`native/web/src/widgets/` (`html.ts`, `flutter.ts`, `animation.ts`,
+`nextjs.ts`), ported file for file to Kotlin (`native/android/elpian-core`) and
+Swift (`native/ios/Sources/ElpianCore/Widgets`) — so this catalog applies to
+both host modes.
+
 Two naming families coexist and are freely mixable in one tree:
 
 - **`PascalCase`** — Flutter widgets (`Container`, `Column`, `AnimatedOpacity`).
 - **`lowercase`** — HTML elements (`div`, `h1`, `button`, `table`).
 
-Choose per taste; HTML tags map onto Flutter widgets underneath, and both accept
-the same `style` / `className` / `events` fields.
+Choose per taste; HTML tags map onto Flutter widgets underneath (on the native
+hosts, onto the same widget descriptors before layout), and both accept the
+same `style` / `className` / `events` fields.
 
 ---
 
@@ -185,6 +192,6 @@ built. `WidgetRegistry.unregister(type)` removes one.
 
 > Exhaustive per-widget prop lists are not duplicated here — they live in
 > `flutter/lib/src/widgets/*.dart` and `flutter/lib/src/html_widgets/*.dart`, one small file per
-> tag. Each is a single `static Widget build(ElpianNode node, List<Widget> children)`
+> tag (natively: `native/web/src/widgets/*.ts`). Each is a single `static Widget build(ElpianNode node, List<Widget> children)`
 > that reads `node.props[...]` and `node.style`; reading the file for the tag you
 > need takes seconds and is always current.

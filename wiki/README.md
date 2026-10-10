@@ -15,10 +15,12 @@ Elpian runs **dynamically-delivered application code with no JIT and no
 ahead-of-time native compilation**. You write **TypeScript** (or JavaScript, or
 a Dart subset); a Rust toolchain compiles it to **Elpian bytecode**; and a
 sandboxed **Rust VM** — a pausing AST/bytecode interpreter — executes it inside
-a host. The host is a **Flutter application** (`elpian_ui`), which turns a JSON
-UI tree the guest emits into real Flutter widgets: 60+ Flutter widgets, 70+ HTML
-tags, a 150+ property CSS engine, a 2D canvas, and an embedded Godot 4 engine
-reached as a `Scene3D` widget. Because nothing generates machine code at runtime, the same program is legal on iOS and
+a host. There are two host modes: the **Flutter host** (`flutter/`,
+`elpian_ui`), which turns the JSON UI tree the guest emits into real Flutter
+widgets, and the **native hosts** (`native/`), which render the same tree with
+Android Views, UIKit or the DOM (and Expo / React Native over them). Both offer
+60+ Flutter widgets, 70+ HTML tags, a 150+ property CSS engine, a 2D canvas, and
+an embedded Godot 4 engine reached as a `Scene3D` widget. Because nothing generates machine code at runtime, the same program is legal on iOS and
 runs on the web. The guest reaches the outside world through exactly one seam,
 `askHost(name, payload)`, which is where capability gating and resource metering
 are enforced.
@@ -30,13 +32,18 @@ are enforced.
  Elpian VM  (Rust; pausing interpreter; suspends on askHost(name, payload))
    │  askHost("render", viewJson) / "println" / "dom.*" / "canvas.*" / timers …
    ▼
- Host: Flutter app (elpian_ui)
-        ├─ ElpianEngine        — JSON UI tree → Flutter widget tree (161 tags)
+ Host: Flutter app (elpian_ui)  — or a native host (Android Views, UIKit, DOM, Expo)
+        ├─ ElpianEngine        — JSON UI tree → Flutter widgets / native views (161 tags)
         ├─ CSS + stylesheets   — 201 style properties, classes, media queries
         ├─ EventDispatcher     — 40+ event types routed back into the VM
         ├─ Canvas2D / Scene3D  — drawing + embedded Godot 3D
         └─ Governance          — capabilities, resource meters, the VM tree
 ```
+
+Unless a chapter says otherwise, what it documents (node format, widgets, CSS,
+events, host APIs, canvas, `Scene3D`) holds on both host modes; Dart APIs such
+as `ElpianVmWidget` are the Flutter host's, and their native counterparts are
+the session kinds of [`23-native-hosts.md`](23-native-hosts.md).
 
 ## The files
 
@@ -65,6 +72,7 @@ are enforced.
 | [`21-hosting.md`](21-hosting.md) | Run `elpiand`: the registry, policy, the pool, meters, quotas, the admin surface. |
 | [`22-packaging.md`](22-packaging.md) | `.elpianpkg`: determinism, verification, signing and its limit. |
 | [`23-native-hosts.md`](23-native-hosts.md) | Android (Kotlin), iOS (Swift), Web and Expo hosts of the same mini apps. |
+| [`24-agentic-ui.md`](24-agentic-ui.md) | Agents as the backend (instructions, skills, your functions as tools) and A2UI as their UI, on every host. |
 
 ## How an agent should use this skill
 
@@ -75,8 +83,10 @@ are enforced.
    compiler accepts, [`07-ui-model.md`](07-ui-model.md) for the render contract,
    [`08-widgets.md`](08-widgets.md) + [`09-styling.md`](09-styling.md) for the
    UI surface, [`10-events.md`](10-events.md) for interaction.
-3. **Embedding the VM in your own Flutter app?**
+3. **Embedding mini apps in your own app?** Flutter:
    [`02-elpian-vm.md`](02-elpian-vm.md) + [`12-host-apis.md`](12-host-apis.md).
+   Android, iOS, web or Expo without Flutter:
+   [`23-native-hosts.md`](23-native-hosts.md).
 4. **Running untrusted code?** [`03-governance.md`](03-governance.md) is the
    whole story — capabilities, meters, and the VM tree.
 5. **Read [`14-gotchas.md`](14-gotchas.md).** Most first-try failures are there.
@@ -89,16 +99,24 @@ Exhaustive lists (every widget prop, every CSS property) live in the source:
 - **VM (Rust):** `rust/crates/elpian-vm/src/sdk/` — `executor.rs` (the interpreter), `compiler.rs`
   (AST→bytecode), `program.rs` (decode), `limits.rs`, `capabilities.rs`,
   `hierarchy.rs`, `lifecycle.rs`, `stdlib/mod.rs`; public API in `rust/crates/elpian-vm/src/api.rs`.
-- **VM embedding:** `rust/crates/elpian-ffi/src/abi.rs` (native), `rust/crates/elpian-wasm/src/lib.rs` (web),
-  `rust/crates/elpian-vm/src/bin/elpian-server.rs` (the HTTP server VM).
+- **VM embedding:** `rust/crates/elpian-ffi/src/abi.rs` (native C ABI; `jni.rs`
+  under `--features jni`), `rust/crates/elpian-wasm/src/lib.rs` (web),
+  `rust/crates/elpian-host/` (`elpiand`, the server host).
 - **Flutter host:** `flutter/lib/src/vm/` (widget + runtimes + host handlers),
   `flutter/lib/src/core/` (engine, registry, events, DOM), `flutter/lib/src/widgets/`,
-  `flutter/lib/src/html_widgets/`, `flutter/lib/src/css/`, `flutter/lib/src/canvas/`, `flutter/lib/src/godot/`. Public surface: `lib/elpian_ui.dart`.
+  `flutter/lib/src/html_widgets/`, `flutter/lib/src/css/`, `flutter/lib/src/canvas/`, `flutter/lib/src/godot/`. Public surface: `flutter/lib/elpian_ui.dart`.
+- **Native hosts:** `native/web/src/` (the TypeScript engine: `widgets/`,
+  `css/`, `render/`, `host/`, `vm/`, `session/`, `bridge/sessions.ts`) and its
+  DOM host `native/web/src/dom/`; the Kotlin port in
+  `native/android/elpian-core` + Views host `native/android/elpian`; the Swift
+  port in `native/ios/Sources/ElpianCore` + UIKit host
+  `native/ios/Sources/Elpian`; `native/expo/`.
 - **Compilers:** `rust/crates/js2elpian/src/lib.rs` (JS→AST→bytecode),
   `rust/crates/dart2elpian/src/lib.rs` (Dart→JS subset) — vendored in-repo.
 - **CLI:** `cli/rust/main.rs` (single file), `cli/README.md`.
 - **Web shell:** `cli/elpian_client/` (the standalone Flutter project
-  the CLI builds and serves).
+  the CLI builds and serves with the `flutter` renderer; the `native` renderer
+  serves `native/web`).
 - **The old root-level documents are gone.** What was still true in them was
   folded in here: `VM_LOGIC.md` → chapter 15, `2D_GRAPHICS.md` → chapter 16,
   `NEXTJS_INTEGRATION.md` → chapter 17, and the guidance sections of
@@ -106,7 +124,9 @@ Exhaustive lists (every widget prop, every CSS property) live in the source:
   described removed subsystems (Bevy, the Dart 3D renderer, the TPS demo) or was
   superseded.
 - **Embedded Godot (native side):** `godot/` — the Android and iOS
-  platform views, the op queues, and the Godot-side `OpSink.gd`. A separate
+  platform views, the op queues, the web-export glue and the Godot-side
+  `OpSink.gd` (`native/android` reuses its engine-side Kotlin). A separate
   plugin package so an app with no 3D does not carry the ~21 MB Godot AAR.
-- **Tests as executable specs:** `test/` (60+ files — layout, CSS, scope,
-  Godot ops/DSL, events, Next.js integration).
+- **Tests as executable specs:** `flutter/test/` (50+ files — layout, CSS,
+  scope, Godot ops/DSL, events, Next.js integration); `native/web/test/`,
+  `native/android/*/src/test/`, `native/ios/Tests/` for the native hosts.

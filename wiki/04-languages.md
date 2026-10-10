@@ -275,7 +275,9 @@ generics with runtime reification, named/optional parameters beyond the basics,
 
 `ElpianRuntime.quickJs` (`flutter/lib/src/vm/quickjs_vm*.dart`) runs a real QuickJS
 engine instead of the Elpian bytecode VM. Use it when you genuinely need JS
-semantics the subset does not cover.
+semantics the subset does not cover. On the native hosts it is `runtime:
+"quickjs"` on a `miniapp` session — QuickJS on Android and the web,
+JavaScriptCore on iOS.
 
 **What you give up:** the bytecode pipeline, and the governance layer described
 in [`03-governance.md`](03-governance.md) — capabilities, resource meters and the

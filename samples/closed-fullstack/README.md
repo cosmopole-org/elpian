@@ -46,6 +46,13 @@ curl -s -X POST localhost:4180/apps/notes/render/NoteList
 curl -s -X POST localhost:4180/apps/notes/render/NoteList   # coldStart:false — cached
 ```
 
+On a device, the client renders on either host mode: the Flutter host's
+`ServerComponent(client: ElpianServerClient(baseUrl: ..., appId: 'notes'), name: 'NoteList')`,
+or a native host's `server` session
+(`{ baseUrl, appId: 'notes', name: 'NoteList' }` — see
+[wiki/18](../../wiki/18-fullstack.md#6-on-the-device) and
+[wiki/23](../../wiki/23-native-hosts.md#sessions)).
+
 ## What to look at
 
 * **`createNote.js`** — the failure path is a returned value, not a throw. The

@@ -7,6 +7,7 @@
 library;
 
 export 'elpian_align.dart';
+export 'svg_path.dart';
 export 'elpian_animated_align.dart';
 export 'elpian_animated_container.dart';
 export 'elpian_animated_cross_fade.dart';

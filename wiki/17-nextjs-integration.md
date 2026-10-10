@@ -3,7 +3,10 @@
 > Moved from the repository root (`NEXTJS_INTEGRATION.md`). The
 > server-driven bridge: request modes, navigation commands, and the
 > `clientComp` + inline `jsCode` pattern. Implemented in
-> `flutter/lib/src/integrations/`.
+> `flutter/lib/src/integrations/` (Flutter host) and, as the `nextjs` session
+> kind, in `native/web/src/session/nextjs.ts` and its Kotlin / Swift ports
+> (native hosts). The Dart examples below are the Flutter host's API; the
+> native equivalent is at the end of [Minimal usage](#minimal-usage-no-extra-config).
 Elpian now includes a **black-box Next.js client**: developers only provide a Next.js server base URL and route, then `NextjsServerWidget` handles:
 
 - route requests
@@ -29,6 +32,19 @@ class MiniAppShell extends StatelessWidget {
     );
   }
 }
+```
+
+On the native hosts the same client is a `nextjs` session; its options mirror
+the widget's parameters (`serverBaseUrl`, `route`, `endpoint`, `requestMode`
+`"routePath"` | `"apiEndpoint"`, `props`, `headers`, `auth`, `timeoutMs`), and
+`navigate` / `back` / `refresh` are session methods, `routeChanged` an event:
+
+```kotlin
+view.open("nextjs", mapOf("serverBaseUrl" to "https://mini.example.com", "route" to "/"))
+```
+
+```html
+<elpian-view kind="nextjs" options='{"serverBaseUrl":"https://mini.example.com","route":"/"}'></elpian-view>
 ```
 
 Default behavior uses route-path requests (normal Next.js style): route `/profile` -> `GET https://your-server/profile`.
