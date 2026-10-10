@@ -1,0 +1,244 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>html,body{margin:0;background:transparent;overflow:hidden}canvas{display:block}</style>
+<script type="importmap">
+{ "imports": { "three": "./node_modules/three/build/three.module.js", "three/addons/": "./node_modules/three/examples/jsm/" } }
+</script>
+</head>
+<body>
+<script type="module">
+import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const params = new URLSearchParams(location.search);
+const W = Number(params.get('w') || 1024), H = Number(params.get('h') || 1024);
+const bg = params.get('bg'); // null = transparent
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: !bg, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+renderer.setSize(W, H);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+if (bg) scene.background = new THREE.Color(bg);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.55;
+
+// Camera: a gentle three-quarter view so the E reads clearly and shows depth.
+const aspect = W / H;
+const camera = new THREE.PerspectiveCamera(26, aspect, 0.1, 100);
+camera.position.set(-6.2, 4.2, 14.5);
+camera.lookAt(-0.35, -0.1, 0.4);
+
+// ---- Palette: Elpian violet -> cyan ------------------------------------------------
+const C = {
+  spine: new THREE.Color('#3b2ad6'),
+  top: new THREE.Color('#6d28d9'),
+  mid: new THREE.Color('#9333ea'),
+  bot: new THREE.Color('#0891b2'),
+};
+
+function slabMaterial(color) {
+  return new THREE.MeshPhysicalMaterial({
+    color,
+    metalness: 0.05,
+    roughness: 0.32,
+    clearcoat: 1,
+    clearcoatRoughness: 0.12,
+    iridescence: 0.18,
+    iridescenceIOR: 1.25,
+    emissive: color,
+    emissiveIntensity: 0.12,
+  });
+}
+const glass = new THREE.MeshPhysicalMaterial({ color: '#ffffff', metalness: 0, roughness: 0.1, transmission: 0.0, transparent: true, opacity: 0.92, clearcoat: 1 });
+const ink = new THREE.MeshPhysicalMaterial({ color: '#e9e7ff', roughness: 0.35, metalness: 0, emissive: '#ffffff', emissiveIntensity: 0.18 });
+
+const logo = new THREE.Group();
+scene.add(logo);
+
+function slab(w, h, d, color, x, y, z, r = 0.16) {
+  const m = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 6, r), slabMaterial(color));
+  m.position.set(x, y, z);
+  m.castShadow = true;
+  m.receiveShadow = true;
+  logo.add(m);
+  return m;
+}
+
+// The "E": a spine plus three bars. Each bar is a UI card standing a step
+// further forward than the one above — layered widgets building the letter.
+const D = 0.9; // slab depth
+const spine = slab(1.05, 4.6, D, C.spine, -1.55, 0, 0);
+const top = slab(3.3, 1.05, D, C.top, -0.43, 1.78, 0.42);
+const mid = slab(2.5, 0.95, D, C.mid, -0.83, 0.0, 0.84);
+const bot = slab(3.3, 1.05, D, C.bot, -0.43, -1.78, 1.26);
+
+// UI details on each card's face: a title line, a text line and a pill button.
+function pill(w, h, r) {
+  r = Math.min(r, h / 2, w / 2);
+  const s = new THREE.Shape();
+  s.moveTo(-w / 2 + r, -h / 2);
+  s.lineTo(w / 2 - r, -h / 2);
+  s.absarc(w / 2 - r, -h / 2 + r, r, -Math.PI / 2, 0);
+  s.lineTo(w / 2, h / 2 - r);
+  s.absarc(w / 2 - r, h / 2 - r, r, 0, Math.PI / 2);
+  s.lineTo(-w / 2 + r, h / 2);
+  s.absarc(-w / 2 + r, h / 2 - r, r, Math.PI / 2, Math.PI);
+  s.lineTo(-w / 2, -h / 2 + r);
+  s.absarc(-w / 2 + r, -h / 2 + r, r, Math.PI, Math.PI * 1.5);
+  const g = new THREE.ExtrudeGeometry(s, { depth: 0.03, bevelEnabled: true, bevelThickness: 0.015, bevelSize: 0.015, bevelSegments: 4, curveSegments: 24 });
+  return g;
+}
+
+function ui(card, w, h, variant) {
+  const face = card.position.z + D / 2 + 0.012;
+  const add = (gw, gh, x, y, mat, r) => {
+    const g = new THREE.Mesh(pill(gw, gh, r ?? gh / 2), mat);
+    g.position.set(card.position.x + x, card.position.y + y, face);
+    g.castShadow = true;
+    logo.add(g);
+  };
+  const left = -w / 2 + 0.42;
+  if (variant === 'top') {
+    add(1.25, 0.16, left + 0.62, 0.17, ink);
+    add(0.8, 0.12, left + 0.4, -0.15, glass);
+    add(0.62, 0.36, w / 2 - 0.55, 0, glass);
+  } else if (variant === 'mid') {
+    add(0.38, 0.38, left + 0.19, 0, glass, 0.19);       // avatar
+    add(1.0, 0.13, left + 0.98, 0.1, ink);
+    add(0.72, 0.11, left + 0.84, -0.14, glass);
+  } else {
+    add(1.5, 0.15, left + 0.75, 0.17, ink);
+    add(1.05, 0.12, left + 0.52, -0.15, glass);
+    // a toggle switch
+    add(0.66, 0.34, w / 2 - 0.6, 0, glass);
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.13, 32, 16), slabMaterial(C.bot.clone().offsetHSL(0, 0, 0.08)));
+    knob.position.set(card.position.x + w / 2 - 0.47, card.position.y, face + 0.1);
+    logo.add(knob);
+  }
+}
+ui(top, 3.3, 1.05, 'top');
+ui(mid, 2.5, 0.95, 'mid');
+ui(bot, 3.3, 1.05, 'bot');
+
+// The agent: a glowing orb on an orbit around the letter — the VM / agent that
+// generates the UI.
+function glowTexture(inner, outer) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+  grad.addColorStop(0, inner);
+  grad.addColorStop(0.25, inner);
+  grad.addColorStop(1, outer);
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 256, 256);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const orbit = new THREE.Group();
+orbit.rotation.set(1.02, -0.32, 0.38);
+orbit.position.set(-0.45, 0.0, 0.6);
+logo.add(orbit);
+const R = 3.05;
+const ringMat = new THREE.MeshPhysicalMaterial({ color: '#a78bfa', emissive: '#8b5cf6', emissiveIntensity: 0.6, roughness: 0.3, metalness: 0.2, transparent: true, opacity: 0.9 });
+const ring = new THREE.Mesh(new THREE.TorusGeometry(R, 0.022, 16, 256), ringMat);
+orbit.add(ring);
+// dotted trail behind the orb
+const trail = new THREE.Group();
+orbit.add(trail);
+for (let i = 1; i <= 14; i++) {
+  const a = -0.35 - i * 0.07;
+  const d = new THREE.Mesh(new THREE.SphereGeometry(0.075 * (1 - i / 17), 16, 8), new THREE.MeshBasicMaterial({ color: '#67e8f9', transparent: true, opacity: 0.95 - i * 0.055 }));
+  d.position.set(Math.cos(a) * R, Math.sin(a) * R, 0);
+  trail.add(d);
+}
+const orbAngle = -0.35;
+const orb = new THREE.Mesh(new THREE.SphereGeometry(0.26, 64, 32), new THREE.MeshPhysicalMaterial({ color: '#cffafe', emissive: '#22d3ee', emissiveIntensity: 1.4, roughness: 0.2, clearcoat: 1 }));
+orb.position.set(Math.cos(orbAngle) * R, Math.sin(orbAngle) * R, 0);
+orbit.add(orb);
+const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture('rgba(103,232,249,0.85)', 'rgba(103,232,249,0)'), depthWrite: false, transparent: true }));
+halo.scale.set(1.25, 1.25, 1);
+halo.position.copy(orb.position);
+orbit.add(halo);
+const orbLight = new THREE.PointLight('#67e8f9', 9, 7, 2);
+orbLight.position.copy(orb.position);
+orbit.add(orbLight);
+
+function starTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.18, 'rgba(196,181,253,0.95)');
+  grad.addColorStop(1, 'rgba(139,92,246,0)');
+  g.fillStyle = grad;
+  g.beginPath();
+  // a four-point star with concave sides
+  for (let i = 0; i < 4; i++) {
+    const a = (i * Math.PI) / 2;
+    const tip = [128 + Math.cos(a) * 124, 128 + Math.sin(a) * 124];
+    const next = (a + Math.PI / 2);
+    const ctrl = [128 + Math.cos(a + Math.PI / 4) * 14, 128 + Math.sin(a + Math.PI / 4) * 14];
+    if (i === 0) g.moveTo(...tip);
+    g.quadraticCurveTo(...ctrl, 128 + Math.cos(next) * 124, 128 + Math.sin(next) * 124);
+  }
+  g.closePath();
+  g.fill();
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+// sparkles
+for (const [x, y, z, s] of [[1.75, 2.85, 0.6, 0.62], [-3.15, -2.15, 1.4, 0.46], [2.45, -0.75, 1.9, 0.38]]) {
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: starTexture(), depthWrite: false, transparent: true }));
+  sp.position.set(x, y, z);
+  sp.scale.set(s, s, 1);
+  logo.add(sp);
+}
+
+// Lights
+scene.add(new THREE.HemisphereLight('#e0e7ff', '#1e1b4b', 0.7));
+const key = new THREE.DirectionalLight('#ffffff', 2.4);
+key.position.set(5, 8, 9);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.radius = 6;
+key.shadow.camera.left = -6; key.shadow.camera.right = 6; key.shadow.camera.top = 6; key.shadow.camera.bottom = -6;
+scene.add(key);
+const rim = new THREE.DirectionalLight('#22d3ee', 1.6);
+rim.position.set(-8, 2, -6);
+scene.add(rim);
+const fill = new THREE.DirectionalLight('#c084fc', 0.9);
+fill.position.set(-6, -4, 8);
+scene.add(fill);
+
+// Soft contact shadow under the letter (shadow-only plane).
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), new THREE.ShadowMaterial({ opacity: 0.0 }));
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -2.45;
+ground.receiveShadow = true;
+scene.add(ground);
+
+logo.rotation.y = 0.12;
+const fit = Number(params.get('scale') || 1);
+logo.scale.setScalar(fit);
+logo.position.set(Number(params.get('x') || 0), Number(params.get('y') || 0), 0);
+
+renderer.render(scene, camera);
+window.__done = true;
+</script>
+</body>
+</html>
