@@ -1,7 +1,7 @@
 import type { StyleProp, ViewStyle } from 'react-native';
 
 /** The session kinds every host supports (see the core's SessionRegistry). */
-export type ElpianSessionKind = 'json' | 'miniapp' | 'superapp' | 'stream' | 'nextjs' | 'server';
+export type ElpianSessionKind = 'json' | 'miniapp' | 'superapp' | 'stream' | 'nextjs' | 'server' | 'agent';
 
 /** A session event: `ready`, `error`, `println`, `updateApp`, `routeChanged`, `result`, … */
 export interface ElpianEvent {
@@ -14,7 +14,8 @@ export interface ElpianViewProps {
   kind: ElpianSessionKind;
   /**
    * Session options (JSON-serializable), e.g. for `miniapp`:
-   * `{ runtime: 'quickjs' | 'elpian' | 'wasm', code, astJson, bytecodeBase64, entryFunction, stylesheet }`.
+   * `{ runtime: 'quickjs' | 'elpian' | 'wasm', code, astJson, bytecodeBase64, entryFunction, stylesheet }`;
+   * for `agent`: `{ baseUrl, appId, agent, prompt?, conversationId?, chat? }`.
    * Changing them re-opens the session.
    */
   options?: Record<string, unknown>;

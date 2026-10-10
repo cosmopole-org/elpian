@@ -28,6 +28,11 @@ Both modes share the node format, the HTML and Flutter widget sets, CSS, canvas,
 Swift and TypeScript ports of one engine, tested against it &mdash; see
 [wiki/23-native-hosts.md](wiki/23-native-hosts.md).
 
+Fullstack mini apps can also put **agents** in the backend. Each agent has
+instructions, skills and the app's own server functions as tools, and answers
+with [A2UI](https://a2ui.org/) UI that every host renders natively, next to
+static Elpian UI &mdash; see [wiki/24-agentic-ui.md](wiki/24-agentic-ui.md).
+
 Flutter host:
 
 ```dart
@@ -107,7 +112,9 @@ await mountElpian(document.getElementById('app'), 'json', {
 - **Event System** &mdash; 40+ event types with capturing, bubbling, delegation, debounce, and throttle
 - **Widget Registry** &mdash; 200+ pre-registered builders, plus custom widget registration
 - **QuickJS Runtime** &mdash; Embedded JavaScript engine for scripting alongside the Rust VM (JavaScriptCore on the native iOS host)
-- **Sessions** &mdash; native hosts expose `json`, `miniapp`, `superapp`, `stream`, `nextjs` and `server` sessions with the same methods and events on every platform
+- **Sessions** &mdash; native hosts expose `json`, `miniapp`, `superapp`, `stream`, `nextjs`, `server` and `agent` sessions with the same methods and events on every platform
+- **Agents** &mdash; declared per mini app (instructions, `SKILL.md` skills, server functions as tools), run by `elpiand` on Claude by default (OpenAI-compatible and scripted providers too), governed like functions: secrets stay on the host, tools go through quota and capability checks
+- **A2UI renderer** &mdash; A2UI v0.9.1 (all 18 basic-catalog components and its functions, data binding, checks, actions) implemented in every engine and tested against the official conformance cases; the `A2UISurface` widget embeds agent UI anywhere
 
 ---
 
@@ -124,6 +131,20 @@ cd my_app && elpian run install && elpian run dev
 `elpian.config.json`'s `"renderer"` (`"flutter"` | `"native"`) picks what
 `elpian run build` writes to `dist/web`; `--renderer` overrides it per run. See
 [wiki/05-cli.md](wiki/05-cli.md).
+
+### An agentic mini app
+
+```bash
+elpian create shop --template agentic          # works with --renderer native too
+cd shop && elpian run install
+ELPIAN_AGENT_PROVIDER=scripted elpian run dev  # offline: a canned agent script
+ANTHROPIC_API_KEY=sk-ant-... elpian run dev    # the real agent, on Claude
+```
+
+The template declares an `assistant` agent (instructions plus two skills) that
+uses the app's `listProducts` server function as a tool. Its client renders the
+agent's A2UI between static Elpian UI. See
+[wiki/24-agentic-ui.md](wiki/24-agentic-ui.md).
 
 ### Flutter host
 
@@ -167,6 +188,41 @@ stylesheets and the VM programs are the same on the native hosts, which take
 them as session options (`view`, `stylesheet`, `code` / `astJson`) &mdash; see
 [wiki/23-native-hosts.md](wiki/23-native-hosts.md#sessions).
 
+
+### Agentic UI — agents as the backend
+
+Declare an agent in the mini app's `elpian.app.json`:
+
+```jsonc
+"agents": [{
+  "name": "assistant",
+  "instructions": "agents/assistant.md",   // or inline text
+  "skills": ["catalog", "ordering"],       // agents/skills/<name>/SKILL.md
+  "tools": ["listProducts"],               // your own server functions
+  "model": "claude-opus-5-5", "effort": "medium"
+}]
+```
+
+Then place its UI anywhere in static client code:
+
+```ts
+import { el, a2uiSurface } from '@elpian/sdk';
+
+el('div', {}, [
+  el('h1', { text: 'Tea & Coffee' }, []),
+  a2uiSurface({ agent: 'assistant', prompt: 'Show me what you have.', chat: true }),
+]);
+```
+
+Or open it full screen:
+
+- Flutter: `ElpianAgentView(baseUrl: …, appId: 'shop', agent: 'assistant')`
+- Android/iOS: `ElpianHostView.open("agent", …)`
+- Web: `mountElpian(el, 'agent', …)`
+- Expo: `<ElpianView kind="agent" …/>`
+
+The agent answers through `POST /apps/<app>/agent/<agent>` with streamed A2UI.
+User actions such as button presses go back to it, carrying their bound data.
 
 ### Next.js Black-Box Client
 
@@ -548,7 +604,9 @@ elpian/
 │   ├── ios/                        #   Swift engine + UIKit host
 │   └── expo/                       #   @elpian/expo — Expo / React Native module
 ├── rust/                           # Rust VM workspace: VM, FFI (C ABI + JNI),
-│                                   #   js2elpian, dart2elpian, runtime, host
+│                                   #   js2elpian, dart2elpian, runtime, host,
+│                                   #   elpian-agent (agents + A2UI validation)
+├── a2ui/                           # Vendored A2UI v0.9.1 spec, catalog, conformance
 ├── cli/                            # The `elpian` CLI + its Flutter web shell
 ├── godot/                          # Embedded Godot (Android, iOS, web glue)
 ├── guest-sdk/                      # Guest-side SDKs (JS, Dart)
@@ -602,6 +660,7 @@ folded in.
 - **&#x1F3D7;&#xFE0F; No-Code Builders** &mdash; Visual UI builders that output JSON for Elpian to render
 - **&#x1F4CA; 3D Visualization** &mdash; Product viewers, data viz, interactive scenes
 - **&#x1F4DC; Scripted Applications** &mdash; VM-driven apps with dynamic logic and rendering
+- **&#x1F916; Agentic Apps** &mdash; Agents that build the UI each user needs, alongside static screens and server logic
 
 ---
 
@@ -613,6 +672,7 @@ folded in.
 (cd native && npm ci && npm test)                               # web host (Chromium)
 (cd native/android && gradle :elpian-core:test :elpian:testDebugUnitTest)
 (cd native/ios && swift test)                                   # ElpianCore
+node scripts/e2e-agentic.mjs                                    # agentic app, end to end (Chromium)
 ```
 
 ---
