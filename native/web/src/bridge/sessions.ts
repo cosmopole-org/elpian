@@ -129,6 +129,14 @@ export class SessionRegistry {
           onUnservicedApi: (api, advertised) => emit('unservicedApi', { api, advertised }),
           surface: surfaceOpts,
         });
+        // Where this app's agents live: A2UISurface widgets and the agent.* host APIs default to it.
+        if (typeof options.baseUrl === 'string' || typeof options.appId === 'string') {
+          a2uiRegistry(session.surface.engine.services).defaults = {
+            baseUrl: typeof options.baseUrl === 'string' ? options.baseUrl : null,
+            appId: typeof options.appId === 'string' ? options.appId : null,
+            headers: isMap(options.headers) ? (options.headers as Record<string, string>) : undefined,
+          };
+        }
         entry = {
           kind,
           surface: session.surface,

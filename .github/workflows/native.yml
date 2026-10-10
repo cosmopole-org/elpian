@@ -12,9 +12,9 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ["native/**", "cli/**", "rust/crates/elpian-ffi/**", "rust/crates/elpian-vm/**", "flutter/assets/web_runtime/**", ".github/workflows/native.yml"]
+    paths: ["native/**", "cli/**", "a2ui/**", "rust/crates/elpian-agent/**", "rust/crates/elpian-host/**", "scripts/e2e-agentic.mjs", "rust/crates/elpian-ffi/**", "rust/crates/elpian-vm/**", "flutter/assets/web_runtime/**", ".github/workflows/native.yml"]
   pull_request:
-    paths: ["native/**", "cli/**", "rust/crates/elpian-ffi/**", "rust/crates/elpian-vm/**", "flutter/assets/web_runtime/**", ".github/workflows/native.yml"]
+    paths: ["native/**", "cli/**", "a2ui/**", "rust/crates/elpian-agent/**", "rust/crates/elpian-host/**", "scripts/e2e-agentic.mjs", "rust/crates/elpian-ffi/**", "rust/crates/elpian-vm/**", "flutter/assets/web_runtime/**", ".github/workflows/native.yml"]
 
 permissions:
   contents: read
@@ -148,6 +148,11 @@ jobs:
           test -f dist/web/elpian-web.js
           test -f dist/web/assets/runtime/wasm/elpian_vm/elpian_vm.js
           test -f dist/web/__elpian/elpian.manifest.json
+      - name: Agentic app end to end (scripted agent, native renderer, Chromium)
+        run: |
+          npm install -g playwright@1.49.1
+          npx playwright install --with-deps chromium
+          node scripts/e2e-agentic.mjs
 
   # ---------------------------------------------------------------------------
   expo:

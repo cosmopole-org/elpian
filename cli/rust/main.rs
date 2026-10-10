@@ -537,7 +537,10 @@ fn build_project(root: &Path, config: &Config, package_web: bool) -> Result<Vec<
             "url": format!("__elpian/{}", item.bytecode.as_ref().unwrap_or(&item.ast).file_name().unwrap().to_string_lossy()),
             "sourceUrl": format!("__elpian/{}", item.js.file_name().unwrap().to_string_lossy())
         })),
-        "server": config.server.as_ref().map(|_| json!({ "endpoint": "__elpian/api" }))
+        "server": config.server.as_ref().map(|_| json!({ "endpoint": "__elpian/api" })),
+        // A mini app's id: the client addresses its agents (and server functions)
+        // under `/apps/<app>/…` on the same origin.
+        "app": app_id(root)
     });
     write_json(&out.join("elpian.manifest.json"), &manifest)?;
 
@@ -548,6 +551,12 @@ fn build_project(root: &Path, config: &Config, package_web: bool) -> Result<Vec<
         package_web_export(root, config, &artifacts, &out)?;
     }
     Ok(artifacts)
+}
+
+/// The mini app id from `elpian.app.json`, when the project is a mini app.
+fn app_id(root: &Path) -> Option<String> {
+    let manifest: serde_json::Value = read_json(&root.join("elpian.app.json")).ok()?;
+    manifest["id"].as_str().map(str::to_string)
 }
 
 /// Compile `src/server/{actions,components}/*` into `build/fn/<name>.bc`.
@@ -925,6 +934,11 @@ const NATIVE_INDEX_HTML: &str = r#"<!doctype html>
         const bytes = new Uint8Array(await res.arrayBuffer());
         if (!bytes.length) throw new Error('Elpian client artifact is empty');
         const options = { machineId: 'elpian-dynamic-client', runtime: 'elpian' };
+        // A mini app's agents and functions are served by the same host, under /apps/<id>/.
+        if (typeof manifest.app === 'string') {
+          options.appId = manifest.app;
+          options.baseUrl = new URL('.', document.baseURI).href;
+        }
         if (client.format === 'bytecode') options.bytecodeBase64 = base64(bytes);
         else options.astJson = new TextDecoder().decode(bytes);
         status(null);
