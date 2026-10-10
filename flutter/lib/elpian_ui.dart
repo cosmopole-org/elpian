@@ -34,6 +34,10 @@ export 'src/fullstack/server_component.dart';
 
 // ── The rendering engine ───────────────────────────────────────────
 export 'src/core/elpian_engine.dart';
+
+// ── Agent-generated UI (A2UI v0.9.1) ───────────────────────────────
+export 'src/a2ui/a2ui.dart';
+
 export 'src/core/widget_registry.dart';
 export 'src/core/dom_api.dart';
 export 'src/core/event_system.dart';

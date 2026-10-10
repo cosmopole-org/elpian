@@ -4,13 +4,15 @@ import '../core/elpian_services.dart';
 
 class ElpianCheckbox {
   static Widget build(ElpianNode node, List<Widget> children) {
+    // Captured while the engine's service scope is active: the handlers
+    // run later, outside it.
+    final dispatcher = ElpianServices.current.events;
     final value = node.props['value'] as bool? ?? false;
     final elementId = node.key ?? 'element_${node.hashCode}';
 
     return Checkbox(
       value: value,
       onChanged: (newValue) {
-        final dispatcher = ElpianServices.current.events;
         dispatcher.dispatchChange(elementId, newValue);
       },
     );

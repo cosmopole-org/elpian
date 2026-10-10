@@ -4,6 +4,9 @@ import '../core/elpian_services.dart';
 
 class ElpianRadio {
   static Widget build(ElpianNode node, List<Widget> children) {
+    // Captured while the engine's service scope is active: the handlers
+    // run later, outside it.
+    final dispatcher = ElpianServices.current.events;
     final Object? value = node.props['value'];
     final Object? groupValue = node.props['groupValue'];
     final elementId = node.key ?? 'element_${node.hashCode}';
@@ -14,7 +17,6 @@ class ElpianRadio {
     return RadioGroup<Object?>(
       groupValue: groupValue,
       onChanged: (newValue) {
-        final dispatcher = ElpianServices.current.events;
         dispatcher.dispatchChange(elementId, newValue);
       },
       child: Radio<Object?>(value: value),

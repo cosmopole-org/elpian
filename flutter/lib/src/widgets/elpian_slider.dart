@@ -4,6 +4,9 @@ import '../core/elpian_services.dart';
 
 class ElpianSlider {
   static Widget build(ElpianNode node, List<Widget> children) {
+    // Captured while the engine's service scope is active: the handlers
+    // run later, outside it.
+    final dispatcher = ElpianServices.current.events;
     final value = (node.props['value'] as num?)?.toDouble() ?? 0.5;
     final min = (node.props['min'] as num?)?.toDouble() ?? 0.0;
     final max = (node.props['max'] as num?)?.toDouble() ?? 1.0;
@@ -14,7 +17,6 @@ class ElpianSlider {
       min: min,
       max: max,
       onChanged: (newValue) {
-        final dispatcher = ElpianServices.current.events;
         dispatcher.dispatchChange(elementId, newValue);
       },
     );

@@ -77,7 +77,9 @@ class _DynamicElpianClientState extends State<DynamicElpianClient> {
     if (artifactResponse.bodyBytes.isEmpty) {
       throw const FormatException('Elpian client artifact is empty');
     }
-    return _ClientProgram(format as String, artifactResponse.bodyBytes);
+    final agents = agentEndpointDefaults(manifest, Uri.base);
+    return _ClientProgram(format as String, artifactResponse.bodyBytes,
+        appId: agents.appId, baseUrl: agents.baseUrl);
   }
 
   void _retry() => setState(() => _program = _fetchProgram());
@@ -100,6 +102,8 @@ class _DynamicElpianClientState extends State<DynamicElpianClient> {
             return ElpianVmWidget.fromBytecode(
               machineId: 'elpian-dynamic-client',
               bytecode: Uint8List.fromList(program.bytes),
+              agentAppId: program.appId,
+              agentBaseUrl: program.baseUrl,
               errorBuilder: (error) =>
                   _LoadFailure(message: error, retry: _retry),
             );
@@ -107,6 +111,8 @@ class _DynamicElpianClientState extends State<DynamicElpianClient> {
           return ElpianVmWidget.fromAst(
             machineId: 'elpian-dynamic-client',
             astJson: utf8.decode(program.bytes),
+            agentAppId: program.appId,
+            agentBaseUrl: program.baseUrl,
             errorBuilder: (error) =>
                 _LoadFailure(message: error, retry: _retry),
           );
@@ -117,7 +123,24 @@ class _DynamicElpianClientState extends State<DynamicElpianClient> {
 class _ClientProgram {
   final String format;
   final Uint8List bytes;
-  const _ClientProgram(this.format, this.bytes);
+  final String? appId;
+  final String baseUrl;
+  const _ClientProgram(this.format, this.bytes,
+      {required this.appId, required this.baseUrl});
+}
+
+/// Where the served mini app's agents live: the manifest's `app` id, and the
+/// directory the shell was served from as the base URL — so `A2UISurface`
+/// widgets and `agent.*` calls post to `<base>/apps/<app>/agent/<agent>` on the
+/// same dev server (`elpian run dev`). A manifest without `app` leaves agents
+/// unconfigured (static A2UI still renders).
+({String? appId, String baseUrl}) agentEndpointDefaults(
+    Map<String, dynamic> manifest, Uri base) {
+  final app = manifest['app'];
+  return (
+    appId: app is String && app.isNotEmpty ? app : null,
+    baseUrl: base.resolve('.').toString(),
+  );
 }
 
 class _LoadFailure extends StatelessWidget {

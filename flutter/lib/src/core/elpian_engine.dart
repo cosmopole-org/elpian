@@ -15,6 +15,7 @@ import '../models/elpian_node.dart';
 import '../widgets/widgets.dart';
 import '../scope/scope_contract.dart';
 import 'elpian_services.dart';
+import '../a2ui/elpian.dart';
 import 'event_dispatcher.dart';
 import 'event_enabled_widget.dart';
 import 'event_system.dart';
@@ -35,6 +36,9 @@ class ElpianEngine {
   ElpianEngine({ElpianServices? services})
       : services = services ?? ElpianServices.shared {
     _registerDefaultWidgets();
+    // `A2UISurface` widgets render their lowered agent UI with this app's
+    // engine (the first one created for these services).
+    a2uiRegistry(this.services).engine ??= this;
   }
 
   WidgetRegistry get _registry => services.registry;
@@ -101,6 +105,9 @@ class ElpianEngine {
     _registry.register('Switch', ElpianSwitch.build);
     _registry.register('Slider', ElpianSlider.build);
     _registry.register('Icon', ElpianIcon.build);
+    // Agent-generated UI (A2UI v0.9.1).
+    _registry.register('A2UISurface', buildA2UISurface);
+    _registry.register('a2ui-surface', buildA2UISurface);
     _registry.register('Card', ElpianCard.build);
     _registry.register('Scaffold', ElpianScaffold.build);
     _registry.register('AppBar', ElpianAppBar.build);
