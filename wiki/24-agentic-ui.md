@@ -235,7 +235,8 @@ the prose and a chat row. It takes the options `baseUrl`, `appId`, `agent`,
 - Swift: `ElpianHostView.open(kind: "agent", …)`
 - Web: `mountElpian(el, 'agent', options)`
 - Expo: `<ElpianView kind="agent" …>`
-- Flutter: `ElpianAgentView`
+- Flutter: `ElpianAgentView(baseUrl:, appId:, agent:, prompt:)`. Use a
+  `GlobalKey<ElpianAgentViewState>` to call `send` and `action` from outside.
 
 **Host APIs for guest code** need the `agents` capability:
 
@@ -295,5 +296,19 @@ deliberately doesn't use the official A2UI renderer libraries:
   - Images default to `cover` (`contain` for the `icon` variant).
   - A Modal covers its surface rather than the whole screen.
   - Field errors show after the user touches the field.
+- **Formatting per engine.** `formatNumber`, `formatCurrency`, `formatDate`
+  and `pluralize` use the platform's formatters:
+  - **Web:** `Intl`.
+  - **Android:** `java.text`.
+  - **iOS:** Foundation formatters.
+  - **Flutter:** `en-US` only, because the package has no `intl` dependency.
+
+  Plural rules outside the web come from a built-in table of common languages
+  and fall back to English rules. Dates use the device time zone.
+- **Async host replies on Android.** QuickJS and WASM guests get a plain `OK`
+  from `agent.send` and `agent.action` instead of `{conversationId}`, because
+  their host-call path is synchronous. Elpian VM guests get the full reply, and
+  `A2UISurface` widgets are unaffected. This matches the web host's runtime
+  protocol.
 - **Dev-only providers.** The scripted provider (`ELPIAN_AGENT_PROVIDER=scripted`,
   `ELPIAN_AGENT_SCRIPT`) is for tests and offline development.
