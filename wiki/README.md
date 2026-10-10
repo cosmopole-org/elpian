@@ -72,6 +72,7 @@ the session kinds of [`23-native-hosts.md`](23-native-hosts.md).
 | [`21-hosting.md`](21-hosting.md) | Run `elpiand`: the registry, policy, the pool, meters, quotas, the admin surface. |
 | [`22-packaging.md`](22-packaging.md) | `.elpianpkg`: determinism, verification, signing and its limit. |
 | [`23-native-hosts.md`](23-native-hosts.md) | Android (Kotlin), iOS (Swift), Web and Expo hosts of the same mini apps. |
+| [`24-agentic-ui.md`](24-agentic-ui.md) | Agents as the backend (instructions, skills, your functions as tools) and A2UI as their UI, on every host. |
 
 ## How an agent should use this skill
 

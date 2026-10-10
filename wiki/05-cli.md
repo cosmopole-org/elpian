@@ -22,7 +22,7 @@ sibling checkout is needed.
 ## The whole surface
 
 ```
-elpian create <DIRECTORY> [--template client|server|fullstack|closed-fullstack|showcase]
+elpian create <DIRECTORY> [--template client|server|fullstack|closed-fullstack|agentic|showcase]
                           [--renderer flutter|native]
 
 elpian run install
@@ -33,7 +33,7 @@ elpian run dev   [--host <HOST>] [--port <PORT>] [--mode <MODE>] [--build-engine
 
 | Flag | Short | Default |
 |---|---|---|
-| `--template` | `-t` | `client` (also `server`, `fullstack`, `showcase`) |
+| `--template` | `-t` | `client` (also `server`, `fullstack`, `closed-fullstack`, `agentic`, `showcase`) |
 | `--mode` | `-m` | from `elpian.config.json` (`both`) |
 | `--host` | `-H` | `127.0.0.1` |
 | `--port` | `-p` | `4173` |
@@ -72,6 +72,12 @@ my-app/
         ├── elpian.package.json
         └── index.ts         # the `el` / `render` SDK
 ```
+
+`--template agentic` adds an agent-backed mini app: `elpian.app.json` with an
+`agents` section, `agents/assistant.md` (instructions), `agents/skills/*/SKILL.md`,
+`agents/scripted.json` (an offline script for `ELPIAN_AGENT_PROVIDER=scripted`),
+a server function the agent uses as a tool, and a client that places an
+`A2UISurface` beside static UI. See [`24-agentic-ui.md`](24-agentic-ui.md).
 
 ## `elpian run install`
 

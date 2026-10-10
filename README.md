@@ -96,6 +96,7 @@ await mountElpian(document.getElementById('app'), 'json', {
 | **Canvas 2D** | Full 2D graphics API with paths, shapes, gradients, text, and transforms |
 | **3D Scenes** | An embedded **Godot 4** engine as a `Scene3D` widget, driven reflectively |
 | **Elpian VM** | Sandboxed Rust bytecode VM with FFI / JNI (native) and WASM (web) for scripting UI logic |
+| **Agentic UI** | Agents (Claude by default) as a fullstack app's backend — instructions, skills, your server functions as tools — answering in [A2UI](https://a2ui.org/) rendered natively on every host, mixed freely with static Elpian UI |
 | **Next.js Bridge** | Server-driven Next.js payloads (`component` + `stylesheet`) rendered natively by Elpian clients |
 | **Two host modes** | The Flutter host (`flutter/`) and native hosts (`native/`: Android Views, UIKit, DOM, Expo) for the same mini apps |
 
@@ -588,6 +589,7 @@ folded in.
 | [`17-nextjs-integration.md`](wiki/17-nextjs-integration.md) | Render Next.js server payloads |
 | [`18-fullstack.md`](wiki/18-fullstack.md) &ndash; [`22-packaging.md`](wiki/22-packaging.md) | Fullstack apps, server functions, egress, hosting, packaging |
 | [`23-native-hosts.md`](wiki/23-native-hosts.md) | Host mini apps natively on Android, iOS, the web and Expo |
+| [`24-agentic-ui.md`](wiki/24-agentic-ui.md) | Agentic UI: agents as the backend, A2UI as the UI |
 
 ---
 
