@@ -225,7 +225,9 @@ dependencies = [
 name = "elpian-wasm"
 version = "0.1.0"
 dependencies = [
+ "dart2elpian",
  "elpian-vm",
+ "js2elpian",
  "serde_json",
  "wasm-bindgen",
 ]
