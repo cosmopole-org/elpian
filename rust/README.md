@@ -14,7 +14,7 @@ member crates and read as though the VM contained them.
 | Crate | What it is |
 |---|---|
 | `elpian-vm` | The bytecode VM: executor, compiler, standard library, governance model (capabilities, limits, hierarchy, lifecycle), and HTTP server binary. |
-| `elpian-wasm` | The wasm-bindgen browser adapter. Produces the WebAssembly cdylib while keeping its artifact separate from the native C ABI. |
+| `elpian-wasm` | The wasm-bindgen adapter. Produces the WebAssembly cdylib while keeping its artifact separate from the native C ABI. With `--features compiler` it also carries the JavaScript and Dart front-ends (`elpian_wasm_compile_js` / `elpian_wasm_compile_dart`), for server-side Node.js hosts that receive guest source rather than bytecode. |
 | `js2elpian` | JavaScript → Elpian AST / bytecode. |
 | `dart2elpian` | Dart → the JS subset `js2elpian` compiles. |
 | `elpian-dart-runtime` | The `dart:*` host surface and the Flutter widget layer, plus a Dart-level capability/resource governor. Was named `dart`, which read as a language, a directory and a dependency at once. |
@@ -37,6 +37,8 @@ cargo run --bin gen-host-api-catalog -- ../flutter/lib/src/vm/host_api_catalog.d
 
 # The browser VM. wasm-pack needs a package, not the virtual root:
 cd crates/elpian-wasm && wasm-pack build --release --target web
+# …or for a Node.js host that compiles guest source itself:
+cd crates/elpian-wasm && wasm-pack build --release --target nodejs -- --features compiler
 ```
 
 ## The guest preludes are not here

@@ -23,3 +23,9 @@ echo "== building elpian-wasm for wasm32-unknown-unknown =="
 
 echo "== running it =="
 node "$ROOT/scripts/wasm-smoke.cjs" "$OUT"
+
+echo "== building elpian-wasm with the compiler for a Node.js host =="
+(cd "$ROOT/rust/crates/elpian-wasm" && wasm-pack build --target nodejs --out-dir "$OUT/compiler" -- --features compiler >/dev/null 2>&1)
+
+echo "== compiling and running guest source in it =="
+node "$ROOT/scripts/wasm-compiler-smoke.cjs" "$OUT/compiler"

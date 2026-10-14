@@ -3,12 +3,22 @@ name = "elpian-wasm"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "wasm-bindgen browser adapter for the Elpian VM."
+description = "wasm-bindgen adapter for the Elpian VM (browser and Node.js hosts)."
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[features]
+default = []
+# Source front-ends inside the wasm module: JavaScript (`js2elpian`) and the
+# Dart subset (`dart2elpian`). Off for the browser artifact Flutter ships, which
+# only runs prebuilt bytecode; on for server-side hosts (a Node.js process that
+# compiles uploaded guest source once and then runs it).
+compiler = ["dep:js2elpian", "dep:dart2elpian"]
+
 [dependencies]
 elpian-vm = { path = "../elpian-vm" }
+js2elpian = { path = "../js2elpian", optional = true }
+dart2elpian = { path = "../dart2elpian", optional = true }
 serde_json = "1.0"
 wasm-bindgen = "0.2"

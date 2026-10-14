@@ -167,3 +167,42 @@ pub fn elpian_wasm_adopt(parent_id: String, child_id: String) -> String {
 pub fn elpian_wasm_enforce_tree_budgets() -> String {
     govern::enforce_tree_budgets_json().to_string()
 }
+
+// ── Source front-ends (feature `compiler`) ─────────────────────────────────
+//
+// A server-side host — a Node.js process running a mini app's or a tool's
+// backend — receives guest *source*, not bytecode. These compile it inside the
+// same module that runs it, so such a host needs nothing but this artifact.
+// Both return the bytecode `elpian_wasm_create_vm_from_bytecode` takes, and
+// throw a message naming the stage that rejected the source.
+//
+// On wasm32 a panic aborts rather than unwinds, so source a front-end panics
+// on (rather than rejecting with an error) traps the module instance. A host
+// compiles before it serves anything, and treats a trap as a failed build.
+
+/// Compile JavaScript (the `js2elpian` subset) to Elpian bytecode.
+#[cfg(feature = "compiler")]
+#[wasm_bindgen]
+pub fn elpian_wasm_compile_js(source: String) -> Result<Vec<u8>, JsValue> {
+    compile_js_source(&source)
+}
+
+/// Compile Dart (the `dart2elpian` subset) to Elpian bytecode: Dart is
+/// transpiled to the JS subset, which `js2elpian` then compiles.
+#[cfg(feature = "compiler")]
+#[wasm_bindgen]
+pub fn elpian_wasm_compile_dart(source: String) -> Result<Vec<u8>, JsValue> {
+    let js = dart2elpian::transpile(&source)
+        .map_err(|e| JsValue::from_str(&format!("Dart transpile failed: {e}")))?;
+    compile_js_source(&js)
+}
+
+#[cfg(feature = "compiler")]
+fn compile_js_source(source: &str) -> Result<Vec<u8>, JsValue> {
+    // Parse first: a syntax error is reported with its message, where a
+    // compile failure past this point can only say that the subset refused it.
+    js2elpian::try_parse_js(source)
+        .map_err(|e| JsValue::from_str(&format!("JavaScript parse failed: {e}")))?;
+    js2elpian::compile_js_to_bytecode(source)
+        .ok_or_else(|| JsValue::from_str("source is outside the Elpian JavaScript subset"))
+}
